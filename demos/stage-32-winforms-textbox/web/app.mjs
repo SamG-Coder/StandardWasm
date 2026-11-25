@@ -77,7 +77,7 @@ async function start() {
         const units = wasm.CreateChars(value.length);
         for (let i = 0; i < value.length; i++)
             wasm.SetCodeUnit(units, i, value.charCodeAt(i));
-        wasm.Edit(state, inputModel, preview, units);
+        wasm.Edit(inputModel, units);
         repaint();
     }
 
@@ -86,7 +86,7 @@ async function start() {
     });
     input.addEventListener("compositionend", edit);
     clear.addEventListener("click", () => {
-        wasm.Clear(state, inputModel, preview);
+        wasm.Click(button);
         input.value = readText(wasm.ReadInput(inputModel));
         repaint();
         if (wasm.TakeFocusRequest(inputModel)) input.focus();

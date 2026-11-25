@@ -5,7 +5,8 @@ namespace PeLibrary
     internal static class EventMetadata
     {
         internal const int Empty = 1, Construct = 2, ConstructHandler = 3, InvokeHandler = 4, CombineHandler = 5, RemoveHandler = 6;
-        private const int DelegateType = 256; // Only used to match BCL member signatures.
+        private const int DelegateType = 256, InterlockedType = 257; // Signature matching only.
+        private const int ExchangeMember = 7;
 
         internal static int Reference(byte[] image, int[] heaps, int[] methods, int coded)
         {
@@ -13,7 +14,33 @@ namespace PeLibrary
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
             int type = first < 0 ? 0 : ReadType(image, heaps, methods, counts, first, coded >> 2);
-            return type == DelegateType ? 0 : type;
+            return type >= DelegateType ? 0 : type;
+        }
+
+        internal static bool IsHandlerExchange(byte[] image, int[] heaps, int[] methods, int row)
+        {
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0 || row < 1 || row > counts[43]) return false;
+            int specs = MetadataTableRows.TableStart(heaps, methods, counts, 43);
+            if (specs < 0) return false;
+            int memberWidth = MetadataTableRows.MethodRefWidth(counts), blobs = methods[3];
+            uint at = (uint)(specs + (row - 1) * (memberWidth + blobs));
+            uint member = Index(image, at, memberWidth);
+            if ((member & 1) != 1 || Member(image, heaps, methods, (int)(member >> 1)) != ExchangeMember)
+                return false;
+            uint blob = Index(image, at + (uint)memberWidth, blobs);
+            if (blob == 0 || blob >= (uint)heaps[1]) return false;
+            int end = heaps[0] + heaps[1];
+            var next = new int[1];
+            int size = CompressedUnsigned(image, heaps[0] + (int)blob, end, next);
+            int signature = next[0];
+            if (size < 4 || size > end - signature || image[signature] != 0x0a ||
+                image[signature + 1] != 1 || image[signature + 2] != 0x12)
+                return false;
+            int type = CompressedUnsigned(image, signature + 3, signature + size, next);
+            return next[0] == signature + size && (type & 3) == 1 &&
+                ReadType(image, heaps, methods, counts, first, type >> 2) == ObjectLayouts.EventHandlerReference;
         }
 
         internal static int Member(byte[] image, int[] heaps, int[] methods, int row)
@@ -40,6 +67,14 @@ namespace PeLibrary
             int size = CompressedUnsigned(image, heaps[0] + (int)blob, end, next);
             int signature = next[0];
             if (size < 3 || size > end - signature) return 0;
+            if (type == InterlockedType)
+            {
+                // static generic T CompareExchange<T>(ref T, T, T)
+                return size == 12 && U32(image, (uint)signature) == 0x1e030110 &&
+                    U32(image, (uint)signature + 4) == 0x001e1000 && U32(image, (uint)signature + 8) == 0x001e001e &&
+                    Name(image, heaps, name, 15, 0x706d6f43, 0x45657261, 0x61686378, 0x65676e)
+                    ? ExchangeMember : 0;
+            }
             if (type == DelegateType)
             {
                 if (image[signature] != 0 || image[signature + 1] != 2) return 0;
@@ -103,8 +138,12 @@ namespace PeLibrary
                 type = ObjectLayouts.EventHandlerReference;
             else if (Name(image, heaps, name, 8, 0x656c6544, 0x65746167, 0)) // Delegate
                 type = DelegateType;
+            else if (Name(image, heaps, name, 11, 0x65746e49, 0x636f6c72, 0x64656b)) // Interlocked
+                type = InterlockedType;
             else return 0;
-            if (!Name(image, heaps, Index(image, at + (uint)(scopeWidth + strings), strings), 6, 0x74737953, 0x6d65, 0)) // System
+            uint ns = Index(image, at + (uint)(scopeWidth + strings), strings);
+            if (type == InterlockedType ? !Name(image, heaps, ns, 16, 0x74737953, 0x542e6d65, 0x61657268, 0x676e6964) :
+                !Name(image, heaps, ns, 6, 0x74737953, 0x6d65, 0))
                 return 0;
 
             // Read the AssemblyRef public key token and culture as well as its name.
@@ -124,13 +163,14 @@ namespace PeLibrary
 
         // CLR metadata names are UTF-8. These ASCII signatures are packed in
         // little-endian words so the scalar bootstrap can compile the matcher.
-        private static bool Name(byte[] image, int[] heaps, uint index, int length, uint first, uint second, uint third)
+        private static bool Name(byte[] image, int[] heaps, uint index, int length, uint first, uint second, uint third,
+            uint fourth = 0)
         {
             if (index == 0 || !Fits(index, (uint)length + 1, (uint)heaps[3])) return false;
             uint start = (uint)heaps[2] + index;
             for (int i = 0; i < length; i++)
             {
-                uint word = i < 4 ? first : i < 8 ? second : third;
+                uint word = i < 4 ? first : i < 8 ? second : i < 12 ? third : fourth;
                 if (image[start + (uint)i] != unchecked((byte)(word >> ((i & 3) * 8)))) return false;
             }
             return image[start + (uint)length] == 0;

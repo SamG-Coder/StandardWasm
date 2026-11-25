@@ -10,7 +10,7 @@ Open the printed local URL. Editing Name updates the greeting, and Clear empties
 
 Both projects compile ProfileApplication.cs. The Windows project uses the native Form, TextBox, Label and Button classes. ProfileBrowser.csproj compiles the same file against browser implementations of those controls and includes the shared profile model. StandardWasm compiles that assembly to WebAssembly. Initialization sets Text, MaxLength and bounds. The shared handler bodies update the preview or clear and request focus.
 
-The browser reads layout and captions from the initialized managed instances. The Windows host attaches TextChanged and Click and owns the native controls. The browser host delivers equivalent events from HTML, positions its input and button, draws the preview with WebGPU and applies managed focus requests. The browser Focus method queues a request for the host. Its return value indicates that the request was queued.
+The browser reads layout and captions from the initialized managed instances. ProfileApplication.cs creates and subscribes to TextChanged and Click in both builds. The browser host forwards text edits and button clicks to the control methods, positions the DOM elements, draws the preview with WebGPU and applies managed focus requests. The browser Focus method queues a request for the host. Its return value indicates that the request was queued.
 
 Run the integration checks from the repository root.
 

@@ -288,6 +288,27 @@ namespace PortableCompiler
                     if (returned != Void)
                         used = Local(code, used, 0x21, Spill(spills, maximum, returned, first));
                 }
+                else if (kind == ExchangeHandlerField)
+                {
+                    byte owner = (byte)(records[slot + 3] >> 8);
+                    int receiver = Spill(spills, maximum, owner, top);
+                    int oldValue = Spill(spills, maximum, EventHandlerReference, top);
+                    used = Local(code, used, 0x20, receiver);
+                    used = Gc(code, used, 2, owner); // struct.get
+                    used = WasmBinary.Unsigned(code, used, operand);
+                    used = Local(code, used, 0x22, oldValue);
+                    used = Local(code, used, 0x20, records[slot + 2 * BranchIl.Width + 1]);
+                    code[used++] = 0xd3; // identity comparison
+                    code[used++] = 0x04;
+                    code[used++] = 0x40;
+                    // This module's GC objects stay on one Wasm agent. The field
+                    // read and conditional write execute with no call between them.
+                    used = Local(code, used, 0x20, receiver);
+                    used = Local(code, used, 0x20, records[slot + BranchIl.Width + 1]);
+                    used = Gc(code, used, 5, owner);
+                    used = WasmBinary.Unsigned(code, used, operand);
+                    code[used++] = 0x0b;
+                }
                 else if (kind == GetField || kind == SetField)
                 {
                     int descriptor = records[slot + 3];
@@ -355,7 +376,7 @@ namespace PortableCompiler
                         }
                         used = NumericLocal(code, used, Spill(spills, maximum, type, top), type, width);
                         if (IsFloat(width)) used = FloatWasm.Binary(code, used, comparison, width);
-                        else if (IsObjectReference(type))
+                        else if (type == String || IsObjectReference(type))
                         {
                             code[used++] = IsComparison(comparison) ? (byte)0xd3 : (byte)0xd1; // ref.eq or ref.is_null
                             if (comparison == 0 || comparison == 0x47) code[used++] = 0x45;

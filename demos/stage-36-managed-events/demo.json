@@ -1,1 +1,1 @@
-{"assembly":"EventLibrary","exportType":"EventLibrary.EventDemo","method":"Compile","inputs":[{"file":"self"},{"name":"RemoveCallbacks"}],"generated":{"capacity":32768,"arguments":[0]},"expected":123}
+{"assembly":"EventLibrary","exportType":"EventLibrary.EventDemo","method":"Compile","inputs":[{"file":"self"},{"name":"SubscriptionOrder"}],"generated":{"capacity":32768,"arguments":[]},"expected":12112}

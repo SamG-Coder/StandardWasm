@@ -1,10 +1,13 @@
-# Stage 36 · Multicast event handlers
+# Stage 36 · Shared WinForms event subscriptions
 
 Run from the repository root.
 
     npm run demo -- stage-36-managed-events
+    node scripts/winforms-textbox.mjs --verify
 
-The compiler takes the .NET Standard DLL and emits a Wasm module that returns 123 from `RemoveCallbacks(0)`. That case removes the last matching two-callback subsequence from a five-callback list. The other cases cover middle removal, no match, null operands, removing the entire list, and removing a callback while dispatch is in progress. When one callback survives, the result preserves that original delegate's identity. [Delegate.Remove](https://learn.microsoft.com/en-us/dotnet/api/system.delegate.remove?view=net-10.0)
+The portable compiler compiles a .NET Standard DLL with an ordinary C# field-like event. The demo returns 12112 from `SubscriptionOrder()`. `RemoveCallbacks` checks removal of the last match, removal in the middle, no match, null operands, removing the entire list, and changes during dispatch. When one callback survives, the result preserves that original delegate's identity. [Delegate.Remove](https://learn.microsoft.com/en-us/dotnet/api/system.delegate.remove?view=net-10.0)
+
+The Profile integration runs the same C# `TextChanged` and `Click` registrations and handlers against native WinForms and the browser controls. Edge drives text editing and button clicks through the DOM and presents the resulting preview through WebGPU. The verifier compares Unicode input, selection replacement, Backspace, Clear, focus, and bounds on both hosts. The library oracle also checks unchanged text, null normalization, and removing a text-change handler.
 
 `CombineCallbacks` checks registration order, null operands, and that a callback added during dispatch first runs on the next invocation. [Delegate.Combine](https://learn.microsoft.com/en-us/dotnet/api/system.delegate.combine?view=net-10.0)
 
@@ -16,8 +19,6 @@ Within one module instance, `EventArgs.Empty` always returns the same reference 
 
 ## Event subscription fixtures
 
-The current Wasm implementation covers combining, removing and invoking bound, nonvirtual instance handlers. Static handlers and compiler-generated field-like event accessors still need support. The remaining subscription fixtures currently run on the CLR.
-
 | CLR entry in `EventLibrary.EventCases` | Expected | Behavior |
 | --- | --- | --- |
 | `SubscriptionOrder()` | 12112 | Invoke in registration order and remove the last matching subscription. |
@@ -27,4 +28,6 @@ The current Wasm implementation covers combining, removing and invoking bound, n
 
 Every handler checks that the sender is the original source and the arguments are the same object as `System.EventArgs.Empty`.
 
-The release build generates event accessors that call `System.Delegate.Combine` or `System.Delegate.Remove`, then use generic `Interlocked.CompareExchange` on the delegate field. The raise method uses a field snapshot followed by `EventHandler.Invoke(object, EventArgs)`.
+The release build generates event accessors that call `System.Delegate.Combine` or `System.Delegate.Remove`, then use generic `Interlocked.CompareExchange` on the delegate field. The compiler recognizes a field address followed by two frame loads and the exact platform `CompareExchange<EventHandler>` call. The fused operation returns the old field value and writes only if the comparand is the same object. The module executes this operation on one Wasm agent, with no call between the read and write. The raise method uses a snapshot followed by `EventHandler.Invoke(object, EventArgs)`.
+
+The current delegate support covers bound, nonvirtual instance handlers. Static handlers, general managed field addresses, and shared-memory interlocked operations are outside this stage.

@@ -32,7 +32,16 @@ namespace PortableCompiler
                     continue;
                 }
 
-                int next = Transition(stack, depth, kind, operand, records[slot + 3], frame,
+                int next;
+                if (kind == ExchangeHandlerField)
+                {
+                    if (!Match(stack, depth, (byte)(records[slot + 3] >> 8)) ||
+                        frame[records[slot + BranchIl.Width + 1]] != EventHandlerReference ||
+                        frame[records[slot + 2 * BranchIl.Width + 1]] != EventHandlerReference)
+                        return -1;
+                    next = Push(stack, depth - 1, EventHandlerReference);
+                }
+                else next = Transition(stack, depth, kind, operand, records[slot + 3], frame,
                     signatures, offsets, arities);
                 if (next < 0)
                     return next;
@@ -128,6 +137,8 @@ namespace PortableCompiler
                 if (depth < needed) return -1;
                 byte type = stack[depth - needed];
                 byte top = stack[depth - 1];
+                if (type == String || top == String)
+                    return kind == Conditional && needed == 1 ? depth - 1 : -1;
                 if (IsObjectReference(type) || IsObjectReference(top))
                 {
                     if (!Assignable(type, top) && !Assignable(top, type)) return -1;

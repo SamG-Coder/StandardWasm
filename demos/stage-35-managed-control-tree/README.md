@@ -11,4 +11,4 @@ The portable compiler reserves stable class type indices before resolving fields
 
 The Profile form uses this representation in the browser. The same ProfileApplication.cs creates the Form, TextBox, Button and two Labels on Windows and in Wasm. It inserts the four children through Form.Controls.Add. A linked collection in Wasm retains each child's reference and insertion order, including both Label instances. Edge enumerates it to position the DOM elements and draw the WebGPU preview. The integration test compares all children, bounds, captions, edits and Clear focus.
 
-Run npm run demo -- stage-34-shared-winforms-source for the interactive Profile form. Each platform host attaches its native events. The browser collection implements insertion and traversal for the controls in this stage.
+Run npm run demo -- stage-34-shared-winforms-source for the interactive Profile form. The browser collection implements insertion and traversal for the controls in this stage. Stage 36 adds shared event registration and dispatch.

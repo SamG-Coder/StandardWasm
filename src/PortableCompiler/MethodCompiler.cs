@@ -292,7 +292,8 @@ namespace PortableCompiler
                     if (EventMetadata.Reference(image, heaps, layout, coded) != EventHandlerReference) return -2;
                     continue;
                 }
-                if (kind == BranchIl.GetField || kind == BranchIl.SetField)
+                if (kind == BranchIl.MethodSpecCall) return -2;
+                if (kind == BranchIl.GetField || kind == BranchIl.SetField || kind == BranchIl.FieldAddress)
                 {
                     int field = records[slot + 1];
                     int fieldOwner = ObjectLayouts.Owner(image, heaps, layout, field, true);
@@ -303,6 +304,8 @@ namespace PortableCompiler
                     if (fieldIndex < 0) return -1;
                     records[slot + 1] = fieldIndex;
                     records[slot + 3] = (type << 8) | ObjectLayouts.FieldType(objects, field);
+                    if (kind == BranchIl.FieldAddress && !LinkExchange(image, heaps, layout, records, slot))
+                        return -2;
                     continue;
                 }
                 if (kind == BranchIl.LoadString)
@@ -479,6 +482,34 @@ namespace PortableCompiler
                 }
             }
             return functions;
+        }
+
+        private static bool LinkExchange(byte[] image, int[] heaps, int[] layout, int[] records, int slot)
+        {
+            // Keep the interior reference confined to this fused operation.
+            // Only local/argument loads can occur between ldflda and the call.
+            if (unchecked((byte)records[slot + 3]) != EventHandlerReference) return false;
+            int replacement = records[slot + 2] * BranchIl.Width;
+            if (replacement >= records.Length || records[replacement] != BranchIl.Load || records[replacement + 3] != 0)
+                return false;
+            int comparand = records[replacement + 2] * BranchIl.Width;
+            if (comparand >= records.Length || records[comparand] != BranchIl.Load || records[comparand + 3] != 0)
+                return false;
+            int call = records[comparand + 2] * BranchIl.Width;
+            if (call >= records.Length || records[call] != BranchIl.MethodSpecCall || records[call + 3] != 0 ||
+                !EventMetadata.IsHandlerExchange(image, heaps, layout, records[call + 1]))
+                return false;
+
+            // The field token's operand bytes have no IR instructions. Keep
+            // the two captured frame indices in their unused operand slots.
+            records[slot + BranchIl.Width + 1] = records[replacement + 1];
+            records[slot + 2 * BranchIl.Width + 1] = records[comparand + 1];
+            records[slot] = BranchIl.ExchangeHandlerField;
+            records[slot + 2] = records[call + 2];
+            records[replacement] = 0;
+            records[comparand] = 0;
+            records[call] = 0;
+            return true;
         }
 
         private static int Register(byte[] image, int[] layout, int[] heaps, int owner, int row,

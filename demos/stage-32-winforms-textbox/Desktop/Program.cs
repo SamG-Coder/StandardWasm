@@ -72,8 +72,6 @@ internal sealed class ProfileWindow : IDisposable
         Input.AccessibleName = ProfileHandlers.InputLabel();
         Input.Font = new Font("Segoe UI", 12);
         Preview.Font = new Font("Segoe UI", 19);
-        Input.TextChanged += (_, _) => ProfileApplication.NameChanged(state, Input, Preview);
-        Clear.Click += (_, _) => ProfileApplication.Clear(Input);
     }
 
     public void Dispose() => Form.Dispose();

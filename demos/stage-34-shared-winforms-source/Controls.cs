@@ -74,10 +74,23 @@ namespace System.Windows.Forms
     public sealed class TextBox
     {
         private readonly int[] bounds = new int[4];
+        private string text = "";
         private int focusRequested;
 
         public string Name { get; set; } = "";
-        public string Text { get; set; } = "";
+        public string Text
+        {
+            get => text;
+            set
+            {
+                if (value == null) value = "";
+                if (SameText(text, value)) return;
+                text = value;
+                TextChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        public event EventHandler TextChanged;
         public int MaxLength { get; set; }
         public bool AutoSize { set { } } // This host uses the explicitly supplied bounds.
 
@@ -98,6 +111,14 @@ namespace System.Windows.Forms
             focusRequested = 0;
             return requested;
         }
+
+        private static bool SameText(string left, string right)
+        {
+            if (left.Length != right.Length) return false;
+            for (int i = 0; i < left.Length; i++)
+                if (left[i] != right[i]) return false;
+            return true;
+        }
     }
 
     public sealed class Label
@@ -117,6 +138,8 @@ namespace System.Windows.Forms
         private readonly int[] bounds = new int[4];
         public string Name { get; set; } = "";
         public string Text { get; set; } = "";
+        public event EventHandler Click;
+        public void PerformClick() => Click?.Invoke(this, EventArgs.Empty);
 
         public void SetBounds(int x, int y, int width, int height) =>
             ControlBounds.Set(bounds, x, y, width, height);

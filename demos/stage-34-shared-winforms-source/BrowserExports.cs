@@ -1,3 +1,4 @@
+using System;
 using ProfileExample;
 using System.Windows.Forms;
 
@@ -15,17 +16,9 @@ namespace ProfileBrowser
         public static Label GetLabel(ControlEntry child) => child.Label;
         public static Button GetButton(ControlEntry child) => child.Button;
 
-        public static void Edit(ProfileState state, TextBox input, Label preview, char[] units)
-        {
-            input.Text = new string(units);
-            ProfileApplication.NameChanged(state, input, preview);
-        }
+        public static void Edit(TextBox input, char[] units) => input.Text = new string(units);
 
-        public static void Clear(ProfileState state, TextBox input, Label preview)
-        {
-            ProfileApplication.Clear(input);
-            ProfileApplication.NameChanged(state, input, preview);
-        }
+        public static void Click(Button button) => button.PerformClick();
 
         public static string ReadTitle(Form form) => form.Text;
         public static string ReadInput(TextBox input) => input.Text;
@@ -69,15 +62,42 @@ namespace ProfileBrowser
             if (action == 1) return form.Text;
             if (action == 2) return button.Text;
             if (action == 3) return input.MaxLength == 40 && input.Bound(2) == 238 ? "Bounds applied" : "";
+            if (action == 6) return VerifyTextChanged(input) ? "Events" : "";
             input.Text = "Ada";
-            ProfileApplication.NameChanged(state, input, preview);
             if (action == 4)
             {
-                BrowserExports.Clear(state, input, preview);
+                BrowserExports.Click(button);
                 return BrowserExports.TakeFocusRequest(input) == 1 && BrowserExports.TakeFocusRequest(input) == 0
                     ? preview.Text : "";
             }
             return preview.Text;
+        }
+
+        private static bool VerifyTextChanged(TextBox input)
+        {
+            var probe = new TextChangeProbe(input);
+            input.TextChanged += probe.Record;
+            input.Text = "Ada";
+            input.Text = "Ada";
+            input.Text = null;
+            input.Text = "";
+            input.TextChanged -= probe.Record;
+            input.Text = "Later";
+            return probe.Count == 2;
+        }
+    }
+
+    internal sealed class TextChangeProbe
+    {
+        private readonly TextBox input;
+        internal int Count;
+
+        internal TextChangeProbe(TextBox input) => this.input = input;
+
+        internal void Record(object sender, EventArgs args)
+        {
+            if (sender == input && args == EventArgs.Empty)
+                Count++;
         }
     }
 }

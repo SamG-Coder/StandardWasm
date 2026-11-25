@@ -21,6 +21,11 @@ internal static class SenderIdentityCases
         Check(nameof(EventCases.InvokeEmptyHandler), [0], EventCases.InvokeEmptyHandler, typeof(EventCases));
         Check(nameof(EventCases.CombineCallbacks), [0, 1, 2], EventCases.CombineCallbacks, typeof(EventCases));
         Check(nameof(EventCases.RemoveCallbacks), [0, 1, 2, 3], EventCases.RemoveCallbacks, typeof(EventCases));
+        Check(nameof(EventCases.CompareHandlerField), null, _ => EventCases.CompareHandlerField(), typeof(EventCases));
+        Check(nameof(EventCases.SubscriptionOrder), null, _ => EventCases.SubscriptionOrder(), typeof(EventCases));
+        Check(nameof(EventCases.RemoveDuringRaise), null, _ => EventCases.RemoveDuringRaise(), typeof(EventCases));
+        Check(nameof(EventCases.EmptyAndUnmatched), null, _ => EventCases.EmptyAndUnmatched(), typeof(EventCases));
+        Check(nameof(EventCases.DistinctTargets), null, _ => EventCases.DistinctTargets(), typeof(EventCases));
         RejectWrongAssembly();
 
         void RejectWrongAssembly()
@@ -51,7 +56,7 @@ internal static class SenderIdentityCases
             });
         }
 
-        void Check(string name, int[] values, Func<int, int> oracle, Type? declaringType = null)
+        void Check(string name, int[]? values, Func<int, int> oracle, Type? declaringType = null)
         {
             int row = Row(declaringType ?? typeof(SenderCases), name);
             var output = new byte[capacity];
@@ -59,7 +64,7 @@ internal static class SenderIdentityCases
             if (length <= 0) throw new InvalidOperationException($"{name} returned {length}");
             string hex = Convert.ToHexString(output.AsSpan(0, length)).ToLowerInvariant();
 
-            foreach (int value in values)
+            foreach (int value in values ?? [0])
             {
                 int? expected;
                 string? exception = null;
@@ -73,7 +78,7 @@ internal static class SenderIdentityCases
                 {
                     module = "BootstrapLibrary", method = "Compile", fixture = name,
                     inputs = new object[] { input, row },
-                    generated = new { capacity, arguments = new[] { value }, hex },
+                    generated = new { capacity, arguments = values == null ? Array.Empty<int>() : new[] { value }, hex },
                     expected, exception
                 });
             }

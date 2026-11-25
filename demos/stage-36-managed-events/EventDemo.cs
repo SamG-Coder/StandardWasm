@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace EventLibrary
 {
@@ -14,6 +15,23 @@ namespace EventLibrary
 
     public static class EventCases
     {
+        public static int CompareHandlerField()
+        {
+            var sender = new EventSource();
+            var log = new EventLog(sender);
+            var slot = new HandlerSlot();
+            EventHandler first = log.First;
+            EventHandler equivalent = log.First;
+            EventHandler replacement = log.Second;
+            slot.Handler = first;
+            if ((object)slot.Exchange(replacement, equivalent) != first || (object)slot.Handler != first)
+                return -1;
+            if ((object)slot.Exchange(replacement, first) != first || (object)slot.Handler != replacement)
+                return -2;
+            slot.Raise(sender, EventArgs.Empty);
+            return log.Value;
+        }
+
         public static int RemoveCallbacks(int scenario)
         {
             var sender = new EventSource();
@@ -172,6 +190,9 @@ namespace EventLibrary
     internal sealed class HandlerSlot
     {
         internal EventHandler Handler;
+
+        internal EventHandler Exchange(EventHandler replacement, EventHandler comparand) =>
+            Interlocked.CompareExchange(ref Handler, replacement, comparand);
 
         internal void Raise(object sender, EventArgs args) => Handler(sender, args);
     }

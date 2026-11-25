@@ -1,9 +1,12 @@
+#nullable enable annotations
+
+using System;
 using System.Windows.Forms;
 
 namespace ProfileExample
 {
     // This file is compiled against WinForms on Windows and the browser control
-    // implementations when targeting Wasm. The hosts connect their own events.
+    // implementations when targeting Wasm. Both builds use these subscriptions.
     internal static class ProfileApplication
     {
         internal static Form Create(ProfileState state)
@@ -29,21 +32,40 @@ namespace ProfileExample
             clear.SetBounds(ProfileHandlers.Left(ProfileHandlers.ClearButton), ProfileHandlers.Top(ProfileHandlers.ClearButton),
                 ProfileHandlers.Width(ProfileHandlers.ClearButton), ProfileHandlers.Height(ProfileHandlers.ClearButton));
             prompt.SetBounds(32, 30, 238, 20);
-            NameChanged(state, input, preview);
+            var events = new ProfileEvents(state, input, preview);
+            events.RefreshPreview();
+            input.TextChanged += events.NameChanged;
+            clear.Click += events.ClearClicked;
             form.Controls.Add(input);
             form.Controls.Add(preview);
             form.Controls.Add(clear);
             form.Controls.Add(prompt);
             return form;
         }
+    }
 
-        internal static void NameChanged(ProfileState state, TextBox input, Label preview)
+    internal sealed class ProfileEvents
+    {
+        private readonly ProfileState state;
+        private readonly TextBox input;
+        private readonly Label preview;
+
+        internal ProfileEvents(ProfileState state, TextBox input, Label preview)
+        {
+            this.state = state;
+            this.input = input;
+            this.preview = preview;
+        }
+
+        internal void NameChanged(object? sender, EventArgs args) => RefreshPreview();
+
+        internal void RefreshPreview()
         {
             ProfileHandlers.Edit(state, input.Text);
             preview.Text = ProfileHandlers.Preview(state);
         }
 
-        internal static void Clear(TextBox input)
+        internal void ClearClicked(object? sender, EventArgs args)
         {
             input.Text = "";
             input.Focus();
