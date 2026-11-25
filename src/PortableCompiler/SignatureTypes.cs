@@ -5,9 +5,11 @@ namespace PortableCompiler
 {
     internal static class SignatureTypes
     {
-        internal const byte Void = 0, I32 = 1, Bytes = 2, Ints = 3, Delegate = 4, MethodPointer = 5, String = 6, Chars = 7, I64 = 8;
+        internal const byte Void = 0, I32 = 1, Bytes = 2, Ints = 3, Delegate = 4, MethodPointer = 5, String = 6, Chars = 7, I64 = WideStorage.Scalar, Longs = WideStorage.Array;
 
         internal static bool IsInteger(byte type) => type == I32 || type == I64;
+
+        internal static byte ArrayValueType(byte array) => array == Longs ? I64 : I32;
 
         // Destination for a method is [result, parameters...]. Local signatures
         // write only their slots. Stack values normalize CLI small integers to i32.
@@ -41,7 +43,7 @@ namespace PortableCompiler
                     types[target] = Void;
                 else if (element == 2 || element == 3 || element == 5 || element == 8 || element == 9)
                     types[target] = I32;
-                else if (element == 0x0a || element == 0x0b)
+                else if (WideStorage.IsIntegerElement(element))
                     types[target] = I64;
                 else if (element == 0x0e)
                     types[target] = String;
@@ -51,6 +53,7 @@ namespace PortableCompiler
                     if (item == 5) types[target] = Bytes;
                     else if (item == 3) types[target] = Chars;
                     else if (item == 8) types[target] = Ints;
+                    else if (WideStorage.IsIntegerElement(item)) types[target] = Longs;
                     else return -2;
                 }
                 else if (element == 0x15)

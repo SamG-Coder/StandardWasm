@@ -13,9 +13,9 @@ namespace PortableCompiler
             byte result = (byte)frameShape[3];
             int classes = frameShape[4];
             bool stringScratch = frameShape[5] != 0;
-            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 1 + I64 + classes) + (stringScratch ? 2 : 0));
+            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 1 + Longs + classes) + (stringScratch ? 2 : 0));
             int spills = arguments + locals;
-            int temporaries = spills + (I64 + classes) * maximum;
+            int temporaries = spills + (Longs + classes) * maximum;
             int scratch = temporaries + classes;
             int pcLocal = scratch + (stringScratch ? 5 : 0);
             // Keep declared locals in CLI order, then allocate one bank per spill type.
@@ -26,7 +26,7 @@ namespace PortableCompiler
             }
             if (maximum != 0)
             {
-                for (int kind = I32; kind <= I64 + classes; kind++)
+                for (int kind = I32; kind <= Longs + classes; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
                     used = WasmBinary.ValueType(code, used, (byte)kind);
@@ -267,16 +267,17 @@ namespace PortableCompiler
                     byte array = states[state + top - 1];
                     used = Local(code, used, 0x20, Spill(spills, maximum, array, top - 1));
                     used = Local(code, used, 0x20, spills + top);
-                    int instruction = operand == 0x94 ? 0x0b : operand == 0x90 ? 0x0c : 0x0d;
+                    // Unpacked integer arrays use array.get. Packed elements require extension.
+                    int instruction = array == Ints || array == Longs ? 0x0b : operand == 0x90 ? 0x0c : 0x0d;
                     used = Gc(code, used, instruction, array);
-                    used = Local(code, used, 0x21, spills + top - 1);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, ArrayValueType(array), top - 1));
                 }
                 else if (kind == ArraySet)
                 {
                     byte array = states[state + top - 2];
                     used = Local(code, used, 0x20, Spill(spills, maximum, array, top - 2));
                     used = Local(code, used, 0x20, spills + top - 1);
-                    used = Local(code, used, 0x20, spills + top);
+                    used = Local(code, used, 0x20, Spill(spills, maximum, ArrayValueType(array), top));
                     used = Gc(code, used, 0x0e, array);
                 }
 

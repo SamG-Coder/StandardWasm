@@ -27,5 +27,6 @@
     <ProjectReference Include="../demos/stage-24-portable-i64/WideLibrary.csproj" />
     <ProjectReference Include="../demos/stage-26-portable-switch/SwitchLibrary.csproj" />
     <ProjectReference Include="../demos/stage-27-portable-diagnostics/DiagnosticLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-28-wide-storage/WideStorageLibrary.csproj" />
   </ItemGroup>
 </Project>

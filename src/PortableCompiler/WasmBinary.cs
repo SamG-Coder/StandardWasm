@@ -6,13 +6,15 @@ namespace PortableCompiler
 {
     internal static class WasmBinary
     {
+        private const int WideArrayHeap = 6, FirstClassHeap = WideArrayHeap + 1;
+
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
             byte[] literals, int literalSize)
         {
-            int typeOffset = objects[0] + 6;
+            int typeOffset = objects[0] + FirstClassHeap;
             int totalFunctions = functions + thunks[0];
-            int typeSize = UnsignedSize(functions + typeOffset) + 25;
+            int typeSize = UnsignedSize(functions + typeOffset) + 28;
             for (int i = 0; i < objects[0]; i++)
             {
                 int slot = 1 + i * Width;
@@ -124,6 +126,9 @@ namespace PortableCompiler
             output[cursor++] = 0x63;
             output[cursor++] = 4;
             output[cursor++] = 0;
+            output[cursor++] = 0x5e; // array of i64
+            output[cursor++] = 0x7e;
+            output[cursor++] = 1;
             for (int i = 0; i < objects[0]; i++)
             {
                 int slot = 1 + i * Width;
@@ -257,7 +262,8 @@ namespace PortableCompiler
         }
 
         internal static int HeapType(byte type) =>
-            type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type < FirstClass ? type - Bytes : 6 + type - FirstClass;
+            type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
+                type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;
 
         private static int ThunkSize(int receiver, int function) =>
             7 + (HeapType((byte)receiver) <= 63 ? 1 : 2) + UnsignedSize(function);

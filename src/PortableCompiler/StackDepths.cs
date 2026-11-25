@@ -140,20 +140,20 @@ namespace PortableCompiler
             }
             else if (kind == ArrayLength)
             {
-                if (!Match(stack, depth, Bytes) && !Match(stack, depth, Ints)) return -1;
+                if (!Match(stack, depth, Bytes) && !Match(stack, depth, Ints) && !Match(stack, depth, Longs)) return -1;
                 stack[depth - 1] = I32;
             }
             else if (kind == ArrayGet)
             {
-                byte array = operand == 0x94 ? Ints : operand == 0x93 ? Chars : Bytes;
+                byte array = operand == 0x96 ? Longs : operand == 0x94 ? Ints : operand == 0x93 ? Chars : Bytes;
                 if (!Match(stack, depth, I32) || !Match(stack, depth - 1, array)) return -1;
-                stack[depth - 2] = I32;
+                stack[depth - 2] = ArrayValueType(array);
                 return depth - 1;
             }
             else if (kind == ArraySet)
             {
-                byte array = operand == 0x9e ? Ints : operand == 0x9d ? Chars : Bytes;
-                if (!Match(stack, depth, I32) || !Match(stack, depth - 1, I32) ||
+                byte array = operand == 0x9f ? Longs : operand == 0x9e ? Ints : operand == 0x9d ? Chars : Bytes;
+                if (!Match(stack, depth, ArrayValueType(array)) || !Match(stack, depth - 1, I32) ||
                     !Match(stack, depth - 2, array))
                     return -1;
                 return depth - 3;

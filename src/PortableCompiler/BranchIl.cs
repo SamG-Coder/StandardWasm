@@ -161,12 +161,12 @@ namespace PortableCompiler
                     pc += 4;
                 }
                 else if (op == 0x8e) kind = ArrayLength;
-                else if (op == 0x90 || op == 0x91 || op == 0x93 || op == 0x94)
+                else if (op == 0x90 || op == 0x91 || op == 0x93 || op == 0x94 || op == 0x96)
                 {
                     kind = ArrayGet;
                     operand = op;
                 }
-                else if (op == 0x9c || op == 0x9d || op == 0x9e)
+                else if (op == 0x9c || op == 0x9d || op == 0x9e || op == 0x9f)
                 {
                     kind = ArraySet;
                     operand = op;

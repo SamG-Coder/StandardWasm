@@ -4,7 +4,7 @@ namespace PeLibrary
 {
     internal static class ObjectLayouts
     {
-        internal const int FirstClass = 9, MaxClasses = 256 - FirstClass, Width = 3;
+        internal const int FirstClass = WideStorage.Array + 1, MaxClasses = 256 - FirstClass, Width = 3;
         internal const int FieldMapStart = 1 + MaxClasses * Width;
 
         // Registry: count, fixed triples of TypeDef row, first Field row and field count, then field kinds by row.
@@ -52,11 +52,14 @@ namespace PeLibrary
                 int type;
                 if (image[blob] == 2 && image[blob + 2] == 8)
                     type = 1;
+                else if (image[blob] == 2 && WideStorage.IsIntegerElement(image[blob + 2]))
+                    type = WideStorage.Scalar;
                 else if (image[blob] == 3 && Fits(sig, 4, (uint)streams[1]) && image[blob + 2] == 0x1d)
                 {
                     int element = image[blob + 3];
                     if (element == 5) type = 2;
                     else if (element == 8) type = 3;
+                    else if (WideStorage.IsIntegerElement(element)) type = WideStorage.Array;
                     else return -2;
                 }
                 else return -2;
