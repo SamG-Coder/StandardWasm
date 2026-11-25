@@ -21,7 +21,7 @@ The first working backend takes a DLL and a public export type, follows reachabl
 
 | Available today | Current boundary |
 | --- | --- |
-| 32- and 64-bit integers (int64 values cross the JS boundary as BigInt), unsigned comparisons, booleans, locals, loops, conditional branches, static calls and recursion | No general BCL linker, virtual dispatch, generics, strings or floating-point lowering |
+| 32- and 64-bit integers (int64 values cross the JS boundary as BigInt), `float`/`double` with IEEE semantics and saturating conversions, unsigned comparisons, booleans, locals, loops, conditional branches, static calls and recursion | No general BCL linker, virtual dispatch, generics, strings, floating-point remainder or `Math.*` |
 | Managed one-dimensional int and byte arrays backed by Wasm GC | Allocation, length, indexed read and write for int and packed byte elements |
 | Direct tail calls for eligible call/return pairs | Managed exception handling and stack-trace fidelity are open |
 | Integer arithmetic and array access | Runtime arithmetic and array failures surface as Wasm traps. Typed CLR exceptions are open. Checked arithmetic currently produces a compile-time diagnostic. |
@@ -61,4 +61,5 @@ instance.exports.SumSquares(10); // 385
 
 Self-hosting requires a metadata reader and binary writer that can run inside the compiled module, plus enough support for the compiler's own strings, collections, object model and error paths. The current bootstrap also needs a file/byte-buffer boundary to replace host filesystem calls. The existing compiler uses Mono.Cecil and Binaryen on the build host. Generated sample modules have neither dependency.
 
-The modern instructions used here are standardized Wasm GC array instructions and `return_call`. See the [WebAssembly 3.0 release](https://webassembly.org/news/2025-09-17-wasm-3.0/) and [engine feature matrix](https://webassembly.org/features/).
+The modern instructions used here are standardized Wasm GC array instructions, `return_call` and the non-trapping float-to-int conversions (`trunc_sat`). See the [WebAssembly 3.0 release](https://webassembly.org/news/2025-09-17-wasm-3.0/) and [engine feature matrix](https://webassembly.org/features/).
+

@@ -1,0 +1,1 @@
+{"assembly":"FloatingPoint","exportType":"FloatingPoint.Reals","method":"KahanSum","inputs":[0.1,10],"expected":1}

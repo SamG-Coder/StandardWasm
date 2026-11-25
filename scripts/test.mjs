@@ -27,6 +27,15 @@ const rejectedWide = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", 
     "--", wideDemo.dll, "LongIntegers.CheckedWide", "artifacts/unsupported-wide.wat"], { encoding: "utf8" });
 assert.equal(rejectedWide.status, 1);
 assert.match(rejectedWide.stderr, /CheckedWide::Increment\(System\.Int64\) at IL_[0-9a-f]+ \(add\.ovf\)/);
+// Floating-point remainder (no exact Wasm fmod yet) and checked float-to-int conversion must be diagnosed.
+const realsDemo = demos.find(d => d.assembly === "FloatingPoint");
+for (const [type, pattern] of [["CheckedReals", /CheckedReals::Remainder\(System\.Double,System\.Double\) at IL_[0-9a-f]+ \(rem\): Floating-point remainder/],
+                               ["CheckedConversions", /CheckedConversions::Narrow\(System\.Double\) at IL_[0-9a-f]+ \(conv\.ovf\.i4\)/]]) {
+    const rejectedReal = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
+        "--", realsDemo.dll, "FloatingPoint." + type, "artifacts/unsupported-real.wat"], { encoding: "utf8" });
+    assert.equal(rejectedReal.status, 1);
+    assert.match(rejectedReal.stderr, pattern);
+}
 const cases = JSON.parse(readFileSync("artifacts/oracle.json"));
 console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases));
 

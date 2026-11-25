@@ -22,8 +22,9 @@ export async function verify(load, cases) {
             const key = (c.exception ?? "no CLR exception") + " -> trap '" + error.message + "'";
             traps.set(key, (traps.get(key) ?? 0) + 1);
         }
-        // Strict equality also rejects a Number where the CLR produced a 64-bit value, and vice versa.
-        if (actual !== decode(c.expected))
+        // SameValue (Object.is) treats NaN as equal to NaN and +0 as different from -0, so floating-point results
+        // compare bit-exactly up to NaN payload. It also rejects a Number where the CLR produced a 64-bit BigInt.
+        if (!Object.is(actual, decode(c.expected)))
             throw Error(printable({ ...c, inputs: c.inputs.map(input => input?.bytes ? "<" + input.bytes.length + " bytes>" : input), actual }));
     }
     if (modules.Sample.Countdown(1000000, 7) !== 1000007) throw Error("Deep tail call failed");
