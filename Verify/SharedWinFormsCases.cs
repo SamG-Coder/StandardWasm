@@ -8,7 +8,7 @@ internal static class SharedWinFormsCases
 {
     internal static void Add(List<object> cases)
     {
-        const int capacity = 16384;
+        const int capacity = 32768;
         int Row(Type type, string name) => type.GetMethod(name)!.MetadataToken & 0xffffff;
         byte[] image = File.ReadAllBytes(typeof(BrowserExports).Assembly.Location);
         byte[] manifest = BootstrapCases.Manifest(
