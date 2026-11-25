@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Sample;
 using ArrayLibrary;
+using ByteLibrary;
 
 var cases = new List<object>();
 void Check(string module, string method, int[] inputs, Func<int> run)
@@ -8,6 +9,7 @@ void Check(string module, string method, int[] inputs, Func<int> run)
     int? expected;
     try { expected = run(); }
     catch (ArithmeticException) { expected = null; }
+    catch (IndexOutOfRangeException) { expected = null; }
     cases.Add(new { module, method, inputs, expected });
 }
 
@@ -27,4 +29,18 @@ for (int i = 0; i < 300; i++)
 // Keep the CLR oracle's recursion shallow. A separate engine stress case checks deep Wasm tail calls.
 Check("Sample", "Countdown", [300, 2], () => Kernels.Countdown(300, 2));
 Check("ArrayLibrary", "PrefixChecksum", [-1, 0], () => Sequences.PrefixChecksum(-1, 0));
+int[] byteValues = [int.MinValue, -257, -1, 0, 127, 128, 255, 256, 511, int.MaxValue];
+foreach (int value in byteValues)
+{
+    Check("ByteLibrary", "Narrow", [value], () => Buffers.Narrow(value));
+    foreach (int index in new[] { 0, 1, 2 })
+        Check("ByteLibrary", "RoundTrip", [3, index, value], () => Buffers.RoundTrip(3, index, value));
+}
+
+foreach (var (count, index) in new[] { (1, 0), (3, 2), (0, 0), (3, -1), (3, 3), (-1, 0) })
+{
+    Check("ByteLibrary", "ZeroInitialized", [count, index], () => Buffers.ZeroInitialized(count, index));
+    Check("ByteLibrary", "RoundTrip", [count, index, 255], () => Buffers.RoundTrip(count, index, 255));
+}
+
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));

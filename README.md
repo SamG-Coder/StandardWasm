@@ -22,7 +22,7 @@ The first working backend takes a DLL and a public export type, follows reachabl
 | Available today | Current boundary |
 | --- | --- |
 | 32-bit integers, unsigned comparisons, booleans, locals, loops, conditional branches, static calls and recursion | No general BCL linker, virtual dispatch, generics, strings or floating-point lowering |
-| Managed one-dimensional int arrays backed by Wasm GC | Only int elements, with allocation, length, indexed read and write |
+| Managed one-dimensional int and byte arrays backed by Wasm GC | Allocation, length, indexed read and write for int and packed byte elements |
 | Direct tail calls for eligible call/return pairs | Managed exception handling and stack-trace fidelity are open |
 | Integer arithmetic and array access | Runtime arithmetic and array failures surface as Wasm traps. Typed CLR exceptions are open. Checked arithmetic currently produces a compile-time diagnostic. |
 
@@ -35,7 +35,7 @@ npm ci
 npm test
 ```
 
-The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds two netstandard2.0 libraries, records expected results on the CLR, compiles both DLLs and executes the binaries in Node and a headless browser. It also verifies rejection of checked addition and exercises one million tail calls. Traps are compared as failures, without matching exception classes.
+The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds three netstandard2.0 libraries, records expected results on the CLR, compiles the DLLs and executes the binaries in Node and a headless browser. It also verifies rejection of checked addition and exercises one million tail calls. Traps are compared as failures, without matching exception classes.
 
 To compile another DLL:
 

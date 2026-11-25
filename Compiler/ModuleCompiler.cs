@@ -21,10 +21,15 @@ internal sealed class ModuleCompiler(ModuleDefinition module)
         return name;
     }
 
+    internal const string Int = "i32";
+    internal const string IntArray = "(ref null $ints)";
+    internal const string ByteArray = "(ref null $bytes)";
+
     internal static string ValueType(TypeReference type) => type.FullName switch
     {
-        "System.Int32" or "System.UInt32" or "System.Boolean" => "i32",
-        "System.Int32[]" => "(ref null $ints)",
+        "System.Int32" or "System.UInt32" or "System.Boolean" or "System.Byte" => Int,
+        "System.Int32[]" => IntArray,
+        "System.Byte[]" => ByteArray,
         _ => throw new NotSupportedException($"Unsupported value type: {type.FullName}")
     };
 
@@ -32,7 +37,7 @@ internal sealed class ModuleCompiler(ModuleDefinition module)
     {
         if (module.GetType("<Module>")?.Methods.Any(m => m.Name == ".cctor") == true)
             throw new NotSupportedException("Module initializers require managed startup support.");
-        var output = new StringBuilder("(module\n (type $ints (array (mut i32)))\n");
+        var output = new StringBuilder("(module\n (type $ints (array (mut i32)))\n (type $bytes (array (mut i8)))\n");
         var used = new HashSet<string>();
         foreach (var method in exports.Methods.Where(m => m.IsPublic && m.IsStatic))
         {
