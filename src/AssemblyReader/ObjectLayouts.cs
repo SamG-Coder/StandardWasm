@@ -4,7 +4,7 @@ namespace PeLibrary
 {
     internal static class ObjectLayouts
     {
-        internal const int FirstClass = WideStorage.Array + 1, MaxClasses = 256 - FirstClass, Width = 3;
+        internal const int FirstClass = 12, MaxClasses = 256 - FirstClass, Width = 3;
         internal const int FieldMapStart = 1 + MaxClasses * Width;
 
         // Registry: count, fixed triples of TypeDef row, first Field row and field count, then field kinds by row.

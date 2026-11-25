@@ -5,9 +5,15 @@ namespace PortableCompiler
 {
     internal static class SignatureTypes
     {
-        internal const byte Void = 0, I32 = 1, Bytes = 2, Ints = 3, Delegate = 4, MethodPointer = 5, String = 6, Chars = 7, I64 = WideStorage.Scalar, Longs = WideStorage.Array;
+        internal const byte Void = 0, I32 = 1, Bytes = 2, Ints = 3, Delegate = 4, MethodPointer = 5, String = 6, Chars = 7, I64 = WideStorage.Scalar, Longs = WideStorage.Array, F32 = 10, F64 = 11;
 
         internal static bool IsInteger(byte type) => type == I32 || type == I64;
+
+        internal static bool IsFloat(byte type) => type == F32 || type == F64;
+
+        internal static bool IsScalar(byte type) => IsInteger(type) || IsFloat(type);
+
+        internal static byte FloatWidth(byte left, byte right) => left == F64 || right == F64 ? F64 : F32;
 
         internal static byte ArrayValueType(byte array) => array == Longs ? I64 : I32;
 
@@ -45,6 +51,8 @@ namespace PortableCompiler
                     types[target] = I32;
                 else if (WideStorage.IsIntegerElement(element))
                     types[target] = I64;
+                else if (element == 0x0c || element == 0x0d)
+                    types[target] = element == 0x0c ? F32 : F64;
                 else if (element == 0x0e)
                     types[target] = String;
                 else if (element == 0x1d && cursor < end)

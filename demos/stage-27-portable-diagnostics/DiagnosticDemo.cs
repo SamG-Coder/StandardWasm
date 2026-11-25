@@ -22,7 +22,7 @@ namespace DiagnosticLibrary
         public static int LinkedRate(int value) => DiagnosticDependency.Costs.FlatRate(value) + 1;
 
         public static int Absolute(int value) => System.Math.Abs(value);
-        public static double UnsupportedShape(int value) => value;
+        public static short UnsupportedShape(int value) => unchecked((short)value);
         public static int Supported(int value) => unchecked(value * 3 + 1);
     }
 }
