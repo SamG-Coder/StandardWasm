@@ -2,15 +2,23 @@ using System.Text.Json;
 using Sample;
 using ArrayLibrary;
 using ByteLibrary;
+using IntegerDivision;
 
 var cases = new List<object>();
+// Each case records the CLR result. expected == null means the CLR threw one of the exceptions below,
+// and the Wasm module must trap. Wasm has no typed exceptions yet, so the exception type name is kept
+// for reporting and is not compared with the engine's trap message.
 void Check(string module, string method, int[] inputs, Func<int> run)
 {
     int? expected;
+    string exception = null;
     try { expected = run(); }
-    catch (ArithmeticException) { expected = null; }
-    catch (IndexOutOfRangeException) { expected = null; }
-    cases.Add(new { module, method, inputs, expected });
+    catch (Exception e) when (e is ArithmeticException or IndexOutOfRangeException)
+    {
+        expected = null;
+        exception = e.GetType().FullName;
+    }
+    cases.Add(new { module, method, inputs, expected, exception });
 }
 
 var random = new Random(6941);
@@ -44,4 +52,45 @@ foreach (var (count, index) in new[] { (1, 0), (3, 2), (0, 0), (3, -1), (3, 3), 
 }
 
 PeCases.Add(cases);
+// Integer division (stage 08). The grid crosses every signed boundary with every divisor boundary.
+// The unsigned high-bit patterns (0x80000000, 0x80000001, 0xFFFFFFFE, 0xFFFFFFFF) are the same values
+// read as int, so div.un and rem.un see dividends and divisors above int.MaxValue.
+int[] divisionBoundaries =
+[
+    int.MinValue, int.MinValue + 1, -10, -8, -7, -2, -1, 0, 1, 2, 7, 8, 10, int.MaxValue - 1, int.MaxValue
+];
+void CheckDivision(int a, int b)
+{
+    Check("IntegerDivision", "Divide", [a, b], () => Quotients.Divide(a, b));
+    Check("IntegerDivision", "Remainder", [a, b], () => Quotients.Remainder(a, b));
+    Check("IntegerDivision", "DivideUnsigned", [a, b], () => Quotients.DivideUnsigned(a, b));
+    Check("IntegerDivision", "RemainderUnsigned", [a, b], () => Quotients.RemainderUnsigned(a, b));
+    Check("IntegerDivision", "QuotientIdentityHolds", [a, b], () => Quotients.QuotientIdentityHolds(a, b) ? 1 : 0);
+}
+void CheckConstantDivisors(int a)
+{
+    Check("IntegerDivision", "DivideByNegativeOne", [a], () => Quotients.DivideByNegativeOne(a));
+    Check("IntegerDivision", "RemainderByNegativeOne", [a], () => Quotients.RemainderByNegativeOne(a));
+    Check("IntegerDivision", "DivideByEight", [a], () => Quotients.DivideByEight(a));
+    Check("IntegerDivision", "RemainderBySeven", [a], () => Quotients.RemainderBySeven(a));
+    Check("IntegerDivision", "DivideUnsignedByTen", [a], () => Quotients.DivideUnsignedByTen(a));
+    Check("IntegerDivision", "UnsignedDigitSum", [a], () => Quotients.UnsignedDigitSum(a));
+}
+foreach (int a in divisionBoundaries)
+{
+    foreach (int b in divisionBoundaries)
+        CheckDivision(a, b);
+    CheckConstantDivisors(a);
+}
+var divisionRandom = new Random(3301);
+for (int i = 0; i < 200; i++)
+{
+    int a = (int)divisionRandom.NextInt64(int.MinValue, (long)int.MaxValue + 1);
+    // Alternate small divisors, which give large quotients, with full-range divisors, which give
+    // mostly zero or small quotients. The small range includes zero.
+    int b = i % 2 == 0 ? divisionRandom.Next(-50, 51)
+                       : (int)divisionRandom.NextInt64(int.MinValue, (long)int.MaxValue + 1);
+    CheckDivision(a, b);
+    CheckConstantDivisors(a);
+}
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));
