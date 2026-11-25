@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WinForms redraw comparison</title>
+<style>
+  :root { color-scheme: dark; font: 15px system-ui, sans-serif; background: #111827; color: #f8fafc; }
+  body { margin: 20px; }
+  h1 { font-size: 1.4rem; }
+  form { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; margin-bottom: 16px; }
+  label { display: grid; gap: 5px; }
+  button, select { font: inherit; padding: .45rem .65rem; }
+  .canvases { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 620px), 1fr)); gap: 16px; }
+  figure { margin: 0; min-width: 0; }
+  figcaption { margin-bottom: 6px; font-weight: 600; }
+  canvas { display: block; width: 100%; max-width: 960px; outline: 1px solid #334155; }
+  pre { overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>WinForms redraw comparison</h1>
+<form id="controls">
+  <label>Controls <select id="count"><option>2</option><option>128</option><option>512</option><option selected>2048</option></select></label>
+  <label>Changed each frame <select id="change"><option value="0">0%</option><option value="0.1" selected>10%</option><option value="1">100%</option></select></label>
+  <button type="submit">Measure redraw</button>
+</form>
+<div class="canvases">
+  <figure><figcaption>WebGPU</figcaption><canvas id="gpu" width="960" height="600"></canvas></figure>
+  <figure><figcaption>Canvas 2D</figcaption><canvas id="canvas2d" width="960" height="600"></canvas></figure>
+</div>
+<p id="status" role="status"></p>
+<pre id="result"></pre>
+<script type="module" src="./benchmark.mjs"></script>
+</body>
+</html>

@@ -1,7 +1,8 @@
 const tones = {
     background: [0.078, 0.113, 0.180],
     panel: [0.117, 0.166, 0.255],
-    button: [0.384, 0.855, 0.906]
+    button: [0.384, 0.855, 0.906],
+    active: [0.961, 0.702, 0.322]
 };
 
 function rgb(color) {
@@ -17,43 +18,65 @@ export function createTextLayer(model) {
             paint.clearRect(0, 0, model.width, model.height);
             for (const control of model.controls) {
                 const button = control.kind === "button";
-                paint.font = button ? "700 16px system-ui" : "700 34px system-ui";
+                const fontSize = control.fontSize ?? (button ? 16 : 34);
+                const inset = control.textInset ?? (button ? 6 : 20);
+                paint.font = "700 " + fontSize + "px system-ui";
                 paint.fillStyle = button ? "#10212b" : "#f1f6ff";
                 paint.textAlign = button ? "center" : "left";
                 paint.textBaseline = "middle";
                 paint.fillText(texts.get(control.name),
-                    control.x + (button ? control.width * 0.5 : 20),
+                    control.x + (button ? control.width * 0.5 : inset),
                     control.y + control.height * 0.5,
-                    control.width - (button ? 12 : 40));
+                    control.width - inset * 2);
             }
         }
     };
 }
 
-export function canvasBaseline(model, text) {
-    const canvas = new OffscreenCanvas(model.width, model.height);
+function controlTone(control, active) {
+    return active ? tones.active : control.kind === "button" ? tones.button : tones.panel;
+}
+
+export function canvasBaseline(model, text, canvas = new OffscreenCanvas(model.width, model.height)) {
     const context = canvas.getContext("2d", { alpha: false });
-    return () => {
-        context.fillStyle = rgb(tones.background);
-        context.fillRect(0, 0, model.width, model.height);
-        for (const c of model.controls) {
-            context.fillStyle = rgb(c.kind === "button" ? tones.button : tones.panel);
-            context.fillRect(c.x, c.y, c.width, c.height);
+    const background = rgb(tones.background);
+    const initialColors = model.controls.map(control => rgb(controlTone(control, false)));
+    const activeColor = rgb(tones.active);
+    const states = new Uint8Array(model.controls.length);
+    return {
+        update(start, count, active) {
+            states.fill(active ? 1 : 0, start, start + count);
+        },
+        draw() {
+            context.fillStyle = background;
+            context.fillRect(0, 0, model.width, model.height);
+            let previous = background;
+            for (let i = 0; i < model.controls.length; i++) {
+                const c = model.controls[i];
+                const color = states[i] ? activeColor : initialColors[i];
+                if (color !== previous) {
+                    context.fillStyle = color;
+                    previous = color;
+                }
+                context.fillRect(c.x, c.y, c.width, c.height);
+            }
+            context.drawImage(text.canvas, 0, 0);
         }
-        context.drawImage(text.canvas, 0, 0);
     };
 }
 
 const fills = /* wgsl */ `
 struct Vertex {
     @builtin(position) position: vec4f,
-    @location(0) color: vec3f,
+    @location(0) color: vec4f,
 };
-@vertex fn vertexMain(@location(0) pos: vec2f, @location(1) color: vec3f) -> Vertex {
-    return Vertex(vec4f(pos, 0, 1), color);
+@vertex fn vertexMain(@builtin(vertex_index) index: u32,
+                      @location(0) rect: vec4f, @location(1) color: vec4f) -> Vertex {
+    let uv = vec2f(f32(index & 1u), f32(index >> 1u));
+    return Vertex(vec4f(rect.xy + uv * rect.zw, 0, 1), color);
 }
 @fragment fn fragmentMain(in: Vertex) -> @location(0) vec4f {
-    return vec4f(in.color, 1);
+    return in.color;
 }
 `;
 
@@ -72,7 +95,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f };
 
 export async function webgpuRenderer(canvas, model, text) {
     if (!navigator.gpu) throw Error("WebGPU requires a supported browser and a secure origin.");
-    const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
+    const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) throw Error("No WebGPU adapter is available.");
     const device = await adapter.requestDevice();
     const context = canvas.getContext("webgpu");
@@ -80,33 +103,42 @@ export async function webgpuRenderer(canvas, model, text) {
     const format = navigator.gpu.getPreferredCanvasFormat();
     context.configure({ device, format, alphaMode: "opaque" });
 
-    const vertices = [];
-    for (const c of model.controls) {
-        const left = 2 * c.x / model.width - 1;
-        const right = 2 * (c.x + c.width) / model.width - 1;
-        const top = 1 - 2 * c.y / model.height;
-        const bottom = 1 - 2 * (c.y + c.height) / model.height;
-        const color = c.kind === "button" ? tones.button : tones.panel;
-        for (const [x, y] of [[left, top], [left, bottom], [right, top], [right, top], [left, bottom], [right, bottom]])
-            vertices.push(x, y, ...color);
+    const rectangles = new Float32Array(model.controls.length * 4);
+    const initialColors = new Uint8Array(model.controls.length * 4);
+    const activeColors = new Uint8Array(model.controls.length * 4);
+
+    const rgba = tone => [...tone.map(value => Math.round(value * 255)), 255];
+    const active = rgba(tones.active);
+    for (const [i, control] of model.controls.entries()) {
+        initialColors.set(rgba(controlTone(control, false)), i * 4);
+        activeColors.set(active, i * 4);
     }
-    const data = new Float32Array(vertices);
-    const vertexBuffer = device.createBuffer({
-        size: data.byteLength,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-    });
-    device.queue.writeBuffer(vertexBuffer, 0, data);
+
+    for (const [i, c] of model.controls.entries()) {
+        const left = 2 * c.x / model.width - 1;
+        const top = 1 - 2 * c.y / model.height;
+        rectangles.set([left, top, 2 * c.width / model.width, -2 * c.height / model.height], i * 4);
+    }
+    const geometryBuffer = device.createBuffer({ size: rectangles.byteLength,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+    const colorBuffer = device.createBuffer({ size: initialColors.byteLength,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(geometryBuffer, 0, rectangles);
+    device.queue.writeBuffer(colorBuffer, 0, initialColors);
     const fillShader = device.createShaderModule({ code: fills });
     const glyphShader = device.createShaderModule({ code: glyphs });
     const fillPipeline = await device.createRenderPipelineAsync({
         layout: "auto",
         vertex: {
             module: fillShader, entryPoint: "vertexMain",
-            buffers: [{ arrayStride: 20, attributes: [
-                { shaderLocation: 0, offset: 0, format: "float32x2" },
-                { shaderLocation: 1, offset: 8, format: "float32x3" }
-            ] }]
+            buffers: [
+                { arrayStride: 16, stepMode: "instance",
+                    attributes: [{ shaderLocation: 0, offset: 0, format: "float32x4" }] },
+                { arrayStride: 4, stepMode: "instance",
+                    attributes: [{ shaderLocation: 1, offset: 0, format: "unorm8x4" }] }
+            ]
         },
+        primitive: { topology: "triangle-strip" },
         fragment: { module: fillShader, entryPoint: "fragmentMain", targets: [{ format }] }
     });
     const textPipeline = await device.createRenderPipelineAsync({
@@ -137,6 +169,15 @@ export async function webgpuRenderer(canvas, model, text) {
             fallback: adapter.info.isFallbackAdapter },
         finished: () => device.queue.onSubmittedWorkDone(),
         lost: device.lost,
+        dispose() {
+            context.unconfigure();
+            device.destroy();
+        },
+        update(start, count, active) {
+            if (count === 0) return;
+            const bytes = active ? activeColors : initialColors;
+            device.queue.writeBuffer(colorBuffer, start * 4, bytes, start * 4, count * 4);
+        },
         upload() {
             device.queue.copyExternalImageToTexture({ source: text.canvas }, { texture }, extent);
         },
@@ -147,8 +188,9 @@ export async function webgpuRenderer(canvas, model, text) {
                 loadOp: "clear", storeOp: "store"
             }] });
             pass.setPipeline(fillPipeline);
-            pass.setVertexBuffer(0, vertexBuffer);
-            pass.draw(vertices.length / 5);
+            pass.setVertexBuffer(0, geometryBuffer);
+            pass.setVertexBuffer(1, colorBuffer);
+            pass.draw(4, model.controls.length);
             pass.setPipeline(textPipeline);
             pass.setBindGroup(0, bindings);
             pass.draw(3);
