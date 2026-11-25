@@ -1,6 +1,8 @@
 import { decode, invoke, invokeGenerated } from "./invoke.mjs";
 
-const printable = value => JSON.stringify(value, (key, v) => typeof v === "bigint" ? v + "n" : v);
+// Failure reports spell out values JSON would hide: BigInt, -0 (JSON prints 0) and non-finite Numbers.
+const printable = value => JSON.stringify(value, (key, v) =>
+    typeof v === "bigint" ? v + "n" : Object.is(v, -0) ? "-0" : typeof v === "number" && !Number.isFinite(v) ? String(v) : v);
 
 export async function verify(load, cases) {
     const modules = {};
