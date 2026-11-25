@@ -21,12 +21,20 @@ internal class CounterForm : Form
         state = CounterHandlers.Create(0);
         click = CounterHandlers.Bind(state);
         ClientSize = new Size(CounterHandlers.ClientWidth(layout), CounterHandlers.ClientHeight(layout));
+        MinimumSize = SizeFromClientSize(ClientSize);
         Result.Font = new Font("Segoe UI", 24, FontStyle.Bold);
         Result.Text = CounterHandlers.LabelText(state);
         Increment.Text = CounterHandlers.Caption(CounterLayout.Increment);
         Increment.Click += Activate;
         ApplyLayout();
         AcceptButton = Increment;
+        ClientSizeChanged += ResizeLayout;
+    }
+
+    private void ResizeLayout(object? sender, EventArgs args)
+    {
+        CounterHandlers.Resize(layout, ClientSize.Width, ClientSize.Height);
+        ApplyLayout();
     }
 
     private void Activate(object? sender, EventArgs args)

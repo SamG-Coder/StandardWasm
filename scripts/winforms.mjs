@@ -43,7 +43,7 @@ if (verify) {
         browser = await chromium.launch({
             executablePath: process.env.BROWSER_PATH || (existsSync(edge) ? edge : undefined)
         });
-        const page = await browser.newPage({ viewport: { width: 600, height: 400 } });
+        const page = await browser.newPage({ viewport: { width: 760, height: 500 } });
         const errors = [];
         page.on("pageerror", error => errors.push(error.message));
         await page.goto(url);
@@ -145,11 +145,80 @@ if (verify) {
                 imports: WebAssembly.Module.imports(module).length, nullTraps };
         });
         assert.deepEqual(instances, { first: 8, second: 100, imports: 0, nullTraps: true });
+        const resized = [];
+        async function recordResize() {
+            const client = await page.locator("#surface").evaluate(canvas => [canvas.width, canvas.height]);
+            const surface = await page.locator("#surface").boundingBox();
+            async function relative(locator) {
+                const bounds = await locator.boundingBox();
+                return [bounds.x - surface.x, bounds.y - surface.y, bounds.width, bounds.height].map(Math.round);
+            }
+            resized.push({
+                client,
+                label: JSON.parse(await form.getAttribute("data-label-bounds")),
+                increment: await relative(original),
+                additional: await additional.count() ? await relative(additional) : [],
+                caption: await label.textContent()
+            });
+        }
+        async function waitForSize(width, height) {
+            await page.waitForFunction(([width, height]) => {
+                const canvas = document.querySelector("#surface");
+                return canvas.width === width && canvas.height === height;
+            }, [width, height]);
+        }
+        async function setSize(width, height) {
+            await form.evaluate((node, [width, height]) => {
+                node.style.width = width + "px";
+                node.style.height = height + "px";
+            }, [width, height]);
+            await waitForSize(width, height);
+        }
+
+        // Drag Chromium's actual resize handle to grow the form.
+        const start = await form.boundingBox();
+        await page.mouse.move(start.x + start.width - 4, start.y + start.height - 4);
+        await page.mouse.down();
+        await page.mouse.move(start.x + start.width + 96, start.y + start.height + 56, { steps: 8 });
+        await page.mouse.up();
+        await waitForSize(520, 300);
+        await recordResize();
+        const expanded = await page.locator("#surface").boundingBox();
+        await page.mouse.click(expanded.x + 100, expanded.y + 175);
+        assert.equal(await label.textContent(), "Count: 4");
+        await original.click();
+        await recordResize();
+        const expandedPng = await capture();
+        const pixels = await page.evaluate(async bytes => {
+            const image = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: "image/png" }));
+            const paint = new OffscreenCanvas(image.width, image.height).getContext("2d");
+            paint.drawImage(image, 0, 0);
+            return [[80, 175], [40, 215], [310, 215], [500, 45], [510, 45]].map(([x, y]) => paint.getImageData(x, y, 1, 1).data[1]);
+        }, Array.from(expandedPng));
+        assert.ok(pixels[0] < 60 && pixels[1] > 180 && pixels[2] > 180, "WebGPU must draw the buttons at the new bounds.");
+        assert.ok(pixels[3] > pixels[4], "WebGPU must stretch the label panel to its new width.");
+        await page.screenshot({ path: artifacts + "/browser-resized.png" });
+        const expandedTiming = await page.evaluate(() => window.measureRendering(60));
+        const resizedButton = await additional.elementHandle();
+        await additional.focus();
+        await setSize(480, 280);
+        assert.equal(await additional.evaluate((node, retained) =>
+            node === retained && node === document.activeElement, resizedButton), true);
+        await recordResize();
+        await page.keyboard.press("Enter");
+        assert.equal(await additional.count(), 0);
+        assert.equal(await original.evaluate((node, retained) =>
+            node === retained && node === document.activeElement, originalNode), true);
+        await recordResize();
+        await setSize(420, 240);
+        await recordResize();
+        assert.deepEqual(resized, desktop.resized);
+
         const timing = await page.evaluate(() => window.measureRendering());
         assert.deepEqual(errors, []);
         const evidence = {
             engine: browser.version(), sequence, controlCounts, dynamicBounds,
-            labelLeft: positions, movedEdgePixels: movedEdge, changedLabelPixels: changed, insertedPixels: inserted, instances, ...timing
+            labelLeft: positions, movedEdgePixels: movedEdge, changedLabelPixels: changed, insertedPixels: inserted, instances, resized, expandedTiming, ...timing
         };
         await page.screenshot({ path: artifacts + "/browser.png" });
         writeFileSync(artifacts + "/timing.json", JSON.stringify(evidence, null, 2) + "\n");

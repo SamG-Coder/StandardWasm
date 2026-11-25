@@ -66,8 +66,39 @@ internal static class Program
         using var image = new Bitmap(form.Width, form.Height);
         form.DrawToBitmap(image, new Rectangle(Point.Empty, image.Size));
         image.Save(output);
+
+        var resized = new List<object>();
+        static int[] Bounds(Control control) => [control.Left, control.Top, control.Width, control.Height];
+        void RecordResize() => resized.Add(new
+        {
+            client = new[] { form.ClientSize.Width, form.ClientSize.Height },
+            label = Bounds(form.Result), increment = Bounds(form.Increment),
+            additional = form.Additional is { } extra ? Bounds(extra) : Array.Empty<int>(),
+            caption = form.Result.Text
+        });
+
+        form.ClientSize = new Size(520, 300);
+        RecordResize();
+        form.Increment.PerformClick();
+        var resizedButton = form.Additional ?? throw new InvalidOperationException("Resize lost the additional button.");
+        form.ActiveControl = resizedButton;
+        RecordResize();
+        form.ClientSize = new Size(480, 280);
+        if (form.ActiveControl != resizedButton || form.Additional != resizedButton)
+            throw new InvalidOperationException("Resizing replaced the focused native control.");
+        RecordResize();
+        resizedButton.PerformClick();
+        if (!resizedButton.IsDisposed || form.ActiveControl != retained)
+            throw new InvalidOperationException("Removal after resize did not return native focus.");
+        RecordResize();
+        form.ClientSize = new Size(420, 240);
+        RecordResize();
+        if (form.Increment != retained || form.Increment.Bounds != new Rectangle(32, 151, 156, 48) ||
+            form.Result.Bounds != new Rectangle(32, 35, 350, 94))
+            throw new InvalidOperationException("The resize round trip did not restore the original native bounds.");
+
         string evidence = JsonSerializer.Serialize(new { sequence, labelLeft = positions, controlCounts = counts,
-            dynamicBounds = new[] { 204, 151, 184, 48 },
+            dynamicBounds = new[] { 204, 151, 184, 48 }, resized,
             width = form.ClientSize.Width, height = form.ClientSize.Height });
         File.WriteAllText(Path.ChangeExtension(output, ".json"), evidence);
         Console.WriteLine(evidence);

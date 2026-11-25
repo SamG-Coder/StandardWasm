@@ -1,0 +1,1 @@
+{"assembly":"ResizeLibrary","exportType":"ResizeLibrary.ResizeDemo","method":"Compile","inputs":[{"file":"self"},{"name":"ReadBounds"}],"generated":{"capacity":32768,"arguments":[520,300,480,280,1,2,2]},"expected":264}

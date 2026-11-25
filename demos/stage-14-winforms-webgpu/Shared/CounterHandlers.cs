@@ -38,6 +38,7 @@ namespace CounterExample
         public static int TextCodeUnit(string text, int index) => text[index];
 
         public static ControlTree BuildTree() => CounterLayout.Build();
+        public static void Resize(ControlTree tree, int width, int height) => CounterLayout.Resize(tree, width, height);
         public static int ClientWidth(ControlTree tree) => tree.ClientWidth();
         public static int ClientHeight(ControlTree tree) => tree.ClientHeight();
         public static int DefaultButton(ControlTree tree) => tree.DefaultButton();

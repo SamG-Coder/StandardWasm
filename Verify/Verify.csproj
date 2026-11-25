@@ -29,5 +29,6 @@
     <ProjectReference Include="../demos/stage-27-portable-diagnostics/DiagnosticLibrary.csproj" />
     <ProjectReference Include="../demos/stage-28-wide-storage/WideStorageLibrary.csproj" />
     <ProjectReference Include="../demos/stage-30-portable-floats/PortableReals.csproj" />
+    <ProjectReference Include="../demos/stage-31-resize-winforms/ResizeLibrary.csproj" />
   </ItemGroup>
 </Project>
