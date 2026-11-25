@@ -131,6 +131,12 @@ namespace PortableCompiler
             if (kind == Dup) return depth < 1 ? -1 : Push(stack, depth, stack[depth - 1]);
             if (kind == Pop) return depth - 1;
             if (kind == Switch) return Match(stack, depth, I32) ? depth - 1 : -1;
+            if (kind == CheckedInteger)
+            {
+                if (depth < 2) return -1;
+                byte type = stack[depth - 1];
+                return IsInteger(type) && Match(stack, depth - 1, type) ? depth - 1 : -1;
+            }
             if (kind == Binary || kind == Conditional)
             {
                 int needed = kind == Binary || (extra != 0 && extra != 0x45) ? 2 : 1;

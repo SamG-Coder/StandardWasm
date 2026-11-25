@@ -287,6 +287,14 @@ namespace PortableCompiler
                     }
                     used = Local(code, used, 0x21, Spill(spills, maximum, resultType, top - 1));
                 }
+                else if (kind == CheckedInteger)
+                {
+                    byte type = states[state + top];
+                    int left = Spill(spills, maximum, type, top - 1);
+                    int right = Spill(spills, maximum, type, top);
+                    used = CheckedIntegerWasm.Emit(code, used, operand, type, left, right);
+                    used = Local(code, used, 0x21, left);
+                }
                 else if (kind == Call || kind == NewObject)
                 {
                     int arity = arities[operand], shape = offsets[operand];
@@ -482,7 +490,7 @@ namespace PortableCompiler
             return used;
         }
 
-        private static byte NumericOpcode(int instruction, byte type) =>
+        internal static byte NumericOpcode(int instruction, byte type) =>
             (byte)(type == I32 ? instruction : instruction + (IsComparison(instruction) ? 0x0b : 0x12));
 
         // The CLR throws for MinValue % -1 even though Wasm rem_s returns zero.
@@ -496,6 +504,11 @@ namespace PortableCompiler
             used = type == I64 ? WideConst(code, used, -1, -1) : Const(code, used, -1);
             code[used++] = NumericOpcode(0x46, type);
             code[used++] = 0x71; // i32.and
+            return TrapIf(code, used);
+        }
+
+        internal static int TrapIf(byte[] code, int used)
+        {
             code[used++] = 0x04; // if
             code[used++] = 0x40; // void
             code[used++] = 0; // unreachable

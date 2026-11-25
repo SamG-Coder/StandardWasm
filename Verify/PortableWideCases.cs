@@ -48,7 +48,8 @@ internal static class PortableWideCases
         }
         Case(nameof(WideKernels.Widen), [int.MinValue, -1], () => WideKernels.Widen(int.MinValue, uint.MaxValue));
         Case(nameof(WideKernels.Widen), [-1, int.MinValue], () => WideKernels.Widen(-1, 0x80000000));
-        Reject(nameof(WideKernels.CheckedAdd));
+        Case(nameof(WideKernels.CheckedAdd), [long.MaxValue, 1L], () => WideKernels.CheckedAdd(long.MaxValue, 1));
+        Case(nameof(WideKernels.CheckedAdd), [long.MinValue, 1L], () => WideKernels.CheckedAdd(long.MinValue, 1));
         Reject(nameof(WideKernels.CheckedNarrow));
 
         void Case(string method, object[] args, Func<object> evaluate, bool linked = false)

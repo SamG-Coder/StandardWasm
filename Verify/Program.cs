@@ -72,4 +72,5 @@ SenderIdentityCases.Add(cases);
 PortablePrimitiveCases.Add(cases);
 PortableNarrowScalarCases.Add(cases);
 ArrayLiteralCases.Add(cases);
+CheckedIntegerCases.Add(cases);
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));
