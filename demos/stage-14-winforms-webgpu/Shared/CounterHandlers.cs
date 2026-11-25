@@ -30,7 +30,8 @@ namespace CounterExample
         }
 
         public static string Title() => CounterText.Title;
-        public static string ButtonCaption() => CounterText.Increment;
+        public static string Caption(int key) =>
+            key == CounterLayout.Additional ? CounterText.Additional : CounterText.Increment;
         public static string LabelText(CounterState state) =>
             string.Concat(CounterText.ResultPrefix, InvariantText.Int32(state.Value()));
         public static int TextLength(string text) => text.Length;
@@ -40,6 +41,7 @@ namespace CounterExample
         public static int ClientWidth(ControlTree tree) => tree.ClientWidth();
         public static int ClientHeight(ControlTree tree) => tree.ClientHeight();
         public static int DefaultButton(ControlTree tree) => tree.DefaultButton();
+        public static int ControlCapacity(ControlTree tree) => tree.Capacity();
         public static int ControlCount(ControlTree tree) => tree.Count();
         public static int ControlValue(ControlTree tree, int index, int column) => tree.Value(index, column);
         public static int Read(CounterState state) => state.Value();

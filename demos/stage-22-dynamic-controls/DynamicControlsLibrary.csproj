@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/AssemblyReader/*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="../../src/PortableCompiler/*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="../../src/ManagedLibrary/InvariantText.cs" Link="InvariantText.cs" />
+    <Compile Include="../stage-14-winforms-webgpu/Shared/ControlTree.cs" Link="ControlTree.cs" />
+    <Compile Include="../stage-14-winforms-webgpu/Shared/CounterHandlers.cs" Link="CounterHandlers.cs" />
+    <Compile Include="../stage-14-winforms-webgpu/Shared/CounterText.cs" Link="CounterText.cs" />
+  </ItemGroup>
+</Project>

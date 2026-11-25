@@ -57,4 +57,5 @@ DelegateCases.Add(cases);
 ControlStorageCases.Add(cases);
 StringCases.Add(cases);
 FormattingCases.Add(cases);
+DynamicControlsCases.Add(cases);
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));
