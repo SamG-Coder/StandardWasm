@@ -27,7 +27,7 @@ namespace PortableCompiler
                     stack[i] = states[pc * maximum + i];
                 if (kind == Return)
                 {
-                    if (result == Void ? depth != 0 : depth != 1 || stack[0] != result)
+                    if (result == Void ? depth != 0 : depth != 1 || !Assignable(stack[0], result))
                         return -1;
                     continue;
                 }
@@ -89,7 +89,7 @@ namespace PortableCompiler
                 return Push(stack, depth, kind == WideConstant ? I64 : I32);
             if (kind == SingleConstant || kind == DoubleConstant)
                 return Push(stack, depth, kind == SingleConstant ? F32 : F64);
-            if (kind == Store) return Match(stack, depth, frame[operand]) ? depth - 1 : -1;
+            if (kind == Store) return depth > 0 && Assignable(stack[depth - 1], frame[operand]) ? depth - 1 : -1;
             if (kind == Unary || kind == Narrow || kind == ConvertInteger || kind == ConvertFloat)
             {
                 if (depth < 1) return -1;
@@ -118,9 +118,9 @@ namespace PortableCompiler
                 if (depth < needed) return -1;
                 byte type = stack[depth - needed];
                 byte top = stack[depth - 1];
-                if (type >= FirstClass || top >= FirstClass)
+                if (IsObjectReference(type) || IsObjectReference(top))
                 {
-                    if (type != top) return -1;
+                    if (!Assignable(type, top) && !Assignable(top, type)) return -1;
                     if (kind == Conditional)
                         return needed == 1 || extra == 0x46 || extra == 0x47 ? depth - needed : -1;
                     return operand == 0x46 ? Push(stack, depth - 2, I32) : -1;
@@ -147,7 +147,7 @@ namespace PortableCompiler
                 if (start < 0)
                     return -1;
                 for (int i = receiver; i < count; i++)
-                    if (stack[start + i - receiver] != signatures[offset + 1 + i])
+                    if (!Assignable(stack[start + i - receiver], signatures[offset + 1 + i]))
                         return -1;
                 byte result = kind == NewObject ? signatures[offset + 1] : signatures[offset];
                 return result == Void ? start : Push(stack, start, result);
@@ -161,8 +161,8 @@ namespace PortableCompiler
                 return depth;
             }
             if (kind == SetField)
-                return Match(stack, depth, unchecked((byte)extra)) &&
-                    Match(stack, depth - 1, (byte)(extra >> 8)) ? depth - 2 : -1;
+                return Match(stack, depth - 1, (byte)(extra >> 8)) &&
+                    Assignable(stack[depth - 1], unchecked((byte)extra)) ? depth - 2 : -1;
             if (kind == NewArray)
             {
                 if (!Match(stack, depth, I32)) return -1;

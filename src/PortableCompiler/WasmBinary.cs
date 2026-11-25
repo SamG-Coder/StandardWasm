@@ -257,7 +257,7 @@ namespace PortableCompiler
         }
 
         private static int ValueWidth(byte type) =>
-            type == Void ? 0 : IsScalar(type) || type == MethodPointer ? 1 :
+            type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference ? 1 :
                 HeapType(type) <= 63 ? 2 : 3;
 
         internal static int ValueType(byte[] output, int cursor, byte type)
@@ -268,6 +268,8 @@ namespace PortableCompiler
                 output[cursor++] = 0x7e;
             else if (IsFloat(type))
                 output[cursor++] = type == F32 ? (byte)0x7d : (byte)0x7c;
+            else if (type == ObjectReference)
+                output[cursor++] = 0x6d; // eqref, the supertype of the managed class structs
             else
             {
                 output[cursor++] = 0x63; // ref null

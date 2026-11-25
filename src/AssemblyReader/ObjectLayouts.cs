@@ -4,7 +4,8 @@ namespace PeLibrary
 {
     internal static class ObjectLayouts
     {
-        internal const int FirstClass = 12, MaxClasses = 256 - FirstClass, Width = 3;
+        internal const byte ObjectReference = 12;
+        internal const int FirstClass = ObjectReference + 1, MaxClasses = 256 - FirstClass, Width = 3;
         internal const int FieldMapStart = 1 + MaxClasses * Width;
 
         // Registry: count, fixed triples of TypeDef row, first Field row and field count, then field kinds by row.
@@ -64,6 +65,8 @@ namespace PeLibrary
                     type = 1;
                 else if (image[blob] == 2 && image[blob + 2] == 0x0e)
                     type = 6; // String. The Wasm slot defaults to a null reference.
+                else if (image[blob] == 2 && image[blob + 2] == 0x1c)
+                    type = ObjectReference;
                 else if (image[blob] == 2 && WideStorage.IsIntegerElement(image[blob + 2]))
                     type = WideStorage.Scalar;
                 else if (image[blob] == 3 && Fits(sig, 4, (uint)streams[1]) && image[blob + 2] == 0x1d)

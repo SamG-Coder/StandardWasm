@@ -13,6 +13,14 @@ namespace PortableCompiler
 
         internal static bool IsScalar(byte type) => IsInteger(type) || IsFloat(type);
 
+        // Widen supported class references without allocating or losing sender identity.
+        // Boxing and other CLR reference conversions use separate IL operations.
+        internal static bool IsObjectReference(byte type) =>
+            type == ObjectLayouts.ObjectReference || type >= ObjectLayouts.FirstClass;
+
+        internal static bool Assignable(byte source, byte target) =>
+            source == target || target == ObjectLayouts.ObjectReference && IsObjectReference(source);
+
         internal static byte FloatWidth(byte left, byte right) => left == F64 || right == F64 ? F64 : F32;
 
         internal static byte ArrayValueType(byte array) => array == Longs ? I64 : I32;
@@ -55,6 +63,8 @@ namespace PortableCompiler
                     types[target] = element == 0x0c ? F32 : F64;
                 else if (element == 0x0e)
                     types[target] = String;
+                else if (element == 0x1c)
+                    types[target] = ObjectLayouts.ObjectReference;
                 else if (element == 0x1d && cursor < end)
                 {
                     int item = image[cursor++];

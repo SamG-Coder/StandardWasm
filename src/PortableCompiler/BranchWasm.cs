@@ -13,9 +13,10 @@ namespace PortableCompiler
             byte result = (byte)frameShape[3];
             int classes = frameShape[4];
             bool stringScratch = frameShape[5] != 0;
-            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 1 + F64 + classes) + (stringScratch ? 2 : 0));
+            int spillKinds = FirstClass - 1 + classes;
+            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 1 + spillKinds) + (stringScratch ? 2 : 0));
             int spills = arguments + locals;
-            int temporaries = spills + (F64 + classes) * maximum;
+            int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
             int pcLocal = scratch + (stringScratch ? 5 : 0);
             // Keep declared locals in CLI order, then allocate one bank per spill type.
@@ -26,7 +27,7 @@ namespace PortableCompiler
             }
             if (maximum != 0)
             {
-                for (int kind = I32; kind <= F64 + classes; kind++)
+                for (int kind = I32; kind <= spillKinds; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
                     used = WasmBinary.ValueType(code, used, (byte)kind);
@@ -177,7 +178,7 @@ namespace PortableCompiler
                 }
                 else if (kind == Store)
                 {
-                    used = Local(code, used, 0x20, Spill(spills, maximum, frame[operand], top));
+                    used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
                     used = Local(code, used, 0x21, operand);
                 }
                 else if (kind == Unary || kind == Narrow || kind == ConvertInteger || kind == ConvertFloat)
@@ -218,7 +219,7 @@ namespace PortableCompiler
                     used = NumericLocal(code, used, right, rightType, width);
                     if (type == I64 && IsShift(operand)) code[used++] = 0xad;
                     if (IsFloat(width)) used = FloatWasm.Binary(code, used, operand, width);
-                    else if (type >= FirstClass) code[used++] = 0xd3; // ref.eq
+                    else if (IsObjectReference(type)) code[used++] = 0xd3; // ref.eq
                     else code[used++] = NumericOpcode(operand, type);
                     used = Local(code, used, 0x21, Spill(spills, maximum, resultType, top - 1));
                 }
@@ -259,7 +260,8 @@ namespace PortableCompiler
                     byte type = (byte)(descriptor >> 8), value = unchecked((byte)descriptor);
                     int address = kind == GetField ? top : top - 1;
                     used = Local(code, used, 0x20, Spill(spills, maximum, type, address));
-                    if (kind == SetField) used = Local(code, used, 0x20, Spill(spills, maximum, value, top));
+                    if (kind == SetField)
+                        used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
                     used = Gc(code, used, kind == GetField ? 2 : 5, type);
                     used = WasmBinary.Unsigned(code, used, operand);
                     if (kind == GetField) used = Local(code, used, 0x21, Spill(spills, maximum, value, top));
@@ -299,7 +301,7 @@ namespace PortableCompiler
                 if (kind == Return)
                 {
                     if (result != Void)
-                        used = Local(code, used, 0x20, Spill(spills, maximum, result, top));
+                        used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
                     code[used++] = 0x0f;
                 }
                 else
@@ -319,7 +321,7 @@ namespace PortableCompiler
                         }
                         used = NumericLocal(code, used, Spill(spills, maximum, type, top), type, width);
                         if (IsFloat(width)) used = FloatWasm.Binary(code, used, comparison, width);
-                        else if (type >= FirstClass)
+                        else if (IsObjectReference(type))
                         {
                             code[used++] = IsComparison(comparison) ? (byte)0xd3 : (byte)0xd1; // ref.eq or ref.is_null
                             if (comparison == 0 || comparison == 0x47) code[used++] = 0x45;

@@ -67,6 +67,41 @@ namespace EventLibrary
         }
     }
 
+    public static class SenderCases
+    {
+        public static int SenderIdentity(int scenario)
+        {
+            var sender = new SenderNode();
+            var holder = new SenderHolder();
+            if (holder.Sender != null) return -1;
+            holder.Sender = sender;
+            if (holder.Sender != sender) return -2;
+            if (scenario == 0) return Equal(holder.Sender, Forward(sender));
+            if (scenario == 1) return Equal(holder.Sender, new SenderNode());
+            return Equal(holder.Sender, new SenderHolder());
+        }
+
+        private static object Forward(SenderNode sender) => sender;
+
+        private static int Equal(object left, object right) => left == right ? 1 : 0;
+
+        public static int SenderLocal(int replacements)
+        {
+            var sender = new SenderNode();
+            object selected = sender;
+            for (int i = 0; i < replacements; i++)
+                selected = new SenderHolder();
+            return Equal(sender, selected);
+        }
+    }
+
+    internal sealed class SenderNode { }
+
+    internal sealed class SenderHolder
+    {
+        internal object Sender;
+    }
+
     internal sealed class EventSource
     {
         internal event EventHandler Changed;
