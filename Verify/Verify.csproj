@@ -7,5 +7,6 @@
   <ItemGroup>
     <ProjectReference Include="../demos/stage-01-scalars/Sample.csproj" />
     <ProjectReference Include="../demos/stage-02-managed-arrays/ArrayLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-03-byte-buffers/ByteLibrary.csproj" />
   </ItemGroup>
 </Project>
