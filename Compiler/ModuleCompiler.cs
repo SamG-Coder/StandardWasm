@@ -5,6 +5,15 @@ internal sealed class ModuleCompiler(ModuleDefinition module)
 {
     private readonly Dictionary<MethodDefinition, string> names = new();
     private readonly Queue<MethodDefinition> pending = new();
+    // Runtime helpers (RuntimeHelpers.Functions) this module references, emitted once after the methods.
+    private readonly SortedSet<string> helpers = new(StringComparer.Ordinal);
+
+    internal string RequireHelper(string name)
+    {
+        if (!RuntimeHelpers.Functions.ContainsKey(name)) throw new InvalidOperationException($"Unknown runtime helper {name}");
+        helpers.Add(name);
+        return "$" + name;
+    }
 
     internal string Register(MethodDefinition method)
     {
@@ -58,6 +67,8 @@ internal sealed class ModuleCompiler(ModuleDefinition module)
         if (used.Count == 0) throw new InvalidDataException("No public static exports.");
         while (pending.TryDequeue(out var method))
             output.AppendLine(new MethodCompiler(this, method).Compile(names[method]));
+        foreach (var helper in helpers)
+            output.AppendLine(RuntimeHelpers.Functions[helper]);
         return output.AppendLine(")").ToString();
     }
 }

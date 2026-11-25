@@ -7,7 +7,7 @@ StandardWasm is an experimental ahead-of-time compiler for .NET Standard assembl
 - [Project goal, milestones and acceptance criteria](GOAL.md)
 - [Runnable demos by stage](demos/README.md)
 - [Shared agent workflow](AGENTS.md) and [Claude entry point](CLAUDE.md)
-- [Architecture decisions](docs/decisions/0001-staged-demos.md)
+- Architecture decisions: [0001 staged demos](docs/decisions/0001-staged-demos.md), [0002 assembly reader boundary](docs/decisions/0002-assembly-reader-boundary.md), [0003 BCL intrinsics](docs/decisions/0003-bcl-intrinsics.md)
 
 .NET Standard specifies an API contract. Each supported API needs either a compatible implementation compiled into the module or an explicitly documented host import. Windows services and UI controls require additional browser implementations. Blazor is outside this project's architecture.
 
@@ -21,7 +21,7 @@ The first working backend takes a DLL and a public export type, follows reachabl
 
 | Available today | Current boundary |
 | --- | --- |
-| 32- and 64-bit integers (int64 values cross the JS boundary as BigInt), `float`/`double` with IEEE semantics and saturating conversions, unsigned comparisons, booleans, locals, loops, conditional branches, `switch` jump tables, static calls and recursion | No general BCL linker, virtual dispatch, generics, strings, floating-point remainder or `Math.*` |
+| 32- and 64-bit integers (int64 values cross the JS boundary as BigInt), `float`/`double` with IEEE semantics, saturating conversions and exact `%`, unsigned comparisons, booleans, locals, loops, conditional branches, `switch` jump tables, static calls and recursion | No general BCL linker (only the exact `System.Math` intrinsics of [decision 0003](docs/decisions/0003-bcl-intrinsics.md)), virtual dispatch, generics or strings |
 | Managed one-dimensional int and byte arrays backed by Wasm GC | Allocation, length, indexed read and write for int and packed byte elements |
 | Direct tail calls for eligible call/return pairs | Managed exception handling and stack-trace fidelity are open |
 | Integer arithmetic and array access | Runtime arithmetic and array failures surface as Wasm traps. Typed CLR exceptions are open. Checked arithmetic currently produces a compile-time diagnostic. |

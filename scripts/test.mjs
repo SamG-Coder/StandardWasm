@@ -29,15 +29,29 @@ const rejectedWide = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", 
     "--", wideDemo.dll, "LongIntegers.CheckedWide", "artifacts/unsupported-wide.wat"], { encoding: "utf8" });
 assert.equal(rejectedWide.status, 1);
 assert.match(rejectedWide.stderr, /CheckedWide::Increment\(System\.Int64\) at IL_[0-9a-f]+ \(add\.ovf\)/);
-// Floating-point remainder (no exact Wasm fmod yet) and checked float-to-int conversion must be diagnosed.
+// A checked float-to-int conversion must be diagnosed. Float remainder is lowered exactly since stage 33.
 const realsDemo = demos.find(d => d.assembly === "FloatingPoint");
-for (const [type, pattern] of [["CheckedReals", /CheckedReals::Remainder\(System\.Double,System\.Double\) at IL_[0-9a-f]+ \(rem\): Floating-point remainder/],
-                               ["CheckedConversions", /CheckedConversions::Narrow\(System\.Double\) at IL_[0-9a-f]+ \(conv\.ovf\.i4\)/]]) {
+for (const [type, pattern] of [["CheckedConversions", /CheckedConversions::Narrow\(System\.Double\) at IL_[0-9a-f]+ \(conv\.ovf\.i4\)/]]) {
     const rejectedReal = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
         "--", realsDemo.dll, "FloatingPoint." + type, "artifacts/unsupported-real.wat"], { encoding: "utf8" });
     assert.equal(rejectedReal.status, 1);
     assert.match(rejectedReal.stderr, pattern);
 }
+// A BCL method outside the intrinsic table (decision 0003) must stay an unlinked-call diagnostic.
+const mathDemo = demos.find(d => d.assembly === "MathIntrinsics");
+const rejectedMath = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
+    "--", mathDemo.dll, "MathIntrinsics.UnmappedMath", "artifacts/unsupported-math.wat"], { encoding: "utf8" });
+assert.equal(rejectedMath.status, 1);
+assert.match(rejectedMath.stderr, /UnmappedMath::Power\(System\.Double,System\.Double\) at IL_[0-9a-f]+ \(call\): Unlinked call: System\.Double System\.Math::Pow/);
+// A dependency that defines its own System.Math.Sqrt (reached through an extern alias) is not the BCL. The CLR runs
+// that method, so the compiler must report an unlinked call instead of substituting f64.sqrt.
+const identityProbe = "demos/stage-29-math-intrinsics/identity/IdentityProbe";
+run("dotnet", ["build", "-c", "Release", identityProbe]);
+const rejectedIdentity = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
+    "--", identityProbe + "/bin/Release/netstandard2.0/IdentityProbe.dll", "IdentityProbe.Probe", "artifacts/unsupported-identity.wat"],
+    { encoding: "utf8" });
+assert.equal(rejectedIdentity.status, 1);
+assert.match(rejectedIdentity.stderr, /Probe::Compute\(System\.Double\) at IL_[0-9a-f]+ \(call\): Unlinked call: System\.Double System\.Math::Sqrt\(System\.Double\) in ThirdPartyMath/);
 const cases = JSON.parse(readFileSync("artifacts/oracle.json"));
 console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases));
 

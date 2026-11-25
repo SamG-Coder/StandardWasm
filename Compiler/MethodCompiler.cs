@@ -273,7 +273,19 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
             case Code.Rem:
             {
                 if (stack.Count > 0 && FloatOps.IsFloat(stack[^1]))
-                    throw new NotSupportedException("Floating-point remainder needs an exact fmod, which Wasm does not provide");
+                {
+                    // CLR float remainder is C fmod (truncated, sign of the dividend). Wasm has no instruction for it,
+                    // so call the exact runtime helper. A float32 remainder is exactly representable as float32, so
+                    // computing it in f64 and demoting is exact.
+                    var (floatDivisor, floatType) = PopNumeric();
+                    var floatDividend = Pop(floatType);
+                    var fmod = module.RequireHelper("fmod");
+                    Push(floatType == Float64
+                        ? $"(call {fmod} {floatDividend} {floatDivisor})"
+                        : $"(f32.demote_f64 (call {fmod} (f64.promote_f32 {floatDividend}) (f64.promote_f32 {floatDivisor})))",
+                        floatType);
+                    break;
+                }
                 var (divisor, type) = PopInteger();
                 var dividend = Pop(type);
                 // Wasm rem_s returns zero for MinValue % -1. The CLR throws OverflowException, so trap explicitly.
@@ -318,8 +330,17 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
             case Code.Call:
             {
                 var reference = (MethodReference)i.Operand;
+                if (BclIntrinsics.Find(reference) is { } intrinsic)
+                {
+                    // Pop arguments right to left with their declared Wasm types, then emit the guard and the value.
+                    var values = intrinsic.Parameters.Reverse().Select(type => Pop(type)).Reverse().ToArray();
+                    var (guard, value) = intrinsic.Lower(values);
+                    if (guard != null) Emit(guard);
+                    Push(value, intrinsic.Result);
+                    break;
+                }
                 if (reference.DeclaringType.Scope != method.Module || reference is GenericInstanceMethod)
-                    throw new NotSupportedException($"Unlinked call: {reference.FullName}");
+                    throw new NotSupportedException($"Unlinked call: {reference.FullName} in {reference.DeclaringType.Scope.Name}");
                 var target = reference.Resolve();
                 var callee = module.Register(target);
                 var arguments = target.Parameters.Reverse().Select(p => Pop(ModuleCompiler.ValueType(p.ParameterType))).Reverse().ToArray();
