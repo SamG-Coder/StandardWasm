@@ -21,7 +21,8 @@ namespace DiagnosticLibrary
         public static int ViaDependency(int value) => DiagnosticDependency.Costs.Estimate(value) + 1;
         public static int LinkedRate(int value) => DiagnosticDependency.Costs.FlatRate(value) + 1;
 
-        public static int Absolute(int value) => System.Math.Abs(value);
+        // Math.Sign is outside the exact intrinsic table (decision 0003), so this call stays an unsupported diagnostic.
+        public static int Absolute(int value) => System.Math.Sign(value);
         public static short UnsupportedShape(int value) => unchecked((short)value);
         public static int Supported(int value) => unchecked(value * 3 + 1);
     }

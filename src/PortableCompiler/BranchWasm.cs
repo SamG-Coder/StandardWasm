@@ -292,6 +292,13 @@ namespace PortableCompiler
                     if (returned != Void)
                         used = Local(code, used, 0x21, Spill(spills, maximum, returned, first));
                 }
+                else if (kind == MathCall)
+                {
+                    byte type = MathWasm.Type(operand);
+                    int first = top - MathWasm.Arity(operand) + 1;
+                    used = MathWasm.Emit(code, used, operand, Spill(spills, maximum, type, first), Spill(spills, maximum, type, top));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, type, first));
+                }
                 else if (kind == ExchangeHandlerField)
                 {
                     byte owner = (byte)(records[slot + 3] >> 8);

@@ -10,6 +10,8 @@ namespace PortableCompiler
         internal const int UnsignedSingle = 0x100;
         internal const int LoadEventArgsEmpty = 38, NewEventArgs = 39, CombineHandler = 40, CastHandler = 41, RemoveHandler = 42;
         internal const int FieldAddress = 43, MethodSpecCall = 44, ExchangeHandlerField = 45;
+        // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
+        internal const int MathCall = 46;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).

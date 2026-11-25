@@ -160,6 +160,14 @@ namespace PortableCompiler
                 int remaining = depth - needed;
                 return kind == Binary ? Push(stack, remaining, IsComparison(operand) ? I32 : type) : remaining;
             }
+            if (kind == MathCall)
+            {
+                // Every mapped overload is T(T) or T(T, T) over one numeric stack type.
+                byte type = MathWasm.Type(operand);
+                int arity = MathWasm.Arity(operand);
+                if (!Match(stack, depth, type) || (arity == 2 && !Match(stack, depth - 1, type))) return -1;
+                return Push(stack, depth - arity, type);
+            }
             if (kind == Call || kind == NewObject)
             {
                 int count = arities[operand], offset = offsets[operand];

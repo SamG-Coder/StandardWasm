@@ -64,6 +64,7 @@ PortableSwitchCases.Add(cases);
 DiagnosticCases.Add(cases);
 WideStorageCases.Add(cases);
 PortableFloatCases.Add(cases);
+PortableMathCases.Add(cases);
 ResizeCases.Add(cases);
 TextBoxCases.Add(cases);
 SharedWinFormsCases.Add(cases);
