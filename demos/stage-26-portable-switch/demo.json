@@ -1,0 +1,1 @@
+{"assembly":"SwitchLibrary","exportType":"SwitchLibrary.SwitchDemo","method":"Compile","inputs":[{"file":"self"},{"name":"Classify"}],"generated":{"capacity":32768,"arguments":[-3]},"expected":17}

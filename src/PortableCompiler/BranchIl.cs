@@ -6,7 +6,7 @@ namespace PortableCompiler
     {
         internal const int Width = 4;
         internal const int Load = 1, Store = 2, Constant = 3, Unary = 4, Binary = 5,
-            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12, NewArray = 13, ArrayLength = 14, ArrayGet = 15, ArraySet = 16, Narrow = 17, NewObject = 18, GetField = 19, SetField = 20, BaseCtor = 21, LoadFunction = 22, NewDelegate = 23, InvokeDelegate = 24, MemberCall = 25, LoadString = 26, StringLength = 27, StringCharacter = 28, JoinStrings = 29, StringFromChars = 30, NullString = 31, WideConstant = 32, ConvertInteger = 33;
+            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12, NewArray = 13, ArrayLength = 14, ArrayGet = 15, ArraySet = 16, Narrow = 17, NewObject = 18, GetField = 19, SetField = 20, BaseCtor = 21, LoadFunction = 22, NewDelegate = 23, InvokeDelegate = 24, MemberCall = 25, LoadString = 26, StringLength = 27, StringCharacter = 28, JoinStrings = 29, StringFromChars = 30, NullString = 31, WideConstant = 32, ConvertInteger = 33, Switch = 34;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
@@ -94,6 +94,28 @@ namespace PortableCompiler
                     operand += pc;
                     kind = branch == 0 ? Branch : Conditional;
                     comparison = Comparison(branch);
+                }
+                else if (op == 0x45)
+                {
+                    if (length - pc < 4) return -1;
+                    uint count = ImageBytes.U32(image, (uint)(start + pc));
+                    pc += 4;
+                    if (count > (uint)((length - pc) / 4)) return -1;
+                    kind = Switch;
+                    comparison = (int)count;
+                    operand = pc;
+                    pc += comparison * 4;
+                    if (pc >= length) return -1;
+
+                    // Offsets are relative to the end of the table. Keep target
+                    // offsets in the unused operand records, with kind still zero.
+                    for (int i = 0; i < comparison; i++)
+                    {
+                        int entry = operand + i * 4;
+                        int delta = unchecked((int)ImageBytes.U32(image, (uint)(start + entry)));
+                        if (delta < -pc || delta >= length - pc) return -1;
+                        records[entry * Width + 1] = pc + delta;
+                    }
                 }
                 else if (op == 0x28 || op == 0x6f || op == 0x73 || op == 0x7b || op == 0x7d)
                 {
@@ -206,9 +228,19 @@ namespace PortableCompiler
                 int kind = records[slot];
                 if ((kind == Branch || kind == Conditional) && records[records[slot + 1] * Width] == 0)
                     return -1;
+                if (kind == Switch)
+                {
+                    int table = records[slot + 1], count = records[slot + 3];
+                    for (int i = 0; i < count; i++)
+                        if (records[SwitchTarget(records, table, i) * Width] == 0)
+                            return -1;
+                }
             }
             return 0;
         }
+
+        internal static int SwitchTarget(int[] records, int table, int index) =>
+            records[(table + index * 4) * Width + 1];
 
         // Only the left operand determines shift width. CLI shift counts are i32.
         internal static bool IsShift(int instruction) => instruction >= 0x74 && instruction <= 0x76;

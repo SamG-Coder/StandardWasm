@@ -306,6 +306,8 @@ namespace PortableCompiler
                         else if (comparison != 0) code[used++] = 0x45;
                         code[used++] = 0x1b;
                     }
+                    else if (kind == Switch)
+                        used = SwitchDispatch(code, used, records, operand, records[slot + 3], next, spills + top);
                     else used = Const(code, used, kind == Branch ? operand : next);
                     used = Local(code, used, 0x21, pcLocal);
                     code[used++] = 0x0c;
@@ -317,6 +319,37 @@ namespace PortableCompiler
             code[used++] = 0x0b;
             code[used++] = 0;
             code[used++] = 0x0b;
+            return used;
+        }
+
+        private static int SwitchDispatch(byte[] code, int used, int[] records, int table, int count,
+            int fallthrough, int selector)
+        {
+            // The outer block yields the next IL offset. The inner empty blocks
+            // give br_table a label for each case and the default in CLI order.
+            code[used++] = 0x02; // block
+            code[used++] = 0x7f; // i32 result
+            for (int i = 0; i <= count; i++)
+            {
+                code[used++] = 0x02;
+                code[used++] = 0x40; // void
+            }
+            used = Local(code, used, 0x20, selector);
+            code[used++] = 0x0e; // br_table interprets the selector as unsigned
+            used = WasmBinary.Unsigned(code, used, count);
+            for (int i = 0; i <= count; i++)
+                used = WasmBinary.Unsigned(code, used, i);
+
+            for (int i = 0; i < count; i++)
+            {
+                code[used++] = 0x0b; // end the block selected by case i
+                used = Const(code, used, SwitchTarget(records, table, i));
+                code[used++] = 0x0c; // branch to the result block
+                used = WasmBinary.Unsigned(code, used, count - i);
+            }
+            code[used++] = 0x0b; // end the default block
+            used = Const(code, used, fallthrough);
+            code[used++] = 0x0b; // end the result block
             return used;
         }
 

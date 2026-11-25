@@ -232,7 +232,7 @@ namespace PortableCompiler
             {
                 int op = records[slot];
                 if (owner != 0 && op >= BranchIl.NewArray && op != BranchIl.Narrow && op != BranchIl.MemberCall &&
-                    op != BranchIl.WideConstant && op != BranchIl.ConvertInteger)
+                    op != BranchIl.WideConstant && op != BranchIl.ConvertInteger && op != BranchIl.Switch)
                     return -2; // The dependency backend currently admits only scalar state.
                 if (records[slot] == BranchIl.NewArray)
                 {

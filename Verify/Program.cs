@@ -60,4 +60,5 @@ FormattingCases.Add(cases);
 DynamicControlsCases.Add(cases);
 BundleCases.Add(cases);
 PortableWideCases.Add(cases);
+PortableSwitchCases.Add(cases);
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));

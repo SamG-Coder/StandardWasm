@@ -40,6 +40,15 @@ namespace PortableCompiler
                     tail = Edge(operand, next, maximum, stack, depths, states, pending, tail);
                     if (tail < 0) return false;
                 }
+                if (kind == Switch)
+                {
+                    int count = records[slot + 3];
+                    for (int i = 0; i < count; i++)
+                    {
+                        tail = Edge(SwitchTarget(records, operand, i), next, maximum, stack, depths, states, pending, tail);
+                        if (tail < 0) return false;
+                    }
+                }
                 if (kind != Branch)
                 {
                     tail = Edge(records[slot + 2], next, maximum, stack, depths, states, pending, tail);
@@ -87,6 +96,7 @@ namespace PortableCompiler
             }
             if (kind == Dup) return depth < 1 ? -1 : Push(stack, depth, stack[depth - 1]);
             if (kind == Pop) return depth - 1;
+            if (kind == Switch) return Match(stack, depth, I32) ? depth - 1 : -1;
             if (kind == Binary || kind == Conditional)
             {
                 int needed = kind == Binary || (extra != 0 && extra != 0x45) ? 2 : 1;
