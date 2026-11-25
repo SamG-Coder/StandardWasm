@@ -16,4 +16,4 @@ Run the native/browser parity check with:
 
 It compares the two text controls and previews through Unicode entry, selection replacement, Backspace and Clear. It also checks input focus and compares pixels inside the WebGPU preview. npm test checks default and explicit null string fields, replacement and independent objects, combining characters, and copying UTF-16 input before it is mutated. The self-recompiled compiler reruns those cases.
 
-[Stage 33](../stage-33-shared-winforms-source/README.md) adds shared source for control initialization and the event handler bodies used by this demo.
+[Stage 34](../stage-34-shared-winforms-source/README.md) adds shared source for control initialization and the event handler bodies used by this demo.

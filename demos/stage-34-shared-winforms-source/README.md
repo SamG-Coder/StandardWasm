@@ -1,8 +1,8 @@
-# Stage 33 · Shared WinForms application source
+# Stage 34 · Shared WinForms application source
 
 Run from the repository root.
 
-    npm run demo -- stage-33-shared-winforms-source
+    npm run demo -- stage-34-shared-winforms-source
 
 Open the printed local URL. Editing Name updates the greeting, and Clear empties and refocuses the input. Run the native counterpart with:
 
