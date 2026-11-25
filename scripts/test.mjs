@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { listDemos } from "./demos.mjs";
 import { chromium } from "playwright-core";
 import { compile, root, run } from "./toolchain.mjs";
 import { verify } from "./verify.mjs";
@@ -9,12 +9,15 @@ import { verify } from "./verify.mjs";
 process.chdir(root);
 mkdirSync("artifacts", { recursive: true });
 run("dotnet", ["run", "-c", "Release", "--project", "Verify", "--", "artifacts/oracle.json"]);
-const dll = name => join(name, "bin/Release/netstandard2.0", name + ".dll");
-for (const [name, type] of [["Sample", "Sample.Kernels"], ["ArrayLibrary", "ArrayLibrary.Sequences"]]) {
-    compile(dll(name), type, "artifacts/" + name + ".wasm");
+const demos = listDemos();
+for (const demo of demos) {
+    compile(demo.dll, demo.exportType, demo.wasm);
+    const { instance } = await WebAssembly.instantiate(readFileSync(demo.wasm));
+    assert.equal(instance.exports[demo.method](...demo.inputs), demo.expected, demo.stage);
 }
+const scalarDemo = demos.find(d => d.assembly === "Sample");
 const rejected = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
-    "--", dll("Sample"), "Sample.CheckedArithmetic", "artifacts/unsupported.wat"], { encoding: "utf8" });
+    "--", scalarDemo.dll, "Sample.CheckedArithmetic", "artifacts/unsupported.wat"], { encoding: "utf8" });
 assert.equal(rejected.status, 1);
 assert.match(rejected.stderr, /Increment.*IL_[0-9a-f]+.*add\.ovf/);
 const cases = JSON.parse(readFileSync("artifacts/oracle.json"));
@@ -29,7 +32,7 @@ try {
     // Serve only these fixture assets to the isolated test page.
     const assets = new Map([
         ["/verify.mjs", ["text/javascript", readFileSync("scripts/verify.mjs")]],
-        ...["Sample", "ArrayLibrary"].map(name => ["/" + name, ["application/wasm", readFileSync("artifacts/" + name + ".wasm")]])
+        ...demos.map(d => ["/" + d.assembly, ["application/wasm", readFileSync(d.wasm)]])
     ]);
     await page.route("http://standardwasm.test/**", async route => {
         const path = new URL(route.request().url()).pathname;

@@ -4,7 +4,8 @@
   "description": "Experimental .NET Standard IL to WebAssembly compiler",
   "scripts": {
     "test": "node scripts/test.mjs",
-    "compile": "node scripts/compile.mjs"
+    "compile": "node scripts/compile.mjs",
+    "demo": "node scripts/demo.mjs"
   },
   "type": "commonjs",
   "dependencies": {

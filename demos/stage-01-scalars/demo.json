@@ -1,0 +1,1 @@
+{"assembly":"Sample","exportType":"Sample.Kernels","method":"SumSquares","inputs":[10],"expected":385}
