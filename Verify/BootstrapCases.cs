@@ -54,7 +54,7 @@ internal static class BootstrapCases
         }
     }
 
-    private static byte[] Manifest(IEnumerable<(string Name, int Row)> entries)
+    internal static byte[] Manifest(IEnumerable<(string Name, int Row)> entries)
     {
         using var buffer = new MemoryStream();
         using var writer = new BinaryWriter(buffer);

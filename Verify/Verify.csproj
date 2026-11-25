@@ -30,5 +30,6 @@
     <ProjectReference Include="../demos/stage-28-wide-storage/WideStorageLibrary.csproj" />
     <ProjectReference Include="../demos/stage-30-portable-floats/PortableReals.csproj" />
     <ProjectReference Include="../demos/stage-31-resize-winforms/ResizeLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-32-winforms-textbox/Model/ProfileModel.csproj" />
   </ItemGroup>
 </Project>

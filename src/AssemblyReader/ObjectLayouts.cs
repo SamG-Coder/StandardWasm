@@ -52,6 +52,8 @@ namespace PeLibrary
                 int type;
                 if (image[blob] == 2 && image[blob + 2] == 8)
                     type = 1;
+                else if (image[blob] == 2 && image[blob + 2] == 0x0e)
+                    type = 6; // String. The Wasm slot defaults to a null reference.
                 else if (image[blob] == 2 && WideStorage.IsIntegerElement(image[blob + 2]))
                     type = WideStorage.Scalar;
                 else if (image[blob] == 3 && Fits(sig, 4, (uint)streams[1]) && image[blob + 2] == 0x1d)
