@@ -6,8 +6,8 @@ namespace PortableCompiler
 {
     internal static class WasmBinary
     {
-        internal const int ScalarThunkType = 2, EventThunkType = 8;
-        private const int WideArrayHeap = 6, EventArgsHeap = 7, EventHandlerHeap = 9, FirstClassHeap = EventHandlerHeap + 1;
+        internal const int ScalarThunkType = 2, EventThunkType = 8, EventEntryHeap = 9, EventHandlerHeap = 10;
+        private const int WideArrayHeap = 6, EventArgsHeap = 7, FirstClassHeap = EventHandlerHeap + 1;
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
@@ -37,7 +37,7 @@ namespace PortableCompiler
             // A recursive group is one type-section entry but its member
             // types retain individual indices for fields and function signatures.
             int typeEntries = recursive ? functions + FirstClassHeap + 1 : functions + typeOffset;
-            int prefix = UnsignedSize(typeEntries) + 46 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+            int prefix = UnsignedSize(typeEntries) + 50 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;
             int functionSize = UnsignedSize(totalFunctions) + thunks[0];
@@ -160,6 +160,11 @@ namespace PortableCompiler
             output[cursor++] = 0x63;
             output[cursor++] = EventThunkType;
             output[cursor++] = 0;
+            // Private array of callbacks. Generated code writes only fresh arrays.
+            output[cursor++] = 0x5e;
+            output[cursor++] = 0x63;
+            output[cursor++] = EventEntryHeap;
+            output[cursor++] = 1;
             if (recursive)
             {
                 output[cursor++] = 0x4e;

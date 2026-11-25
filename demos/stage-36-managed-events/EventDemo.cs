@@ -14,6 +14,39 @@ namespace EventLibrary
 
     public static class EventCases
     {
+        public static int CombineCallbacks(int scenario)
+        {
+            var sender = new EventSource();
+            var log = new EventLog(sender);
+            var slot = new HandlerSlot();
+            EventHandler first = log.First;
+            EventHandler second = log.Second;
+            EventHandler missing = slot.Handler;
+            if (scenario == 0)
+            {
+                EventHandler original = first + second;
+                slot.Handler = original + first;
+                slot.Raise(sender, EventArgs.Empty);
+                original(sender, EventArgs.Empty);
+                return log.Value;
+            }
+            if (scenario == 1)
+            {
+                if (missing + missing != null) return -1;
+                if ((object)(missing + first) != first) return -2;
+                if ((object)(first + missing) != first) return -3;
+                return 1;
+            }
+            // A callback adds a handler to the field. The current invocation
+            // continues using the original list and sees the addition next time.
+            log.Slot = slot;
+            slot.Handler = log.AppendSecond;
+            slot.Handler += first;
+            slot.Raise(sender, EventArgs.Empty);
+            slot.Raise(sender, EventArgs.Empty);
+            return log.Value;
+        }
+
         public static int InvokeBoundHandler(int scenario)
         {
             var sender = new EventSource();
@@ -163,12 +196,19 @@ namespace EventLibrary
     {
         private readonly EventSource source;
         internal int Value;
+        internal HandlerSlot Slot;
 
         internal EventLog(EventSource source) => this.source = source;
 
         internal void First(object sender, EventArgs args) => Record(1, sender, args);
 
         internal void Second(object sender, EventArgs args) => Record(2, sender, args);
+
+        internal void AppendSecond(object sender, EventArgs args)
+        {
+            Record(3, sender, args);
+            Slot.Handler += Second;
+        }
 
         internal void RemoveSecond(object sender, EventArgs args)
         {

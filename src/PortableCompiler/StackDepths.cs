@@ -64,6 +64,11 @@ namespace PortableCompiler
         {
             if (kind == LoadString || kind == NullString) return Push(stack, depth, String);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, depth, EventArgsReference);
+            if (kind == CombineHandler)
+                return Match(stack, depth, EventHandlerReference) && Match(stack, depth - 1, EventHandlerReference)
+                    ? depth - 1 : -1;
+            // The supported Combine overload has already proved the result's concrete type.
+            if (kind == CastHandler) return Match(stack, depth, EventHandlerReference) ? depth : -1;
             if (kind == JoinStrings)
                 return Match(stack, depth, String) && Match(stack, depth - 1, String)
                     ? Push(stack, depth - 2, String) : -1;

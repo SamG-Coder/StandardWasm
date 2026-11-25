@@ -1,10 +1,12 @@
-# Stage 36 · Bound event handlers
+# Stage 36 · Multicast event handlers
 
 Run from the repository root.
 
     npm run demo -- stage-36-managed-events
 
-The compiler takes the .NET Standard DLL and emits a Wasm module that returns 12 from `InvokeBoundHandler(0)`. The fixture stores an ordinary `System.EventHandler` in a field and invokes it with the original sender and `EventArgs.Empty`. The compiler creates a Wasm GC struct for the delegate's target and typed function reference. A thunk receives the target, sender and arguments, casts the target to its concrete class, and forwards the call. The fixture exercises distinct methods, distinct targets, and a null delegate. The CLR's `NullReferenceException` corresponds to a Wasm trap.
+The compiler takes the .NET Standard DLL and emits a Wasm module that returns 12112 from `CombineCallbacks(0)`. The fixture combines three callbacks, invokes the result in registration order, then invokes the original two callbacks again. The other cases check that combining with null preserves the original reference and that a callback added during dispatch first runs on the next invocation. [Delegate.Combine](https://learn.microsoft.com/en-us/dotnet/api/system.delegate.combine?view=net-10.0)
+
+The compiler represents each bound target and typed function reference with a Wasm GC struct. A private GC array stores those entries in invocation order. Combining two nonnull delegates copies both lists into a new array, and each invocation keeps its original array for the duration of dispatch. `InvokeBoundHandler` covers distinct methods and target objects. Invoking a null delegate traps in Wasm and throws `NullReferenceException` on the CLR.
 
 Within one module instance, `EventArgs.Empty` always returns the same reference and each `new EventArgs()` returns a fresh reference. An immutable global initialized with `struct.new_default` holds the singleton. The compiler validates the .NET Standard facade's AssemblyRef name and public key token before binding those members. [WebAssembly Core Specification](https://webassembly.github.io/spec/core/valid/instructions.html#valid-constant)
 
@@ -12,7 +14,7 @@ Within one module instance, `EventArgs.Empty` always returns the same reference 
 
 ## Event subscription fixtures
 
-The current Wasm implementation covers a single bound, nonvirtual instance handler. Static handlers, multicast delegate operations and compiler-generated event accessors still need support. The remaining subscription fixtures currently run on the CLR.
+The current Wasm implementation covers combining and invoking bound, nonvirtual instance handlers. Static handlers, delegate removal and compiler-generated field-like event accessors still need support. The remaining subscription fixtures currently run on the CLR.
 
 | CLR entry in `EventLibrary.EventCases` | Expected | Behavior |
 | --- | --- | --- |

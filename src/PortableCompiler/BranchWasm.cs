@@ -13,12 +13,15 @@ namespace PortableCompiler
             byte result = (byte)frameShape[3];
             int classes = frameShape[4];
             bool stringScratch = frameShape[5] != 0;
+            bool eventScratch = frameShape[6] != 0;
             int spillKinds = FirstClass - 1 + classes;
-            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 1 + spillKinds) + (stringScratch ? 2 : 0));
+            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 1 + spillKinds) +
+                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0));
             int spills = arguments + locals;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
-            int pcLocal = scratch + (stringScratch ? 5 : 0);
+            int eventLocals = scratch + (stringScratch ? 5 : 0);
+            int pcLocal = eventLocals + (eventScratch ? 3 : 0);
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < spills; i++)
             {
@@ -44,6 +47,13 @@ namespace PortableCompiler
                 used = WasmBinary.ValueType(code, used, Chars);
                 code[used++] = 2;
                 code[used++] = 0x7f;
+            }
+            if (eventScratch)
+            {
+                code[used++] = 2; // loop or copy lengths
+                code[used++] = 0x7f;
+                code[used++] = 1; // unpublished output array
+                used = WasmBinary.ValueType(code, used, EventHandlerReference);
             }
             code[used++] = 1;
             code[used++] = 0x7f;
@@ -163,32 +173,39 @@ namespace PortableCompiler
                     code[used++] = 0x25; // table.get from the generated thunk table
                     code[used++] = 0;
                     if (closureType == EventHandlerReference)
+                    {
                         used = CastThunk(code, used, WasmBinary.EventThunkType);
-                    used = Gc(code, used, 0, closureType); // struct.new closure
+                        used = EventWasm.NewList(code, used);
+                    }
+                    else used = Gc(code, used, 0, closureType); // struct.new scalar closure
                     used = Local(code, used, 0x21, Spill(spills, maximum, closureType, top - 1));
+                }
+                else if (kind == CombineHandler)
+                {
+                    int left = Spill(spills, maximum, EventHandlerReference, top - 1);
+                    int right = Spill(spills, maximum, EventHandlerReference, top);
+                    used = EventWasm.CombineLists(code, used, left, right, eventLocals);
+                    used = Local(code, used, 0x21, left);
+                }
+                else if (kind == InvokeDelegate && operand == EventHandlerReference)
+                {
+                    used = EventWasm.Invoke(code, used, Spill(spills, maximum, EventHandlerReference, top - 2),
+                        Spill(spills, maximum, states[state + top - 1], top - 1),
+                        Spill(spills, maximum, EventArgsReference, top), eventLocals);
                 }
                 else if (kind == InvokeDelegate)
                 {
-                    byte closureType = (byte)operand;
-                    bool eventHandler = closureType == EventHandlerReference;
-                    int closure = Spill(spills, maximum, closureType, top - (eventHandler ? 2 : 0));
+                    int closure = Spill(spills, maximum, Delegate, top);
                     used = Local(code, used, 0x20, closure);
-                    used = Gc(code, used, 2, closureType); // struct.get receiver
+                    used = Gc(code, used, 2, Delegate); // struct.get receiver
                     code[used++] = 0;
-                    if (eventHandler)
-                    {
-                        used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top - 1], top - 1));
-                        used = Local(code, used, 0x20, Spill(spills, maximum, EventArgsReference, top));
-                    }
                     used = Local(code, used, 0x20, closure);
-                    used = Gc(code, used, 2, closureType); // struct.get callable reference
+                    used = Gc(code, used, 2, Delegate); // struct.get callable reference
                     code[used++] = 1;
-                    if (!eventHandler)
-                        used = CastThunk(code, used, WasmBinary.ScalarThunkType);
+                    used = CastThunk(code, used, WasmBinary.ScalarThunkType);
                     code[used++] = 0x14; // call_ref
-                    code[used++] = eventHandler ? (byte)WasmBinary.EventThunkType : (byte)WasmBinary.ScalarThunkType;
-                    if (!eventHandler)
-                        used = Local(code, used, 0x21, spills + top);
+                    code[used++] = WasmBinary.ScalarThunkType;
+                    used = Local(code, used, 0x21, spills + top);
                 }
                 else if (kind == Store)
                 {
@@ -442,7 +459,7 @@ namespace PortableCompiler
             return WasmBinary.Unsigned(code, used, WasmBinary.HeapType((byte)type));
         }
 
-        private static int Const(byte[] code, int used, int value)
+        internal static int Const(byte[] code, int used, int value)
         {
             code[used++] = 0x41;
             return WasmBinary.Signed(code, used, value);
@@ -454,7 +471,7 @@ namespace PortableCompiler
             return WasmBinary.Signed64(code, used, low, high);
         }
 
-        private static int Local(byte[] code, int used, byte instruction, int local)
+        internal static int Local(byte[] code, int used, byte instruction, int local)
         {
             code[used++] = instruction;
             return WasmBinary.Unsigned(code, used, local);

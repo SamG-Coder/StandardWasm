@@ -134,7 +134,7 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[6];
+            var frameShape = new int[7];
             bool eventArgsEmpty = false;
 
             int activeOwner = 0;
@@ -234,10 +234,14 @@ namespace PortableCompiler
                     frameShape[3] = result;
                     frameShape[4] = objects[0];
                     frameShape[5] = 0;
+                    frameShape[6] = 0;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars) frameShape[5] = 1;
+                        if (kind == BranchIl.CombineHandler ||
+                            (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
+                            frameShape[6] = 1;
                         if (kind == BranchIl.LoadEventArgsEmpty && depths[slot / BranchIl.Width] != 0)
                             eventArgsEmpty = true;
                     }
@@ -276,6 +280,12 @@ namespace PortableCompiler
                     if (type < 0) return type;
                     records[slot + 1] = type;
                 }
+                if (kind == BranchIl.CastHandler)
+                {
+                    int coded = (records[slot + 1] << 2) | 1;
+                    if (EventMetadata.Reference(image, heaps, layout, coded) != EventHandlerReference) return -2;
+                    continue;
+                }
                 if (kind == BranchIl.GetField || kind == BranchIl.SetField)
                 {
                     int field = records[slot + 1];
@@ -303,7 +313,7 @@ namespace PortableCompiler
                 {
                     int member = records[slot + 1], opcode = records[slot + 3];
                     int constructorType = Delegate;
-                    if (owner == 0 && (opcode == 0x7e || opcode == 0x73 || opcode == 0x6f))
+                    if (owner == 0)
                     {
                         int eventMember = EventMetadata.Member(image, heaps, layout, member);
                         if (eventMember == EventMetadata.Empty && opcode == 0x7e)
@@ -324,6 +334,11 @@ namespace PortableCompiler
                         }
                         if (eventMember == EventMetadata.ConstructHandler && opcode == 0x73)
                             constructorType = EventHandlerReference;
+                        if (eventMember == EventMetadata.CombineHandler && opcode == 0x28)
+                        {
+                            records[slot] = BranchIl.CombineHandler;
+                            continue;
+                        }
                     }
                     if (opcode == 0x7e) return -2;
                     if (opcode == 0x28 && ObjectLayouts.IsObjectConstructor(image, heaps, layout, member))

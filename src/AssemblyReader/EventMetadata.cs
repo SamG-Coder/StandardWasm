@@ -4,14 +4,16 @@ namespace PeLibrary
 {
     internal static class EventMetadata
     {
-        internal const int Empty = 1, Construct = 2, ConstructHandler = 3, InvokeHandler = 4;
+        internal const int Empty = 1, Construct = 2, ConstructHandler = 3, InvokeHandler = 4, CombineHandler = 5;
+        private const int DelegateType = 256; // Only used to match BCL member signatures.
 
         internal static int Reference(byte[] image, int[] heaps, int[] methods, int coded)
         {
             if ((coded & 3) != 1) return 0;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
-            return first < 0 ? 0 : ReadType(image, heaps, methods, counts, first, coded >> 2);
+            int type = first < 0 ? 0 : ReadType(image, heaps, methods, counts, first, coded >> 2);
+            return type == DelegateType ? 0 : type;
         }
 
         internal static int Member(byte[] image, int[] heaps, int[] methods, int row)
@@ -38,6 +40,21 @@ namespace PeLibrary
             int size = CompressedUnsigned(image, heaps[0] + (int)blob, end, next);
             int signature = next[0];
             if (size < 3 || size > end - signature) return 0;
+            if (type == DelegateType)
+            {
+                if (image[signature] != 0 || image[signature + 1] != 2 ||
+                    !Name(image, heaps, name, 7, 0x626d6f43, 0x656e69, 0)) return 0; // Combine
+                int cursor = signature + 2;
+                for (int i = 0; i < 3; i++)
+                {
+                    if (cursor >= signature + size || image[cursor] != 0x12) return 0;
+                    int reference = CompressedUnsigned(image, cursor + 1, signature + size, next);
+                    if ((reference & 3) != 1 || ReadType(image, heaps, methods, counts, first, reference >> 2) != DelegateType)
+                        return 0;
+                    cursor = next[0];
+                }
+                return cursor == signature + size ? CombineHandler : 0;
+            }
             if (type == ObjectLayouts.EventHandlerReference)
             {
                 // HASTHIS, two arguments, void result, object first argument.
@@ -79,6 +96,8 @@ namespace PeLibrary
                 type = ObjectLayouts.EventArgsReference;
             else if (Name(image, heaps, name, 12, 0x6e657645, 0x6e614874, 0x72656c64)) // EventHandler
                 type = ObjectLayouts.EventHandlerReference;
+            else if (Name(image, heaps, name, 8, 0x656c6544, 0x65746167, 0)) // Delegate
+                type = DelegateType;
             else return 0;
             if (!Name(image, heaps, Index(image, at + (uint)(scopeWidth + strings), strings), 6, 0x74737953, 0x6d65, 0)) // System
                 return 0;
