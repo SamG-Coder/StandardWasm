@@ -115,6 +115,7 @@ namespace PortableCompiler
             var moduleCode = new byte[output.Length];
             var literals = new byte[output.Length];
             var literalSize = new int[1];
+            var remainderFixup = new int[1];
             int functions = 0, length = 0;
             for (int export = 0; export < exportCount; export++)
             {
@@ -134,7 +135,7 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[7];
+            var frameShape = new int[8];
             bool eventArgsEmpty = false;
 
             int activeOwner = 0;
@@ -241,6 +242,7 @@ namespace PortableCompiler
                     frameShape[4] = objects[0];
                     frameShape[5] = 0;
                     frameShape[6] = 0;
+                    frameShape[7] = length;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
@@ -252,7 +254,7 @@ namespace PortableCompiler
                             eventArgsEmpty = true;
                     }
                     code = new byte[capacity];
-                    used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets, arities, code);
+                    used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets, arities, code, remainderFixup);
                 }
 
                 if (used > moduleCode.Length - length)
@@ -264,7 +266,7 @@ namespace PortableCompiler
             }
             CompileLocation.Clear(location);
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], eventArgsEmpty);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], eventArgsEmpty, remainderFixup[0]);
         }
 
         private static int LinkOperands(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,

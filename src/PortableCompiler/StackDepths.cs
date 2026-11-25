@@ -150,8 +150,7 @@ namespace PortableCompiler
                 {
                     if (needed != 2 || !IsFloat(type) || !IsFloat(top)) return -1;
                     if (kind == Conditional) return depth - 2;
-                    if (operand == 0x6f) return -2; // No exact floating-point remainder yet.
-                    if (!IsComparison(operand) && (operand < 0x6a || operand > 0x6d)) return -1;
+                    if (!IsComparison(operand) && operand != 0x6f && (operand < 0x6a || operand > 0x6d)) return -1;
                     return Push(stack, depth - 2, IsComparison(operand) ? I32 : FloatWidth(type, top));
                 }
                 if (!IsInteger(type)) return -1;

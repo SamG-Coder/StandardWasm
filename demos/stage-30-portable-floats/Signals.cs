@@ -46,7 +46,20 @@ namespace PortableReals
             FloatDependency.Scale.Adjust(sample, delta) + FloatDependency.Scale.Adjust(sample, (float)delta);
 
         public static double Remainder(double left, double right) => left % right;
+        public static float RemainderSingle(float left, float right) => left % right;
+        public static int RemainderWithCallback(double left, double right)
+        {
+            var callback = new RemainderCallback();
+            System.Func<int> read = callback.Read;
+            return (int)(left % right) + read();
+        }
+
         public static int CheckedTruncate(double value) => checked((int)value);
         public static int CheckedToByte(double value) => checked((byte)value);
+
+        private sealed class RemainderCallback
+        {
+            internal int Read() => (int)Remainder(9.5, 4.0);
+        }
     }
 }

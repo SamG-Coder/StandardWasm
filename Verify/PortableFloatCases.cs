@@ -67,7 +67,16 @@ internal static class PortableFloatCases
         }
         Check(nameof(Signals.TinyConstant), [], () => Signals.TinyConstant());
         Check(nameof(Signals.NegativeZero), [], () => Signals.NegativeZero());
-        Reject(nameof(Signals.Remainder), OpCodes.Rem);
+        double[] remainderValues = [0.0, -0.0, -6.0, 3.0, double.Epsilon, float.Epsilon,
+            double.MaxValue, 1.0e-300, double.PositiveInfinity, double.NegativeInfinity, double.NaN];
+        foreach (double left in remainderValues)
+        foreach (double right in remainderValues)
+        {
+            Check(nameof(Signals.Remainder), [left, right], () => Signals.Remainder(left, right));
+            Check(nameof(Signals.RemainderSingle), [(float)left, (float)right],
+                () => Signals.RemainderSingle((float)left, (float)right));
+        }
+        Check(nameof(Signals.RemainderWithCallback), [19.5, 4.0], () => Signals.RemainderWithCallback(19.5, 4.0));
         Reject(nameof(Signals.CheckedTruncate), OpCodes.Conv_Ovf_I4);
         Reject(nameof(Signals.CheckedToByte), OpCodes.Conv_Ovf_U1);
 

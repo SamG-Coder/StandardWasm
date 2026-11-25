@@ -11,10 +11,14 @@ namespace PortableCompiler
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize, bool eventArgsEmpty)
+            byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup)
         {
             int typeOffset = objects[0] + FirstClassHeap;
-            int totalFunctions = functions + thunks[0];
+            bool hasRemainder = remainderFixup != 0;
+            int remainderIndex = functions + thunks[0];
+            int totalFunctions = remainderIndex + (hasRemainder ? 1 : 0);
+            var remainderBody = new byte[hasRemainder ? FloatRemainderWasm.BodyCapacity : 0];
+            int remainderSize = hasRemainder ? FloatRemainderWasm.WriteBody(remainderBody) : 0;
             int classBytes = 0;
             bool recursive = false;
             for (int i = 0; i < objects[0]; i++)
@@ -38,11 +42,18 @@ namespace PortableCompiler
             // types retain individual indices for fields and function signatures.
             // The entry and invocation list also share one fixed recursive type group.
             int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 1;
+            if (hasRemainder) typeEntries++;
             int prefix = UnsignedSize(typeEntries) + 57 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+            if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;
             int functionSize = UnsignedSize(totalFunctions) + thunks[0];
             int codeSize = UnsignedSize(totalFunctions);
+            if (hasRemainder)
+            {
+                functionSize += UnsignedSize(typeOffset + functions);
+                codeSize += UnsignedSize(remainderSize) + remainderSize;
+            }
             // Use one type per function in discovery order. Accumulate against
             // destination capacity before any writes, guarding size arithmetic.
             for (int i = 0; i < functions; i++)
@@ -101,6 +112,7 @@ namespace PortableCompiler
             if (remaining < 0 || (literalSize != 0 && (dataOverhead > remaining ||
                 literalSize > remaining - dataOverhead || Reserve(remaining, dataOverhead + literalSize) < 0)))
                 return -3;
+            if (hasRemainder) FloatRemainderWasm.ResolveCalls(bodies, remainderFixup, remainderIndex);
 
             output[0] = 0;
             output[1] = 0x61;
@@ -208,6 +220,7 @@ namespace PortableCompiler
                 if (result != Void)
                     cursor = ValueType(output, cursor, result);
             }
+            if (hasRemainder) cursor = FloatRemainderWasm.WriteType(output, cursor);
 
             cursor = Section(output, cursor, 3, functionSize);
             cursor = Unsigned(output, cursor, totalFunctions);
@@ -215,6 +228,7 @@ namespace PortableCompiler
                 cursor = Unsigned(output, cursor, i + typeOffset);
             for (int i = 0; i < thunks[0]; i++)
                 output[cursor++] = arities[thunks[i + 1]] == 3 ? (byte)EventThunkType : (byte)ScalarThunkType;
+            if (hasRemainder) cursor = Unsigned(output, cursor, typeOffset + functions);
             if (thunks[0] != 0)
             {
                 cursor = Section(output, cursor, 4, tableSize);
@@ -297,6 +311,11 @@ namespace PortableCompiler
                 output[cursor++] = 0x10;
                 cursor = Unsigned(output, cursor, function);
                 output[cursor++] = 0x0b;
+            }
+            if (hasRemainder)
+            {
+                cursor = Unsigned(output, cursor, remainderSize);
+                for (int i = 0; i < remainderSize; i++) output[cursor++] = remainderBody[i];
             }
             if (literalSize != 0)
             {

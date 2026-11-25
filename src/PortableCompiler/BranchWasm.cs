@@ -7,7 +7,7 @@ namespace PortableCompiler
     internal static class BranchWasm
     {
         internal static int Emit(int[] records, int[] depths, byte[] states, int[] frameShape, byte[] frame,
-            byte[] signatures, int[] offsets, int[] arities, byte[] code)
+            byte[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             byte result = (byte)frameShape[3];
@@ -251,14 +251,25 @@ namespace PortableCompiler
                     byte resultType = IsComparison(operand) ? I32 : width;
                     int left = Spill(spills, maximum, type, top - 1);
                     int right = Spill(spills, maximum, states[state + top], top);
-                    if (operand == 0x6f)
-                        used = GuardRemainder(code, used, type, left, right);
-                    used = NumericLocal(code, used, left, type, width);
-                    used = NumericLocal(code, used, right, rightType, width);
-                    if (type == I64 && IsShift(operand)) code[used++] = 0xad;
-                    if (IsFloat(width)) used = FloatWasm.Binary(code, used, operand, width);
-                    else if (IsObjectReference(type)) code[used++] = 0xd3; // ref.eq
-                    else code[used++] = NumericOpcode(operand, type);
+                    if (operand == 0x6f && IsFloat(width))
+                    {
+                        // Any exact remainder of two f32 operands also fits in
+                        // f32. Reuse the f64 helper and demote at the IL result.
+                        used = NumericLocal(code, used, left, type, F64);
+                        used = NumericLocal(code, used, right, rightType, F64);
+                        used = FloatRemainderWasm.Call(code, used, frameShape[7], remainderFixup);
+                        if (width == F32) code[used++] = 0xb6;
+                    }
+                    else
+                    {
+                        if (operand == 0x6f) used = GuardRemainder(code, used, type, left, right);
+                        used = NumericLocal(code, used, left, type, width);
+                        used = NumericLocal(code, used, right, rightType, width);
+                        if (type == I64 && IsShift(operand)) code[used++] = 0xad;
+                        if (IsFloat(width)) used = FloatWasm.Binary(code, used, operand, width);
+                        else if (IsObjectReference(type)) code[used++] = 0xd3; // ref.eq
+                        else code[used++] = NumericOpcode(operand, type);
+                    }
                     used = Local(code, used, 0x21, Spill(spills, maximum, resultType, top - 1));
                 }
                 else if (kind == Call || kind == NewObject)
