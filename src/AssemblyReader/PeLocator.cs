@@ -8,20 +8,14 @@ namespace PeLibrary
 
         public static int LocateMetadata(byte[] image, int[] location)
         {
-            uint limit = (uint)image.Length;
-            if (location.Length < 2 || limit < 64 || U16(image, 0) != 0x5a4d)
+            int peStart = ReadPeStart(image);
+            if (location.Length < 2 || peStart < 0)
                 return Invalid;
-            uint pe = U32(image, 60);
-            if (!Fits(pe, 24, limit) || U32(image, pe) != 0x4550)
-                return Invalid;
+            uint pe = (uint)peStart;
             uint sectionCount = U16(image, pe + 6);
             uint optionalSize = U16(image, pe + 20);
             uint optional = pe + 24;
-            if (optionalSize < 2 || !Fits(optional, optionalSize, limit))
-                return Invalid;
             uint sections = optional + optionalSize;
-            if (!Fits(sections, sectionCount * 40, limit))
-                return Invalid;
 
             uint directory;
             uint magic = U16(image, optional);
@@ -69,6 +63,39 @@ namespace PeLibrary
             location[0] = metadata;
             location[1] = (int)metadataSize;
             return 0;
+        }
+
+        internal static int MapImageRange(byte[] image, uint rva, uint size)
+        {
+            int peStart = ReadPeStart(image);
+            if (peStart < 0)
+                return -1;
+            uint pe = (uint)peStart;
+            uint count = U16(image, pe + 6);
+            uint optionalSize = U16(image, pe + 20);
+            uint optional = pe + 24;
+            uint magic = U16(image, optional);
+            if (optionalSize < 64 || (magic != 0x10b && magic != 0x20b) ||
+                rva < U32(image, optional + 60))
+                return -1;
+            return MapRange(image, optional + optionalSize, count, rva, size);
+        }
+
+        private static int ReadPeStart(byte[] image)
+        {
+            uint limit = (uint)image.Length;
+            if (limit < 64 || U16(image, 0) != 0x5a4d)
+                return -1;
+            uint pe = U32(image, 60);
+            if (!Fits(pe, 24, limit) || U32(image, pe) != 0x4550)
+                return -1;
+            uint optional = pe + 24;
+            uint optionalSize = U16(image, pe + 20);
+            uint sectionCount = U16(image, pe + 6);
+            if (optionalSize < 2 || !Fits(optional, optionalSize, limit) ||
+                !Fits(optional + optionalSize, sectionCount * 40, limit))
+                return -1;
+            return (int)pe;
         }
 
         private static int MapRange(byte[] image, uint sections, uint count, uint rva, uint size)
