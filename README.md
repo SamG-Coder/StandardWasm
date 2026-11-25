@@ -7,7 +7,7 @@ StandardWasm is an experimental ahead-of-time compiler for .NET Standard assembl
 - [Project goal, milestones and acceptance criteria](GOAL.md)
 - [Runnable demos by stage](demos/README.md)
 - [Shared agent workflow](AGENTS.md) and [Claude entry point](CLAUDE.md)
-- [Architecture decisions](docs/decisions/0001-staged-demos.md)
+- Architecture decisions: [0001 staged demos](docs/decisions/0001-staged-demos.md), [0002 assembly reader boundary](docs/decisions/0002-assembly-reader-boundary.md), [0003 BCL intrinsics](docs/decisions/0003-bcl-intrinsics.md)
 
 .NET Standard specifies an API contract. Each supported API needs either a compatible implementation compiled into the module or an explicitly documented host import. Windows services and UI controls require additional browser implementations. Blazor is outside this project's architecture.
 
@@ -21,7 +21,7 @@ The first working backend takes a DLL and a public export type, follows reachabl
 
 | Available today | Current boundary |
 | --- | --- |
-| 32-bit integers, unsigned comparisons, booleans, locals, loops, conditional branches, static calls and recursion | No general BCL linker, virtual dispatch, generics, strings or floating-point lowering |
+| 32- and 64-bit integers (int64 values cross the JS boundary as BigInt), `float`/`double` with IEEE semantics, saturating conversions and exact `%`, unsigned comparisons, booleans, locals, loops, conditional branches, `switch` jump tables, static calls and recursion | No general BCL linker (only the exact `System.Math` intrinsics of [decision 0003](docs/decisions/0003-bcl-intrinsics.md)), virtual dispatch, generics or strings |
 | Managed one-dimensional int and byte arrays backed by Wasm GC | Allocation, length, indexed read and write for int and packed byte elements |
 | Direct tail calls for eligible call/return pairs | Managed exception handling and stack-trace fidelity are open |
 | Integer arithmetic and array access | Runtime arithmetic and array failures surface as Wasm traps. Typed CLR exceptions are open. Checked arithmetic currently produces a compile-time diagnostic. |
@@ -35,7 +35,7 @@ npm ci
 npm test
 ```
 
-The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds twelve netstandard2.0 libraries, records expected results on the CLR, compiles the DLLs and executes the binaries in Node and a headless browser. It also verifies rejection of checked addition and exercises one million tail calls. Traps are compared as failures, without matching exception classes.
+The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds the netstandard2.0 demo libraries, records expected results on the CLR, compiles the DLLs and executes the binaries in Node and a headless browser. It also verifies rejection of checked addition and exercises one million tail calls. Traps are compared as failures, without matching exception classes.
 
 To compile another DLL:
 
@@ -52,7 +52,7 @@ instance.exports.SumSquares(10); // 385
 
 ## Self-recompilation
 
-Stage 13 generates a compiler with six named exports. The generated compiler recompiles its own DLL using its own buffer APIs and reproduces the module byte for byte. The second generation reruns the portable generated-code fixtures in Node and Edge. Running npm test writes the Node-verified final generation to artifacts/StandardWasm.Compiler.wasm. See the [stage instructions](demos/stage-13-complete-bootstrap/README.md).
+Stage 13 compares the portable compiler's CLR output with three Wasm generations built from the same DLL and export manifest. Each generated compiler provides its own byte transport. The second generation replays the portable generated-code fixtures in Node and Edge. See the [Stage 13 instructions](demos/stage-13-complete-bootstrap/README.md).
 
 ## Source map and bootstrap dependencies
 
@@ -64,6 +64,6 @@ Stage 13 generates a compiler with six named exports. The generated compiler rec
 - `src/PortableCompiler/` contains the compiler-in-Wasm path demonstrated by Stages 09 through 13.
 - `scripts/` contains assembly, engine validation and browser tests. Generated modules are written to `artifacts/`.
 
-The original CLI uses Mono.Cecil to read IL and Binaryen to assemble WAT. It bootstraps the portable compiler, which has a source-level PE/CLI reader and binary writer. Portable output modules have zero runtime imports. Expanding input compatibility and building the WinForms/WebGPU backend are separate milestones.
+The initial compiler uses Mono.Cecil and Binaryen on the build host. The portable compiler uses its own metadata reader, binary writer, and managed byte-array boundary. The generated compiler and sample modules have zero runtime imports. The CLR-equivalence suite includes additional capabilities that still need portable implementations.
 
-The modern instructions used here are standardized Wasm GC array instructions and `return_call`. See the [WebAssembly 3.0 release](https://webassembly.org/news/2025-09-17-wasm-3.0/) and [engine feature matrix](https://webassembly.org/features/).
+The modern instructions used here are standardized Wasm GC array instructions, `return_call` and the non-trapping float-to-int conversions (`trunc_sat`). See the [WebAssembly 3.0 release](https://webassembly.org/news/2025-09-17-wasm-3.0/) and [engine feature matrix](https://webassembly.org/features/).

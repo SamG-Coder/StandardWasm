@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { invoke, invokeGenerated } from "./invoke.mjs";
+import { decode, invoke, invokeGenerated } from "./invoke.mjs";
 import { demoInputs, listDemos } from "./demos.mjs";
 import { chromium } from "playwright-core";
 import { compile, root, run } from "./toolchain.mjs";
@@ -16,13 +16,42 @@ for (const demo of demos) {
     const { instance } = await WebAssembly.instantiate(readFileSync(demo.wasm));
     assert.equal((demo.generated
         ? await invokeGenerated(instance.exports, demoInputs(demo), demo.generated)
-        : invoke(instance.exports, demo.method, demoInputs(demo))), demo.expected, demo.stage);
+        : invoke(instance.exports, demo.method, demoInputs(demo))), decode(demo.expected), demo.stage);
 }
 const scalarDemo = demos.find(d => d.assembly === "Sample");
 const rejected = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
     "--", scalarDemo.dll, "Sample.CheckedArithmetic", "artifacts/unsupported.wat"], { encoding: "utf8" });
 assert.equal(rejected.status, 1);
 assert.match(rejected.stderr, /Increment.*IL_[0-9a-f]+.*add\.ovf/);
+// 64-bit checked arithmetic must be diagnosed too, with the method and IL offset.
+const wideDemo = demos.find(d => d.assembly === "LongIntegers");
+const rejectedWide = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
+    "--", wideDemo.dll, "LongIntegers.CheckedWide", "artifacts/unsupported-wide.wat"], { encoding: "utf8" });
+assert.equal(rejectedWide.status, 1);
+assert.match(rejectedWide.stderr, /CheckedWide::Increment\(System\.Int64\) at IL_[0-9a-f]+ \(add\.ovf\)/);
+// A checked float-to-int conversion must be diagnosed. Float remainder is lowered exactly since stage 33.
+const realsDemo = demos.find(d => d.assembly === "FloatingPoint");
+for (const [type, pattern] of [["CheckedConversions", /CheckedConversions::Narrow\(System\.Double\) at IL_[0-9a-f]+ \(conv\.ovf\.i4\)/]]) {
+    const rejectedReal = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
+        "--", realsDemo.dll, "FloatingPoint." + type, "artifacts/unsupported-real.wat"], { encoding: "utf8" });
+    assert.equal(rejectedReal.status, 1);
+    assert.match(rejectedReal.stderr, pattern);
+}
+// A BCL method outside the intrinsic table (decision 0003) must stay an unlinked-call diagnostic.
+const mathDemo = demos.find(d => d.assembly === "MathIntrinsics");
+const rejectedMath = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
+    "--", mathDemo.dll, "MathIntrinsics.UnmappedMath", "artifacts/unsupported-math.wat"], { encoding: "utf8" });
+assert.equal(rejectedMath.status, 1);
+assert.match(rejectedMath.stderr, /UnmappedMath::Power\(System\.Double,System\.Double\) at IL_[0-9a-f]+ \(call\): Unlinked call: System\.Double System\.Math::Pow/);
+// A dependency that defines its own System.Math.Sqrt (reached through an extern alias) is not the BCL. The CLR runs
+// that method, so the compiler must report an unlinked call instead of substituting f64.sqrt.
+const identityProbe = "demos/stage-29-math-intrinsics/identity/IdentityProbe";
+run("dotnet", ["build", "-c", "Release", identityProbe]);
+const rejectedIdentity = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
+    "--", identityProbe + "/bin/Release/netstandard2.0/IdentityProbe.dll", "IdentityProbe.Probe", "artifacts/unsupported-identity.wat"],
+    { encoding: "utf8" });
+assert.equal(rejectedIdentity.status, 1);
+assert.match(rejectedIdentity.stderr, /Probe::Compute\(System\.Double\) at IL_[0-9a-f]+ \(call\): Unlinked call: System\.Double System\.Math::Sqrt\(System\.Double\) in ThirdPartyMath/);
 const cases = JSON.parse(readFileSync("artifacts/oracle.json"));
 console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases,
     bytes => writeFileSync("artifacts/StandardWasm.Compiler.wasm", bytes)));
