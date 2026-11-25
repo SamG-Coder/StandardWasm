@@ -273,7 +273,19 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
             case Code.Rem:
             {
                 if (stack.Count > 0 && FloatOps.IsFloat(stack[^1]))
-                    throw new NotSupportedException("Floating-point remainder needs an exact fmod, which Wasm does not provide");
+                {
+                    // CLR float remainder is C fmod (truncated, sign of the dividend). Wasm has no instruction for it,
+                    // so call the exact runtime helper. A float32 remainder is exactly representable as float32, so
+                    // computing it in f64 and demoting is exact.
+                    var (floatDivisor, floatType) = PopNumeric();
+                    var floatDividend = Pop(floatType);
+                    var fmod = module.RequireHelper("fmod");
+                    Push(floatType == Float64
+                        ? $"(call {fmod} {floatDividend} {floatDivisor})"
+                        : $"(f32.demote_f64 (call {fmod} (f64.promote_f32 {floatDividend}) (f64.promote_f32 {floatDivisor})))",
+                        floatType);
+                    break;
+                }
                 var (divisor, type) = PopInteger();
                 var dividend = Pop(type);
                 // Wasm rem_s returns zero for MinValue % -1. The CLR throws OverflowException, so trap explicitly.
