@@ -52,6 +52,7 @@ foreach (var (count, index) in new[] { (1, 0), (3, 2), (0, 0), (3, -1), (3, 3), 
 }
 
 PeCases.Add(cases);
+StreamCases.Add(cases);
 // Integer division (stage 08). The grid crosses every signed boundary with every divisor boundary.
 // The unsigned high-bit patterns (0x80000000, 0x80000001, 0xFFFFFFFE, 0xFFFFFFFF) are the same values
 // read as int, so div.un and rem.un see dividends and divisors above int.MaxValue.

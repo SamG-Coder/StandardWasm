@@ -8,7 +8,7 @@ internal static class PeCases
     {
         AddFixture(cases, typeof(Sample.Kernels).Assembly.Location, PEMagic.PE32);
         AddFixture(cases, typeof(ArrayLibrary.Sequences).Assembly.Location, PEMagic.PE32);
-        AddFixture(cases, typeof(PeLocator).Assembly.Location, PEMagic.PE32Plus);
+        AddFixture(cases, typeof(ReaderDemo).Assembly.Location, PEMagic.PE32Plus);
     }
 
     private static void AddFixture(List<object> cases, string path, PEMagic magic)

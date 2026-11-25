@@ -1,6 +1,8 @@
+using static PeLibrary.ImageBytes;
+
 namespace PeLibrary
 {
-    public static class PeLocator
+    internal static class PeLocator
     {
         private const int Invalid = 1, Unsupported = 2, NoCli = 3;
 
@@ -95,14 +97,5 @@ namespace PeLibrary
             }
             return result;
         }
-
-        private static bool Fits(uint offset, uint length, uint limit) =>
-            offset <= limit && length <= limit - offset;
-
-        private static uint U16(byte[] bytes, uint offset) =>
-            (uint)(bytes[offset] | (bytes[offset + 1] << 8));
-
-        private static uint U32(byte[] bytes, uint offset) =>
-            U16(bytes, offset) | (U16(bytes, offset + 2) << 16);
     }
 }

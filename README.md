@@ -35,7 +35,7 @@ npm ci
 npm test
 ```
 
-The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds four netstandard2.0 libraries, records expected results on the CLR, compiles the DLLs and executes the binaries in Node and a headless browser. It also verifies rejection of checked addition and exercises one million tail calls. Traps are compared as failures, without matching exception classes.
+The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds six netstandard2.0 libraries, records expected results on the CLR, compiles the DLLs and executes the binaries in Node and a headless browser. It also verifies rejection of checked addition and exercises one million tail calls. Traps are compared as failures, without matching exception classes.
 
 To compile another DLL:
 
@@ -56,6 +56,7 @@ instance.exports.SumSquares(10); // 385
 - `Compiler/MethodCompiler.cs` translates IL evaluation stacks and control flow. Basic blocks currently use a dispatcher for correctness. Efficient structured control flow is a future optimization.
 - `Compiler/IntegerOps.cs` maps numeric and comparison instructions.
 - `demos/stage-*/` contains the independently buildable .NET Standard libraries. `Verify/` generates deterministic expected results on the CLR.
+- `src/AssemblyReader/` contains the portable PE/CLI discovery code shared by the reader stages.
 - `scripts/` contains assembly, engine validation and browser tests. Generated modules are written to `artifacts/`.
 
 Self-hosting requires a metadata reader and binary writer that can run inside the compiled module, plus enough support for the compiler's own strings, collections, object model and error paths. The current bootstrap also needs a file/byte-buffer boundary to replace host filesystem calls. The existing compiler uses Mono.Cecil and Binaryen on the build host. Generated sample modules have neither dependency.
