@@ -96,4 +96,5 @@ for (int i = 0; i < 200; i++)
     CheckConstantDivisors(a);
 }
 LongCases.Add(cases);
+FloatCases.Add(cases);
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));

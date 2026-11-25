@@ -13,5 +13,6 @@
     <ProjectReference Include="../demos/stage-06-method-definitions/MethodLibrary.csproj" />
     <ProjectReference Include="../demos/stage-08-integer-division/IntegerDivision.csproj" />
     <ProjectReference Include="../demos/stage-18-long-integers/LongIntegers.csproj" />
+    <ProjectReference Include="../demos/stage-20-floating-point/FloatingPoint.csproj" />
   </ItemGroup>
 </Project>
