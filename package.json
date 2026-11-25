@@ -5,7 +5,9 @@
   "scripts": {
     "test": "node scripts/test.mjs",
     "compile": "node scripts/compile.mjs",
-    "demo": "node scripts/demo.mjs"
+    "demo": "node scripts/demo.mjs",
+    "winforms": "node scripts/winforms.mjs",
+    "test:winforms": "node scripts/winforms.mjs --verify"
   },
   "type": "commonjs",
   "dependencies": {

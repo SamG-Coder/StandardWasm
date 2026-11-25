@@ -10,6 +10,11 @@ if (!demo) {
     console.log("Usage: npm run demo -- <stage>\n" + demos.map(d => d.stage).join("\n"));
     process.exit(process.argv[2] ? 1 : 0);
 }
+if (demo.runner) {
+    run(process.execPath, [demo.runner]);
+    process.exit(0);
+}
+
 run("dotnet", ["build", "-c", "Release", demo.project]);
 compile(demo.dll, demo.exportType, demo.wasm);
 const { instance } = await WebAssembly.instantiate(readFileSync(demo.wasm));
