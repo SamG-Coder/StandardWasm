@@ -6,7 +6,7 @@ namespace PortableCompiler
     {
         internal const int Width = 4;
         internal const int Load = 1, Store = 2, Constant = 3, Unary = 4, Binary = 5,
-            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12;
+            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12, NewArray = 13, ArrayLength = 14, ArrayGet = 15, ArraySet = 16, Narrow = 17;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and branch comparison.
@@ -27,6 +27,13 @@ namespace PortableCompiler
                         if (pc >= length) return -1;
                         operand = image[start + pc++];
                     }
+                    if (operand >= arguments) return -1;
+                }
+                else if (op == 0x10)
+                {
+                    kind = Store;
+                    if (pc >= length) return -1;
+                    operand = image[start + pc++];
                     if (operand >= arguments) return -1;
                 }
                 else if (op >= 6 && op <= 13 || op == 0x11 || op == 0x13)
@@ -89,6 +96,25 @@ namespace PortableCompiler
                     kind = Call;
                     operand = (int)(token & 0xffffff);
                 }
+                else if (op == 0x8d)
+                {
+                    kind = NewArray;
+                    if (length - pc < 4) return -1;
+                    operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                    pc += 4;
+                }
+                else if (op == 0x8e) kind = ArrayLength;
+                else if (op == 0x90 || op == 0x91 || op == 0x94)
+                {
+                    kind = ArrayGet;
+                    operand = op;
+                }
+                else if (op == 0x9c || op == 0x9e)
+                {
+                    kind = ArraySet;
+                    operand = op;
+                }
+                else if (op == 0xd2) kind = Narrow;
                 else if (op == 0xfe)
                 {
                     if (pc >= length) return -1;
@@ -103,7 +129,7 @@ namespace PortableCompiler
                     kind = Unary;
                     operand = op == 0x65 ? 0x6c : 0x73;
                 }
-                else if (op == 0 || op == 0x69 || op == 0x6d)
+                else if (op == 0 || op == 0x69 || op == 0x6d || op == 0xd3 || op == 0xe0)
                 {
                     kind = Nop;
                     operand = op; // conv.i4 and conv.u4 require a live i32 at the top.

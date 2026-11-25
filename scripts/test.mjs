@@ -85,6 +85,7 @@ try {
     const page = await browser.newPage();
     // Serve only these fixture assets to the isolated test page.
     const assets = new Map([
+        ["/bootstrap.mjs", ["text/javascript", readFileSync("scripts/bootstrap.mjs")]],
         ["/invoke.mjs", ["text/javascript", readFileSync("scripts/invoke.mjs")]],
         ["/verify.mjs", ["text/javascript", readFileSync("scripts/verify.mjs")]],
         ...demos.map(d => ["/" + d.assembly, ["application/wasm", readFileSync(d.wasm)]])

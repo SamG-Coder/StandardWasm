@@ -1,4 +1,5 @@
 import { decode, invoke, invokeGenerated } from "./invoke.mjs";
+import { verifyBootstrap } from "./bootstrap.mjs";
 
 // Failure reports spell out values JSON would hide: BigInt, -0 (JSON prints 0) and non-finite Numbers.
 const printable = value => JSON.stringify(value, (key, v) =>
@@ -15,7 +16,9 @@ export async function verify(load, cases) {
     // ArithmeticException (expected === null) must surface as a RuntimeError trap. The pairing is
     // reported, not asserted, because trap messages are engine-specific.
     const traps = new Map();
+    const bootstrap = cases.find(c => c.bootstrap);
     for (const c of cases) {
+        if (c.bootstrap) continue;
         let actual;
         try {
             actual = c.generated
@@ -37,5 +40,8 @@ export async function verify(load, cases) {
     if (modules.LongIntegers && modules.LongIntegers.Countdown(1000000n, 0n) !== 3000000n)
         throw Error("Deep i64 tail call failed");
     const trapSummary = [...traps].sort().map(([key, count]) => "\n  " + count + " x " + key).join("");
-    return cases.length + " CLR comparisons and 1,000,000 tail calls passed" + trapSummary;
+    const summary = (cases.length - (bootstrap ? 1 : 0)) +
+        " CLR comparisons and 1,000,000 tail calls passed" + trapSummary;
+    return bootstrap ? summary + "\n  Self-recompiled: " +
+        await verifyBootstrap(modules[bootstrap.module], bootstrap, cases) : summary;
 }

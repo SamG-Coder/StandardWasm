@@ -1,0 +1,1 @@
+{"assembly":"TypedArrayLibrary","exportType":"TypedArrayLibrary.ArrayDemo","method":"Compile","inputs":[{"file":"self"},{"name":"Route"}],"generated":{"capacity":16384,"arguments":[255,3]},"expected":516}
