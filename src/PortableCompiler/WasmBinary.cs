@@ -14,7 +14,8 @@ namespace PortableCompiler
         {
             int typeOffset = objects[0] + FirstClassHeap;
             int totalFunctions = functions + thunks[0];
-            int typeSize = UnsignedSize(functions + typeOffset) + 28;
+            int classBytes = 0;
+            bool recursive = false;
             for (int i = 0; i < objects[0]; i++)
             {
                 int slot = 1 + i * Width;
@@ -25,12 +26,19 @@ namespace PortableCompiler
                     int type = FieldType(objects, first + field);
                     if (type == 0) continue;
                     size += 1 + ValueWidth((byte)type);
+                    if (type >= FirstClass) recursive = true;
                     stored++;
                 }
                 size += UnsignedSize(stored);
-                if (size > output.Length - typeSize) return -3;
-                typeSize += size;
+                if (size > output.Length - classBytes) return -3;
+                classBytes += size;
             }
+            // A recursive group is one type-section entry but its member
+            // types retain individual indices for fields and function signatures.
+            int typeEntries = recursive ? functions + FirstClassHeap + 1 : functions + typeOffset;
+            int prefix = UnsignedSize(typeEntries) + 28 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+            if (classBytes > output.Length - prefix) return -3;
+            int typeSize = classBytes + prefix;
             int functionSize = UnsignedSize(totalFunctions) + thunks[0];
             int codeSize = UnsignedSize(totalFunctions);
             // Use one type per function in discovery order. Accumulate against
@@ -99,7 +107,7 @@ namespace PortableCompiler
             output[6] = 0;
             output[7] = 0;
             int cursor = Section(output, 8, 1, typeSize);
-            cursor = Unsigned(output, cursor, functions + typeOffset);
+            cursor = Unsigned(output, cursor, typeEntries);
             output[cursor++] = 0x5e; // array of packed i8
             output[cursor++] = 0x78;
             output[cursor++] = 1;
@@ -129,6 +137,11 @@ namespace PortableCompiler
             output[cursor++] = 0x5e; // array of i64
             output[cursor++] = 0x7e;
             output[cursor++] = 1;
+            if (recursive)
+            {
+                output[cursor++] = 0x4e;
+                cursor = Unsigned(output, cursor, objects[0]);
+            }
             for (int i = 0; i < objects[0]; i++)
             {
                 int slot = 1 + i * Width;

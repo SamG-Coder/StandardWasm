@@ -218,6 +218,7 @@ namespace PortableCompiler
                     used = NumericLocal(code, used, right, rightType, width);
                     if (type == I64 && IsShift(operand)) code[used++] = 0xad;
                     if (IsFloat(width)) used = FloatWasm.Binary(code, used, operand, width);
+                    else if (type >= FirstClass) code[used++] = 0xd3; // ref.eq
                     else code[used++] = NumericOpcode(operand, type);
                     used = Local(code, used, 0x21, Spill(spills, maximum, resultType, top - 1));
                 }
@@ -318,6 +319,11 @@ namespace PortableCompiler
                         }
                         used = NumericLocal(code, used, Spill(spills, maximum, type, top), type, width);
                         if (IsFloat(width)) used = FloatWasm.Binary(code, used, comparison, width);
+                        else if (type >= FirstClass)
+                        {
+                            code[used++] = IsComparison(comparison) ? (byte)0xd3 : (byte)0xd1; // ref.eq or ref.is_null
+                            if (comparison == 0 || comparison == 0x47) code[used++] = 0x45;
+                        }
                         else if (IsComparison(comparison)) code[used++] = NumericOpcode(comparison, type);
                         else if (type == I64)
                         {

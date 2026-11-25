@@ -6,9 +6,20 @@ namespace ProfileExample
     // implementations when targeting Wasm. The hosts connect their own events.
     internal static class ProfileApplication
     {
-        internal static void Initialize(ProfileState state, Form form, TextBox input, Label preview, Button clear)
+        internal static Form Create(ProfileState state)
         {
+            var form = new Form();
+            var input = new TextBox();
+            var preview = new Label();
+            var clear = new Button();
+            var prompt = new Label();
             form.Text = ProfileHandlers.Title();
+            input.Name = "name";
+            preview.Name = "preview";
+            clear.Name = "clear";
+            prompt.Name = "prompt";
+            prompt.Text = ProfileHandlers.InputLabel();
+            input.AutoSize = false;
             input.MaxLength = ProfileHandlers.InputLimit();
             clear.Text = ProfileHandlers.ClearLabel();
             input.SetBounds(ProfileHandlers.Left(ProfileHandlers.Input), ProfileHandlers.Top(ProfileHandlers.Input),
@@ -17,7 +28,13 @@ namespace ProfileExample
                 ProfileHandlers.Width(ProfileHandlers.PreviewBox), ProfileHandlers.Height(ProfileHandlers.PreviewBox));
             clear.SetBounds(ProfileHandlers.Left(ProfileHandlers.ClearButton), ProfileHandlers.Top(ProfileHandlers.ClearButton),
                 ProfileHandlers.Width(ProfileHandlers.ClearButton), ProfileHandlers.Height(ProfileHandlers.ClearButton));
+            prompt.SetBounds(32, 30, 238, 20);
             NameChanged(state, input, preview);
+            form.Controls.Add(input);
+            form.Controls.Add(preview);
+            form.Controls.Add(clear);
+            form.Controls.Add(prompt);
+            return form;
         }
 
         internal static void NameChanged(ProfileState state, TextBox input, Label preview)

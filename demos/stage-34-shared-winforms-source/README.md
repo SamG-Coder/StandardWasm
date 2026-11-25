@@ -17,4 +17,6 @@ Run the integration checks from the repository root.
     node scripts/winforms-textbox.mjs --verify
     npm test
 
-The native/browser test matches all three control rectangles, captions, the input limit, edits and focus. The compiler fixture compiles the same browser assembly in Node and Edge, compares the results with the CLR and replays them using the regenerated compiler.
+The native/browser test matches the control rectangles, captions, the input limit, edits and focus. The compiler fixture compiles the same browser assembly in Node and Edge, compares the results with the CLR and replays them using the regenerated compiler.
+
+[Stage 35](../stage-35-managed-control-tree/README.md) extends this example with shared construction and a managed child collection.

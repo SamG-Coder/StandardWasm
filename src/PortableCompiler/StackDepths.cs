@@ -118,6 +118,13 @@ namespace PortableCompiler
                 if (depth < needed) return -1;
                 byte type = stack[depth - needed];
                 byte top = stack[depth - 1];
+                if (type >= FirstClass || top >= FirstClass)
+                {
+                    if (type != top) return -1;
+                    if (kind == Conditional)
+                        return needed == 1 || extra == 0x46 || extra == 0x47 ? depth - needed : -1;
+                    return operand == 0x46 ? Push(stack, depth - 2, I32) : -1;
+                }
                 if (IsFloat(type) || IsFloat(top))
                 {
                     if (needed != 2 || !IsFloat(type) || !IsFloat(top)) return -1;

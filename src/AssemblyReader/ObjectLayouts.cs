@@ -36,6 +36,14 @@ namespace PeLibrary
             uint end = row == counts[2] ? (uint)(counts[4] + 1) :
                 ReadIndex(image, def + (uint)(defWidth + fieldColumn), fieldIndex);
             if (first < 1 || end < first || end > (uint)(counts[4] + 1)) return -1;
+            // Reserve the class ID before resolving fields. Self and mutual
+            // references then resolve to this same ID during recursive discovery.
+            int index = registry[0];
+            registry[0] = index + 1;
+            int slot = 1 + index * Width;
+            registry[slot] = row;
+            registry[slot + 1] = (int)first;
+            registry[slot + 2] = (int)(end - first);
             int fields = defs + counts[2] * defWidth;
             int blobs = methods[3];
             for (uint field = first; field < end; field++)
@@ -48,6 +56,8 @@ namespace PeLibrary
                 uint sig = ReadIndex(image, at + (uint)(2 + strings), blobs);
                 if (!Fits(sig, 3, (uint)streams[1])) return -1;
                 uint blob = (uint)streams[0] + sig;
+                int size = image[blob];
+                if (size < 2 || !Fits(sig, (uint)(size + 1), (uint)streams[1])) return -1;
                 if (image[blob + 1] != 6) return -2;
                 int type;
                 if (image[blob] == 2 && image[blob + 2] == 8)
@@ -64,15 +74,18 @@ namespace PeLibrary
                     else if (WideStorage.IsIntegerElement(element)) type = WideStorage.Array;
                     else return -2;
                 }
+                else if (image[blob + 2] == 0x12)
+                {
+                    int endSignature = (int)blob + 1 + size;
+                    var next = new int[1];
+                    int coded = CompressedUnsigned(image, (int)blob + 3, endSignature, next);
+                    if (coded <= 0 || (coded & 3) != 0 || next[0] != endSignature) return -2;
+                    type = Register(image, streams, methods, registry, coded >> 2);
+                    if (type < 0) return type;
+                }
                 else return -2;
                 registry[FieldMapStart + (int)field] = type;
             }
-            int slot = 1 + registry[0] * Width;
-            registry[slot] = row;
-            registry[slot + 1] = (int)first;
-            registry[slot + 2] = (int)(end - first);
-            int index = registry[0];
-            registry[0] = index + 1;
             return FirstClass + index;
         }
 
