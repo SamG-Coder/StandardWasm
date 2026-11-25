@@ -42,15 +42,17 @@ internal sealed class ModuleCompiler(ModuleDefinition module)
 
     // Small integer types live in i32 like on the CLR evaluation stack. MethodCompiler.Normalize restores their
     // range wherever a value enters or leaves a typed location (argument, local, return).
-    internal static string ValueType(TypeReference type) => type.FullName switch
+    // Primitives are classified by CLI identity (PlatformTypes), never by name, so a third-party type called
+    // System.Int16 is rejected instead of being lowered as a 16-bit integer.
+    internal static string ValueType(TypeReference type) => PlatformTypes.Primitive(type) switch
     {
-        "System.Int32" or "System.UInt32" or "System.Boolean" or "System.Byte" or "System.SByte" or
-        "System.Int16" or "System.UInt16" or "System.Char" => Int,
-        "System.Int64" or "System.UInt64" => Long,
-        "System.Single" => Float32,
-        "System.Double" => Float64,
-        _ when type is ArrayType { Rank: 1 } array && ArrayKinds.ForElement(array.ElementType.FullName) is { } kind => kind.Reference,
-        _ => throw new NotSupportedException($"Unsupported value type: {type.FullName}")
+        MetadataType.Int32 or MetadataType.UInt32 or MetadataType.Boolean or MetadataType.Byte or MetadataType.SByte or
+        MetadataType.Int16 or MetadataType.UInt16 or MetadataType.Char => Int,
+        MetadataType.Int64 or MetadataType.UInt64 => Long,
+        MetadataType.Single => Float32,
+        MetadataType.Double => Float64,
+        _ when type is ArrayType { IsVector: true } array && ArrayKinds.ForElement(array.ElementType) is { } kind => kind.Reference,
+        _ => throw new NotSupportedException($"Unsupported value type: {type.FullName} in {type.Scope?.Name}")
     };
 
     internal string Compile(TypeDefinition exports)

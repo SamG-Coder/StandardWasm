@@ -114,7 +114,7 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
 
     // A small integer type holds a narrower range than its i32 storage. Restore the CLR value wherever one enters or
     // leaves a typed location: sbyte and short sign-extend, while byte, ushort and char zero-extend (mask).
-    private static string Normalize(TypeReference type, string value) => type.MetadataType switch
+    private static string Normalize(TypeReference type, string value) => PlatformTypes.Primitive(type) switch
     {
         MetadataType.Byte => NarrowByte(value),
         MetadataType.SByte => $"(i32.extend8_s {value})",
@@ -312,8 +312,8 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
             {
                 // new T[n] zero-initializes like the CLR. A negative n traps where the CLR throws OverflowException.
                 var element = (TypeReference)i.Operand;
-                var kind = ArrayKinds.ForElement(element.FullName)
-                    ?? throw new NotSupportedException($"Arrays of {element.FullName} are not supported");
+                var kind = ArrayKinds.ForElement(element)
+                    ?? throw new NotSupportedException($"Arrays of {element.FullName} in {element.Scope?.Name} are not supported");
                 Push($"(array.new_default {kind.TypeName} {Pop()})", kind.Reference); break;
             }
             case Code.Ldlen: Push($"(array.len {PopArray()})"); break;

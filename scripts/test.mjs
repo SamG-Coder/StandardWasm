@@ -65,6 +65,15 @@ const rejectedElement = spawnSync("dotnet", ["run", "-c", "Release", "--no-build
     "--", arraysDemo.dll, "PrimitiveArrays.CompoundElement", "artifacts/unsupported-element.wat"], { encoding: "utf8" });
 assert.equal(rejectedElement.status, 1);
 assert.match(rejectedElement.stderr, /CompoundElement::Increment\(System\.Int32\) at IL_[0-9a-f]+ \(ldelema\)/);
+// A third-party class named System.Int16 is not the CLI primitive, so arrays of it must not lower to short[]. The CLR keeps
+// the two array types distinct (#75 review).
+const arrayIdentityProbe = "demos/stage-37-primitive-arrays/identity/ArrayIdentityProbe";
+run("dotnet", ["build", "-c", "Release", arrayIdentityProbe]);
+const rejectedArrayIdentity = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler", "--",
+    arrayIdentityProbe + "/bin/Release/netstandard2.0/ArrayIdentityProbe.dll", "ArrayIdentityProbe.Probe", "artifacts/unsupported-array-identity.wat"],
+    { encoding: "utf8" });
+assert.equal(rejectedArrayIdentity.status, 1);
+assert.match(rejectedArrayIdentity.stderr, /Probe::Make\(System\.Int32\) at IL_[0-9a-f]+ \(newarr\): Arrays of System\.Int16 in ThirdPartyPrimitive/);
 const cases = JSON.parse(readFileSync("artifacts/oracle.json"));
 console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases));
 

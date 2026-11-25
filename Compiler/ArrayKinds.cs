@@ -1,3 +1,4 @@
+using Mono.Cecil;
 using Mono.Cecil.Cil;
 using static ModuleCompiler;
 
@@ -22,14 +23,15 @@ internal static class ArrayKinds
     internal static readonly Kind Doubles = new("$doubles", "f64", Float64);
     internal static readonly Kind[] All = [Ints, Bytes, Shorts, Longs, Floats, Doubles];
 
-    internal static Kind? ForElement(string elementFullName) => elementFullName switch
+    // The element must be a platform primitive by CLI identity (PlatformTypes), not merely by name.
+    internal static Kind? ForElement(TypeReference element) => PlatformTypes.Primitive(element) switch
     {
-        "System.Int32" or "System.UInt32" => Ints,
-        "System.Byte" or "System.SByte" or "System.Boolean" => Bytes,
-        "System.Int16" or "System.UInt16" or "System.Char" => Shorts,
-        "System.Int64" or "System.UInt64" => Longs,
-        "System.Single" => Floats,
-        "System.Double" => Doubles,
+        MetadataType.Int32 or MetadataType.UInt32 => Ints,
+        MetadataType.Byte or MetadataType.SByte or MetadataType.Boolean => Bytes,
+        MetadataType.Int16 or MetadataType.UInt16 or MetadataType.Char => Shorts,
+        MetadataType.Int64 or MetadataType.UInt64 => Longs,
+        MetadataType.Single => Floats,
+        MetadataType.Double => Doubles,
         _ => null
     };
 
