@@ -22,7 +22,7 @@ The first working backend takes a DLL and a public export type, follows reachabl
 | Available today | Current boundary |
 | --- | --- |
 | 32- and 64-bit integers (int64 values cross the JS boundary as BigInt), `float`/`double` with IEEE semantics, saturating conversions and exact `%`, unsigned comparisons, booleans, locals, loops, conditional branches, `switch` jump tables, static calls and recursion | No general BCL linker (only the exact `System.Math` intrinsics of [decision 0003](docs/decisions/0003-bcl-intrinsics.md)), virtual dispatch, generics or strings |
-| Managed one-dimensional int and byte arrays backed by Wasm GC | Allocation, length, indexed read and write for int and packed byte elements |
+| Managed one-dimensional arrays of every primitive type backed by Wasm GC (packed i8/i16 for small types) | Element references (`ldelema`, so `a[i] += x`), constant array initializers and arrays of references are open |
 | Direct tail calls for eligible call/return pairs | Managed exception handling and stack-trace fidelity are open |
 | Integer arithmetic and array access | Runtime arithmetic and array failures surface as Wasm traps. Typed CLR exceptions are open. Checked arithmetic currently produces a compile-time diagnostic. |
 
