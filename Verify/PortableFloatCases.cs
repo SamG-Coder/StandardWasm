@@ -46,6 +46,19 @@ internal static class PortableFloatCases
         foreach (float value in new[] { -0f, float.Epsilon, 16777216f, float.PositiveInfinity, float.NaN })
             Check(nameof(Signals.AddSingle), [value, 1f], () => Signals.AddSingle(value, 1f));
 
+        double[] narrowValues = [0.0, -0.0, double.Epsilon, float.Epsilon, -1.9, -256.5, -65536.5,
+            254.9, 255.5, 256.0, 300.7, 65534.9, 65535.5, 65536.0, 65537.9,
+            int.MaxValue, 2147483648.0, int.MinValue, -2147483649.0, double.MaxValue,
+            double.NegativeInfinity, double.PositiveInfinity, double.NaN];
+        foreach (double value in narrowValues)
+        {
+            float single = (float)value;
+            Check(nameof(Signals.ToByteDouble), [value], () => Signals.ToByteDouble(value));
+            Check(nameof(Signals.ToByteSingle), [single], () => Signals.ToByteSingle(single));
+            Check(nameof(Signals.ToUInt16Double), [value], () => Signals.ToUInt16Double(value));
+            Check(nameof(Signals.ToUInt16Single), [single], () => Signals.ToUInt16Single(single));
+        }
+
         foreach (ulong value in new[] { 0UL, 1UL, 0x8000008000000001UL, 0xfffffffffffff801UL, ulong.MaxValue })
         {
             Check(nameof(Signals.FloatFromUnsigned), [value], () => Signals.FloatFromUnsigned(value));
@@ -56,6 +69,7 @@ internal static class PortableFloatCases
         Check(nameof(Signals.NegativeZero), [], () => Signals.NegativeZero());
         Reject(nameof(Signals.Remainder), OpCodes.Rem);
         Reject(nameof(Signals.CheckedTruncate), OpCodes.Conv_Ovf_I4);
+        Reject(nameof(Signals.CheckedToByte), OpCodes.Conv_Ovf_U1);
 
         void Check(string method, object[] arguments, Func<object> evaluate, bool linked = false)
         {

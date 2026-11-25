@@ -224,7 +224,11 @@ namespace PortableCompiler
                     if (kind == Unary && IsFloat(source))
                         code[used++] = source == F32 ? (byte)0x8c : (byte)0x9a;
                     else if (kind == ConvertFloat || IsFloat(source))
-                        used = FloatWasm.Convert(code, used, operand, source, target);
+                    {
+                        // The .NET 10 oracle narrows floating values through a
+                        // signed saturating i32 conversion before masking.
+                        used = FloatWasm.Convert(code, used, kind == Narrow ? 0x69 : operand, source, target);
+                    }
                     else if (source != target)
                         code[used++] = target == I32 ? (byte)0xa7 : operand == 0x6a ? (byte)0xac : (byte)0xad;
                     if (kind == Narrow)

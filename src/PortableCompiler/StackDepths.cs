@@ -123,7 +123,7 @@ namespace PortableCompiler
                 }
                 else
                 {
-                    if (IsFloat(source) && (kind == Narrow || operand == 0xd3 || operand == 0xe0)) return -2;
+                    if (IsFloat(source) && (operand == 0xd3 || operand == 0xe0)) return -2;
                     stack[depth - 1] = kind == ConvertInteger && ConvertsToWide(operand) ? I64 : I32;
                 }
                 return depth;
