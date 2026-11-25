@@ -1,14 +1,16 @@
-# Stage 36 · Managed event sender identity
+# Stage 36 · Managed event sender and arguments
 
 Run from the repository root.
 
     npm run demo -- stage-36-managed-events
 
-The compiler takes the .NET Standard DLL and emits a Wasm module that returns 1 from `SenderIdentity(0)`. The same sealed class instance passes through an `object` parameter, return, local or field without being copied. Wasm GC uses `eqref` for the wider type and `ref.eq` for identity. The CLR oracle also compares separate instances, instances of different classes and the default-null object field. The supported conversions here are between same-module sealed classes and `object`.
+The compiler takes the .NET Standard DLL and emits a Wasm module that returns 1 from `ArgumentIdentity(0)`. Within one module instance, `EventArgs.Empty` always returns the same reference and each `new EventArgs()` returns a fresh reference. An immutable global initialized with `struct.new_default` holds the singleton. The compiler validates the .NET Standard facade's AssemblyRef name and public key token before binding those members. [WebAssembly Core Specification](https://webassembly.github.io/spec/core/valid/instructions.html#valid-constant)
+
+`SenderIdentity` and `SenderLocal` verify that a sealed class instance passes through an `object` parameter, return, local or field without being copied. Wasm GC uses `eqref` for the wider type and `ref.eq` for identity. The CLR oracle covers separate instances, distinct classes and default-null fields. It also checks `EventArgs` signatures and field storage, and the compiler rejects a modified AssemblyRef token at the load instruction.
 
 ## Event subscription fixtures
 
-The DLL also contains the CLR oracle for event dispatch. The portable compiler still rejects the event signatures, so these entries currently run on the CLR.
+The DLL also contains the CLR oracle for event dispatch. The portable compiler still needs `EventHandler` signatures and invocation-list support, so these entries currently run on the CLR.
 
 | CLR entry in `EventLibrary.EventCases` | Expected | Behavior |
 | --- | --- | --- |

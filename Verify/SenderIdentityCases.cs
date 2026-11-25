@@ -2,6 +2,9 @@
 
 using BootstrapLibrary;
 using EventLibrary;
+using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
+using System.Reflection.PortableExecutable;
 
 internal static class SenderIdentityCases
 {
@@ -13,10 +16,40 @@ internal static class SenderIdentityCases
 
         Check(nameof(SenderCases.SenderIdentity), [0, 1, 2], SenderCases.SenderIdentity);
         Check(nameof(SenderCases.SenderLocal), [-1, 0, 1, 3], SenderCases.SenderLocal);
+        Check(nameof(SenderCases.ArgumentIdentity), [0, 1, 2, 3], SenderCases.ArgumentIdentity);
+        RejectWrongAssembly();
+
+        void RejectWrongAssembly()
+        {
+            using var pe = new PEReader(new MemoryStream(image));
+            var metadata = pe.GetMetadataReader();
+            var facade = metadata.AssemblyReferences.Select(metadata.GetAssemblyReference)
+                .Single(reference => metadata.GetString(reference.Name) == "netstandard");
+            int token = pe.PEHeaders.MetadataStartOffset + metadata.GetHeapMetadataOffset(HeapIndex.Blob) +
+                MetadataTokens.GetHeapOffset(facade.PublicKeyOrToken);
+            byte[] forged = (byte[])image.Clone();
+            if (forged[token] != 8)
+                throw new InvalidOperationException("Expected an eight-byte netstandard public key token");
+            forged[token + 1] ^= 1;
+
+            int row = Row(nameof(SenderCases.EmptyArgument));
+            var output = Enumerable.Repeat((byte)0xa5, capacity).ToArray();
+            var location = new int[3];
+            int result = CompilerExports.CompileDetailed(forged, row, output, location);
+            if (result != -2 || !location.SequenceEqual(new[] { 0, row, 0 }) || output.Any(value => value != 0xa5))
+                throw new InvalidOperationException($"Wrong EventArgs assembly returned {result}, location {string.Join(",", location)}");
+            cases.Add(new
+            {
+                module = "BootstrapLibrary", method = "Compile", fixture = "EventArgs wrong AssemblyRef token",
+                inputs = new object[] { new { bytes = Array.ConvertAll(forged, value => (int)value) }, row },
+                generated = new { capacity, arguments = Array.Empty<int>(), reject = true, diagnostic = new[] { 0, row, 0 } },
+                expected = result
+            });
+        }
 
         void Check(string name, int[] values, Func<int, int> oracle)
         {
-            int row = typeof(SenderCases).GetMethod(name)!.MetadataToken & 0xffffff;
+            int row = Row(name);
             var output = new byte[capacity];
             int length = CompilerExports.Compile(image, row, output);
             if (length <= 0) throw new InvalidOperationException($"{name} returned {length}");
@@ -31,5 +64,7 @@ internal static class SenderIdentityCases
                     expected = oracle(value)
                 });
         }
+
+        static int Row(string name) => typeof(SenderCases).GetMethod(name)!.MetadataToken & 0xffffff;
     }
 }

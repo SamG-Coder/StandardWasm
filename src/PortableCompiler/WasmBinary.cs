@@ -6,11 +6,11 @@ namespace PortableCompiler
 {
     internal static class WasmBinary
     {
-        private const int WideArrayHeap = 6, FirstClassHeap = WideArrayHeap + 1;
+        private const int WideArrayHeap = 6, EventArgsHeap = 7, FirstClassHeap = EventArgsHeap + 1;
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize)
+            byte[] literals, int literalSize, bool eventArgsEmpty)
         {
             int typeOffset = objects[0] + FirstClassHeap;
             int totalFunctions = functions + thunks[0];
@@ -36,7 +36,7 @@ namespace PortableCompiler
             // A recursive group is one type-section entry but its member
             // types retain individual indices for fields and function signatures.
             int typeEntries = recursive ? functions + FirstClassHeap + 1 : functions + typeOffset;
-            int prefix = UnsignedSize(typeEntries) + 28 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+            int prefix = UnsignedSize(typeEntries) + 32 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;
             int functionSize = UnsignedSize(totalFunctions) + thunks[0];
@@ -87,6 +87,8 @@ namespace PortableCompiler
             remaining = Reserve(remaining, functionSize);
             if (thunks[0] != 0)
                 remaining = Reserve(remaining, tableSize);
+            if (eventArgsEmpty)
+                remaining = Reserve(remaining, 8);
             remaining = Reserve(remaining, exportSize);
             if (thunks[0] != 0)
                 remaining = Reserve(remaining, elementSize);
@@ -137,6 +139,11 @@ namespace PortableCompiler
             output[cursor++] = 0x5e; // array of i64
             output[cursor++] = 0x7e;
             output[cursor++] = 1;
+            // The immutable marker gives EventArgs a distinct GC shape from user classes.
+            output[cursor++] = 0x5f;
+            output[cursor++] = 1;
+            output[cursor++] = 0x7f;
+            output[cursor++] = 0;
             if (recursive)
             {
                 output[cursor++] = 0x4e;
@@ -187,6 +194,17 @@ namespace PortableCompiler
                 cursor = Unsigned(output, cursor, thunks[0]);
             }
 
+            if (eventArgsEmpty)
+            {
+                cursor = Section(output, cursor, 6, 8);
+                output[cursor++] = 1;
+                cursor = ValueType(output, cursor, EventArgsReference);
+                output[cursor++] = 0; // immutable global, initialized once per module instance
+                output[cursor++] = 0xfb;
+                output[cursor++] = 1; // struct.new_default
+                output[cursor++] = EventArgsHeap;
+                output[cursor++] = 0x0b;
+            }
             cursor = Section(output, cursor, 7, exportSize);
             cursor = Unsigned(output, cursor, exports.Length);
             for (int i = 0; i < exports.Length; i++)
@@ -280,6 +298,7 @@ namespace PortableCompiler
 
         internal static int HeapType(byte type) =>
             type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
+                type == EventArgsReference ? EventArgsHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;
 
         private static int ThunkSize(int receiver, int function) =>

@@ -105,6 +105,16 @@ namespace PortableCompiler
                     used = StringWasm.Wrap(code, used);
                     used = Local(code, used, 0x21, Spill(spills, maximum, String, depth));
                 }
+                else if (kind == LoadEventArgsEmpty || kind == NewEventArgs)
+                {
+                    if (kind == LoadEventArgsEmpty)
+                    {
+                        code[used++] = 0x23; // global.get EventArgs.Empty
+                        code[used++] = 0;
+                    }
+                    else used = Gc(code, used, 1, EventArgsReference); // struct.new_default
+                    used = Local(code, used, 0x21, Spill(spills, maximum, EventArgsReference, depth));
+                }
                 else if (kind == NullString)
                 {
                     code[used++] = 0xd0;

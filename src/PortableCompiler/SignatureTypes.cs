@@ -16,7 +16,7 @@ namespace PortableCompiler
         // Widen supported class references without allocating or losing sender identity.
         // Boxing and other CLR reference conversions use separate IL operations.
         internal static bool IsObjectReference(byte type) =>
-            type == ObjectLayouts.ObjectReference || type >= ObjectLayouts.FirstClass;
+            type >= ObjectLayouts.ObjectReference;
 
         internal static bool Assignable(byte source, byte target) =>
             source == target || target == ObjectLayouts.ObjectReference && IsObjectReference(source);
@@ -83,9 +83,14 @@ namespace PortableCompiler
                 else if (element == 0x12)
                 {
                     int coded = CompressedUnsigned(image, cursor, end, next);
-                    if (coded <= 0 || (coded & 3) != 0) return -2;
+                    if (coded <= 0) return -2;
                     cursor = next[0];
-                    int type = ObjectLayouts.Register(image, heap, methods, objects, coded >> 2);
+                    int type;
+                    if ((coded & 3) == 0)
+                        type = ObjectLayouts.Register(image, heap, methods, objects, coded >> 2);
+                    else if (EventMetadata.IsEventArgs(image, heap, methods, coded))
+                        type = ObjectLayouts.EventArgsReference;
+                    else return -2;
                     if (type < 0) return type;
                     types[target] = (byte)type;
                 }

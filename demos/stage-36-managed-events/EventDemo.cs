@@ -93,6 +93,21 @@ namespace EventLibrary
                 selected = new SenderHolder();
             return Equal(sender, selected);
         }
+
+        public static int ArgumentIdentity(int scenario)
+        {
+            var holder = new ArgumentHolder();
+            if (holder.Args != null) return -1;
+            holder.Args = EventArgs.Empty;
+            if (scenario == 0) return SameArgs(holder.Args, EventArgs.Empty) ? 1 : 0;
+            if (scenario == 1) return SameArgs(holder.Args, new EventArgs()) ? 1 : 0;
+            if (scenario == 2) return SameArgs(new EventArgs(), new EventArgs()) ? 1 : 0;
+            return Equal(EmptyArgument(), holder.Args);
+        }
+
+        private static bool SameArgs(EventArgs left, EventArgs right) => left == right;
+
+        public static object EmptyArgument() => EventArgs.Empty;
     }
 
     internal sealed class SenderNode { }
@@ -100,6 +115,11 @@ namespace EventLibrary
     internal sealed class SenderHolder
     {
         internal object Sender;
+    }
+
+    internal sealed class ArgumentHolder
+    {
+        internal EventArgs Args;
     }
 
     internal sealed class EventSource

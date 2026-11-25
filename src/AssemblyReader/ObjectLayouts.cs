@@ -4,8 +4,8 @@ namespace PeLibrary
 {
     internal static class ObjectLayouts
     {
-        internal const byte ObjectReference = 12;
-        internal const int FirstClass = ObjectReference + 1, MaxClasses = 256 - FirstClass, Width = 3;
+        internal const byte ObjectReference = 12, EventArgsReference = 13;
+        internal const int FirstClass = EventArgsReference + 1, MaxClasses = 256 - FirstClass, Width = 3;
         internal const int FieldMapStart = 1 + MaxClasses * Width;
 
         // Registry: count, fixed triples of TypeDef row, first Field row and field count, then field kinds by row.
@@ -82,8 +82,12 @@ namespace PeLibrary
                     int endSignature = (int)blob + 1 + size;
                     var next = new int[1];
                     int coded = CompressedUnsigned(image, (int)blob + 3, endSignature, next);
-                    if (coded <= 0 || (coded & 3) != 0 || next[0] != endSignature) return -2;
-                    type = Register(image, streams, methods, registry, coded >> 2);
+                    if (coded <= 0 || next[0] != endSignature) return -2;
+                    if ((coded & 3) == 0)
+                        type = Register(image, streams, methods, registry, coded >> 2);
+                    else if (EventMetadata.IsEventArgs(image, streams, methods, coded))
+                        type = EventArgsReference;
+                    else return -2;
                     if (type < 0) return type;
                 }
                 else return -2;

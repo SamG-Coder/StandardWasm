@@ -63,6 +63,7 @@ namespace PortableCompiler
             byte[] signatures, int[] offsets, int[] arities)
         {
             if (kind == LoadString || kind == NullString) return Push(stack, depth, String);
+            if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, depth, EventArgsReference);
             if (kind == JoinStrings)
                 return Match(stack, depth, String) && Match(stack, depth - 1, String)
                     ? Push(stack, depth - 2, String) : -1;

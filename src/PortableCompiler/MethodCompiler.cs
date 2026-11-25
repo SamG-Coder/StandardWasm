@@ -134,6 +134,7 @@ namespace PortableCompiler
             }
             var body = new int[6];
             var frameShape = new int[6];
+            bool eventArgsEmpty = false;
 
             int activeOwner = 0;
             for (int current = 0; current < functions; current++)
@@ -235,11 +236,9 @@ namespace PortableCompiler
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
-                        if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars)
-                        {
-                            frameShape[5] = 1;
-                            break;
-                        }
+                        if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars) frameShape[5] = 1;
+                        if (kind == BranchIl.LoadEventArgsEmpty && depths[slot / BranchIl.Width] != 0)
+                            eventArgsEmpty = true;
                     }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets, arities, code);
@@ -254,7 +253,7 @@ namespace PortableCompiler
             }
             CompileLocation.Clear(location);
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0]);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], eventArgsEmpty);
         }
 
         private static int LinkOperands(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
@@ -302,6 +301,21 @@ namespace PortableCompiler
                 if (kind == BranchIl.MemberCall)
                 {
                     int member = records[slot + 1], opcode = records[slot + 3];
+                    if (owner == 0 && (opcode == 0x7e || opcode == 0x73))
+                    {
+                        int eventMember = EventMetadata.Member(image, heaps, layout, member);
+                        if (eventMember == EventMetadata.Empty && opcode == 0x7e)
+                        {
+                            records[slot] = BranchIl.LoadEventArgsEmpty;
+                            continue;
+                        }
+                        if (eventMember == EventMetadata.Construct && opcode == 0x73)
+                        {
+                            records[slot] = BranchIl.NewEventArgs;
+                            continue;
+                        }
+                    }
+                    if (opcode == 0x7e) return -2;
                     if (opcode == 0x28 && ObjectLayouts.IsObjectConstructor(image, heaps, layout, member))
                     {
                         records[slot] = BranchIl.BaseCtor;
