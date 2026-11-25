@@ -21,5 +21,6 @@
     <ProjectReference Include="../demos/stage-16-managed-delegates/DelegateLibrary.csproj" />
     <ProjectReference Include="../demos/stage-19-runtime-controls/ControlStorageLibrary.csproj" />
     <ProjectReference Include="../demos/stage-20-managed-strings/StringLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-21-managed-formatting/FormattingLibrary.csproj" />
   </ItemGroup>
 </Project>

@@ -38,6 +38,8 @@ namespace PeLibrary
                 return 2; // Byte
             if (prefix == 0x33746e49 && Fits(name, 6, heapSize) && U16(image, entry + 4) == 0x32)
                 return 3; // Int32
+            if (prefix == 0x72616843 && image[entry + 4] == 0)
+                return 7; // Char
             return -2;
         }
 

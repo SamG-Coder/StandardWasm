@@ -52,7 +52,12 @@ namespace PortableCompiler
         private static int Transition(byte[] stack, int depth, int kind, int operand, int extra, byte[] frame,
             byte[] signatures, int[] offsets, int[] arities)
         {
-            if (kind == LoadString) return Push(stack, depth, String);
+            if (kind == LoadString || kind == NullString) return Push(stack, depth, String);
+            if (kind == JoinStrings)
+                return Match(stack, depth, String) && Match(stack, depth - 1, String)
+                    ? Push(stack, depth - 2, String) : -1;
+            if (kind == StringFromChars)
+                return Match(stack, depth, Chars) ? Push(stack, depth - 1, String) : -1;
             if (kind == StringLength)
                 return Match(stack, depth, String) ? Push(stack, depth - 1, I32) : -1;
             if (kind == StringCharacter)
@@ -119,14 +124,14 @@ namespace PortableCompiler
             }
             else if (kind == ArrayGet)
             {
-                byte array = operand == 0x94 ? Ints : Bytes;
+                byte array = operand == 0x94 ? Ints : operand == 0x93 ? Chars : Bytes;
                 if (!Match(stack, depth, I32) || !Match(stack, depth - 1, array)) return -1;
                 stack[depth - 2] = I32;
                 return depth - 1;
             }
             else if (kind == ArraySet)
             {
-                byte array = operand == 0x9e ? Ints : Bytes;
+                byte array = operand == 0x9e ? Ints : operand == 0x9d ? Chars : Bytes;
                 if (!Match(stack, depth, I32) || !Match(stack, depth - 1, I32) ||
                     !Match(stack, depth - 2, array))
                     return -1;
