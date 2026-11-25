@@ -1,4 +1,4 @@
-import { decode, invoke } from "./invoke.mjs";
+import { decode, invoke, invokeGenerated } from "./invoke.mjs";
 
 const printable = value => JSON.stringify(value, (key, v) => typeof v === "bigint" ? v + "n" : v);
 
@@ -15,9 +15,13 @@ export async function verify(load, cases) {
     const traps = new Map();
     for (const c of cases) {
         let actual;
-        try { actual = invoke(modules[c.module], c.method, c.inputs); }
+        try {
+            actual = c.generated
+                ? await invokeGenerated(modules[c.module], c.inputs, c.generated)
+                : invoke(modules[c.module], c.method, c.inputs);
+        }
         catch (error) {
-            if (!(error instanceof WebAssembly.RuntimeError)) throw error;
+            if (c.generated || !(error instanceof WebAssembly.RuntimeError)) throw error;
             actual = null;
             const key = (c.exception ?? "no CLR exception") + " -> trap '" + error.message + "'";
             traps.set(key, (traps.get(key) ?? 0) + 1);

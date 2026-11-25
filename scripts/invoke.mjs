@@ -15,3 +15,37 @@ export function invoke(exports, method, inputs) {
     });
     return exports[method](...args);
 }
+
+export async function invokeGenerated(exports, inputs, generated) {
+    const output = exports.CreateBytes(generated.capacity);
+    if (generated.reject)
+        for (let i = 0; i < generated.capacity; i++) exports.SetByte(output, i, 0xa5);
+    // The host only moves bytes and asks the engine to validate and execute the result.
+    const [image, selection] = inputs;
+    const row = Array.isArray(selection?.name)
+        ? invoke(exports, "FindRow", [image, { bytes: selection.name }])
+        : selection;
+    if (Array.isArray(selection?.name) && row < 1) throw Error("Fixture method was not found");
+    const length = invoke(exports, "Compile", [image, row, output]);
+    if (generated.reject) {
+        if (length >= 0) throw Error("Expected a compiler diagnostic");
+        for (let i = 0; i < generated.capacity; i++)
+            if (exports.ReadByte(output, i) !== 0xa5) throw Error("Diagnostic modified the output buffer");
+        return length;
+    }
+    if (length <= 0 || length > generated.capacity) throw Error("Compiler returned invalid length: " + length);
+    const bytes = new Uint8Array(length);
+    for (let i = 0; i < length; i++) bytes[i] = exports.ReadByte(output, i);
+    if (generated.hex !== undefined) {
+        const hex = Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+        if (hex !== generated.hex) throw Error("Emitted bytes differ from the CLR compiler");
+    }
+    const { instance, module } = await WebAssembly.instantiate(bytes);
+    if (WebAssembly.Module.imports(module).length) throw Error("Generated module has runtime imports");
+    try {
+        return instance.exports.run(...generated.arguments);
+    } catch (error) {
+        if (!(error instanceof WebAssembly.RuntimeError)) throw error;
+        return null;
+    }
+}

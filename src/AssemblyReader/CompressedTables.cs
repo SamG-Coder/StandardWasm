@@ -4,7 +4,10 @@ namespace PeLibrary
 {
     internal static class CompressedTables
     {
-        internal static int Find(byte[] image, int[] layout)
+        internal static int Find(byte[] image, int[] layout) =>
+            FindWithHeaps(image, layout, new int[4]);
+
+        internal static int FindWithHeaps(byte[] image, int[] layout, int[] heaps)
         {
             var root = new int[2];
             if (PeLocator.LocateMetadata(image, root) != 0)
@@ -22,6 +25,18 @@ namespace PeLibrary
             {
                 int slot = i * MetadataStreams.RecordWidth;
                 int name = streams[slot];
+                // Compare the names #Blob and #Strings as little-endian ASCII words.
+                if (streams[slot + 1] == 5 && U32(image, (uint)name) == 0x6f6c4223 && image[name + 4] == 'b')
+                {
+                    heaps[0] = streams[slot + 2];
+                    heaps[1] = streams[slot + 3];
+                }
+                if (streams[slot + 1] == 8 && U32(image, (uint)name) == 0x72745323 &&
+                    U32(image, (uint)name + 4) == 0x73676e69)
+                {
+                    heaps[2] = streams[slot + 2];
+                    heaps[3] = streams[slot + 3];
+                }
                 if (streams[slot + 1] != 2 || image[name] != '#')
                     continue;
                 if (image[name + 1] == '~')

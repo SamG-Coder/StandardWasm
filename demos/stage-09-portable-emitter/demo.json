@@ -1,0 +1,1 @@
+{"assembly":"EmitterLibrary","exportType":"EmitterLibrary.EmitterDemo","method":"Compile","inputs":[{"file":"self"},{"name":"DemoKernel"}],"generated":{"capacity":256,"arguments":[11]},"expected":40}
