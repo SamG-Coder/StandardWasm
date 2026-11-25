@@ -18,5 +18,6 @@
     <ProjectReference Include="../demos/stage-18-long-integers/LongIntegers.csproj" />
     <ProjectReference Include="../demos/stage-20-floating-point/FloatingPoint.csproj" />
     <ProjectReference Include="../demos/stage-25-switch-dispatch/SwitchDispatch.csproj" />
+    <ProjectReference Include="../demos/stage-33-float-remainder/FloatRemainder.csproj" />
   </ItemGroup>
 </Project>
