@@ -1,4 +1,4 @@
-import { invoke } from "./invoke.mjs";
+import { invoke, invokeGenerated } from "./invoke.mjs";
 
 export async function verify(load, cases) {
     const modules = {};
@@ -9,9 +9,13 @@ export async function verify(load, cases) {
     }
     for (const c of cases) {
         let actual;
-        try { actual = invoke(modules[c.module], c.method, c.inputs); }
+        try {
+            actual = c.generated
+                ? await invokeGenerated(modules[c.module], c.inputs, c.generated)
+                : invoke(modules[c.module], c.method, c.inputs);
+        }
         catch (error) {
-            if (!(error instanceof WebAssembly.RuntimeError)) throw error;
+            if (c.generated || !(error instanceof WebAssembly.RuntimeError)) throw error;
             actual = null;
         }
         if (actual !== c.expected) throw Error(JSON.stringify({ ...c, inputs: c.inputs.map(input => input?.bytes ? "<" + input.bytes.length + " bytes>" : input), actual }));

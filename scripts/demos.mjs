@@ -20,7 +20,9 @@ export function listDemos() {
 }
 
 export function demoInputs(demo) {
-    return demo.inputs.map(input => input?.file === "self"
-        ? { bytes: Array.from(readFileSync(demo.dll)) }
-        : input);
+    return demo.inputs.map(input => {
+        if (input?.file === "self") return { bytes: Array.from(readFileSync(demo.dll)) };
+        if (typeof input?.name === "string") return { name: Array.from(Buffer.from(input.name, "utf8")) };
+        return input;
+    });
 }

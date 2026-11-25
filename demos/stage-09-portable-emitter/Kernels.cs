@@ -1,0 +1,12 @@
+namespace EmitterLibrary
+{
+    public static class Kernels
+    {
+        public static int Combine(int a, int b) => (a * b + 12345678) ^ -193;
+        public static int Mix(int a, int b) => ~((a ^ -b) >> 5);
+        public static int Constant() => int.MinValue;
+        public static int Quotient(int dividend, int divisor) => dividend / divisor;
+        public static bool UnsupportedSignature(int value) => value == 0;
+        public static int UnsupportedBranch(int value) => value >= 0 ? value * 2 : value / 2;
+    }
+}
