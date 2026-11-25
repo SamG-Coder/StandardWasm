@@ -23,5 +23,6 @@
     <ProjectReference Include="../demos/stage-25-switch-dispatch/SwitchDispatch.csproj" />
     <ProjectReference Include="../demos/stage-33-float-remainder/FloatRemainder.csproj" />
     <ProjectReference Include="../demos/stage-29-math-intrinsics/MathIntrinsics.csproj" />
+    <ProjectReference Include="../demos/stage-37-primitive-arrays/PrimitiveArrays.csproj" />
   </ItemGroup>
 </Project>

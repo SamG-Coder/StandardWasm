@@ -52,6 +52,28 @@ const rejectedIdentity = spawnSync("dotnet", ["run", "-c", "Release", "--no-buil
     { encoding: "utf8" });
 assert.equal(rejectedIdentity.status, 1);
 assert.match(rejectedIdentity.stderr, /Probe::Compute\(System\.Double\) at IL_[0-9a-f]+ \(call\): Unlinked call: System\.Double System\.Math::Sqrt\(System\.Double\) in ThirdPartyMath/);
+// Host boundary: a JS caller can pass out-of-range Numbers to small-typed parameters, which the CLR cannot express.
+// The module must see the value a CLR store of the same bits would produce.
+{
+    const { instance } = await WebAssembly.instantiate(readFileSync("artifacts/PrimitiveArrays.wasm"));
+    const exports = instance.exports;
+    assert.deepEqual([exports.ShortParameter(40000), exports.CharParameter(-1), exports.SByteParameter(200)], [-25536, 65535, -56]);
+}
+// Compound assignment to an array element needs a managed element pointer (ldelema), which is not lowered yet.
+const arraysDemo = demos.find(d => d.assembly === "PrimitiveArrays");
+const rejectedElement = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
+    "--", arraysDemo.dll, "PrimitiveArrays.CompoundElement", "artifacts/unsupported-element.wat"], { encoding: "utf8" });
+assert.equal(rejectedElement.status, 1);
+assert.match(rejectedElement.stderr, /CompoundElement::Increment\(System\.Int32\) at IL_[0-9a-f]+ \(ldelema\)/);
+// A third-party class named System.Int16 is not the CLI primitive, so arrays of it must not lower to short[]. The CLR keeps
+// the two array types distinct (#75 review).
+const arrayIdentityProbe = "demos/stage-37-primitive-arrays/identity/ArrayIdentityProbe";
+run("dotnet", ["build", "-c", "Release", arrayIdentityProbe]);
+const rejectedArrayIdentity = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler", "--",
+    arrayIdentityProbe + "/bin/Release/netstandard2.0/ArrayIdentityProbe.dll", "ArrayIdentityProbe.Probe", "artifacts/unsupported-array-identity.wat"],
+    { encoding: "utf8" });
+assert.equal(rejectedArrayIdentity.status, 1);
+assert.match(rejectedArrayIdentity.stderr, /Probe::Make\(System\.Int32\) at IL_[0-9a-f]+ \(newarr\): Arrays of System\.Int16 in ThirdPartyPrimitive/);
 const cases = JSON.parse(readFileSync("artifacts/oracle.json"));
 console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases,
     bytes => writeFileSync("artifacts/StandardWasm.Compiler.wasm", bytes)));

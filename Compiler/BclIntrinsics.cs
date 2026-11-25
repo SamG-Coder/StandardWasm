@@ -55,25 +55,9 @@ internal static class BclIntrinsics
     };
 
     // A method's FullName does not identify its assembly, so the declaring scope must also be a platform BCL
-    // assembly. Each identity is the assembly name plus its Microsoft public key token, covering the netstandard
-    // facade, .NET Framework, the .NET Core contract assemblies and CoreLib. A System.Math defined in the input
-    // assembly or in any other dependency (for example one reached through an extern alias) is not an intrinsic.
-    // Its calls stay ordinary in-assembly calls or unlinked-call diagnostics.
-    private static readonly HashSet<(string Name, string Token)> PlatformAssemblies =
-    [
-        ("netstandard", "cc7b13ffcd2ddd51"),
-        ("mscorlib", "b77a5c561934e089"),
-        ("System.Runtime", "b03f5f7f11d50a3a"),
-        ("System.Runtime.Extensions", "b03f5f7f11d50a3a"),
-        ("System.Private.CoreLib", "7cec85d7bea7798e"),
-    ];
-
-    private static bool IsPlatformAssembly(IMetadataScope scope) =>
-        scope is AssemblyNameReference assembly && assembly.PublicKeyToken is { Length: 8 } token &&
-        PlatformAssemblies.Contains((assembly.Name, Convert.ToHexString(token).ToLowerInvariant()));
-
+    // assembly (PlatformTypes). A System.Math in the input assembly or in another dependency is not an intrinsic.
     // The table holds static methods only, so an instance-shaped reference with the same name never matches.
     internal static Intrinsic? Find(MethodReference reference) =>
-        !reference.HasThis && reference is not GenericInstanceMethod && IsPlatformAssembly(reference.DeclaringType.Scope) &&
+        !reference.HasThis && reference is not GenericInstanceMethod && PlatformTypes.IsPlatformAssembly(reference.DeclaringType.Scope) &&
         Table.TryGetValue(reference.FullName, out var intrinsic) ? intrinsic : null;
 }
