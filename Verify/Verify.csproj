@@ -14,5 +14,6 @@
     <ProjectReference Include="../demos/stage-07-method-bodies/BodyLibrary.csproj" />
     <ProjectReference Include="../demos/stage-09-portable-emitter/EmitterLibrary.csproj" />
     <ProjectReference Include="../demos/stage-10-portable-control-flow/FlowLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-11-portable-linking/LinkLibrary.csproj" />
   </ItemGroup>
 </Project>

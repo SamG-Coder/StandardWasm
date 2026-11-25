@@ -30,6 +30,11 @@ namespace PortableCompiler
                 else if (kind == Dup) { required = 1; delta = 1; }
                 else if (kind == Pop || kind == Store) { required = 1; delta = -1; }
                 else if (kind == Binary) { required = 2; delta = -1; }
+                else if (kind == Call)
+                {
+                    required = records[slot + 3];
+                    delta = 1 - required;
+                }
                 else if (kind == Conditional)
                 {
                     int comparison = records[slot + 3];

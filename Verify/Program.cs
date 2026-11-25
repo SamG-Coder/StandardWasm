@@ -49,4 +49,5 @@ MethodCases.Add(cases);
 BodyCases.Add(cases);
 EmitterCases.Add(cases);
 FlowCases.Add(cases);
+LinkCases.Add(cases);
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));

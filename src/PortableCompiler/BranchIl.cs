@@ -6,7 +6,7 @@ namespace PortableCompiler
     {
         internal const int Width = 4;
         internal const int Load = 1, Store = 2, Constant = 3, Unary = 4, Binary = 5,
-            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11;
+            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and branch comparison.
@@ -79,6 +79,15 @@ namespace PortableCompiler
                     operand += pc;
                     kind = branch == 0 ? Branch : Conditional;
                     comparison = Comparison(branch);
+                }
+                else if (op == 0x28)
+                {
+                    if (length - pc < 4) return -1;
+                    uint token = ImageBytes.U32(image, (uint)(start + pc));
+                    pc += 4;
+                    if ((token >> 24) != 6) return -2;
+                    kind = Call;
+                    operand = (int)(token & 0xffffff);
                 }
                 else if (op == 0xfe)
                 {
