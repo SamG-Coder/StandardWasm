@@ -1,6 +1,6 @@
-# Stage 07 · Integer division boundaries
+# Stage 08 · Integer division boundaries
 
-Run `npm run demo -- stage-07-integer-division` from the root after `npm ci`. Expected output is `Divide(-7, 2) = -3`, because signed division truncates toward zero.
+Run `npm run demo -- stage-08-integer-division` from the root after `npm ci`. Expected output is `Divide(-7, 2) = -3`, because signed division truncates toward zero.
 
 Quotients.cs exposes the four IL division instructions (`div`, `div.un`, `rem`, `rem.un`). Each appears with variable operands and with constant divisors -1, 7, 8 and 10. The file also checks the quotient/remainder identity and sums the decimal digits of an unsigned value in a loop. `npm test` compares every exported method with the same DLL on the CLR. It crosses 15 boundary values (including `int.MinValue`, -1, 0 and the unsigned high-bit patterns) with each other, then adds 200 seeded random pairs.
 
