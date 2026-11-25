@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Sample;
 using ArrayLibrary;
 using ByteLibrary;
@@ -73,4 +72,4 @@ PortablePrimitiveCases.Add(cases);
 PortableNarrowScalarCases.Add(cases);
 ArrayLiteralCases.Add(cases);
 CheckedIntegerCases.Add(cases);
-File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));
+OracleWriter.Write(args.Single(), cases);
