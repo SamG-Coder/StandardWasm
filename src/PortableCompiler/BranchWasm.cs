@@ -233,8 +233,13 @@ namespace PortableCompiler
                         code[used++] = target == I32 ? (byte)0xa7 : operand == 0x6a ? (byte)0xac : (byte)0xad;
                     if (kind == Narrow)
                     {
-                        used = Const(code, used, operand);
-                        code[used++] = 0x71; // i32.and
+                        if (operand == 0x67 || operand == 0x68)
+                            code[used++] = operand == 0x67 ? (byte)0xc0 : (byte)0xc1; // i32.extend8_s / extend16_s
+                        else
+                        {
+                            used = Const(code, used, operand == 0xd2 ? 255 : 65535);
+                            code[used++] = 0x71; // i32.and
+                        }
                     }
                     else if (kind == Unary && !IsFloat(source))
                     {
@@ -354,8 +359,10 @@ namespace PortableCompiler
                     byte array = states[state + top - 1];
                     used = Local(code, used, 0x20, Spill(spills, maximum, array, top - 1));
                     used = Local(code, used, 0x20, spills + top);
-                    // Unpacked integer arrays use array.get. Packed elements require extension.
-                    int instruction = array == Ints || array == Longs ? 0x0b : operand == 0x90 ? 0x0c : 0x0d;
+                    // The opcode selects the extension of packed cells. Full-
+                    // width integer and floating arrays use plain array.get.
+                    int instruction = array != Bytes && array != Chars ? 0x0b :
+                        operand == 0x90 || operand == 0x92 ? 0x0c : 0x0d;
                     used = Gc(code, used, instruction, array);
                     used = Local(code, used, 0x21, Spill(spills, maximum, ArrayValueType(array), top - 1));
                 }

@@ -186,20 +186,20 @@ namespace PortableCompiler
                     pc += 4;
                 }
                 else if (op == 0x8e) kind = ArrayLength;
-                else if (op == 0x90 || op == 0x91 || op == 0x93 || op == 0x94 || op == 0x96)
+                else if (op >= 0x90 && op <= 0x96 || op == 0x98 || op == 0x99)
                 {
                     kind = ArrayGet;
                     operand = op;
                 }
-                else if (op == 0x9c || op == 0x9d || op == 0x9e || op == 0x9f)
+                else if (op >= 0x9c && op <= 0xa1)
                 {
                     kind = ArraySet;
                     operand = op;
                 }
-                else if (op == 0xd2 || op == 0xd1)
+                else if (op == 0xd2 || op == 0xd1 || op == 0x67 || op == 0x68)
                 {
                     kind = Narrow;
-                    operand = op == 0xd2 ? 255 : 65535;
+                    operand = op;
                 }
                 else if (op == 0xfe)
                 {

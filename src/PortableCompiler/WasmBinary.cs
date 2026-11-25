@@ -7,7 +7,8 @@ namespace PortableCompiler
     internal static class WasmBinary
     {
         internal const int ScalarThunkType = 2, EventThunkType = 8, EventEntryHeap = 9, EventHandlerHeap = 10;
-        private const int WideArrayHeap = 6, EventArgsHeap = 7, FirstClassHeap = EventHandlerHeap + 1;
+        private const int WideArrayHeap = 6, EventArgsHeap = 7, SingleArrayHeap = 11, DoubleArrayHeap = 12;
+        private const int FirstClassHeap = DoubleArrayHeap + 1;
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
@@ -43,7 +44,7 @@ namespace PortableCompiler
             // The entry and invocation list also share one fixed recursive type group.
             int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 1;
             if (hasRemainder) typeEntries++;
-            int prefix = UnsignedSize(typeEntries) + 57 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+            int prefix = UnsignedSize(typeEntries) + 63 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;
@@ -185,6 +186,12 @@ namespace PortableCompiler
             output[cursor++] = 0x5e;
             output[cursor++] = 0x63;
             output[cursor++] = EventEntryHeap;
+            output[cursor++] = 1;
+            output[cursor++] = 0x5e; // f32 array
+            output[cursor++] = 0x7d;
+            output[cursor++] = 1;
+            output[cursor++] = 0x5e; // f64 array
+            output[cursor++] = 0x7c;
             output[cursor++] = 1;
             if (recursive)
             {
@@ -355,6 +362,7 @@ namespace PortableCompiler
             type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
                 type == EventArgsReference ? EventArgsHeap :
                 type == EventHandlerReference ? EventHandlerHeap :
+                type == Singles ? SingleArrayHeap : type == Doubles ? DoubleArrayHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;
 
         private static int ThunkSize(int receiver, int function, int arity) =>

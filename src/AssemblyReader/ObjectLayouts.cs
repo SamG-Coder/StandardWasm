@@ -5,7 +5,7 @@ namespace PeLibrary
     internal static class ObjectLayouts
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
-        internal const int FirstClass = EventHandlerReference + 1, MaxClasses = 256 - FirstClass, Width = 3;
+        internal const int FirstClass = ArrayTypeRefs.Doubles + 1, MaxClasses = 256 - FirstClass, Width = 3;
         internal const int FieldMapStart = 1 + MaxClasses * Width;
 
         // Registry: count, fixed triples of TypeDef row, first Field row and field count, then field kinds by row.
@@ -71,11 +71,8 @@ namespace PeLibrary
                     type = WideStorage.Scalar;
                 else if (image[blob] == 3 && Fits(sig, 4, (uint)streams[1]) && image[blob + 2] == 0x1d)
                 {
-                    int element = image[blob + 3];
-                    if (element == 5) type = 2;
-                    else if (element == 8) type = 3;
-                    else if (WideStorage.IsIntegerElement(element)) type = WideStorage.Array;
-                    else return -2;
+                    type = ArrayTypeRefs.Storage(image[blob + 3]);
+                    if (type == 0) return -2;
                 }
                 else if (image[blob + 2] == 0x12)
                 {

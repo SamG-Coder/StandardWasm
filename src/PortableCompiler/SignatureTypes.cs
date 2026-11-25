@@ -5,7 +5,9 @@ namespace PortableCompiler
 {
     internal static class SignatureTypes
     {
-        internal const byte Void = 0, I32 = 1, Bytes = 2, Ints = 3, Delegate = 4, MethodPointer = 5, String = 6, Chars = 7, I64 = WideStorage.Scalar, Longs = WideStorage.Array, F32 = 10, F64 = 11;
+        internal const byte Void = 0, I32 = 1, Bytes = ArrayTypeRefs.Bytes, Ints = ArrayTypeRefs.Ints, Delegate = 4,
+            MethodPointer = 5, String = 6, Chars = ArrayTypeRefs.Packed16, I64 = WideStorage.Scalar, Longs = WideStorage.Array,
+            F32 = 10, F64 = 11, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles;
 
         internal static bool IsInteger(byte type) => type == I32 || type == I64;
 
@@ -16,14 +18,37 @@ namespace PortableCompiler
         // Widen supported class references without allocating or losing sender identity.
         // Boxing and other CLR reference conversions use separate IL operations.
         internal static bool IsObjectReference(byte type) =>
-            type >= ObjectLayouts.ObjectReference;
+            type >= ObjectLayouts.FirstClass ||
+            type >= ObjectLayouts.ObjectReference && type <= ObjectLayouts.EventHandlerReference;
 
         internal static bool Assignable(byte source, byte target) =>
             source == target || target == ObjectLayouts.ObjectReference && IsObjectReference(source);
 
         internal static byte FloatWidth(byte left, byte right) => left == F64 || right == F64 ? F64 : F32;
 
-        internal static byte ArrayValueType(byte array) => array == Longs ? I64 : I32;
+        internal static bool IsArray(byte type) =>
+            type == Bytes || type == Ints || type == Chars || type == Longs || type == Singles || type == Doubles;
+
+        internal static byte ArrayValueType(byte array) =>
+            array == Longs ? I64 : array == Singles ? F32 : array == Doubles ? F64 : I32;
+
+        internal static byte ArrayLoadType(int opcode)
+        {
+            if (opcode <= 0x91) return Bytes;
+            if (opcode <= 0x93) return Chars;
+            if (opcode <= 0x95) return Ints;
+            if (opcode == 0x96) return Longs;
+            return opcode == 0x98 ? Singles : Doubles;
+        }
+
+        internal static byte ArrayStoreType(int opcode)
+        {
+            if (opcode == 0x9c) return Bytes;
+            if (opcode == 0x9d) return Chars;
+            if (opcode == 0x9e) return Ints;
+            if (opcode == 0x9f) return Longs;
+            return opcode == 0xa0 ? Singles : Doubles;
+        }
 
         // Destination for a method is [result, parameters...]. Local signatures
         // write only their slots. Stack values normalize CLI small integers to i32.
@@ -67,12 +92,9 @@ namespace PortableCompiler
                     types[target] = ObjectLayouts.ObjectReference;
                 else if (element == 0x1d && cursor < end)
                 {
-                    int item = image[cursor++];
-                    if (item == 5) types[target] = Bytes;
-                    else if (item == 3) types[target] = Chars;
-                    else if (item == 8) types[target] = Ints;
-                    else if (WideStorage.IsIntegerElement(item)) types[target] = Longs;
-                    else return -2;
+                    byte storage = ArrayTypeRefs.Storage(image[cursor++]);
+                    if (storage == 0) return -2;
+                    types[target] = storage;
                 }
                 else if (element == 0x15)
                 {

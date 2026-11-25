@@ -35,4 +35,7 @@
     <ProjectReference Include="../demos/stage-35-managed-control-tree/ReferenceLibrary.csproj" />
     <ProjectReference Include="../demos/stage-36-managed-events/EventLibrary.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../demos/stage-39-portable-primitive-arrays/PrimitiveStorage.csproj" />
+  </ItemGroup>
 </Project>
