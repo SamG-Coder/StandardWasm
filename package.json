@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node scripts/test.mjs",
     "compile": "node scripts/compile.mjs",
-    "demo": "node scripts/demo.mjs"
+    "demo": "node scripts/demo.mjs",
+    "audit:portable": "node scripts/portable-audit.mjs"
   },
   "type": "commonjs",
   "dependencies": {
