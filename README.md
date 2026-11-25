@@ -35,7 +35,7 @@ npm ci
 npm test
 ```
 
-The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds ten netstandard2.0 libraries, records expected results on the CLR, compiles the DLLs and executes the binaries in Node and a headless browser. It also verifies rejection of checked addition and exercises one million tail calls. Traps are compared as failures, without matching exception classes.
+The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds eleven netstandard2.0 libraries, records expected results on the CLR, compiles the DLLs and executes the binaries in Node and a headless browser. It also verifies rejection of checked addition and exercises one million tail calls. Traps are compared as failures, without matching exception classes.
 
 To compile another DLL:
 
@@ -50,6 +50,10 @@ const { instance } = await WebAssembly.instantiateStreaming(fetch("./artifacts/S
 instance.exports.SumSquares(10); // 385
 ```
 
+## Self-recompilation
+
+Stage 12 exercises the portable compiler compiling its own Compile entry point from a real DLL. The generated Wasm compiler recompiles the same DLL to identical bytes and reruns the portable generated-code fixtures in Node and Edge. The initial module still supplies typed array transport for the harness. See the [stage instructions](demos/stage-12-portable-arrays/README.md).
+
 ## Source map and bootstrap dependencies
 
 - `Compiler/ModuleCompiler.cs` selects exports, links reachable methods and maps CLR types.
@@ -57,9 +61,9 @@ instance.exports.SumSquares(10); // 385
 - `Compiler/IntegerOps.cs` maps numeric and comparison instructions.
 - `demos/stage-*/` contains the independently buildable .NET Standard libraries. `Verify/` generates deterministic expected results on the CLR.
 - `src/AssemblyReader/` contains the portable PE/CLI discovery code shared by the reader stages.
-- `src/PortableCompiler/` contains the compiler-in-Wasm path demonstrated by Stages 09 through 11.
+- `src/PortableCompiler/` contains the compiler-in-Wasm path demonstrated by Stages 09 through 12.
 - `scripts/` contains assembly, engine validation and browser tests. Generated modules are written to `artifacts/`.
 
-Self-hosting requires a metadata reader and binary writer that can run inside the compiled module, plus enough support for the compiler's own strings, collections, object model and error paths. The current bootstrap also needs a file/byte-buffer boundary to replace host filesystem calls. The existing compiler uses Mono.Cecil and Binaryen on the build host. Generated sample modules have neither dependency.
+The original CLI uses Mono.Cecil to read IL and Binaryen to assemble WAT. It bootstraps the portable compiler, which has a source-level PE/CLI reader and binary writer. Portable output modules have zero runtime imports. Shipping the regenerated compiler with its own named transport exports, expanding input compatibility, and building the WinForms/WebGPU backend are separate milestones.
 
 The modern instructions used here are standardized Wasm GC array instructions and `return_call`. See the [WebAssembly 3.0 release](https://webassembly.org/news/2025-09-17-wasm-3.0/) and [engine feature matrix](https://webassembly.org/features/).

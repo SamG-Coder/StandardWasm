@@ -1,19 +1,25 @@
+using static PortableCompiler.SignatureTypes;
+
 namespace PortableCompiler
 {
     internal static class WasmBinary
     {
-        internal static int WriteModule(byte[] output, int[] arities, int[] sizes, int functions, byte[] bodies)
+        internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies)
         {
-            int typeSize = UnsignedSize(functions);
+            int typeSize = UnsignedSize(functions + 2) + 6;
             int functionSize = UnsignedSize(functions);
             int codeSize = UnsignedSize(functions);
             // Use one type per function in discovery order. Accumulate against
             // destination capacity before any writes, guarding size arithmetic.
             for (int i = 0; i < functions; i++)
             {
-                int type = 3 + UnsignedSize(arities[i]) + arities[i];
+                int shape = offsets[i];
+                byte result = types[shape];
+                int type = 2 + UnsignedSize(arities[i]) + ValueWidth(result);
+                for (int parameter = 0; parameter < arities[i]; parameter++)
+                    type += ValueWidth(types[shape + 1 + parameter]);
                 int code = UnsignedSize(sizes[i]) + sizes[i];
-                int index = UnsignedSize(i);
+                int index = UnsignedSize(i + 2);
                 if (type > output.Length - typeSize || code > output.Length - codeSize ||
                     index > output.Length - functionSize)
                     return -3;
@@ -38,21 +44,30 @@ namespace PortableCompiler
             output[6] = 0;
             output[7] = 0;
             int cursor = Section(output, 8, 1, typeSize);
-            cursor = Unsigned(output, cursor, functions);
+            cursor = Unsigned(output, cursor, functions + 2);
+            output[cursor++] = 0x5e; // array of packed i8
+            output[cursor++] = 0x78;
+            output[cursor++] = 1;
+            output[cursor++] = 0x5e; // array of i32
+            output[cursor++] = 0x7f;
+            output[cursor++] = 1;
             for (int type = 0; type < functions; type++)
             {
+                int shape = offsets[type];
                 output[cursor++] = 0x60;
                 cursor = Unsigned(output, cursor, arities[type]);
                 for (int i = 0; i < arities[type]; i++)
-                    output[cursor++] = 0x7f;
-                output[cursor++] = 1;
-                output[cursor++] = 0x7f;
+                    cursor = ValueType(output, cursor, types[shape + i + 1]);
+                byte result = types[shape];
+                output[cursor++] = result == Void ? (byte)0 : (byte)1;
+                if (result != Void)
+                    cursor = ValueType(output, cursor, result);
             }
 
             cursor = Section(output, cursor, 3, functionSize);
             cursor = Unsigned(output, cursor, functions);
             for (int i = 0; i < functions; i++)
-                cursor = Unsigned(output, cursor, i);
+                cursor = Unsigned(output, cursor, i + 2);
 
             cursor = Section(output, cursor, 7, 7);
             output[cursor++] = 1;
@@ -73,6 +88,21 @@ namespace PortableCompiler
                 for (int i = 0; i < size; i++)
                     output[cursor++] = bodies[start + i];
                 start += size;
+            }
+            return cursor;
+        }
+
+        private static int ValueWidth(byte type) =>
+            type == Void ? 0 : type == I32 ? 1 : 2;
+
+        internal static int ValueType(byte[] output, int cursor, byte type)
+        {
+            if (type == I32)
+                output[cursor++] = 0x7f;
+            else
+            {
+                output[cursor++] = 0x63; // ref null
+                output[cursor++] = (byte)(type - Bytes);
             }
             return cursor;
         }
