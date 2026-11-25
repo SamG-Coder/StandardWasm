@@ -30,6 +30,6 @@ Each host compiler capability (64-bit integers, floating point, `switch`, `Math`
 
 ## Current status (2026-11-26)
 
-- Item 1: on #24 (integrated head), `npm test` reports C = G1 = G2 = G3 in Node and Edge: 128,404 bytes, SHA-256 cd9c80c7ccefbad75775d1b8d90e1fb8a8d4c86aba9522f42ea6d93981fc0e36, per Codex's READY. An earlier scratchpad probe on a59747a found 128,438 identical bytes.
+- Item 1: met on main since #24. `npm test` asserts C = G1 = G2 = G3 in Node and Edge: 128,404 bytes, SHA-256 cd9c80c7ccefbad75775d1b8d90e1fb8a8d4c86aba9522f42ea6d93981fc0e36.
 - Item 2: open. Stage 12 still uses B's GC transport, which #25 / PR #26 replaces.
-- Items 3–4: open. Portable ports of i64, switch, diagnostics and floats are in review (#51, #55, #56, #61).
+- Items 3–4: open. Codex's audit (#85) lists the concrete gaps (#82, #83, #84). Portable ports of i64, switch, diagnostics and floats are in review (#51, #55, #56, #61).
