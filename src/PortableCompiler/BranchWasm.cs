@@ -12,9 +12,9 @@ namespace PortableCompiler
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             byte result = (byte)frameShape[3];
             int classes = frameShape[4];
-            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 4 + classes));
+            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 6 + classes));
             int spills = arguments + locals;
-            int temporaries = spills + (3 + classes) * maximum;
+            int temporaries = spills + (5 + classes) * maximum;
             int pcLocal = temporaries + classes;
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < spills; i++)
@@ -24,7 +24,7 @@ namespace PortableCompiler
             }
             if (maximum != 0)
             {
-                for (int kind = I32; kind <= Ints + classes; kind++)
+                for (int kind = I32; kind <= MethodPointer + classes; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
                     used = WasmBinary.ValueType(code, used, (byte)kind);
@@ -68,6 +68,44 @@ namespace PortableCompiler
                     }
                     else used = Const(code, used, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, pushed, depth));
+                }
+                else if (kind == LoadFunction)
+                {
+                    used = Const(code, used, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, MethodPointer, depth));
+                }
+                else if (kind == NewDelegate)
+                {
+                    byte receiver = (byte)records[slot + 3];
+                    used = Local(code, used, 0x20, Spill(spills, maximum, receiver, top - 1));
+                    code[used++] = 0xd4;
+                    used = Local(code, used, 0x20, Spill(spills, maximum, MethodPointer, top));
+                    code[used++] = 0x25; // table.get from the generated thunk table
+                    code[used++] = 0;
+                    code[used++] = 0xfb; // struct.new closure
+                    code[used++] = 0;
+                    code[used++] = 3;
+                    used = Local(code, used, 0x21, Spill(spills, maximum, Delegate, top - 1));
+                }
+                else if (kind == InvokeDelegate)
+                {
+                    int closure = Spill(spills, maximum, Delegate, top);
+                    used = Local(code, used, 0x20, closure);
+                    code[used++] = 0xfb;
+                    code[used++] = 2; // struct.get receiver
+                    code[used++] = 3;
+                    code[used++] = 0;
+                    used = Local(code, used, 0x20, closure);
+                    code[used++] = 0xfb;
+                    code[used++] = 2; // struct.get callable reference
+                    code[used++] = 3;
+                    code[used++] = 1;
+                    code[used++] = 0xfb; // ref.cast to the shared thunk signature
+                    code[used++] = 22;
+                    code[used++] = 2;
+                    code[used++] = 0x14; // call_ref
+                    code[used++] = 2;
+                    used = Local(code, used, 0x21, spills + top);
                 }
                 else if (kind == Store)
                 {

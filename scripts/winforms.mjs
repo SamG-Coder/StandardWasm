@@ -78,13 +78,14 @@ if (verify) {
         assert.ok(changed > 30 && bright > 100, "The rendered count glyphs must visibly change.");
         const instances = await page.evaluate(async () => {
             const { module, instance } = await WebAssembly.instantiateStreaming(fetch("./Handlers.wasm"));
-            const { Create, Advance, Read } = instance.exports;
+            const { Create, Bind, Dispatch, Read } = instance.exports;
             const first = Create(7);
             const second = Create(100);
             let nullTraps = false;
-            try { Advance(null); }
+            try { Dispatch(null); }
             catch (error) { nullTraps = error instanceof WebAssembly.RuntimeError; }
-            return { first: Advance(first), second: Read(second),
+            const click = Bind(first);
+            return { first: Dispatch(click), second: Read(second),
                 imports: WebAssembly.Module.imports(module).length, nullTraps };
         });
         assert.deepEqual(instances, { first: 8, second: 100, imports: 0, nullTraps: true });

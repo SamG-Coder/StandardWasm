@@ -18,8 +18,8 @@ internal partial class CounterForm : Form
         Controls.Add(Result);
         Controls.Add(Increment);
         AcceptButton = Increment;
-        Bind(Increment, Result, CounterHandlers.Advance, "Count: ");
+        Bind(Increment, Result, CounterHandlers.Bind, "Count: ");
     }
 
-    partial void Bind(Button button, Label label, Func<CounterState, int> click, string prefix);
+    partial void Bind(Button button, Label label, Func<CounterState, Func<int>> bind, string prefix);
 }

@@ -53,4 +53,5 @@ LinkCases.Add(cases);
 TypedArrayCases.Add(cases);
 BootstrapCases.Add(cases);
 ObjectCases.Add(cases);
+DelegateCases.Add(cases);
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));

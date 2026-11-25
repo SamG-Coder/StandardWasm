@@ -52,6 +52,17 @@ namespace PortableCompiler
         private static int Transition(byte[] stack, int depth, int kind, int operand, int extra, byte[] frame,
             byte[] signatures, int[] offsets, int[] arities)
         {
+            if (kind == LoadFunction) return Push(stack, depth, MethodPointer);
+            if (kind == NewDelegate)
+            {
+                if (!Match(stack, depth, MethodPointer) || !Match(stack, depth - 1, (byte)extra)) return -1;
+                return Push(stack, depth - 2, Delegate);
+            }
+            if (kind == InvokeDelegate)
+            {
+                if (!Match(stack, depth, Delegate)) return -1;
+                return Push(stack, depth - 1, I32);
+            }
             if (kind == Load) return Push(stack, depth, frame[operand]);
             if (kind == Constant) return Push(stack, depth, I32);
             if (kind == Store) return Match(stack, depth, frame[operand]) ? depth - 1 : -1;
