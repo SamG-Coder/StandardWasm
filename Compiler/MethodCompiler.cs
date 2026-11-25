@@ -20,6 +20,7 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
         var suffix = type switch
         {
             Int => "i",
+            Long => "l",
             IntArray => "a",
             ByteArray => "b",
             _ => throw new InvalidDataException($"Invalid evaluation stack type: {type}")
@@ -112,13 +113,43 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
         return Pop(null);
     }
 
+    // Pops an int32 or int64 operand and reports which Wasm type it has. The IL binary numeric rule
+    // (ECMA-335 III.1.5) never mixes int32 and int64 operands, so callers pop the other operand with
+    // Pop(type), which rejects a mixture.
+    private (string Value, string Type) PopInteger()
+    {
+        var type = stack.Count == 0 ? Int : stack[^1];
+        if (type is not (Int or Long)) throw new InvalidDataException("Expected an integer operand");
+        return (Pop(type), type);
+    }
+
+    private static string Narrow32((string Value, string Type) operand) =>
+        operand.Type == Long ? $"(i32.wrap_i64 {operand.Value})" : operand.Value;
+
+    // The CLR shift count is int32 for both operand widths. i64 shifts take an i64 count. Wasm masks the
+    // count to the operand width, which matches C# semantics (Roslyn masks with 31 or 63 itself).
+    private static bool IsShift(Code code) => code is Code.Shl or Code.Shr or Code.Shr_Un;
+
+    private static bool IsComparison(Code code) =>
+        code is Code.Ceq or Code.Clt or Code.Clt_Un or Code.Cgt or Code.Cgt_Un;
+
     private bool Translate(Instruction i)
     {
         var code = i.OpCode.Code;
         if (IntegerOps.Binary.TryGetValue(code, out var op))
         {
-            var right = Pop();
-            Push($"(i32.{op} {Pop()} {right})");
+            if (IsShift(code))
+            {
+                var count = Pop();
+                var (shifted, width) = PopInteger();
+                var amount = width == Long ? $"(i64.extend_i32_u {count})" : count;
+                Push($"({width}.{op} {shifted} {amount})", width);
+                return false;
+            }
+            var (right, type) = PopInteger();
+            var left = Pop(type);
+            // Comparisons yield an int32 0 or 1 whatever the operand width.
+            Push($"({type}.{op} {left} {right})", IsComparison(code) ? Int : type);
             return false;
         }
         switch (code)
@@ -128,6 +159,8 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
                 Push($"(i32.const {code - Code.Ldc_I4_0})"); break;
             case Code.Ldc_I4: case Code.Ldc_I4_S:
                 Push($"(i32.const {i.Operand})"); break;
+            case Code.Ldc_I8:
+                Push($"(i64.const {i.Operand})", Long); break;
             case >= Code.Ldarg_0 and <= Code.Ldarg_3: case Code.Ldarg: case Code.Ldarg_S:
             {
                 var index = i.Operand is ParameterDefinition p ? p.Index : code - Code.Ldarg_0;
@@ -158,18 +191,35 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
             }
             case Code.Pop: Pop(null); break;
             case Code.Dup: Push($"(local.get {Slot(stack.Count - 1, stack[^1])})", stack[^1]); break;
-            case Code.Neg: Push($"(i32.sub (i32.const 0) {Pop()})"); break;
-            case Code.Not: Push($"(i32.xor (i32.const -1) {Pop()})"); break;
+            case Code.Neg:
+            {
+                var (value, type) = PopInteger();
+                Push($"({type}.sub ({type}.const 0) {value})", type); break;
+            }
+            case Code.Not:
+            {
+                var (value, type) = PopInteger();
+                Push($"({type}.xor ({type}.const -1) {value})", type); break;
+            }
+            // Native int is 32 bits in this wasm32 mapping. Narrowing int64 keeps the low 32 bits, as the CLR does.
             case Code.Conv_I4: case Code.Conv_U4: case Code.Conv_I: case Code.Conv_U:
-                Push(Pop()); break;
-            case Code.Conv_U1: Push(NarrowByte(Pop())); break;
+                Push(Narrow32(PopInteger())); break;
+            case Code.Conv_U1: Push(NarrowByte(Narrow32(PopInteger()))); break;
+            case Code.Conv_I8: case Code.Conv_U8:
+            {
+                // ECMA-335 III.3.27: conv.i8 sign-extends an int32 and conv.u8 zero-extends it. int64 passes through.
+                var (value, type) = PopInteger();
+                var extend = code == Code.Conv_I8 ? "i64.extend_i32_s" : "i64.extend_i32_u";
+                Push(type == Long ? value : $"({extend} {value})", Long); break;
+            }
             case Code.Rem:
             {
-                var divisor = Pop();
-                var dividend = Pop();
-                // Wasm rem_s returns zero on this pair. CLR integer remainder can throw.
-                Emit($"(if (i32.and (i32.eq {dividend} (i32.const -2147483648)) (i32.eq {divisor} (i32.const -1))) (then (unreachable)))");
-                Push($"(i32.rem_s {dividend} {divisor})");
+                var (divisor, type) = PopInteger();
+                var dividend = Pop(type);
+                // Wasm rem_s returns zero for MinValue % -1. The CLR throws OverflowException, so trap explicitly.
+                var minimum = type == Long ? "-9223372036854775808" : "-2147483648";
+                Emit($"(if (i32.and ({type}.eq {dividend} ({type}.const {minimum})) ({type}.eq {divisor} ({type}.const -1))) (then (unreachable)))");
+                Push($"({type}.rem_s {dividend} {divisor})", type);
                 break;
             }
             case Code.Newarr when ((TypeReference)i.Operand).FullName == "System.Int32":
@@ -235,12 +285,17 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
                 if (i.OpCode.FlowControl != FlowControl.Cond_Branch || i.Operand is not Instruction targetBlock)
                     throw new NotSupportedException("Unsupported IL instruction");
                 string condition;
-                if (code is Code.Brfalse or Code.Brfalse_S) condition = $"(i32.eqz {Pop()})";
-                else if (code is Code.Brtrue or Code.Brtrue_S) condition = Pop();
+                if (code is Code.Brfalse or Code.Brfalse_S or Code.Brtrue or Code.Brtrue_S)
+                {
+                    // brtrue and brfalse accept any integer width, so test against zero at the operand's width.
+                    var (value, type) = PopInteger();
+                    if (code is Code.Brfalse or Code.Brfalse_S) condition = $"({type}.eqz {value})";
+                    else condition = type == Long ? $"(i64.ne {value} (i64.const 0))" : value;
+                }
                 else
                 {
-                    var right = Pop();
-                    condition = $"(i32.{IntegerOps.Comparison(code)} {Pop()} {right})";
+                    var (right, type) = PopInteger();
+                    condition = $"({type}.{IntegerOps.Comparison(code)} {Pop(type)} {right})";
                 }
                 Emit($"(if {condition} (then {Jump(targetBlock)}))");
                 Emit(Jump(i.Next)); return true;

@@ -95,4 +95,5 @@ for (int i = 0; i < 200; i++)
     CheckDivision(a, b);
     CheckConstantDivisors(a);
 }
+LongCases.Add(cases);
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));
