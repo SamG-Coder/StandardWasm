@@ -50,6 +50,9 @@ if (verify) {
         await page.waitForFunction(() =>
             document.querySelector("#renderer").dataset.ready === "true" || !document.querySelector("#error").hidden);
         assert.equal(await page.locator("#renderer").textContent(), "WebGPU", await page.locator("#error").textContent());
+        assert.equal(await page.locator("h1").textContent(), "Counter");
+        assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(artifacts, "resources.json"), "utf8"))).sort(),
+            ["columns", "keys", "kinds"]);
         const label = page.locator("output");
         const form = page.locator("#form");
         const labelLeft = async () => Number(await form.getAttribute("data-label-left"));

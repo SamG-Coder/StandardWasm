@@ -10,7 +10,7 @@ Open http://127.0.0.1:5173 in a browser with WebGPU. The server binds to loopbac
 
 ## What runs where
 
-Both builds use Shared/ControlTree.cs and Shared/CounterHandlers.cs. The Windows head constructs a native Form, Button and Label using System.Windows.Forms and applies rectangles from the shared tree. The browser build packages captions and compiles the tree and event code from its .NET Standard DLL. The browser creates the control tree inside Wasm, reads its current geometry, and creates a closed managed delegate over CounterState. Pointer and keyboard events dispatch that delegate and update the same managed tree. The browser host reads the resulting value and bounds, formats the label and redraws.
+Both builds use Shared/ControlTree.cs and Shared/CounterHandlers.cs. The Windows head constructs a native Form, Button and Label using System.Windows.Forms and applies rectangles from the shared tree. The browser build packages numeric control-schema IDs and compiles the tree, captions and event code from its .NET Standard DLL. The browser creates the control tree inside Wasm, reads its current geometry, and creates a closed managed delegate over CounterState. Pointer and keyboard events dispatch that delegate and update the same managed tree. The browser host reads managed UTF-16 caption exports, formats the numeric value, and redraws from the live bounds.
 
 WebGPU draws the control geometry and composites a cached glyph texture. Canvas 2D rasterizes text when the label changes. A transparent HTML button supplies pointer and keyboard semantics, and an accessible output mirrors the displayed result. Supported WinForms APIs cover the controls, properties and binding used by this demo. General designer-generated forms, arbitrary event delegates, dynamic insertion or removal of controls, and executing the full WinForms control types inside Wasm are future compatibility work.
 
@@ -25,3 +25,5 @@ One run on Edge 158.0.4370.33, using a hardware NVIDIA Blackwell adapter, change
 See [Stage 17](../stage-17-dense-webgpu/README.md) for the batched renderer and a dense same-device comparison.
 
 See [Stage 19](../stage-19-runtime-controls/README.md) for runtime layout and managed storage details.
+
+See [Stage 20](../stage-20-managed-strings/README.md) for the managed string representation and tests.

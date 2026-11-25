@@ -5,7 +5,7 @@ namespace PortableCompiler
 {
     internal static class SignatureTypes
     {
-        internal const byte Void = 0, I32 = 1, Bytes = 2, Ints = 3, Delegate = 4, MethodPointer = 5;
+        internal const byte Void = 0, I32 = 1, Bytes = 2, Ints = 3, Delegate = 4, MethodPointer = 5, String = 6;
 
         // Destination for a method is [result, parameters...]. Local signatures
         // write only their slots. Stack values normalize CLI small integers to i32.
@@ -37,8 +37,10 @@ namespace PortableCompiler
                 int target = offset + i + (i == 0 ? 0 : implicitSlots);
                 if (!locals && i == 0 && element == 1)
                     types[target] = Void;
-                else if (element == 2 || element == 5 || element == 8 || element == 9)
+                else if (element == 2 || element == 3 || element == 5 || element == 8 || element == 9)
                     types[target] = I32;
+                else if (element == 0x0e)
+                    types[target] = String;
                 else if (element == 0x1d && cursor < end)
                 {
                     int item = image[cursor++];

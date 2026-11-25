@@ -6,6 +6,16 @@ async function start() {
         WebAssembly.instantiateStreaming(fetch("./Handlers.wasm"))
     ]);
     const exports = compiled.instance.exports;
+    function readText(value) {
+        const count = exports.TextLength(value);
+        const chars = new Array(count);
+        for (let index = 0; index < count; index++)
+            chars[index] = String.fromCharCode(exports.TextCodeUnit(value, index));
+        return chars.join("");
+    }
+    const title = readText(exports.Title());
+    const buttonCaption = readText(exports.ButtonCaption());
+    const resultPrefix = readText(exports.ResultPrefix());
     const tree = exports.BuildTree();
     const { columns, keys, kinds } = resources;
     function describe(index) {
@@ -16,7 +26,7 @@ async function start() {
             throw Error("Unsupported runtime control kind " + kind);
         return {
             name: key, kind: kind === kinds.button ? "button" : "label",
-            text: key === keys.increment ? resources.increment : resources.prefix + "0",
+            text: key === keys.increment ? buttonCaption : resultPrefix + "0",
             x: field(columns.x), y: field(columns.y),
             width: field(columns.width), height: field(columns.height)
         };
@@ -31,7 +41,7 @@ async function start() {
     canvas.width = model.width;
     canvas.height = model.height;
     form.style.width = model.width + "px";
-    document.querySelector("#title").textContent = resources.title;
+    document.querySelector("#title").textContent = title;
 
     const texts = new Map(model.controls.map(c => [c.name, c.text]));
     const text = createTextLayer(model);
@@ -65,7 +75,7 @@ async function start() {
         }
         form.dataset.labelLeft = String(model.controls.find(control => control.name === keys.result).x);
         form.dataset.controlCount = String(model.controls.length);
-        result.value = resources.prefix + exports.Read(state);
+        result.value = resultPrefix + exports.Read(state);
         texts.set(keys.result, result.value);
         text.update(texts);
         gpu.upload();

@@ -5,7 +5,7 @@ namespace PeLibrary
     internal static class CompressedTables
     {
         internal static int Find(byte[] image, int[] layout) =>
-            FindWithHeaps(image, layout, new int[6]);
+            FindWithHeaps(image, layout, new int[8]);
 
         internal static int FindWithHeaps(byte[] image, int[] layout, int[] heaps)
         {
@@ -36,6 +36,11 @@ namespace PeLibrary
                 {
                     heaps[2] = streams[slot + 2];
                     heaps[3] = streams[slot + 3];
+                }
+                if (streams[slot + 1] == 3 && U16(image, (uint)name) == 0x5523 && image[name + 2] == 'S')
+                {
+                    heaps[6] = streams[slot + 2];
+                    heaps[7] = streams[slot + 3];
                 }
                 if (streams[slot + 1] != 2 || image[name] != '#')
                     continue;
