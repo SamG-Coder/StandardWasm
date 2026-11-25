@@ -37,6 +37,12 @@ for (const [type, pattern] of [["CheckedConversions", /CheckedConversions::Narro
     assert.equal(rejectedReal.status, 1);
     assert.match(rejectedReal.stderr, pattern);
 }
+// A BCL method outside the intrinsic table (decision 0003) must stay an unlinked-call diagnostic.
+const mathDemo = demos.find(d => d.assembly === "MathIntrinsics");
+const rejectedMath = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
+    "--", mathDemo.dll, "MathIntrinsics.UnmappedMath", "artifacts/unsupported-math.wat"], { encoding: "utf8" });
+assert.equal(rejectedMath.status, 1);
+assert.match(rejectedMath.stderr, /UnmappedMath::Power\(System\.Double,System\.Double\) at IL_[0-9a-f]+ \(call\): Unlinked call: System\.Double System\.Math::Pow/);
 const cases = JSON.parse(readFileSync("artifacts/oracle.json"));
 console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases));
 
