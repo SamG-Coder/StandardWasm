@@ -14,6 +14,29 @@ namespace EventLibrary
 
     public static class EventCases
     {
+        public static int InvokeBoundHandler(int scenario)
+        {
+            var sender = new EventSource();
+            var first = new EventLog(sender);
+            var second = new EventLog(sender);
+            var slot = new HandlerSlot();
+            slot.Handler = first.First;
+            slot.Raise(sender, EventArgs.Empty);
+            if (scenario == 0)
+                slot.Handler = second.Second;
+            else
+                slot.Handler = first.Second;
+            slot.Raise(sender, EventArgs.Empty);
+            return first.Value * 10 + second.Value;
+        }
+
+        public static int InvokeEmptyHandler(int ignored)
+        {
+            var slot = new HandlerSlot();
+            slot.Raise(new SenderNode(), EventArgs.Empty);
+            return ignored;
+        }
+
         public static int SubscriptionOrder()
         {
             var source = new EventSource();
@@ -65,6 +88,13 @@ namespace EventLibrary
             source.Raise();
             return first.Value * 10 + second.Value;
         }
+    }
+
+    internal sealed class HandlerSlot
+    {
+        internal EventHandler Handler;
+
+        internal void Raise(object sender, EventArgs args) => Handler(sender, args);
     }
 
     public static class SenderCases

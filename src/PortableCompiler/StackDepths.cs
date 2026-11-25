@@ -78,10 +78,14 @@ namespace PortableCompiler
             if (kind == NewDelegate)
             {
                 if (!Match(stack, depth, MethodPointer) || !Match(stack, depth - 1, (byte)extra)) return -1;
-                return Push(stack, depth - 2, Delegate);
+                return Push(stack, depth - 2, (byte)operand);
             }
             if (kind == InvokeDelegate)
             {
+                if (operand == EventHandlerReference)
+                    return Match(stack, depth, EventArgsReference) && depth >= 3 &&
+                        Assignable(stack[depth - 2], ObjectReference) && Match(stack, depth - 2, EventHandlerReference)
+                        ? depth - 3 : -1;
                 if (!Match(stack, depth, Delegate)) return -1;
                 return Push(stack, depth - 1, I32);
             }

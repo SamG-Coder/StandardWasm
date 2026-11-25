@@ -156,35 +156,39 @@ namespace PortableCompiler
                 else if (kind == NewDelegate)
                 {
                     byte receiver = (byte)records[slot + 3];
+                    byte closureType = (byte)operand;
                     used = Local(code, used, 0x20, Spill(spills, maximum, receiver, top - 1));
                     code[used++] = 0xd4;
                     used = Local(code, used, 0x20, Spill(spills, maximum, MethodPointer, top));
                     code[used++] = 0x25; // table.get from the generated thunk table
                     code[used++] = 0;
-                    code[used++] = 0xfb; // struct.new closure
-                    code[used++] = 0;
-                    code[used++] = 3;
-                    used = Local(code, used, 0x21, Spill(spills, maximum, Delegate, top - 1));
+                    if (closureType == EventHandlerReference)
+                        used = CastThunk(code, used, WasmBinary.EventThunkType);
+                    used = Gc(code, used, 0, closureType); // struct.new closure
+                    used = Local(code, used, 0x21, Spill(spills, maximum, closureType, top - 1));
                 }
                 else if (kind == InvokeDelegate)
                 {
-                    int closure = Spill(spills, maximum, Delegate, top);
+                    byte closureType = (byte)operand;
+                    bool eventHandler = closureType == EventHandlerReference;
+                    int closure = Spill(spills, maximum, closureType, top - (eventHandler ? 2 : 0));
                     used = Local(code, used, 0x20, closure);
-                    code[used++] = 0xfb;
-                    code[used++] = 2; // struct.get receiver
-                    code[used++] = 3;
+                    used = Gc(code, used, 2, closureType); // struct.get receiver
                     code[used++] = 0;
+                    if (eventHandler)
+                    {
+                        used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top - 1], top - 1));
+                        used = Local(code, used, 0x20, Spill(spills, maximum, EventArgsReference, top));
+                    }
                     used = Local(code, used, 0x20, closure);
-                    code[used++] = 0xfb;
-                    code[used++] = 2; // struct.get callable reference
-                    code[used++] = 3;
+                    used = Gc(code, used, 2, closureType); // struct.get callable reference
                     code[used++] = 1;
-                    code[used++] = 0xfb; // ref.cast to the shared thunk signature
-                    code[used++] = 22;
-                    code[used++] = 2;
+                    if (!eventHandler)
+                        used = CastThunk(code, used, WasmBinary.ScalarThunkType);
                     code[used++] = 0x14; // call_ref
-                    code[used++] = 2;
-                    used = Local(code, used, 0x21, spills + top);
+                    code[used++] = eventHandler ? (byte)WasmBinary.EventThunkType : (byte)WasmBinary.ScalarThunkType;
+                    if (!eventHandler)
+                        used = Local(code, used, 0x21, spills + top);
                 }
                 else if (kind == Store)
                 {
@@ -423,11 +427,19 @@ namespace PortableCompiler
         private static int Spill(int first, int maximum, byte type, int depth) =>
             first + (type - 1) * maximum + depth;
 
-        private static int Gc(byte[] code, int used, int instruction, int array)
+        private static int CastThunk(byte[] code, int used, byte type)
+        {
+            code[used++] = 0xfb;
+            code[used++] = 22; // ref.cast from the shared table's funcref
+            code[used++] = type;
+            return used;
+        }
+
+        private static int Gc(byte[] code, int used, int instruction, int type)
         {
             code[used++] = 0xfb;
             code[used++] = (byte)instruction;
-            return WasmBinary.Unsigned(code, used, WasmBinary.HeapType((byte)array));
+            return WasmBinary.Unsigned(code, used, WasmBinary.HeapType((byte)type));
         }
 
         private static int Const(byte[] code, int used, int value)

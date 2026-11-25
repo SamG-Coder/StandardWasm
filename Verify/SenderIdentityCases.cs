@@ -17,6 +17,8 @@ internal static class SenderIdentityCases
         Check(nameof(SenderCases.SenderIdentity), [0, 1, 2], SenderCases.SenderIdentity);
         Check(nameof(SenderCases.SenderLocal), [-1, 0, 1, 3], SenderCases.SenderLocal);
         Check(nameof(SenderCases.ArgumentIdentity), [0, 1, 2, 3], SenderCases.ArgumentIdentity);
+        Check(nameof(EventCases.InvokeBoundHandler), [0, 1], EventCases.InvokeBoundHandler, typeof(EventCases));
+        Check(nameof(EventCases.InvokeEmptyHandler), [0], EventCases.InvokeEmptyHandler, typeof(EventCases));
         RejectWrongAssembly();
 
         void RejectWrongAssembly()
@@ -32,7 +34,7 @@ internal static class SenderIdentityCases
                 throw new InvalidOperationException("Expected an eight-byte netstandard public key token");
             forged[token + 1] ^= 1;
 
-            int row = Row(nameof(SenderCases.EmptyArgument));
+            int row = Row(typeof(SenderCases), nameof(SenderCases.EmptyArgument));
             var output = Enumerable.Repeat((byte)0xa5, capacity).ToArray();
             var location = new int[3];
             int result = CompilerExports.CompileDetailed(forged, row, output, location);
@@ -47,24 +49,34 @@ internal static class SenderIdentityCases
             });
         }
 
-        void Check(string name, int[] values, Func<int, int> oracle)
+        void Check(string name, int[] values, Func<int, int> oracle, Type? declaringType = null)
         {
-            int row = Row(name);
+            int row = Row(declaringType ?? typeof(SenderCases), name);
             var output = new byte[capacity];
             int length = CompilerExports.Compile(image, row, output);
             if (length <= 0) throw new InvalidOperationException($"{name} returned {length}");
             string hex = Convert.ToHexString(output.AsSpan(0, length)).ToLowerInvariant();
 
             foreach (int value in values)
+            {
+                int? expected;
+                string? exception = null;
+                try { expected = oracle(value); }
+                catch (NullReferenceException error)
+                {
+                    expected = null;
+                    exception = error.GetType().FullName;
+                }
                 cases.Add(new
                 {
                     module = "BootstrapLibrary", method = "Compile", fixture = name,
                     inputs = new object[] { input, row },
                     generated = new { capacity, arguments = new[] { value }, hex },
-                    expected = oracle(value)
+                    expected, exception
                 });
+            }
         }
 
-        static int Row(string name) => typeof(SenderCases).GetMethod(name)!.MetadataToken & 0xffffff;
+        static int Row(Type type, string name) => type.GetMethod(name)!.MetadataToken & 0xffffff;
     }
 }

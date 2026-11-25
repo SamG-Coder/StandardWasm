@@ -88,9 +88,11 @@ namespace PortableCompiler
                     int type;
                     if ((coded & 3) == 0)
                         type = ObjectLayouts.Register(image, heap, methods, objects, coded >> 2);
-                    else if (EventMetadata.IsEventArgs(image, heap, methods, coded))
-                        type = ObjectLayouts.EventArgsReference;
-                    else return -2;
+                    else
+                    {
+                        type = EventMetadata.Reference(image, heap, methods, coded);
+                        if (type == 0) return -2;
+                    }
                     if (type < 0) return type;
                     types[target] = (byte)type;
                 }

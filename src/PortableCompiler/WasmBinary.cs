@@ -6,7 +6,8 @@ namespace PortableCompiler
 {
     internal static class WasmBinary
     {
-        private const int WideArrayHeap = 6, EventArgsHeap = 7, FirstClassHeap = EventArgsHeap + 1;
+        internal const int ScalarThunkType = 2, EventThunkType = 8;
+        private const int WideArrayHeap = 6, EventArgsHeap = 7, EventHandlerHeap = 9, FirstClassHeap = EventHandlerHeap + 1;
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
@@ -36,7 +37,7 @@ namespace PortableCompiler
             // A recursive group is one type-section entry but its member
             // types retain individual indices for fields and function signatures.
             int typeEntries = recursive ? functions + FirstClassHeap + 1 : functions + typeOffset;
-            int prefix = UnsignedSize(typeEntries) + 32 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+            int prefix = UnsignedSize(typeEntries) + 46 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;
             int functionSize = UnsignedSize(totalFunctions) + thunks[0];
@@ -74,7 +75,7 @@ namespace PortableCompiler
             {
                 int function = thunks[i + 1];
                 int receiver = types[offsets[function] + 1];
-                int thunkSize = ThunkSize(receiver, function);
+                int thunkSize = ThunkSize(receiver, function, arities[function]);
                 if (1 + thunkSize > output.Length - codeSize ||
                     UnsignedSize(functions + i) > output.Length - elementSize)
                     return -3;
@@ -144,6 +145,21 @@ namespace PortableCompiler
             output[cursor++] = 1;
             output[cursor++] = 0x7f;
             output[cursor++] = 0;
+            // Event thunk: (target eqref, sender eqref, EventArgs?) -> void.
+            output[cursor++] = 0x60;
+            output[cursor++] = 3;
+            output[cursor++] = 0x6d;
+            output[cursor++] = 0x6d;
+            cursor = ValueType(output, cursor, EventArgsReference);
+            output[cursor++] = 0;
+            // Immutable closed handler with a typed callable reference.
+            output[cursor++] = 0x5f;
+            output[cursor++] = 2;
+            output[cursor++] = 0x6d;
+            output[cursor++] = 0;
+            output[cursor++] = 0x63;
+            output[cursor++] = EventThunkType;
+            output[cursor++] = 0;
             if (recursive)
             {
                 output[cursor++] = 0x4e;
@@ -184,7 +200,7 @@ namespace PortableCompiler
             for (int i = 0; i < functions; i++)
                 cursor = Unsigned(output, cursor, i + typeOffset);
             for (int i = 0; i < thunks[0]; i++)
-                output[cursor++] = 2;
+                output[cursor++] = arities[thunks[i + 1]] == 3 ? (byte)EventThunkType : (byte)ScalarThunkType;
             if (thunks[0] != 0)
             {
                 cursor = Section(output, cursor, 4, tableSize);
@@ -251,13 +267,19 @@ namespace PortableCompiler
             for (int i = 0; i < thunks[0]; i++)
             {
                 int function = thunks[i + 1], receiver = types[offsets[function] + 1];
-                cursor = Unsigned(output, cursor, ThunkSize(receiver, function));
+                int arity = arities[function];
+                cursor = Unsigned(output, cursor, ThunkSize(receiver, function, arity));
                 output[cursor++] = 0; // local declarations
                 output[cursor++] = 0x20;
                 output[cursor++] = 0;
                 output[cursor++] = 0xfb;
                 output[cursor++] = 22; // ref.cast to the target's concrete receiver
                 cursor = Signed(output, cursor, HeapType((byte)receiver));
+                for (int argument = 1; argument < arity; argument++)
+                {
+                    output[cursor++] = 0x20;
+                    output[cursor++] = (byte)argument;
+                }
                 output[cursor++] = 0x10;
                 cursor = Unsigned(output, cursor, function);
                 output[cursor++] = 0x0b;
@@ -299,10 +321,11 @@ namespace PortableCompiler
         internal static int HeapType(byte type) =>
             type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
                 type == EventArgsReference ? EventArgsHeap :
+                type == EventHandlerReference ? EventHandlerHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;
 
-        private static int ThunkSize(int receiver, int function) =>
-            7 + (HeapType((byte)receiver) <= 63 ? 1 : 2) + UnsignedSize(function);
+        private static int ThunkSize(int receiver, int function, int arity) =>
+            7 + (HeapType((byte)receiver) <= 63 ? 1 : 2) + 2 * (arity - 1) + UnsignedSize(function);
 
         private static int Reserve(int remaining, int size)
         {

@@ -1,4 +1,5 @@
 using PeLibrary;
+using static PeLibrary.ObjectLayouts;
 using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
@@ -301,7 +302,8 @@ namespace PortableCompiler
                 if (kind == BranchIl.MemberCall)
                 {
                     int member = records[slot + 1], opcode = records[slot + 3];
-                    if (owner == 0 && (opcode == 0x7e || opcode == 0x73))
+                    int constructorType = Delegate;
+                    if (owner == 0 && (opcode == 0x7e || opcode == 0x73 || opcode == 0x6f))
                     {
                         int eventMember = EventMetadata.Member(image, heaps, layout, member);
                         if (eventMember == EventMetadata.Empty && opcode == 0x7e)
@@ -314,6 +316,14 @@ namespace PortableCompiler
                             records[slot] = BranchIl.NewEventArgs;
                             continue;
                         }
+                        if (eventMember == EventMetadata.InvokeHandler && opcode == 0x6f)
+                        {
+                            records[slot] = BranchIl.InvokeDelegate;
+                            records[slot + 1] = EventHandlerReference;
+                            continue;
+                        }
+                        if (eventMember == EventMetadata.ConstructHandler && opcode == 0x73)
+                            constructorType = EventHandlerReference;
                     }
                     if (opcode == 0x7e) return -2;
                     if (opcode == 0x28 && ObjectLayouts.IsObjectConstructor(image, heaps, layout, member))
@@ -343,6 +353,7 @@ namespace PortableCompiler
                     if (delegateMember == DelegateMetadata.Invoke && opcode == 0x6f)
                     {
                         records[slot] = BranchIl.InvokeDelegate;
+                        records[slot + 1] = Delegate;
                         continue;
                     }
                     if (delegateMember == 0 && stringMember == 0 && opcode == 0x28 && bundle.Length != 0)
@@ -372,10 +383,11 @@ namespace PortableCompiler
                         continue;
                     }
                     int pointer = slot - 6 * BranchIl.Width;
-                    if (delegateMember != DelegateMetadata.Construct || opcode != 0x73 || pointer < 0 ||
+                    if ((constructorType == Delegate && delegateMember != DelegateMetadata.Construct) || opcode != 0x73 || pointer < 0 ||
                         records[pointer] != BranchIl.LoadFunction || records[pointer + 2] != slot / BranchIl.Width)
                         return -2;
                     records[slot] = BranchIl.NewDelegate;
+                    records[slot + 1] = constructorType;
                     records[slot + 3] = records[pointer + 3];
                     continue;
                 }
@@ -396,11 +408,20 @@ namespace PortableCompiler
                 bool hasReceiver = arities[index] > 0 && signatures[signature + 1] >= ObjectLayouts.FirstClass;
                 if (kind == BranchIl.LoadFunction)
                 {
-                    if (!hasReceiver || arities[index] != 1 || signatures[signature] != I32 ||
+                    if (!hasReceiver ||
                         (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) != 0)
                         return -2;
                     int next = records[slot + 2] * BranchIl.Width;
                     if (next >= records.Length || records[next] != BranchIl.MemberCall || records[next + 3] != 0x73)
+                        return -2;
+                    bool eventHandler = EventMetadata.Member(image, heaps, layout, records[next + 1]) == EventMetadata.ConstructHandler;
+                    if (eventHandler)
+                    {
+                        if (arities[index] != 3 || signatures[signature] != Void ||
+                            signatures[signature + 2] != ObjectReference || signatures[signature + 3] != EventArgsReference)
+                            return -2;
+                    }
+                    else if (arities[index] != 1 || signatures[signature] != I32)
                         return -2;
                     int thunk = 0;
                     while (thunk < thunks[0] && thunks[thunk + 1] != index) thunk++;
