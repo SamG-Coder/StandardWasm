@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { invoke, invokeGenerated } from "./invoke.mjs";
+import { decode, invoke, invokeGenerated } from "./invoke.mjs";
 import { demoInputs, listDemos } from "./demos.mjs";
 import { chromium } from "playwright-core";
 import { compile, root, run } from "./toolchain.mjs";
@@ -16,13 +16,28 @@ for (const demo of demos) {
     const { instance } = await WebAssembly.instantiate(readFileSync(demo.wasm));
     assert.equal((demo.generated
         ? await invokeGenerated(instance.exports, demoInputs(demo), demo.generated)
-        : invoke(instance.exports, demo.method, demoInputs(demo))), demo.expected, demo.stage);
+        : invoke(instance.exports, demo.method, demoInputs(demo))), decode(demo.expected), demo.stage);
 }
 const scalarDemo = demos.find(d => d.assembly === "Sample");
 const rejected = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
     "--", scalarDemo.dll, "Sample.CheckedArithmetic", "artifacts/unsupported.wat"], { encoding: "utf8" });
 assert.equal(rejected.status, 1);
 assert.match(rejected.stderr, /Increment.*IL_[0-9a-f]+.*add\.ovf/);
+// 64-bit checked arithmetic must be diagnosed too, with the method and IL offset.
+const wideDemo = demos.find(d => d.assembly === "LongIntegers");
+const rejectedWide = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
+    "--", wideDemo.dll, "LongIntegers.CheckedWide", "artifacts/unsupported-wide.wat"], { encoding: "utf8" });
+assert.equal(rejectedWide.status, 1);
+assert.match(rejectedWide.stderr, /CheckedWide::Increment\(System\.Int64\) at IL_[0-9a-f]+ \(add\.ovf\)/);
+// Floating-point remainder (no exact Wasm fmod yet) and checked float-to-int conversion must be diagnosed.
+const realsDemo = demos.find(d => d.assembly === "FloatingPoint");
+for (const [type, pattern] of [["CheckedReals", /CheckedReals::Remainder\(System\.Double,System\.Double\) at IL_[0-9a-f]+ \(rem\): Floating-point remainder/],
+                               ["CheckedConversions", /CheckedConversions::Narrow\(System\.Double\) at IL_[0-9a-f]+ \(conv\.ovf\.i4\)/]]) {
+    const rejectedReal = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
+        "--", realsDemo.dll, "FloatingPoint." + type, "artifacts/unsupported-real.wat"], { encoding: "utf8" });
+    assert.equal(rejectedReal.status, 1);
+    assert.match(rejectedReal.stderr, pattern);
+}
 const cases = JSON.parse(readFileSync("artifacts/oracle.json"));
 console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases));
 
