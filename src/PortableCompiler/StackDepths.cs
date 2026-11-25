@@ -103,7 +103,7 @@ namespace PortableCompiler
                 if (!Match(stack, depth, Delegate)) return -1;
                 return Push(stack, depth - 1, I32);
             }
-            if (kind == Load) return Push(stack, depth, frame[operand]);
+            if (kind == Load) return Push(stack, depth, StackType(frame[operand]));
             if (kind == Constant || kind == WideConstant)
                 return Push(stack, depth, kind == WideConstant ? I64 : I32);
             if (kind == SingleConstant || kind == DoubleConstant)
@@ -170,7 +170,7 @@ namespace PortableCompiler
                     if (!Assignable(stack[start + i - receiver], signatures[offset + 1 + i]))
                         return -1;
                 byte result = kind == NewObject ? signatures[offset + 1] : signatures[offset];
-                return result == Void ? start : Push(stack, start, result);
+                return result == Void ? start : Push(stack, start, StackType(result));
             }
             if (kind == BaseCtor)
                 return depth > 0 && stack[depth - 1] >= FirstClass ? depth - 1 : -1;

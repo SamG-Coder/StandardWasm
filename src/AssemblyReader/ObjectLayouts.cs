@@ -5,7 +5,8 @@ namespace PeLibrary
     internal static class ObjectLayouts
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
-        internal const int FirstClass = ArrayTypeRefs.Doubles + 1, MaxClasses = 256 - FirstClass, Width = 3;
+        internal const byte Signed8 = 17, Unsigned8 = 18, Signed16 = 19, Unsigned16 = 20, Character = 21;
+        internal const int FirstClass = Character + 1, MaxClasses = 256 - FirstClass, Width = 3;
         internal const int FieldMapStart = 1 + MaxClasses * Width;
 
         // Registry: count, fixed triples of TypeDef row, first Field row and field count, then field kinds by row.

@@ -14,7 +14,8 @@ namespace PortableCompiler
             int classes = frameShape[4];
             bool stringScratch = frameShape[5] != 0;
             bool eventScratch = frameShape[6] != 0;
-            int spillKinds = FirstClass - 1 + classes;
+            // Narrow slots use i32 on the evaluation stack and share its spill bank.
+            int spillKinds = Doubles + classes;
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 1 + spillKinds) +
                 (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0));
             int spills = arguments + locals;
@@ -33,7 +34,8 @@ namespace PortableCompiler
                 for (int kind = I32; kind <= spillKinds; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
-                    used = WasmBinary.ValueType(code, used, (byte)kind);
+                    int type = kind <= Doubles ? kind : kind + FirstClass - Doubles - 1;
+                    used = WasmBinary.ValueType(code, used, unchecked((byte)type));
                 }
             }
             for (int i = 0; i < classes; i++)
@@ -57,6 +59,15 @@ namespace PortableCompiler
             }
             code[used++] = 1;
             code[used++] = 0x7f;
+            // Raw Wasm callers supply i32. Enforce the CLI argument width before
+            // the first instruction, including on entry from a managed call.
+            for (int i = 0; i < arguments; i++)
+            {
+                if (!IsNarrow(frame[i])) continue;
+                used = Local(code, used, 0x20, i);
+                used = NormalizeSlot(code, used, frame[i]);
+                used = Local(code, used, 0x21, i);
+            }
             code[used++] = 0x03;
             code[used++] = 0x40;
             for (int pc = 0; pc < depths.Length; pc++)
@@ -80,7 +91,7 @@ namespace PortableCompiler
                     if (kind == Load)
                     {
                         used = Local(code, used, 0x20, operand);
-                        pushed = frame[operand];
+                        pushed = StackType(frame[operand]);
                     }
                     else if (kind == Dup)
                     {
@@ -213,6 +224,7 @@ namespace PortableCompiler
                 else if (kind == Store)
                 {
                     used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
+                    used = NormalizeSlot(code, used, frame[operand]);
                     used = Local(code, used, 0x21, operand);
                 }
                 else if (kind == Unary || kind == Narrow || kind == ConvertInteger || kind == ConvertFloat)
@@ -306,7 +318,7 @@ namespace PortableCompiler
                         used = Local(code, used, 0x20, temp);
                     }
                     if (returned != Void)
-                        used = Local(code, used, 0x21, Spill(spills, maximum, returned, first));
+                        used = Local(code, used, 0x21, Spill(spills, maximum, StackType(returned), first));
                 }
                 else if (kind == ExchangeHandlerField)
                 {
@@ -378,7 +390,10 @@ namespace PortableCompiler
                 if (kind == Return)
                 {
                     if (result != Void)
+                    {
                         used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
+                        used = NormalizeSlot(code, used, result);
+                    }
                     code[used++] = 0x0f;
                 }
                 else
@@ -487,8 +502,23 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int Spill(int first, int maximum, byte type, int depth) =>
-            first + (type - 1) * maximum + depth;
+        private static int Spill(int first, int maximum, byte type, int depth)
+        {
+            int kind = type < FirstClass ? type : type - (FirstClass - Doubles - 1);
+            return first + (kind - 1) * maximum + depth;
+        }
+
+        private static int NormalizeSlot(byte[] code, int used, byte type)
+        {
+            if (type == Signed8 || type == Signed16)
+                code[used++] = type == Signed8 ? (byte)0xc0 : (byte)0xc1; // i32.extend8_s / extend16_s
+            else if (IsNarrow(type))
+            {
+                used = Const(code, used, type == Unsigned8 ? 255 : 65535);
+                code[used++] = 0x71; // i32.and
+            }
+            return used;
+        }
 
         private static int CastThunk(byte[] code, int used, byte type)
         {

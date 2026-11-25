@@ -24,8 +24,8 @@ internal static class DiagnosticCases
         var entry = estimates.GetMethod(nameof(Estimates.ViaHelper))!;
         var helper = estimates.GetMethod("ClampCost", methodFlags)!;
         Reject(nameof(Estimates.ViaHelper), image, Row(entry), -2, At(0, helper, OpCodes.Mul_Ovf));
-        var unsupported = estimates.GetMethod(nameof(Estimates.UnsupportedShape))!;
-        Reject(nameof(Estimates.UnsupportedShape), image, Row(unsupported), -2, [0, Row(unsupported), -1]);
+        var unsupported = estimates.GetMethod(nameof(Estimates.UnsupportedDecimal))!;
+        Reject(nameof(Estimates.UnsupportedDecimal), image, Row(unsupported), -2, [0, Row(unsupported), -1]);
 
         var absolute = estimates.GetMethod(nameof(Estimates.Absolute))!;
         Reject(nameof(Estimates.Absolute), image, Row(absolute), -2, At(0, absolute, OpCodes.Call));

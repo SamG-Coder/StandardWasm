@@ -163,11 +163,13 @@ namespace PortableCompiler
                 int signature = offsets[current];
                 byte result = signatures[signature];
                 bool scalar = result == I32;
+                int narrowParameters = 0;
                 for (int i = 0; i < parameters; i++)
                 {
                     byte type = signatures[signature + i + 1];
                     frame[i] = type;
                     if (type != I32) scalar = false;
+                    if (IsNarrow(type)) narrowParameters++;
                 }
                 int locals = 0;
                 if (body[3] != 0)
@@ -215,6 +217,9 @@ namespace PortableCompiler
                     if (locals > (int.MaxValue - capacity) / 3)
                         return -3;
                     capacity += locals * 3;
+                    if (narrowParameters > (int.MaxValue - capacity) / 16)
+                        return -3;
+                    capacity += narrowParameters * 16;
                     int classBytes = objects[0] * 12;
                     if (classBytes > int.MaxValue - capacity) return -3;
                     capacity += classBytes;

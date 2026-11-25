@@ -70,4 +70,5 @@ SharedWinFormsCases.Add(cases);
 ReferenceFieldCases.Add(cases);
 SenderIdentityCases.Add(cases);
 PortablePrimitiveCases.Add(cases);
+PortableNarrowScalarCases.Add(cases);
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));

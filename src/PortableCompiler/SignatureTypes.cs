@@ -9,7 +9,9 @@ namespace PortableCompiler
             MethodPointer = 5, String = 6, Chars = ArrayTypeRefs.Packed16, I64 = WideStorage.Scalar, Longs = WideStorage.Array,
             F32 = 10, F64 = 11, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles;
 
-        internal static bool IsInteger(byte type) => type == I32 || type == I64;
+        internal static bool IsNarrow(byte type) => type >= ObjectLayouts.Signed8 && type <= ObjectLayouts.Character;
+        internal static byte StackType(byte type) => IsNarrow(type) ? I32 : type;
+        internal static bool IsInteger(byte type) => StackType(type) == I32 || type == I64;
 
         internal static bool IsFloat(byte type) => type == F32 || type == F64;
 
@@ -22,7 +24,7 @@ namespace PortableCompiler
             type >= ObjectLayouts.ObjectReference && type <= ObjectLayouts.EventHandlerReference;
 
         internal static bool Assignable(byte source, byte target) =>
-            source == target || target == ObjectLayouts.ObjectReference && IsObjectReference(source);
+            source == StackType(target) || target == ObjectLayouts.ObjectReference && IsObjectReference(source);
 
         internal static byte FloatWidth(byte left, byte right) => left == F64 || right == F64 ? F64 : F32;
 
@@ -80,8 +82,12 @@ namespace PortableCompiler
                 int target = offset + i + (i == 0 ? 0 : implicitSlots);
                 if (!locals && i == 0 && element == 1)
                     types[target] = Void;
-                else if (element == 2 || element == 3 || element == 5 || element == 8 || element == 9)
+                else if (element == 2 || element == 8 || element == 9)
                     types[target] = I32;
+                else if (element == 3)
+                    types[target] = ObjectLayouts.Character;
+                else if (element >= 4 && element <= 7)
+                    types[target] = unchecked((byte)(ObjectLayouts.Signed8 + element - 4));
                 else if (WideStorage.IsIntegerElement(element))
                     types[target] = I64;
                 else if (element == 0x0c || element == 0x0d)

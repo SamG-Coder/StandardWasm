@@ -23,6 +23,7 @@ namespace DiagnosticLibrary
 
         public static int Absolute(int value) => System.Math.Abs(value);
         public static short UnsupportedShape(int value) => unchecked((short)value);
+        public static decimal UnsupportedDecimal(int value) => value;
         public static int Supported(int value) => unchecked(value * 3 + 1);
     }
 }
