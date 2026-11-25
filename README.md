@@ -2,12 +2,12 @@
 
 StandardWasm is an experimental ahead-of-time compiler for .NET Standard assemblies. Its goal is to turn managed library IL into standalone WebAssembly modules that a browser can instantiate directly. C# is the first source language. The compiler boundary is the compiled DLL.
 
-## Milestones
+## Start here
 
-1. Compile ordinary scalar library methods, including branches, loops and calls. Compare exported results against the same DLL running on .NET.
-2. Extend the supported IL and library surface using small, independently buildable .NET Standard fixtures. Use Wasm GC for managed storage and tail calls where the managed semantics permit them. Validate the actual binaries in a browser.
-3. Bring up the compiler's own dependencies. Self-hosting passes when a generated Wasm compiler reads its own managed assembly, produces a second Wasm compiler, and that compiler reproduces the module and passes the library tests.
-4. Add a browser backend for WinForms and use WebGPU for drawing. Measure rendering cost against a baseline on the same device.
+- [Project goal, milestones and acceptance criteria](GOAL.md)
+- [Runnable demos by stage](demos/README.md)
+- [Shared agent workflow](AGENTS.md) and [Claude entry point](CLAUDE.md)
+- [Architecture decisions](docs/decisions/0001-staged-demos.md)
 
 .NET Standard specifies an API contract. Each supported API needs either a compatible implementation compiled into the module or an explicitly documented host import. Windows services and UI controls require additional browser implementations. Blazor is outside this project's architecture.
 
@@ -55,7 +55,7 @@ instance.exports.SumSquares(10); // 385
 - `Compiler/ModuleCompiler.cs` selects exports, links reachable methods and maps CLR types.
 - `Compiler/MethodCompiler.cs` translates IL evaluation stacks and control flow. Basic blocks currently use a dispatcher for correctness. Efficient structured control flow is a future optimization.
 - `Compiler/IntegerOps.cs` maps numeric and comparison instructions.
-- `Sample/` and `ArrayLibrary/` are independent .NET Standard libraries. `Verify/` generates deterministic expected results on the CLR.
+- `demos/stage-*/` contains the independently buildable .NET Standard libraries. `Verify/` generates deterministic expected results on the CLR.
 - `scripts/` contains assembly, engine validation and browser tests. Generated modules are written to `artifacts/`.
 
 Self-hosting requires a metadata reader and binary writer that can run inside the compiled module, plus enough support for the compiler's own strings, collections, object model and error paths. The current bootstrap also needs a file/byte-buffer boundary to replace host filesystem calls. The existing compiler uses Mono.Cecil and Binaryen on the build host. Generated sample modules have neither dependency.
