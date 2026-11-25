@@ -85,14 +85,13 @@ namespace PeLibrary
                 uint virtualAddress = U32(image, section + 12);
                 uint rawSize = U32(image, section + 16);
                 uint rawOffset = U32(image, section + 20);
-                uint extent = virtualSize > rawSize ? virtualSize : rawSize;
-                if (rva < virtualAddress || rva - virtualAddress >= extent)
+                if (rva < virtualAddress || rva - virtualAddress >= virtualSize)
                     continue;
                 if (result >= 0)
                     return -1;
                 uint delta = rva - virtualAddress;
                 // The section can have a virtual tail. Only its file-backed bytes are readable.
-                if (!Fits(delta, size, rawSize) || !Fits(rawOffset, rawSize, (uint)image.Length))
+                if (!Fits(delta, size, virtualSize) || !Fits(delta, size, rawSize) || !Fits(rawOffset, rawSize, (uint)image.Length))
                     return -1;
                 result = (int)(rawOffset + delta);
             }
