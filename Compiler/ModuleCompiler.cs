@@ -22,12 +22,16 @@ internal sealed class ModuleCompiler(ModuleDefinition module)
     }
 
     internal const string Int = "i32";
+    // int64 and uint64 share one Wasm type. Signedness lives in the IL instruction (div.un, clt.un, conv.u8),
+    // exactly as it does for int32 and uint32.
+    internal const string Long = "i64";
     internal const string IntArray = "(ref null $ints)";
     internal const string ByteArray = "(ref null $bytes)";
 
     internal static string ValueType(TypeReference type) => type.FullName switch
     {
         "System.Int32" or "System.UInt32" or "System.Boolean" or "System.Byte" => Int,
+        "System.Int64" or "System.UInt64" => Long,
         "System.Int32[]" => IntArray,
         "System.Byte[]" => ByteArray,
         _ => throw new NotSupportedException($"Unsupported value type: {type.FullName}")

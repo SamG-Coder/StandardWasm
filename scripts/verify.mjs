@@ -1,4 +1,6 @@
-import { invoke } from "./invoke.mjs";
+import { decode, invoke } from "./invoke.mjs";
+
+const printable = value => JSON.stringify(value, (key, v) => typeof v === "bigint" ? v + "n" : v);
 
 export async function verify(load, cases) {
     const modules = {};
@@ -20,9 +22,13 @@ export async function verify(load, cases) {
             const key = (c.exception ?? "no CLR exception") + " -> trap '" + error.message + "'";
             traps.set(key, (traps.get(key) ?? 0) + 1);
         }
-        if (actual !== c.expected) throw Error(JSON.stringify({ ...c, inputs: c.inputs.map(input => input?.bytes ? "<" + input.bytes.length + " bytes>" : input), actual }));
+        // Strict equality also rejects a Number where the CLR produced a 64-bit value, and vice versa.
+        if (actual !== decode(c.expected))
+            throw Error(printable({ ...c, inputs: c.inputs.map(input => input?.bytes ? "<" + input.bytes.length + " bytes>" : input), actual }));
     }
     if (modules.Sample.Countdown(1000000, 7) !== 1000007) throw Error("Deep tail call failed");
+    if (modules.LongIntegers && modules.LongIntegers.Countdown(1000000n, 0n) !== 3000000n)
+        throw Error("Deep i64 tail call failed");
     const trapSummary = [...traps].sort().map(([key, count]) => "\n  " + count + " x " + key).join("");
     return cases.length + " CLR comparisons and 1,000,000 tail calls passed" + trapSummary;
 }
