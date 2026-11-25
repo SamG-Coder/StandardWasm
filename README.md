@@ -62,4 +62,3 @@ instance.exports.SumSquares(10); // 385
 Self-hosting requires a metadata reader and binary writer that can run inside the compiled module, plus enough support for the compiler's own strings, collections, object model and error paths. The current bootstrap also needs a file/byte-buffer boundary to replace host filesystem calls. The existing compiler uses Mono.Cecil and Binaryen on the build host. Generated sample modules have neither dependency.
 
 The modern instructions used here are standardized Wasm GC array instructions, `return_call` and the non-trapping float-to-int conversions (`trunc_sat`). See the [WebAssembly 3.0 release](https://webassembly.org/news/2025-09-17-wasm-3.0/) and [engine feature matrix](https://webassembly.org/features/).
-
