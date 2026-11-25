@@ -11,6 +11,8 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
     private readonly Dictionary<string, string> temporaries = new();
     private readonly List<string> stack = new();
     private readonly StringBuilder body = new();
+    // Set when Translate lowers two adjacent instructions as one, so that the block loop skips the second.
+    private Instruction? fused;
     private void Emit(string text) => body.AppendLine("    " + text);
 
     // A stack depth and its Wasm type identify a spill slot shared across incoming edges.
@@ -20,6 +22,9 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
         var suffix = type switch
         {
             Int => "i",
+            Long => "l",
+            Float32 => "f",
+            Float64 => "d",
             IntArray => "a",
             ByteArray => "b",
             _ => throw new InvalidDataException($"Invalid evaluation stack type: {type}")
@@ -82,6 +87,7 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
                 {
                     if (current != first && leaders.Contains(current)) { Emit(Jump(current)); break; }
                     if (Translate(current)) break;
+                    if (fused != null && fused == current.Next) { current = fused; fused = null; }
                 }
                 catch (Exception e)
                 {
@@ -112,13 +118,67 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
         return Pop(null);
     }
 
+    // Pops an int32 or int64 operand and reports which Wasm type it has. The IL binary numeric rule
+    // (ECMA-335 III.1.5) never mixes int32 and int64 operands, so callers pop the other operand with
+    // Pop(type), which rejects a mixture.
+    private (string Value, string Type) PopInteger()
+    {
+        var type = stack.Count == 0 ? Int : stack[^1];
+        if (type is not (Int or Long)) throw new InvalidDataException("Expected an integer operand");
+        return (Pop(type), type);
+    }
+
+    // Pops any int32, int64, float32 or float64 operand together with its Wasm type.
+    private (string Value, string Type) PopNumeric()
+    {
+        var type = stack.Count == 0 ? Int : stack[^1];
+        if (type is not (Int or Long or Float32 or Float64)) throw new InvalidDataException("Expected a numeric operand");
+        return (Pop(type), type);
+    }
+
+    // conv.i4, conv.u4, conv.i and conv.u: integers keep their low 32 bits, and floats truncate with saturation.
+    private static string Narrow32((string Value, string Type) operand, bool unsigned = false) => operand.Type switch
+    {
+        Long => $"(i32.wrap_i64 {operand.Value})",
+        Float32 or Float64 => FloatOps.Truncate(Int, unsigned, operand.Type, operand.Value),
+        _ => operand.Value
+    };
+
+    // The CLR shift count is int32 for both operand widths. i64 shifts take an i64 count. Wasm masks the
+    // count to the operand width, which matches C# semantics (Roslyn masks with 31 or 63 itself).
+    private static bool IsShift(Code code) => code is Code.Shl or Code.Shr or Code.Shr_Un;
+
+    private static bool IsComparison(Code code) =>
+        code is Code.Ceq or Code.Clt or Code.Clt_Un or Code.Cgt or Code.Cgt_Un;
+
     private bool Translate(Instruction i)
     {
         var code = i.OpCode.Code;
         if (IntegerOps.Binary.TryGetValue(code, out var op))
         {
-            var right = Pop();
-            Push($"(i32.{op} {Pop()} {right})");
+            if (!IsShift(code) && stack.Count > 0 && FloatOps.IsFloat(stack[^1]))
+            {
+                var (rightFloat, floatType) = PopNumeric();
+                var leftFloat = Pop(floatType);
+                // and, or, xor, div.un and rem.un have no floating-point form, so Compare rejects them.
+                Push(FloatOps.Arithmetic.TryGetValue(code, out var arithmetic)
+                    ? $"({floatType}.{arithmetic} {leftFloat} {rightFloat})"
+                    : FloatOps.Compare(code, floatType, leftFloat, rightFloat),
+                    FloatOps.Arithmetic.ContainsKey(code) ? floatType : Int);
+                return false;
+            }
+            if (IsShift(code))
+            {
+                var count = Pop();
+                var (shifted, width) = PopInteger();
+                var amount = width == Long ? $"(i64.extend_i32_u {count})" : count;
+                Push($"({width}.{op} {shifted} {amount})", width);
+                return false;
+            }
+            var (right, type) = PopInteger();
+            var left = Pop(type);
+            // Comparisons yield an int32 0 or 1 whatever the operand width.
+            Push($"({type}.{op} {left} {right})", IsComparison(code) ? Int : type);
             return false;
         }
         switch (code)
@@ -128,6 +188,12 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
                 Push($"(i32.const {code - Code.Ldc_I4_0})"); break;
             case Code.Ldc_I4: case Code.Ldc_I4_S:
                 Push($"(i32.const {i.Operand})"); break;
+            case Code.Ldc_I8:
+                Push($"(i64.const {i.Operand})", Long); break;
+            case Code.Ldc_R4:
+                Push(FloatOps.Literal((float)i.Operand), Float32); break;
+            case Code.Ldc_R8:
+                Push(FloatOps.Literal((double)i.Operand), Float64); break;
             case >= Code.Ldarg_0 and <= Code.Ldarg_3: case Code.Ldarg: case Code.Ldarg_S:
             {
                 var index = i.Operand is ParameterDefinition p ? p.Index : code - Code.Ldarg_0;
@@ -158,18 +224,60 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
             }
             case Code.Pop: Pop(null); break;
             case Code.Dup: Push($"(local.get {Slot(stack.Count - 1, stack[^1])})", stack[^1]); break;
-            case Code.Neg: Push($"(i32.sub (i32.const 0) {Pop()})"); break;
-            case Code.Not: Push($"(i32.xor (i32.const -1) {Pop()})"); break;
+            case Code.Neg:
+            {
+                var (value, type) = PopNumeric();
+                // Float32 negation flips the sign bit, so -(0.0) is -0.0. Subtraction from zero would give +0.0.
+                Push(FloatOps.IsFloat(type) ? $"({type}.neg {value})" : $"({type}.sub ({type}.const 0) {value})", type); break;
+            }
+            case Code.Not:
+            {
+                var (value, type) = PopInteger();
+                Push($"({type}.xor ({type}.const -1) {value})", type); break;
+            }
+            // Native int is 32 bits in this wasm32 mapping. Narrowing int64 keeps the low 32 bits, as the CLR does.
             case Code.Conv_I4: case Code.Conv_U4: case Code.Conv_I: case Code.Conv_U:
-                Push(Pop()); break;
-            case Code.Conv_U1: Push(NarrowByte(Pop())); break;
+                Push(Narrow32(PopNumeric(), code is Code.Conv_U4 or Code.Conv_U)); break;
+            case Code.Conv_U1: Push(NarrowByte(Narrow32(PopNumeric()))); break;
+            case Code.Conv_I8: case Code.Conv_U8:
+            {
+                // ECMA-335 III.3.27: conv.i8 sign-extends an int32 and conv.u8 zero-extends it. int64 passes through.
+                var (value, type) = PopNumeric();
+                var extend = code == Code.Conv_I8 ? "i64.extend_i32_s" : "i64.extend_i32_u";
+                Push(type switch
+                {
+                    Long => value,
+                    Float32 or Float64 => FloatOps.Truncate(Long, code == Code.Conv_U8, type, value),
+                    _ => $"({extend} {value})"
+                }, Long); break;
+            }
+            case Code.Conv_R4: case Code.Conv_R8: case Code.Conv_R_Un:
+            {
+                var (value, type) = PopNumeric();
+                if (code == Code.Conv_R_Un && FloatOps.IsFloat(type))
+                    throw new InvalidDataException("conv.r.un expects an integer operand");
+                var target = code == Code.Conv_R4 ? Float32 : Float64;
+                // C# lowers (float)ulong to "conv.r.un; conv.r4", which by the IL rounds twice (through F/double).
+                // RyuJIT converts that adjacent pair in one rounding. For 0x8000008000000001 it returns
+                // 2^63 + 2^40, not 2^63. To match the CLR on the same DLL, fuse the pair when the conv.r4 is not
+                // a branch target. A separate conv.r8 or a stored double still rounds twice, as on the CLR.
+                if (code == Code.Conv_R_Un && i.Next?.OpCode.Code == Code.Conv_R4 && !leaders.Contains(i.Next))
+                {
+                    target = Float32;
+                    fused = i.Next;
+                }
+                Push(FloatOps.Convert(target, code == Code.Conv_R_Un, type, value), target); break;
+            }
             case Code.Rem:
             {
-                var divisor = Pop();
-                var dividend = Pop();
-                // Wasm rem_s returns zero on this pair. CLR integer remainder can throw.
-                Emit($"(if (i32.and (i32.eq {dividend} (i32.const -2147483648)) (i32.eq {divisor} (i32.const -1))) (then (unreachable)))");
-                Push($"(i32.rem_s {dividend} {divisor})");
+                if (stack.Count > 0 && FloatOps.IsFloat(stack[^1]))
+                    throw new NotSupportedException("Floating-point remainder needs an exact fmod, which Wasm does not provide");
+                var (divisor, type) = PopInteger();
+                var dividend = Pop(type);
+                // Wasm rem_s returns zero for MinValue % -1. The CLR throws OverflowException, so trap explicitly.
+                var minimum = type == Long ? "-9223372036854775808" : "-2147483648";
+                Emit($"(if (i32.and ({type}.eq {dividend} ({type}.const {minimum})) ({type}.eq {divisor} ({type}.const -1))) (then (unreachable)))");
+                Push($"({type}.rem_s {dividend} {divisor})", type);
                 break;
             }
             case Code.Newarr when ((TypeReference)i.Operand).FullName == "System.Int32":
@@ -235,12 +343,19 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
                 if (i.OpCode.FlowControl != FlowControl.Cond_Branch || i.Operand is not Instruction targetBlock)
                     throw new NotSupportedException("Unsupported IL instruction");
                 string condition;
-                if (code is Code.Brfalse or Code.Brfalse_S) condition = $"(i32.eqz {Pop()})";
-                else if (code is Code.Brtrue or Code.Brtrue_S) condition = Pop();
+                if (code is Code.Brfalse or Code.Brfalse_S or Code.Brtrue or Code.Brtrue_S)
+                {
+                    // brtrue and brfalse accept any integer width, so test against zero at the operand's width.
+                    var (value, type) = PopInteger();
+                    if (code is Code.Brfalse or Code.Brfalse_S) condition = $"({type}.eqz {value})";
+                    else condition = type == Long ? $"(i64.ne {value} (i64.const 0))" : value;
+                }
                 else
                 {
-                    var right = Pop();
-                    condition = $"(i32.{IntegerOps.Comparison(code)} {Pop()} {right})";
+                    var (right, type) = PopNumeric();
+                    var left = Pop(type);
+                    condition = FloatOps.IsFloat(type) ? FloatOps.Branch(code, type, left, right)
+                        : $"({type}.{IntegerOps.Comparison(code)} {left} {right})";
                 }
                 Emit($"(if {condition} (then {Jump(targetBlock)}))");
                 Emit(Jump(i.Next)); return true;
