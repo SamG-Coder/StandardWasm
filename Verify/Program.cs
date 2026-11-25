@@ -44,4 +44,5 @@ foreach (var (count, index) in new[] { (1, 0), (3, 2), (0, 0), (3, -1), (3, 3), 
 }
 
 PeCases.Add(cases);
+StreamCases.Add(cases);
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));
