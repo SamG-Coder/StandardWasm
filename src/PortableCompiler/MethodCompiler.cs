@@ -110,8 +110,8 @@ namespace PortableCompiler
             var offsets = new int[symbols];
             var sizes = new int[symbols];
             var thunks = new int[symbols + 1];
-            var signatures = new byte[output.Length];
-            var frame = new byte[output.Length];
+            var signatures = new int[output.Length];
+            var frame = new int[output.Length];
             var moduleCode = new byte[output.Length];
             var literals = new byte[output.Length];
             var literalSize = new int[1];
@@ -161,12 +161,12 @@ namespace PortableCompiler
 
                 int parameters = arities[current];
                 int signature = offsets[current];
-                byte result = signatures[signature];
+                int result = signatures[signature];
                 bool scalar = result == I32;
                 int narrowParameters = 0;
                 for (int i = 0; i < parameters; i++)
                 {
-                    byte type = signatures[signature + i + 1];
+                    int type = signatures[signature + i + 1];
                     frame[i] = type;
                     if (type != I32) scalar = false;
                     if (IsNarrow(type)) narrowParameters++;
@@ -275,7 +275,7 @@ namespace PortableCompiler
         }
 
         private static int LinkOperands(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
-            int[] heaps, int owner, int[] records, int[] owners, int[] rows, int[] bases, int[] indices, int[] arities, int[] offsets, byte[] signatures, int[] objects, int[] thunks,
+            int[] heaps, int owner, int[] records, int[] owners, int[] rows, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
             byte[] literals, int[] literalSize, int functions, int[] location)
         {
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
@@ -436,7 +436,7 @@ namespace PortableCompiler
                     index = functions - 1;
                 }
                 int signature = offsets[index];
-                bool hasReceiver = arities[index] > 0 && signatures[signature + 1] >= ObjectLayouts.FirstClass;
+                bool hasReceiver = arities[index] > 0 && StackType(signatures[signature + 1]) >= ObjectLayouts.FirstClass;
                 if (kind == BranchIl.LoadFunction)
                 {
                     if (!hasReceiver ||
@@ -520,7 +520,7 @@ namespace PortableCompiler
         }
 
         private static int Register(byte[] image, int[] layout, int[] heaps, int owner, int row,
-            int[] owners, int[] rows, int[] bases, int[] indices, int[] arities, int[] offsets, byte[] signatures, int[] objects, int functions)
+            int[] owners, int[] rows, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int functions)
         {
             if (owner != 0 && (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x10) == 0)
                 return -2;
@@ -538,7 +538,7 @@ namespace PortableCompiler
             return functions + 1;
         }
 
-        private static bool IsScalarSignature(byte[] types, int offset, int arity)
+        private static bool IsScalarSignature(int[] types, int offset, int arity)
         {
             if (!IsScalar(types[offset]) && types[offset] != Void) return false;
             for (int index = 1; index <= arity; index++)
@@ -546,7 +546,7 @@ namespace PortableCompiler
             return true;
         }
 
-        private static int MethodShape(byte[] image, int[] layout, int[] heaps, int row, byte[] types, int offset, int[] objects)
+        private static int MethodShape(byte[] image, int[] layout, int[] heaps, int row, int[] types, int offset, int[] objects)
         {
             int attributes = MethodDefinitions.ReadColumn(image, layout, row, 2);
             int implementation = MethodDefinitions.ReadColumn(image, layout, row, 1);

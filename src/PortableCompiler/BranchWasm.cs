@@ -6,16 +6,15 @@ namespace PortableCompiler
 {
     internal static class BranchWasm
     {
-        internal static int Emit(int[] records, int[] depths, byte[] states, int[] frameShape, byte[] frame,
-            byte[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup)
+        internal static int Emit(int[] records, int[] depths, byte[] states, int[] frameShape, int[] frame,
+            int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
-            byte result = (byte)frameShape[3];
+            int result = frameShape[3];
             int classes = frameShape[4];
             bool stringScratch = frameShape[5] != 0;
             bool eventScratch = frameShape[6] != 0;
-            // Narrow slots use i32 on the evaluation stack and share its spill bank.
-            int spillKinds = Doubles + classes;
+            int spillKinds = FirstClass - 1 + classes;
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 1 + spillKinds) +
                 (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0));
             int spills = arguments + locals;
@@ -34,8 +33,7 @@ namespace PortableCompiler
                 for (int kind = I32; kind <= spillKinds; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
-                    int type = kind <= Doubles ? kind : kind + FirstClass - Doubles - 1;
-                    used = WasmBinary.ValueType(code, used, unchecked((byte)type));
+                    used = WasmBinary.ValueType(code, used, kind);
                 }
             }
             for (int i = 0; i < classes; i++)
@@ -297,7 +295,7 @@ namespace PortableCompiler
                     int temp = 0;
                     if (kind == NewObject)
                     {
-                        byte type = signatures[shape + 1];
+                        byte type = StackType(signatures[shape + 1]);
                         temp = temporaries + type - FirstClass;
                         used = Gc(code, used, 1, type); // struct.new_default
                         used = Local(code, used, 0x22, temp);
@@ -311,7 +309,7 @@ namespace PortableCompiler
                     }
                     code[used++] = 0x10;
                     used = WasmBinary.Unsigned(code, used, operand);
-                    byte returned = signatures[shape];
+                    int returned = signatures[shape];
                     if (kind == NewObject)
                     {
                         returned = signatures[shape + 1];
@@ -502,13 +500,10 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int Spill(int first, int maximum, byte type, int depth)
-        {
-            int kind = type < FirstClass ? type : type - (FirstClass - Doubles - 1);
-            return first + (kind - 1) * maximum + depth;
-        }
+        private static int Spill(int first, int maximum, byte type, int depth) =>
+            first + (type - 1) * maximum + depth;
 
-        private static int NormalizeSlot(byte[] code, int used, byte type)
+        private static int NormalizeSlot(byte[] code, int used, int type)
         {
             if (type == Signed8 || type == Signed16)
                 code[used++] = type == Signed8 ? (byte)0xc0 : (byte)0xc1; // i32.extend8_s / extend16_s

@@ -10,7 +10,7 @@ namespace PortableCompiler
         private const int WideArrayHeap = 6, EventArgsHeap = 7, SingleArrayHeap = 11, DoubleArrayHeap = 12;
         private const int FirstClassHeap = DoubleArrayHeap + 1;
 
-        internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies,
+        internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
             byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup)
         {
@@ -60,7 +60,7 @@ namespace PortableCompiler
             for (int i = 0; i < functions; i++)
             {
                 int shape = offsets[i];
-                byte result = types[shape];
+                int result = types[shape];
                 int type = 2 + UnsignedSize(arities[i]) + ValueWidth(result);
                 for (int parameter = 0; parameter < arities[i]; parameter++)
                     type += ValueWidth(types[shape + 1 + parameter]);
@@ -222,7 +222,7 @@ namespace PortableCompiler
                 cursor = Unsigned(output, cursor, arities[type]);
                 for (int i = 0; i < arities[type]; i++)
                     cursor = ValueType(output, cursor, types[shape + i + 1]);
-                byte result = types[shape];
+                int result = types[shape];
                 output[cursor++] = result == Void ? (byte)0 : (byte)1;
                 if (result != Void)
                     cursor = ValueType(output, cursor, result);
@@ -336,13 +336,14 @@ namespace PortableCompiler
             return cursor;
         }
 
-        private static int ValueWidth(byte type) =>
+        private static int ValueWidth(int type) =>
             type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference ? 1 :
-                HeapType(type) <= 63 ? 2 : 3;
+                HeapType(StackType(type)) <= 63 ? 2 : 3;
 
-        internal static int ValueType(byte[] output, int cursor, byte type)
+        internal static int ValueType(byte[] output, int cursor, int slot)
         {
-            if (StackType(type) == I32 || type == MethodPointer)
+            byte type = StackType(slot);
+            if (type == I32 || type == MethodPointer)
                 output[cursor++] = 0x7f;
             else if (type == I64)
                 output[cursor++] = 0x7e;

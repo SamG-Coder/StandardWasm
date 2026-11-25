@@ -7,7 +7,7 @@ namespace PortableCompiler
     internal static class StackDepths
     {
         internal static int Analyze(int[] records, int[] depths, byte[] states, int maximum,
-            byte[] frame, byte result, byte[] signatures, int[] offsets, int[] arities, int[] location)
+            int[] frame, int result, int[] signatures, int[] offsets, int[] arities, int[] location)
         {
             if (depths.Length == 0)
                 return -1;
@@ -68,8 +68,8 @@ namespace PortableCompiler
             return 0;
         }
 
-        private static int Transition(byte[] stack, int depth, int kind, int operand, int extra, byte[] frame,
-            byte[] signatures, int[] offsets, int[] arities)
+        private static int Transition(byte[] stack, int depth, int kind, int operand, int extra, int[] frame,
+            int[] signatures, int[] offsets, int[] arities)
         {
             if (kind == LoadString || kind == NullString) return Push(stack, depth, String);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, depth, EventArgsReference);
@@ -169,7 +169,7 @@ namespace PortableCompiler
                 for (int i = receiver; i < count; i++)
                     if (!Assignable(stack[start + i - receiver], signatures[offset + 1 + i]))
                         return -1;
-                byte result = kind == NewObject ? signatures[offset + 1] : signatures[offset];
+                int result = kind == NewObject ? signatures[offset + 1] : signatures[offset];
                 return result == Void ? start : Push(stack, start, StackType(result));
             }
             if (kind == BaseCtor)
