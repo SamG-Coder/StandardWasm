@@ -1,4 +1,4 @@
-import { invokeGenerated } from "./invoke.mjs";
+import { decode, invokeGenerated } from "./invoke.mjs";
 
 export async function verifyBootstrap(host, fixture, cases) {
     const [dll, row] = fixture.inputs;
@@ -18,9 +18,13 @@ export async function verifyBootstrap(host, fixture, cases) {
     }
 
     const first = await build(host.Compile);
+    const firstHex = Array.from(first.bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+    if (firstHex !== fixture.expectedHex) throw Error("First generated compiler differs from the CLR output");
     const second = await build(first.compile);
-    if (second.bytes.length !== first.bytes.length || !first.bytes.every((b, i) => second.bytes[i] === b))
-        throw Error("Self-recompiled compiler differs from the first generation");
+    const third = await build(second.compile);
+    for (const generation of [second, third])
+        if (generation.bytes.length !== first.bytes.length || !first.bytes.every((b, i) => generation.bytes[i] === b))
+            throw Error("Self-recompiled compiler differs from the first generation");
 
     // The bootstrap module supplies only GC buffer transport. Every compilation
     // below is performed by the module emitted by the first portable generation.
@@ -32,7 +36,7 @@ export async function verifyBootstrap(host, fixture, cases) {
     for (const c of cases) {
         if (!c.generated) continue;
         const actual = await invokeGenerated(compiler, c.inputs, c.generated);
-        if (actual !== c.expected)
+        if (!Object.is(actual, decode(c.expected)))
             throw Error("Self-recompiled compiler failed " + c.module + " " + c.fixture);
         tested++;
     }
