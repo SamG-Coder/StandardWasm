@@ -76,11 +76,23 @@ if (verify) {
             return { changed, bright };
         }, { before: Array.from(before), after: Array.from(after) });
         assert.ok(changed > 30 && bright > 100, "The rendered count glyphs must visibly change.");
+        const instances = await page.evaluate(async () => {
+            const { module, instance } = await WebAssembly.instantiateStreaming(fetch("./Handlers.wasm"));
+            const { Create, Advance, Read } = instance.exports;
+            const first = Create(7);
+            const second = Create(100);
+            let nullTraps = false;
+            try { Advance(null); }
+            catch (error) { nullTraps = error instanceof WebAssembly.RuntimeError; }
+            return { first: Advance(first), second: Read(second),
+                imports: WebAssembly.Module.imports(module).length, nullTraps };
+        });
+        assert.deepEqual(instances, { first: 8, second: 100, imports: 0, nullTraps: true });
         const timing = await page.evaluate(() => window.measureRendering());
         assert.deepEqual(errors, []);
         const evidence = {
             engine: browser.version(), sequence: ["Count: 0", "Count: 1", "Count: 2"],
-            changedLabelPixels: changed, ...timing
+            changedLabelPixels: changed, instances, ...timing
         };
         await page.screenshot({ path: artifacts + "/browser.png" });
         writeFileSync(artifacts + "/timing.json", JSON.stringify(evidence, null, 2) + "\n");

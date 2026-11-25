@@ -6,7 +6,7 @@ namespace PortableCompiler
     {
         internal const int Width = 4;
         internal const int Load = 1, Store = 2, Constant = 3, Unary = 4, Binary = 5,
-            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12, NewArray = 13, ArrayLength = 14, ArrayGet = 15, ArraySet = 16, Narrow = 17;
+            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12, NewArray = 13, ArrayLength = 14, ArrayGet = 15, ArraySet = 16, Narrow = 17, NewObject = 18, GetField = 19, SetField = 20, BaseCtor = 21;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and branch comparison.
@@ -87,14 +87,29 @@ namespace PortableCompiler
                     kind = branch == 0 ? Branch : Conditional;
                     comparison = Comparison(branch);
                 }
-                else if (op == 0x28)
+                else if (op == 0x28 || op == 0x6f || op == 0x73 || op == 0x7b || op == 0x7d)
                 {
                     if (length - pc < 4) return -1;
                     uint token = ImageBytes.U32(image, (uint)(start + pc));
                     pc += 4;
-                    if ((token >> 24) != 6) return -2;
-                    kind = Call;
+                    uint table = token >> 24;
                     operand = (int)(token & 0xffffff);
+                    if (operand == 0) return -1;
+                    if (op == 0x7b || op == 0x7d)
+                    {
+                        if (table != 4) return -2;
+                        kind = op == 0x7b ? GetField : SetField;
+                    }
+                    else if (op == 0x28 && table == 0x0a)
+                    {
+                        kind = BaseCtor;
+                    }
+                    else
+                    {
+                        if (table != 6) return -2;
+                        kind = op == 0x73 ? NewObject : Call;
+                        comparison = op == 0x6f ? 1 : 0;
+                    }
                 }
                 else if (op == 0x8d)
                 {

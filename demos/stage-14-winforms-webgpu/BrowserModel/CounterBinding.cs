@@ -6,7 +6,7 @@ internal partial class CounterForm
 {
     internal BrowserBinding Binding { get; private set; } = null!;
 
-    partial void Bind(Button button, Label label, Func<int, int> click, string prefix)
+    partial void Bind(Button button, Label label, Func<CounterState, int> click, string prefix)
     {
         if (click.Target != null || click.Method.DeclaringType != typeof(CounterHandlers))
             throw new InvalidOperationException("The browser binding needs a static handler from CounterHandlers.");

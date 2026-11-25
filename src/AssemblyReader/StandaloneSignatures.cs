@@ -31,7 +31,7 @@ namespace PeLibrary
             return blobs == 2 ? (int)U16(image, offset) : unchecked((int)U32(image, offset));
         }
 
-        private static int Width(int[] counts, int table, int strings, int blobs)
+        internal static int Width(int[] counts, int table, int strings, int blobs)
         {
             if (table == 8) return 4 + strings; // Param
             if (table == 9) return Index(counts[2]) + Coded(2, counts[2], counts[1], counts[27]); // InterfaceImpl
