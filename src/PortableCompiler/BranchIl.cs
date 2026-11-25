@@ -10,11 +10,12 @@ namespace PortableCompiler
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
-        internal static int Decode(byte[] image, int start, int length, int arguments, int locals, int[] records)
+        internal static int Decode(byte[] image, int start, int length, int arguments, int locals, int[] records, int[] location)
         {
             int pc = 0;
             while (pc < length)
             {
+                if (location.Length != 0) location[2] = pc;
                 int slot = pc * Width;
                 int op = image[start + pc++];
                 int kind, operand = 0, comparison = 0;
@@ -224,6 +225,7 @@ namespace PortableCompiler
 
             for (int pcIndex = 0; pcIndex < length; pcIndex += records[pcIndex * Width + 2] - pcIndex)
             {
+                if (location.Length != 0) location[2] = pcIndex;
                 int slot = pcIndex * Width;
                 int kind = records[slot];
                 if ((kind == Branch || kind == Conditional) && records[records[slot + 1] * Width] == 0)

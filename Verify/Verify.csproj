@@ -26,5 +26,6 @@
     <ProjectReference Include="../demos/stage-23-assembly-linking/BundleLibrary.csproj" />
     <ProjectReference Include="../demos/stage-24-portable-i64/WideLibrary.csproj" />
     <ProjectReference Include="../demos/stage-26-portable-switch/SwitchLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-27-portable-diagnostics/DiagnosticLibrary.csproj" />
   </ItemGroup>
 </Project>

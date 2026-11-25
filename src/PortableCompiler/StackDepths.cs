@@ -7,7 +7,7 @@ namespace PortableCompiler
     internal static class StackDepths
     {
         internal static bool Analyze(int[] records, int[] depths, byte[] states, int maximum,
-            byte[] frame, byte result, byte[] signatures, int[] offsets, int[] arities)
+            byte[] frame, byte result, byte[] signatures, int[] offsets, int[] arities, int[] location)
         {
             if (depths.Length == 0)
                 return false;
@@ -18,6 +18,7 @@ namespace PortableCompiler
             while (head < tail)
             {
                 int pc = pending[head++];
+                if (location.Length != 0) location[2] = pc;
                 int slot = pc * BranchIl.Width;
                 int kind = records[slot];
                 int depth = depths[pc] - 1;

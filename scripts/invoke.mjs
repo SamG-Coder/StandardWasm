@@ -12,13 +12,17 @@ export function invoke(exports, method, inputs) {
     return exports[method](...args);
 }
 
-export async function invokeGenerated(exports, inputs, generated) {
+export async function invokeGenerated(exports, inputs, generated, reportDiagnostic) {
     const output = exports.CreateBytes(generated.capacity);
     if (generated.reject)
         for (let i = 0; i < generated.capacity; i++) exports.SetByte(output, i, 0xa5);
     // The host only moves bytes and asks the engine to validate and execute the result.
     const [image, selection] = inputs;
-    let length;
+    const location = generated.diagnostic ? exports.CreateDiagnostic() : undefined;
+    const compile = (method, args) => location
+        ? invoke(exports, method + "Detailed", [...args, location])
+        : invoke(exports, method, args);
+    let length, entryRow;
     if (generated.bundle) {
         let entries = selection;
         if (Array.isArray(selection?.name)) {
@@ -33,15 +37,22 @@ export async function invokeGenerated(exports, inputs, generated) {
             manifest.set([114, 117, 110], 8);
             entries = { bytes: Array.from(manifest) };
         }
-        length = invoke(exports, "CompileBundle", [image, entries, output]);
+        length = compile("CompileBundle", [image, entries, output]);
     } else if (generated.multiExport) {
-        length = invoke(exports, "CompileModule", [image, selection, output]);
+        length = compile("CompileModule", [image, selection, output]);
     } else {
-        const row = Array.isArray(selection?.name)
+        entryRow = Array.isArray(selection?.name)
             ? invoke(exports, "FindRow", [image, { bytes: selection.name }])
             : selection;
-        if (Array.isArray(selection?.name) && row < 1) throw Error("Fixture method was not found");
-        length = invoke(exports, "Compile", [image, row, output]);
+        if (Array.isArray(selection?.name) && entryRow < 1) throw Error("Fixture method was not found");
+        length = compile("Compile", [image, entryRow, output]);
+    }
+    if (location) {
+        const expected = generated.diagnostic.map(value => value === "entry" ? entryRow : value);
+        const actual = expected.map((_, index) => exports.ReadDiagnostic(location, index));
+        if (actual.some((value, index) => value !== expected[index]))
+            throw Error("Diagnostic location " + actual + " differs from expected " + expected);
+        reportDiagnostic?.(actual);
     }
     if (generated.reject) {
         if (length >= 0) throw Error("Expected a compiler diagnostic");

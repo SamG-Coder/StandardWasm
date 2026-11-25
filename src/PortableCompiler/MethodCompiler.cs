@@ -5,7 +5,16 @@ namespace PortableCompiler
 {
     internal static class MethodCompiler
     {
-        internal static int Compile(byte[] image, int row, byte[] output)
+        internal static int Compile(byte[] image, int row, byte[] output) =>
+            CompileSingle(image, row, output, new int[0]);
+
+        internal static int CompileDetailed(byte[] image, int row, byte[] output, int[] location)
+        {
+            if (location.Length < CompileLocation.Size) return -3;
+            return CompileSingle(image, row, output, location);
+        }
+
+        private static int CompileSingle(byte[] image, int row, byte[] output, int[] location)
         {
             var entries = new byte[11];
             entries[0] = unchecked((byte)row);
@@ -16,14 +25,30 @@ namespace PortableCompiler
             entries[8] = 0x72;
             entries[9] = 0x75;
             entries[10] = 0x6e;
-            return CompileExports(image, entries, output);
+            return CompileProgram(image, new byte[0], new int[0], entries, output, location);
         }
 
         internal static int CompileExports(byte[] image, byte[] entries, byte[] output) =>
-            CompileProgram(image, new byte[0], new int[0], entries, output);
+            CompileProgram(image, new byte[0], new int[0], entries, output, new int[0]);
 
-        internal static int CompileBundle(byte[] bundle, byte[] entries, byte[] output)
+        internal static int CompileModuleDetailed(byte[] image, byte[] entries, byte[] output, int[] location)
         {
+            if (location.Length < CompileLocation.Size) return -3;
+            return CompileProgram(image, new byte[0], new int[0], entries, output, location);
+        }
+
+        internal static int CompileBundle(byte[] bundle, byte[] entries, byte[] output) =>
+            CompileBundleCore(bundle, entries, output, new int[0]);
+
+        internal static int CompileBundleDetailed(byte[] bundle, byte[] entries, byte[] output, int[] location)
+        {
+            if (location.Length < CompileLocation.Size) return -3;
+            return CompileBundleCore(bundle, entries, output, location);
+        }
+
+        private static int CompileBundleCore(byte[] bundle, byte[] entries, byte[] output, int[] location)
+        {
+            CompileLocation.Clear(location);
             int count = AssemblyBundle.Count(bundle);
             if (count < 0) return count;
             int mainSize = (int)ImageBytes.U32(bundle, 0);
@@ -36,11 +61,12 @@ namespace PortableCompiler
                 ranges[i + 1] = size;
                 cursor += 4 + size;
             }
-            return CompileProgram(AssemblyBundle.Copy(bundle, 4, mainSize), bundle, ranges, entries, output);
+            return CompileProgram(AssemblyBundle.Copy(bundle, 4, mainSize), bundle, ranges, entries, output, location);
         }
 
-        private static int CompileProgram(byte[] main, byte[] bundle, int[] ranges, byte[] entries, byte[] output)
+        private static int CompileProgram(byte[] main, byte[] bundle, int[] ranges, byte[] entries, byte[] output, int[] location)
         {
+            CompileLocation.Clear(location);
             byte[] image = main;
             var entryOffsets = new int[entries.Length / 9];
             int exportCount = EntryPoints.Read(entries, entryOffsets);
@@ -49,6 +75,7 @@ namespace PortableCompiler
             var exports = new int[exportCount];
             var layout = new int[4];
             var heaps = new int[8];
+            CompileLocation.Set(location, 0, 0, -1);
             int count = CompressedTables.FindWithHeaps(image, layout, heaps);
             if (count < 0)
                 return count == MethodDefinitions.Unsupported ? -2 : -1;
@@ -62,6 +89,7 @@ namespace PortableCompiler
             bases[1] = count;
             for (int module = 1; module < modules; module++)
             {
+                CompileLocation.Set(location, module, 0, -1);
                 byte[] dependency = AssemblyBundle.Load(main, bundle, ranges, module);
                 var dependencyLayout = new int[4];
                 var dependencyHeaps = new int[8];
@@ -90,8 +118,10 @@ namespace PortableCompiler
             for (int export = 0; export < exportCount; export++)
             {
                 uint row = ImageBytes.U32(entries, (uint)entryOffsets[export]);
+                CompileLocation.Set(location, 0, 0, -1);
                 if (row == 0 || row > (uint)count)
                     return -1;
+                CompileLocation.Set(location, 0, (int)row, -1);
                 int index = indices[row] - 1;
                 if (index < 0)
                 {
@@ -108,7 +138,8 @@ namespace PortableCompiler
             int activeOwner = 0;
             for (int current = 0; current < functions; current++)
             {
-                int owner = owners[current];
+                int owner = owners[current], source = rows[current];
+                CompileLocation.Set(location, owner, source, -1);
                 if (owner != activeOwner)
                 {
                     image = AssemblyBundle.Load(main, bundle, ranges, owner);
@@ -118,7 +149,6 @@ namespace PortableCompiler
                     if (count < 0) return -1;
                     activeOwner = owner;
                 }
-                int source = rows[current];
                 uint rva = unchecked((uint)MethodDefinitions.ReadColumn(image, layout, source, 0));
                 int status = MethodBodies.Read(image, rva, body);
                 if (status != 0)
@@ -159,23 +189,25 @@ namespace PortableCompiler
                 if (used < 0)
                 {
                     var records = new int[body[1] * BranchIl.Width];
-                    status = BranchIl.Decode(image, body[0], body[1], parameters, locals, records);
+                    status = BranchIl.Decode(image, body[0], body[1], parameters, locals, records, location);
                     if (status < 0)
                         return status;
                     functions = LinkOperands(main, bundle, ranges, image, layout, heaps, owner, records, owners, rows,
-                        bases, indices, arities, offsets, signatures, objects, thunks, literals, literalSize, functions);
+                        bases, indices, arities, offsets, signatures, objects, thunks, literals, literalSize, functions, location);
                     if (functions < 0)
                         return functions;
 
+                    if (location.Length != 0) location[2] = -1;
                     int maximum = body[2];
                     if (maximum > 0 && body[1] > int.MaxValue / maximum)
                         return -2;
                     var depths = new int[body[1]];
                     var states = new byte[body[1] * maximum];
                     if (!StackDepths.Analyze(records, depths, states, maximum, frame,
-                        result, signatures, offsets, arities))
+                        result, signatures, offsets, arities, location))
                         return -1;
 
+                    if (location.Length != 0) location[2] = -1;
                     int capacity = body[1] * 64 + 32;
                     if (locals > (int.MaxValue - capacity) / 3)
                         return -3;
@@ -220,27 +252,29 @@ namespace PortableCompiler
                 sizes[current] = used;
                 length += used;
             }
+            CompileLocation.Clear(location);
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, functions,
                 moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0]);
         }
 
         private static int LinkOperands(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
             int[] heaps, int owner, int[] records, int[] owners, int[] rows, int[] bases, int[] indices, int[] arities, int[] offsets, byte[] signatures, int[] objects, int[] thunks,
-            byte[] literals, int[] literalSize, int functions)
+            byte[] literals, int[] literalSize, int functions, int[] location)
         {
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
             {
-                int op = records[slot];
-                if (owner != 0 && op >= BranchIl.NewArray && op != BranchIl.Narrow && op != BranchIl.MemberCall &&
-                    op != BranchIl.WideConstant && op != BranchIl.ConvertInteger && op != BranchIl.Switch)
+                int kind = records[slot];
+                if (kind == 0) continue;
+                if (location.Length != 0) location[2] = slot / BranchIl.Width;
+                if (owner != 0 && kind >= BranchIl.NewArray && kind != BranchIl.Narrow && kind != BranchIl.MemberCall &&
+                    kind != BranchIl.WideConstant && kind != BranchIl.ConvertInteger && kind != BranchIl.Switch)
                     return -2; // The dependency backend currently admits only scalar state.
-                if (records[slot] == BranchIl.NewArray)
+                if (kind == BranchIl.NewArray)
                 {
                     int type = ArrayTypeRefs.ElementType(image, heaps, layout, unchecked((uint)records[slot + 1]));
                     if (type < 0) return type;
                     records[slot + 1] = type;
                 }
-                int kind = records[slot];
                 if (kind == BranchIl.GetField || kind == BranchIl.SetField)
                 {
                     int field = records[slot + 1];
@@ -382,7 +416,10 @@ namespace PortableCompiler
                 int kind = records[slot];
                 if ((kind == BranchIl.Branch || kind == BranchIl.Conditional) &&
                     records[records[slot + 1] * BranchIl.Width] == BranchIl.NewDelegate)
+                {
+                    if (location.Length != 0) location[2] = slot / BranchIl.Width;
                     return -1;
+                }
             }
             return functions;
         }
