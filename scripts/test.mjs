@@ -23,10 +23,30 @@ const rejected = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--p
     "--", scalarDemo.dll, "Sample.CheckedArithmetic", "artifacts/unsupported.wat"], { encoding: "utf8" });
 assert.equal(rejected.status, 1);
 assert.match(rejected.stderr, /Increment.*IL_[0-9a-f]+.*add\.ovf/);
-const oracle = readFileSync("artifacts/oracle.json");
-const cases = JSON.parse(oracle);
+const cases = JSON.parse(readFileSync("artifacts/oracle.json"));
 console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases,
     bytes => writeFileSync("artifacts/StandardWasm.Compiler.wasm", bytes)));
+
+// The oracle often compares the same DLL with hundreds of inputs. Share its
+// bytes across those cases to keep the browser transfer proportional to the
+// number of distinct binaries and manifests.
+const blobs = [];
+const blobIndices = new Map();
+const browserCases = cases.map(fixture => ({
+    ...fixture,
+    inputs: fixture.inputs.map(input => {
+        if (!Array.isArray(input?.bytes)) return input;
+        const key = Buffer.from(input.bytes).toString("base64");
+        let blob = blobIndices.get(key);
+        if (blob === undefined) {
+            blob = blobs.length;
+            blobIndices.set(key, blob);
+            blobs.push(input);
+        }
+        return { blob };
+    })
+}));
+const browserOracle = Buffer.from(JSON.stringify({ cases: browserCases, blobs }));
 
 const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const browser = await chromium.launch({
@@ -38,7 +58,7 @@ try {
     const assets = new Map([
         // Serve the oracle as JSON so the browser can parse the DLL byte arrays
         // without Playwright serializing each individual byte as an argument.
-        ["/oracle.json", ["application/json", oracle]],
+        ["/oracle.json", ["application/json", browserOracle]],
         ["/bootstrap.mjs", ["text/javascript", readFileSync("scripts/bootstrap.mjs")]],
         ["/invoke.mjs", ["text/javascript", readFileSync("scripts/invoke.mjs")]],
         ["/verify.mjs", ["text/javascript", readFileSync("scripts/verify.mjs")]],
@@ -51,7 +71,9 @@ try {
     });
     await page.goto("http://standardwasm.test/");
     const result = await page.evaluate(async () => {
-        const cases = await (await fetch("/oracle.json")).json();
+        const { cases, blobs } = await (await fetch("/oracle.json")).json();
+        for (const fixture of cases)
+            fixture.inputs = fixture.inputs.map(input => input?.blob === undefined ? input : blobs[input.blob]);
         const { verify } = await import("/verify.mjs");
         return verify(async name => (await fetch("/" + name)).arrayBuffer(), cases);
     });
