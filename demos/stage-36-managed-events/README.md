@@ -4,7 +4,9 @@ Run from the repository root.
 
     npm run demo -- stage-36-managed-events
 
-The compiler takes the .NET Standard DLL and emits a Wasm module that returns 12112 from `CombineCallbacks(0)`. The fixture combines three callbacks, invokes the result in registration order, then invokes the original two callbacks again. The other cases check that combining with null preserves the original reference and that a callback added during dispatch first runs on the next invocation. [Delegate.Combine](https://learn.microsoft.com/en-us/dotnet/api/system.delegate.combine?view=net-10.0)
+The compiler takes the .NET Standard DLL and emits a Wasm module that returns 123 from `RemoveCallbacks(0)`. That case removes the last matching two-callback subsequence from a five-callback list. The other cases cover middle removal, no match, null operands, removing the entire list, and removing a callback while dispatch is in progress. When one callback survives, the result preserves that original delegate's identity. [Delegate.Remove](https://learn.microsoft.com/en-us/dotnet/api/system.delegate.remove?view=net-10.0)
+
+`CombineCallbacks` checks registration order, null operands, and that a callback added during dispatch first runs on the next invocation. [Delegate.Combine](https://learn.microsoft.com/en-us/dotnet/api/system.delegate.combine?view=net-10.0)
 
 The compiler represents each bound target and typed function reference with a Wasm GC struct. A private GC array stores those entries in invocation order. Combining two nonnull delegates copies both lists into a new array, and each invocation keeps its original array for the duration of dispatch. `InvokeBoundHandler` covers distinct methods and target objects. Invoking a null delegate traps in Wasm and throws `NullReferenceException` on the CLR.
 
@@ -14,7 +16,7 @@ Within one module instance, `EventArgs.Empty` always returns the same reference 
 
 ## Event subscription fixtures
 
-The current Wasm implementation covers combining and invoking bound, nonvirtual instance handlers. Static handlers, delegate removal and compiler-generated field-like event accessors still need support. The remaining subscription fixtures currently run on the CLR.
+The current Wasm implementation covers combining, removing and invoking bound, nonvirtual instance handlers. Static handlers and compiler-generated field-like event accessors still need support. The remaining subscription fixtures currently run on the CLR.
 
 | CLR entry in `EventLibrary.EventCases` | Expected | Behavior |
 | --- | --- | --- |

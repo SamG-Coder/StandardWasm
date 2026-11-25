@@ -21,7 +21,7 @@ namespace PortableCompiler
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
             int eventLocals = scratch + (stringScratch ? 5 : 0);
-            int pcLocal = eventLocals + (eventScratch ? 3 : 0);
+            int pcLocal = eventLocals + (eventScratch ? 6 : 0);
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < spills; i++)
             {
@@ -50,7 +50,7 @@ namespace PortableCompiler
             }
             if (eventScratch)
             {
-                code[used++] = 2; // loop or copy lengths
+                code[used++] = 5; // loop counters and copy lengths
                 code[used++] = 0x7f;
                 code[used++] = 1; // unpublished output array
                 used = WasmBinary.ValueType(code, used, EventHandlerReference);
@@ -169,22 +169,25 @@ namespace PortableCompiler
                     byte closureType = (byte)operand;
                     used = Local(code, used, 0x20, Spill(spills, maximum, receiver, top - 1));
                     code[used++] = 0xd4;
-                    used = Local(code, used, 0x20, Spill(spills, maximum, MethodPointer, top));
+                    int pointer = Spill(spills, maximum, MethodPointer, top);
+                    int destination = Spill(spills, maximum, closureType, top - 1);
+                    used = Local(code, used, 0x20, pointer);
                     code[used++] = 0x25; // table.get from the generated thunk table
                     code[used++] = 0;
                     if (closureType == EventHandlerReference)
                     {
                         used = CastThunk(code, used, WasmBinary.EventThunkType);
-                        used = EventWasm.NewList(code, used);
+                        used = EventWasm.NewList(code, used, pointer, destination);
                     }
                     else used = Gc(code, used, 0, closureType); // struct.new scalar closure
-                    used = Local(code, used, 0x21, Spill(spills, maximum, closureType, top - 1));
+                    used = Local(code, used, 0x21, destination);
                 }
-                else if (kind == CombineHandler)
+                else if (kind == CombineHandler || kind == RemoveHandler)
                 {
                     int left = Spill(spills, maximum, EventHandlerReference, top - 1);
                     int right = Spill(spills, maximum, EventHandlerReference, top);
-                    used = EventWasm.CombineLists(code, used, left, right, eventLocals);
+                    used = kind == CombineHandler ? EventWasm.CombineLists(code, used, left, right, eventLocals) :
+                        EventWasm.RemoveLast(code, used, left, right, eventLocals);
                     used = Local(code, used, 0x21, left);
                 }
                 else if (kind == InvokeDelegate && operand == EventHandlerReference)

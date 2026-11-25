@@ -14,6 +14,52 @@ namespace EventLibrary
 
     public static class EventCases
     {
+        public static int RemoveCallbacks(int scenario)
+        {
+            var sender = new EventSource();
+            var log = new EventLog(sender);
+            var slot = new HandlerSlot();
+            EventHandler first = log.First;
+            EventHandler second = log.Second;
+            EventHandler third = log.Third;
+            if (scenario == 0)
+            {
+                slot.Handler = first + second + third + first + second;
+                EventHandler match = new EventHandler(log.First) + new EventHandler(log.Second);
+                slot.Handler -= match;
+                slot.Raise(sender, EventArgs.Empty);
+                return log.Value;
+            }
+            if (scenario == 1)
+            {
+                EventHandler pair = first + second;
+                EventHandler otherTarget = new EventLog(sender).First;
+                if ((object)(pair - otherTarget) != pair) return -1;
+                if ((object)(pair - third) != pair) return -2;
+                if ((object)(pair - (first + second + third)) != pair) return -3;
+                if ((object)(pair - first) != second) return -4;
+                if ((object)(pair - second) != first) return -5;
+                if (pair - (first + second) != null) return -6;
+                EventHandler missing = slot.Handler;
+                if ((object)(first - missing) != first) return -7;
+                if (missing - first != null) return -8;
+                return 1;
+            }
+            if (scenario == 2)
+            {
+                log.Slot = slot;
+                slot.Handler = log.RemoveSecondFromSlot;
+                slot.Handler += second;
+                slot.Raise(sender, EventArgs.Empty);
+                slot.Raise(sender, EventArgs.Empty);
+                return log.Value;
+            }
+            slot.Handler = first + second + third;
+            slot.Handler -= second;
+            slot.Raise(sender, EventArgs.Empty);
+            return log.Value;
+        }
+
         public static int CombineCallbacks(int scenario)
         {
             var sender = new EventSource();
@@ -204,10 +250,18 @@ namespace EventLibrary
 
         internal void Second(object sender, EventArgs args) => Record(2, sender, args);
 
+        internal void Third(object sender, EventArgs args) => Record(3, sender, args);
+
         internal void AppendSecond(object sender, EventArgs args)
         {
             Record(3, sender, args);
             Slot.Handler += Second;
+        }
+
+        internal void RemoveSecondFromSlot(object sender, EventArgs args)
+        {
+            Record(4, sender, args);
+            Slot.Handler -= Second;
         }
 
         internal void RemoveSecond(object sender, EventArgs args)

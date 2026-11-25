@@ -20,6 +20,7 @@ internal static class SenderIdentityCases
         Check(nameof(EventCases.InvokeBoundHandler), [0, 1], EventCases.InvokeBoundHandler, typeof(EventCases));
         Check(nameof(EventCases.InvokeEmptyHandler), [0], EventCases.InvokeEmptyHandler, typeof(EventCases));
         Check(nameof(EventCases.CombineCallbacks), [0, 1, 2], EventCases.CombineCallbacks, typeof(EventCases));
+        Check(nameof(EventCases.RemoveCallbacks), [0, 1, 2, 3], EventCases.RemoveCallbacks, typeof(EventCases));
         RejectWrongAssembly();
 
         void RejectWrongAssembly()

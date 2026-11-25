@@ -36,8 +36,9 @@ namespace PortableCompiler
             }
             // A recursive group is one type-section entry but its member
             // types retain individual indices for fields and function signatures.
-            int typeEntries = recursive ? functions + FirstClassHeap + 1 : functions + typeOffset;
-            int prefix = UnsignedSize(typeEntries) + 50 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+            // The entry and invocation list also share one fixed recursive type group.
+            int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 1;
+            int prefix = UnsignedSize(typeEntries) + 57 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;
             int functionSize = UnsignedSize(totalFunctions) + thunks[0];
@@ -152,14 +153,22 @@ namespace PortableCompiler
             output[cursor++] = 0x6d;
             cursor = ValueType(output, cursor, EventArgsReference);
             output[cursor++] = 0;
-            // Immutable closed handler with a typed callable reference.
-            output[cursor++] = 0x5f;
+            // Entry and invocation list refer to each other. The back-reference
+            // is set once at construction and retains the original singleton.
+            output[cursor++] = 0x4e;
             output[cursor++] = 2;
+            output[cursor++] = 0x5f;
+            output[cursor++] = 4;
             output[cursor++] = 0x6d;
             output[cursor++] = 0;
             output[cursor++] = 0x63;
             output[cursor++] = EventThunkType;
             output[cursor++] = 0;
+            output[cursor++] = 0x7f; // method identity, independent of the receiver
+            output[cursor++] = 0;
+            output[cursor++] = 0x63;
+            output[cursor++] = EventHandlerHeap;
+            output[cursor++] = 1;
             // Private array of callbacks. Generated code writes only fresh arrays.
             output[cursor++] = 0x5e;
             output[cursor++] = 0x63;

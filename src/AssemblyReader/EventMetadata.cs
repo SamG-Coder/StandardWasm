@@ -4,7 +4,7 @@ namespace PeLibrary
 {
     internal static class EventMetadata
     {
-        internal const int Empty = 1, Construct = 2, ConstructHandler = 3, InvokeHandler = 4, CombineHandler = 5;
+        internal const int Empty = 1, Construct = 2, ConstructHandler = 3, InvokeHandler = 4, CombineHandler = 5, RemoveHandler = 6;
         private const int DelegateType = 256; // Only used to match BCL member signatures.
 
         internal static int Reference(byte[] image, int[] heaps, int[] methods, int coded)
@@ -42,8 +42,13 @@ namespace PeLibrary
             if (size < 3 || size > end - signature) return 0;
             if (type == DelegateType)
             {
-                if (image[signature] != 0 || image[signature + 1] != 2 ||
-                    !Name(image, heaps, name, 7, 0x626d6f43, 0x656e69, 0)) return 0; // Combine
+                if (image[signature] != 0 || image[signature + 1] != 2) return 0;
+                int member;
+                if (Name(image, heaps, name, 7, 0x626d6f43, 0x656e69, 0)) // Combine
+                    member = CombineHandler;
+                else if (Name(image, heaps, name, 6, 0x6f6d6552, 0x6576, 0)) // Remove
+                    member = RemoveHandler;
+                else return 0;
                 int cursor = signature + 2;
                 for (int i = 0; i < 3; i++)
                 {
@@ -53,7 +58,7 @@ namespace PeLibrary
                         return 0;
                     cursor = next[0];
                 }
-                return cursor == signature + size ? CombineHandler : 0;
+                return cursor == signature + size ? member : 0;
             }
             if (type == ObjectLayouts.EventHandlerReference)
             {

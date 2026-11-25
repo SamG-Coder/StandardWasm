@@ -220,6 +220,12 @@ namespace PortableCompiler
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
+                        if (kind == BranchIl.RemoveHandler && depths[slot / BranchIl.Width] != 0)
+                        {
+                            // The structured search and copy expand a single IL call.
+                            if (capacity > int.MaxValue - 320) return -3;
+                            capacity += 320;
+                        }
                         if ((kind != BranchIl.Call && kind != BranchIl.NewObject) ||
                             depths[slot / BranchIl.Width] == 0)
                             continue;
@@ -239,7 +245,7 @@ namespace PortableCompiler
                     {
                         int kind = records[slot];
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars) frameShape[5] = 1;
-                        if (kind == BranchIl.CombineHandler ||
+                        if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
                             frameShape[6] = 1;
                         if (kind == BranchIl.LoadEventArgsEmpty && depths[slot / BranchIl.Width] != 0)
@@ -334,9 +340,9 @@ namespace PortableCompiler
                         }
                         if (eventMember == EventMetadata.ConstructHandler && opcode == 0x73)
                             constructorType = EventHandlerReference;
-                        if (eventMember == EventMetadata.CombineHandler && opcode == 0x28)
+                        if ((eventMember == EventMetadata.CombineHandler || eventMember == EventMetadata.RemoveHandler) && opcode == 0x28)
                         {
-                            records[slot] = BranchIl.CombineHandler;
+                            records[slot] = eventMember == EventMetadata.CombineHandler ? BranchIl.CombineHandler : BranchIl.RemoveHandler;
                             continue;
                         }
                     }
