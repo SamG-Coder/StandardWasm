@@ -7,6 +7,6 @@ namespace EmitterLibrary
         public static int Constant() => int.MinValue;
         public static int Quotient(int dividend, int divisor) => dividend / divisor;
         public static bool UnsupportedSignature(int value) => value == 0;
-        public static int UnsupportedCall(int value) => Quotient(value, 3);
+        public static int UnsupportedCall(int value) => System.Math.Abs(value);
     }
 }

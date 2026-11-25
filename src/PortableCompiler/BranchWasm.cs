@@ -56,6 +56,17 @@ namespace PortableCompiler
                     used = Local(code, used, 0x21, top - 1);
                 }
 
+                if (kind == Call)
+                {
+                    int arity = records[slot + 3];
+                    int firstArgument = top + 1 - arity;
+                    for (int i = 0; i < arity; i++)
+                        used = Local(code, used, 0x20, firstArgument + i);
+                    code[used++] = 0x10;
+                    used = WasmBinary.Unsigned(code, used, operand);
+                    used = Local(code, used, 0x21, firstArgument);
+                }
+
                 if (kind == Return)
                 {
                     used = Local(code, used, 0x20, top);
