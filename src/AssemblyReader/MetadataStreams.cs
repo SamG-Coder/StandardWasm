@@ -12,22 +12,12 @@ namespace PeLibrary
         // The output catalog is published only after every record is validated.
         public static int Read(byte[] image, int root, int size, int[] catalog)
         {
-            if (root < 0 || size < 20 || !Fits((uint)root, (uint)size, (uint)image.Length) ||
-                U32(image, (uint)root) != 0x424a5342)
+            int directory = ReadDirectoryStart(image, root, size);
+            if (directory < 0)
                 return Invalid;
+            uint cursor = (uint)directory;
             uint end = (uint)(root + size);
-            uint version = (uint)root + 16;
-            uint versionSize = U32(image, (uint)root + 12);
-            if (versionSize == 0 || (versionSize & 3) != 0 || !Fits(version, versionSize, end))
-                return Invalid;
-            uint header = version + versionSize;
-            if (image[header - 1] != 0 || !Fits(header, 4, end))
-                return Invalid;
-            int count = (int)U16(image, header + 2);
-            uint cursor = header + 4;
-            // Each stream header needs eight fixed bytes and at least four name bytes.
-            if (!Fits(cursor, (uint)count * 12, end))
-                return Invalid;
+            int count = (int)U16(image, cursor - 2);
             if (count > catalog.Length / RecordWidth)
                 return OutputTooSmall;
 
@@ -77,6 +67,27 @@ namespace PeLibrary
             for (int i = 0; i < records.Length; i++)
                 catalog[i] = records[i];
             return count;
+        }
+
+        internal static int ReadDirectoryStart(byte[] image, int root, int size)
+        {
+            if (root < 0 || size < 20 || !Fits((uint)root, (uint)size, (uint)image.Length) ||
+                U32(image, (uint)root) != 0x424a5342)
+                return Invalid;
+            uint end = (uint)(root + size);
+            uint version = (uint)root + 16;
+            uint versionSize = U32(image, (uint)root + 12);
+            if (versionSize == 0 || (versionSize & 3) != 0 || !Fits(version, versionSize, end))
+                return Invalid;
+            uint header = version + versionSize;
+            if (image[header - 1] != 0 || !Fits(header, 4, end))
+                return Invalid;
+            int count = (int)U16(image, header + 2);
+            uint cursor = header + 4;
+            // Each stream header needs eight fixed bytes and at least four name bytes.
+            if (!Fits(cursor, (uint)count * 12, end))
+                return Invalid;
+            return (int)cursor;
         }
 
         private static int ReadName(byte[] image, uint start, uint end)
