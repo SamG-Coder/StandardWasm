@@ -10,5 +10,6 @@
     <ProjectReference Include="../demos/stage-03-byte-buffers/ByteLibrary.csproj" />
     <ProjectReference Include="../demos/stage-04-pe-metadata/PeLibrary.csproj" />
     <ProjectReference Include="../demos/stage-05-metadata-streams/StreamLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-06-method-definitions/MethodLibrary.csproj" />
   </ItemGroup>
 </Project>
