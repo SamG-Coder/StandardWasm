@@ -26,7 +26,7 @@ namespace PortableCompiler
             return count;
         }
 
-        private static int CompressedUnsigned(byte[] image, int cursor, int end, int[] next)
+        internal static int CompressedUnsigned(byte[] image, int cursor, int end, int[] next)
         {
             if (cursor >= end)
                 return -1;

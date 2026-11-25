@@ -14,6 +14,7 @@
     <ProjectReference Include="../demos/stage-07-method-bodies/BodyLibrary.csproj" />
     <ProjectReference Include="../demos/stage-08-integer-division/IntegerDivision.csproj" />
     <ProjectReference Include="../demos/stage-09-portable-emitter/EmitterLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-10-portable-control-flow/FlowLibrary.csproj" />
     <ProjectReference Include="../demos/stage-18-long-integers/LongIntegers.csproj" />
     <ProjectReference Include="../demos/stage-20-floating-point/FloatingPoint.csproj" />
     <ProjectReference Include="../demos/stage-25-switch-dispatch/SwitchDispatch.csproj" />

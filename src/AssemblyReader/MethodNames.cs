@@ -7,7 +7,7 @@ namespace PeLibrary
         internal static int FindRow(byte[] image, byte[] name)
         {
             var layout = new int[4];
-            var heaps = new int[4];
+            var heaps = new int[6];
             int count = CompressedTables.FindWithHeaps(image, layout, heaps);
             int row = 0;
             for (int i = 1; i <= count; i++)

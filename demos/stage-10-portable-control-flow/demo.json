@@ -1,0 +1,1 @@
+{"assembly":"FlowLibrary","exportType":"FlowLibrary.FlowDemo","method":"Compile","inputs":[{"file":"self"},{"name":"Fold"}],"generated":{"capacity":4096,"arguments":[6,20]},"expected":17}

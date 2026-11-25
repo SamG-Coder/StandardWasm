@@ -80,7 +80,7 @@ namespace PortableCompiler
             return Invalid;
         }
 
-        private static int Binary(int op)
+        internal static int Binary(int op)
         {
             if (op >= 0x58 && op <= 0x5c) return 0x6a + op - 0x58;
             if (op == 0x5e) return 0x70;
