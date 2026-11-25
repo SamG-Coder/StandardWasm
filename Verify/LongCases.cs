@@ -1,6 +1,6 @@
 using LongIntegers;
 
-// CLR oracle for stage 14. A 64-bit input or result is written as {"i64": "<signed decimal>"} because a JSON
+// CLR oracle for stage 18. A 64-bit input or result is written as {"i64": "<signed decimal>"} because a JSON
 // number is exact only to 2^53. ulong values are written as the signed reading of the same 64 bits, which is
 // how the Wasm JS API returns an i64 as a BigInt. expected == null means the CLR threw ArithmeticException.
 internal static class LongCases
