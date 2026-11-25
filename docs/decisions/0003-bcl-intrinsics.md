@@ -8,7 +8,7 @@ The README requires every supported .NET Standard API to have a compatible imple
 
 A method enters the table only if its result is bit-identical on every input to the runtime the CLR oracle uses (.NET 10). NaN payloads are excluded, because the oracle compares NaNs as equal. Where .NET throws, the lowering traps before producing a value, and the harness reports the CLR exception type next to the trap. Everything else stays an `Unlinked call` diagnostic with the method and IL offset until an implementation is compiled into the module. "Close enough" approximations are not allowed. For example, `Math.Pow`, `Math.Exp` and `Math.Sin` have no Wasm instruction and depend on the libm implementation, so they stay unlinked.
 
-Only references that leave the input assembly qualify. A user type named `System.Math` compiles normally.
+A method's full signature does not identify its assembly, so a match also requires the declaring scope to be a platform BCL assembly. The check uses the assembly name plus its Microsoft public key token: `netstandard` (cc7b13ffcd2ddd51), `mscorlib` (b77a5c561934e089), `System.Runtime` and `System.Runtime.Extensions` (b03f5f7f11d50a3a), and `System.Private.CoreLib` (7cec85d7bea7798e). The call must also be static. A `System.Math` defined in the input assembly compiles as an ordinary method. One defined in any other dependency stays an unlinked call. Codex's review of #63 showed why: a third-party `System.Math.Sqrt` reached through an extern alias returns 11 on the CLR for `Compute(9)`, and lowering it to `f64.sqrt` gave 3. Stage 29 keeps that two-DLL case as a regression test (`identity/`).
 
 ## Current table
 

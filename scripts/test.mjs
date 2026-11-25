@@ -43,6 +43,15 @@ const rejectedMath = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", 
     "--", mathDemo.dll, "MathIntrinsics.UnmappedMath", "artifacts/unsupported-math.wat"], { encoding: "utf8" });
 assert.equal(rejectedMath.status, 1);
 assert.match(rejectedMath.stderr, /UnmappedMath::Power\(System\.Double,System\.Double\) at IL_[0-9a-f]+ \(call\): Unlinked call: System\.Double System\.Math::Pow/);
+// A dependency that defines its own System.Math.Sqrt (reached through an extern alias) is not the BCL. The CLR runs
+// that method, so the compiler must report an unlinked call instead of substituting f64.sqrt.
+const identityProbe = "demos/stage-29-math-intrinsics/identity/IdentityProbe";
+run("dotnet", ["build", "-c", "Release", identityProbe]);
+const rejectedIdentity = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
+    "--", identityProbe + "/bin/Release/netstandard2.0/IdentityProbe.dll", "IdentityProbe.Probe", "artifacts/unsupported-identity.wat"],
+    { encoding: "utf8" });
+assert.equal(rejectedIdentity.status, 1);
+assert.match(rejectedIdentity.stderr, /Probe::Compute\(System\.Double\) at IL_[0-9a-f]+ \(call\): Unlinked call: System\.Double System\.Math::Sqrt\(System\.Double\) in ThirdPartyMath/);
 const cases = JSON.parse(readFileSync("artifacts/oracle.json"));
 console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases));
 

@@ -330,7 +330,7 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
             case Code.Call:
             {
                 var reference = (MethodReference)i.Operand;
-                if (BclIntrinsics.Find(reference, method.Module) is { } intrinsic)
+                if (BclIntrinsics.Find(reference) is { } intrinsic)
                 {
                     // Pop arguments right to left with their declared Wasm types, then emit the guard and the value.
                     var values = intrinsic.Parameters.Reverse().Select(type => Pop(type)).Reverse().ToArray();
@@ -340,7 +340,7 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
                     break;
                 }
                 if (reference.DeclaringType.Scope != method.Module || reference is GenericInstanceMethod)
-                    throw new NotSupportedException($"Unlinked call: {reference.FullName}");
+                    throw new NotSupportedException($"Unlinked call: {reference.FullName} in {reference.DeclaringType.Scope.Name}");
                 var target = reference.Resolve();
                 var callee = module.Register(target);
                 var arguments = target.Parameters.Reverse().Select(p => Pop(ModuleCompiler.ValueType(p.ParameterType))).Reverse().ToArray();
