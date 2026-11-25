@@ -13,5 +13,6 @@
     <ProjectReference Include="../demos/stage-06-method-definitions/MethodLibrary.csproj" />
     <ProjectReference Include="../demos/stage-07-method-bodies/BodyLibrary.csproj" />
     <ProjectReference Include="../demos/stage-09-portable-emitter/EmitterLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-10-portable-control-flow/FlowLibrary.csproj" />
   </ItemGroup>
 </Project>

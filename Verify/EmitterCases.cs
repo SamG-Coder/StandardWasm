@@ -16,7 +16,7 @@ internal static class EmitterCases
         {
             string name = md.GetString(md.GetMethodDefinition(handle).Name);
             if (name == "DemoKernel" || name == "Combine" || name == "Mix" || name == "Constant" ||
-                name == "Quotient" || name == "UnsupportedSignature" || name == "UnsupportedBranch")
+                name == "Quotient" || name == "UnsupportedSignature" || name == "UnsupportedCall")
                 rows.Add(name, MetadataTokens.GetRowNumber(handle));
         }
 
@@ -29,7 +29,7 @@ internal static class EmitterCases
         VerifyMethod("Quotient", pairs, a => Kernels.Quotient(a[0], a[1]));
 
         Reject("non-i32 signature", rows["UnsupportedSignature"], 256, -2);
-        Reject("control flow", rows["UnsupportedBranch"], 256, -2);
+        Reject("method call", rows["UnsupportedCall"], 256, -2);
         Reject("insufficient capacity", rows["DemoKernel"], 8, -3);
         Reject("missing row", 0, 256, -1);
 

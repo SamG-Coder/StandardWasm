@@ -5,7 +5,7 @@ namespace PeLibrary
     internal static class CompressedTables
     {
         internal static int Find(byte[] image, int[] layout) =>
-            FindWithHeaps(image, layout, new int[4]);
+            FindWithHeaps(image, layout, new int[6]);
 
         internal static int FindWithHeaps(byte[] image, int[] layout, int[] heaps)
         {
@@ -48,7 +48,9 @@ namespace PeLibrary
                 return MethodDefinitions.Unsupported;
             if (compressed < 0)
                 return MethodDefinitions.Missing;
-            return MethodDefinitions.ReadLayout(image, streams[compressed + 2], streams[compressed + 3], layout);
+            heaps[4] = streams[compressed + 2];
+            heaps[5] = streams[compressed + 3];
+            return MethodDefinitions.ReadLayout(image, heaps[4], heaps[5], layout);
         }
     }
 }
