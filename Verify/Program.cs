@@ -99,4 +99,5 @@ for (int i = 0; i < 200; i++)
 }
 LongCases.Add(cases);
 FloatCases.Add(cases);
+SwitchCases.Add(cases);
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));

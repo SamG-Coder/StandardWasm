@@ -72,6 +72,8 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
         foreach (var instruction in instructions)
         {
             if (instruction.Operand is Instruction target) leaders.Add(target);
+            // Every switch table entry starts a basic block, like any other branch target.
+            if (instruction.Operand is Instruction[] table) leaders.UnionWith(table);
             if (instruction.OpCode.FlowControl == FlowControl.Cond_Branch && instruction.Next != null)
                 leaders.Add(instruction.Next);
         }
@@ -332,6 +334,23 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
                 break;
             }
             case Code.Br: case Code.Br_S: Emit(Jump((Instruction)i.Operand)); return true;
+            case Code.Switch:
+            {
+                // ECMA-335 III.3.66: jump to table[value] when (uint)value < N, otherwise fall through. Wasm br_table
+                // also reads its index as unsigned and takes the last label for out-of-range values. Exiting nested
+                // block k runs the code for case k, which records its IL target in $pc and re-enters the dispatcher.
+                // The rest of the stack flows to every target unchanged, and Jump checks that each one agrees.
+                var table = (Instruction[])i.Operand;
+                var value = Pop();
+                string Label(string suffix) => $"$switch{i.Offset:x}_{suffix}";
+                Emit($"(block {Label("default")}");
+                for (var k = table.Length - 1; k >= 0; k--) Emit($"(block {Label(k.ToString())}");
+                var labels = string.Join(" ", Enumerable.Range(0, table.Length).Select(k => Label(k.ToString())));
+                Emit($"(br_table {labels} {Label("default")} {value})");
+                for (var k = 0; k < table.Length; k++) Emit($") {Jump(table[k])}");
+                Emit(")");
+                Emit(Jump(i.Next)); return true;
+            }
             case Code.Ret:
             {
                 var value = method.ReturnType.MetadataType == MetadataType.Void ? "" : Pop(ModuleCompiler.ValueType(method.ReturnType));
