@@ -55,8 +55,7 @@ internal static class TypedArrayCases
             inputs = new object[] { Encode(wrongLocal), row },
             generated = new { capacity, arguments = Array.Empty<int>(), reject = true }, expected = -1
         });
-        int compilerRow = typeof(ArrayDemo).GetMethod(nameof(ArrayDemo.Compile))!.MetadataToken & 0xffffff;
-        cases.Add(new { module = "TypedArrayLibrary", bootstrap = true, inputs = new object[] { Encode(image), compilerRow } });
+
     }
 
     private static object Encode(byte[] bytes) => new { bytes = Array.ConvertAll(bytes, value => (int)value) };

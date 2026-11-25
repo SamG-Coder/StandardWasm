@@ -1,0 +1,1 @@
+{"assembly":"BootstrapLibrary","exportType":"BootstrapLibrary.CompilerExports","method":"Compile","inputs":[{"file":"self"},{"name":"BootstrapKernel"}],"generated":{"capacity":512,"arguments":[21]},"expected":43}

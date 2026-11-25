@@ -1,10 +1,12 @@
+using PeLibrary;
 using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
     internal static class WasmBinary
     {
-        internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies)
+        internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies,
+            byte[] names, int[] entryOffsets, int[] exports)
         {
             int typeSize = UnsignedSize(functions + 2) + 6;
             int functionSize = UnsignedSize(functions);
@@ -27,12 +29,23 @@ namespace PortableCompiler
                 codeSize += code;
                 functionSize += index;
             }
+            int exportSize = UnsignedSize(exports.Length);
+            for (int i = 0; i < exports.Length; i++)
+            {
+                int name = (int)ImageBytes.U32(names, (uint)entryOffsets[i] + 4);
+                int metadata = UnsignedSize(name) + 1 + UnsignedSize(exports[i]);
+                if (metadata > output.Length - exportSize || name > output.Length - exportSize - metadata)
+                    return -3;
+                exportSize += metadata + name;
+            }
             int remaining = output.Length - 8;
             remaining -= SectionOverhead(typeSize);
             if (remaining < typeSize) return -3;
             remaining -= typeSize + SectionOverhead(functionSize);
             if (remaining < functionSize) return -3;
-            remaining -= functionSize + SectionOverhead(7) + 7 + SectionOverhead(codeSize);
+            remaining -= functionSize + SectionOverhead(exportSize);
+            if (remaining < exportSize) return -3;
+            remaining -= exportSize + SectionOverhead(codeSize);
             if (remaining < codeSize) return -3;
 
             output[0] = 0;
@@ -69,14 +82,18 @@ namespace PortableCompiler
             for (int i = 0; i < functions; i++)
                 cursor = Unsigned(output, cursor, i + 2);
 
-            cursor = Section(output, cursor, 7, 7);
-            output[cursor++] = 1;
-            output[cursor++] = 3;
-            output[cursor++] = 0x72;
-            output[cursor++] = 0x75;
-            output[cursor++] = 0x6e;
-            output[cursor++] = 0;
-            output[cursor++] = 0;
+            cursor = Section(output, cursor, 7, exportSize);
+            cursor = Unsigned(output, cursor, exports.Length);
+            for (int i = 0; i < exports.Length; i++)
+            {
+                int source = entryOffsets[i];
+                int name = (int)ImageBytes.U32(names, (uint)source + 4);
+                cursor = Unsigned(output, cursor, name);
+                for (int j = 0; j < name; j++)
+                    output[cursor++] = names[source + 8 + j];
+                output[cursor++] = 0;
+                cursor = Unsigned(output, cursor, exports[i]);
+            }
 
             cursor = Section(output, cursor, 10, codeSize);
             cursor = Unsigned(output, cursor, functions);

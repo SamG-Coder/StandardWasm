@@ -16,5 +16,6 @@
     <ProjectReference Include="../demos/stage-10-portable-control-flow/FlowLibrary.csproj" />
     <ProjectReference Include="../demos/stage-11-portable-linking/LinkLibrary.csproj" />
     <ProjectReference Include="../demos/stage-12-portable-arrays/TypedArrayLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-13-complete-bootstrap/BootstrapLibrary.csproj" />
   </ItemGroup>
 </Project>

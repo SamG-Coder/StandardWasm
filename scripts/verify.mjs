@@ -1,7 +1,7 @@
 import { verifyBootstrap } from "./bootstrap.mjs";
 import { invoke, invokeGenerated } from "./invoke.mjs";
 
-export async function verify(load, cases) {
+export async function verify(load, cases, saveCompiler) {
     const modules = {};
     for (const name of new Set(cases.map(c => c.module))) {
         const module = await WebAssembly.compile(await load(name));
@@ -25,5 +25,5 @@ export async function verify(load, cases) {
     }
     if (modules.Sample.Countdown(1000000, 7) !== 1000007) throw Error("Deep tail call failed");
     const summary = (cases.length - (bootstrap ? 1 : 0)) + " CLR comparisons and 1,000,000 tail calls passed";
-    return bootstrap ? summary + "\n  Self-recompiled: " + await verifyBootstrap(modules[bootstrap.module], bootstrap, cases) : summary;
+    return bootstrap ? summary + "\n  Self-recompiled: " + await verifyBootstrap(modules[bootstrap.module], bootstrap, cases, saveCompiler) : summary;
 }
