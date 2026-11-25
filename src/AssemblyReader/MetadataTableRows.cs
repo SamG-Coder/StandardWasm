@@ -37,5 +37,42 @@ namespace PeLibrary
 
             return (int)cursor;
         }
+
+        internal static int TableStart(int[] streams, int[] methods, int[] counts, int table)
+        {
+            int cursor = methods[0] + counts[6] * methods[1];
+            int end = streams[4] + streams[5];
+            for (int i = 8; i <= table; i++)
+            {
+                if (counts[i] == 0) continue;
+                int width;
+                if (i < 17) width = StandaloneSignatures.Width(counts, i, methods[2], methods[3]);
+                else width = LaterWidth(counts, i, methods[2], methods[3]);
+                if (width == 0 || counts[i] > (end - cursor) / width) return -1;
+                if (i == table) return cursor;
+                cursor += counts[i] * width;
+            }
+            return -1;
+        }
+
+        private static int LaterWidth(int[] counts, int table, int strings, int blobs)
+        {
+            if (table == 17 || table == 27) return blobs;
+            if (table == 18) return Width(counts[2]) + Width(counts[20]);
+            if (table == 20) return 2 + strings + (counts[2] < 16384 && counts[1] < 16384 && counts[27] < 16384 ? 2 : 4);
+            if (table == 21) return Width(counts[2]) + Width(counts[23]);
+            if (table == 23) return 2 + strings + blobs;
+            if (table == 24) return 2 + Width(counts[6]) + (counts[20] < 32768 && counts[23] < 32768 ? 2 : 4);
+            if (table == 25) return Width(counts[2]) + 2 * (counts[6] < 32768 && counts[10] < 32768 ? 2 : 4);
+            if (table == 26) return strings;
+            if (table == 28) return 2 + (counts[4] < 32768 && counts[6] < 32768 ? 2 : 4) + strings + Width(counts[26]);
+            if (table == 29) return 4 + Width(counts[4]);
+            if (table == 32) return 16 + blobs + 2 * strings;
+            if (table == 33) return 4;
+            if (table == 34) return 12;
+            return table == 35 ? 12 + 2 * blobs + 2 * strings : 0;
+        }
+
+        private static int Width(int count) => count < 65536 ? 2 : 4;
     }
 }

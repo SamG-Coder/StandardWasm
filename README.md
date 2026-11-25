@@ -53,7 +53,7 @@ instance.exports.SumSquares(10); // 385
 
 ## Self-recompilation
 
-Stage 13 generates a compiler with six named exports. The generated compiler recompiles its own DLL using its own buffer APIs and reproduces the module byte for byte. The second generation reruns the portable generated-code fixtures in Node and Edge. Running npm test writes the Node-verified final generation to artifacts/StandardWasm.Compiler.wasm. See the [stage instructions](demos/stage-13-complete-bootstrap/README.md).
+Stage 13 generates a compiler with named compilation and buffer exports. The generated compiler recompiles its own DLL using its own buffer APIs and reproduces the module byte for byte. The second generation reruns the portable generated-code fixtures in Node and Edge. Running npm test writes the Node-verified final generation to artifacts/StandardWasm.Compiler.wasm. See the [stage instructions](demos/stage-13-complete-bootstrap/README.md). Stage 23 adds [portable assembly bundle linking](demos/stage-23-assembly-linking/README.md).
 
 ## Source map and bootstrap dependencies
 
