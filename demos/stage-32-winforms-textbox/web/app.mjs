@@ -1,7 +1,14 @@
 import { createTextLayer, webgpuRenderer } from "./render.mjs";
 
 async function start() {
-    const { instance } = await WebAssembly.instantiateStreaming(fetch("./Profile.wasm"));
+    const options = new URLSearchParams(location.search);
+    let instance, compiledBytes;
+    if (options.has("generated")) {
+        const { compileProfile } = await import("./compile-profile.mjs");
+        ({ instance, bytes: compiledBytes } = await compileProfile());
+    } else {
+        ({ instance } = await WebAssembly.instantiateStreaming(fetch("./Profile.wasm")));
+    }
     const wasm = instance.exports;
     function readText(value) {
         const units = new Array(wasm.TextLength(value));
@@ -94,7 +101,7 @@ async function start() {
         repaint();
         if (wasm.TakeFocusRequest(inputModel)) input.focus();
     });
-    if (new URLSearchParams(location.search).has("benchmark")) {
+    if (options.has("benchmark")) {
         const { prepareProfileTiming } = await import("./profile-timing.mjs");
         window.profileTiming = prepareProfileTiming({
             canvas, model, text, gpu, captions, setManagedText,
@@ -103,6 +110,7 @@ async function start() {
     }
     repaint();
     document.querySelector("#renderer").textContent = "WebGPU";
+    return compiledBytes;
 }
 
 function report(error) {
@@ -112,4 +120,4 @@ function report(error) {
     message.hidden = false;
 }
 
-start().catch(report);
+export const ready = start().catch(report);
