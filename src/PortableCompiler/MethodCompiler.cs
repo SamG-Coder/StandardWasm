@@ -34,7 +34,7 @@ namespace PortableCompiler
             if (MethodNames.HasInitializer(image, layout, heaps, count))
                 return -2;
 
-            var objects = new int[1 + ObjectLayouts.MaxClasses * ObjectLayouts.Width];
+            var objects = new int[ObjectLayouts.FieldMapStart + image.Length / 6 + 1];
             var rows = new int[count];
             var indices = new int[count + 1];
             var arities = new int[count];
@@ -180,7 +180,7 @@ namespace PortableCompiler
                     int fieldIndex = ObjectLayouts.FieldOrdinal(objects, type, field);
                     if (fieldIndex < 0) return -1;
                     records[slot + 1] = fieldIndex;
-                    records[slot + 3] = type;
+                    records[slot + 3] = (type << 8) | ObjectLayouts.FieldType(objects, field);
                     continue;
                 }
                 if (kind == BranchIl.MemberCall)

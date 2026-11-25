@@ -159,13 +159,14 @@ namespace PortableCompiler
                 }
                 else if (kind == GetField || kind == SetField)
                 {
-                    byte type = (byte)records[slot + 3];
+                    int descriptor = records[slot + 3];
+                    byte type = (byte)(descriptor >> 8), value = unchecked((byte)descriptor);
                     int address = kind == GetField ? top : top - 1;
                     used = Local(code, used, 0x20, Spill(spills, maximum, type, address));
-                    if (kind == SetField) used = Local(code, used, 0x20, spills + top);
+                    if (kind == SetField) used = Local(code, used, 0x20, Spill(spills, maximum, value, top));
                     used = Gc(code, used, kind == GetField ? 2 : 5, type);
                     used = WasmBinary.Unsigned(code, used, operand);
-                    if (kind == GetField) used = Local(code, used, 0x21, spills + top);
+                    if (kind == GetField) used = Local(code, used, 0x21, Spill(spills, maximum, value, top));
                 }
                 else if (kind == NewArray)
                 {
