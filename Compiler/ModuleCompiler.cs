@@ -37,17 +37,19 @@ internal sealed class ModuleCompiler(ModuleDefinition module)
     // float32 and float64 stay distinct Wasm types so float arithmetic rounds to single precision like the CLR.
     internal const string Float32 = "f32";
     internal const string Float64 = "f64";
-    internal const string IntArray = "(ref null $ints)";
-    internal const string ByteArray = "(ref null $bytes)";
+    internal static readonly string IntArray = ArrayKinds.Ints.Reference;
+    internal static readonly string ByteArray = ArrayKinds.Bytes.Reference;
 
+    // Small integer types live in i32 like on the CLR evaluation stack. MethodCompiler.Normalize restores their
+    // range wherever a value enters or leaves a typed location (argument, local, return).
     internal static string ValueType(TypeReference type) => type.FullName switch
     {
-        "System.Int32" or "System.UInt32" or "System.Boolean" or "System.Byte" => Int,
+        "System.Int32" or "System.UInt32" or "System.Boolean" or "System.Byte" or "System.SByte" or
+        "System.Int16" or "System.UInt16" or "System.Char" => Int,
         "System.Int64" or "System.UInt64" => Long,
         "System.Single" => Float32,
         "System.Double" => Float64,
-        "System.Int32[]" => IntArray,
-        "System.Byte[]" => ByteArray,
+        _ when type is ArrayType { Rank: 1 } array && ArrayKinds.ForElement(array.ElementType.FullName) is { } kind => kind.Reference,
         _ => throw new NotSupportedException($"Unsupported value type: {type.FullName}")
     };
 
@@ -55,7 +57,8 @@ internal sealed class ModuleCompiler(ModuleDefinition module)
     {
         if (module.GetType("<Module>")?.Methods.Any(m => m.Name == ".cctor") == true)
             throw new NotSupportedException("Module initializers require managed startup support.");
-        var output = new StringBuilder("(module\n (type $ints (array (mut i32)))\n (type $bytes (array (mut i8)))\n");
+        var output = new StringBuilder("(module\n");
+        foreach (var kind in ArrayKinds.All) output.AppendLine(kind.Declaration);
         var used = new HashSet<string>();
         foreach (var method in exports.Methods.Where(m => m.IsPublic && m.IsStatic))
         {

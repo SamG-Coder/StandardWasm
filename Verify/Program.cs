@@ -105,4 +105,5 @@ FloatCases.Add(cases);
 SwitchCases.Add(cases);
 RemainderCases.Add(cases);
 MathCases.Add(cases);
+ArrayCases.Add(cases);
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));

@@ -25,8 +25,7 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
             Long => "l",
             Float32 => "f",
             Float64 => "d",
-            IntArray => "a",
-            ByteArray => "b",
+            _ when ArrayKinds.ForReference(type) is { } kind => kind.TypeName[1..],
             _ => throw new InvalidDataException($"Invalid evaluation stack type: {type}")
         };
         return $"$s{depth}{suffix}";
@@ -113,9 +112,20 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
 
     private static string NarrowByte(string value) => $"(i32.and {value} (i32.const 255))";
 
+    // A small integer type holds a narrower range than its i32 storage. Restore the CLR value wherever one enters or
+    // leaves a typed location: sbyte and short sign-extend, while byte, ushort and char zero-extend (mask).
+    private static string Normalize(TypeReference type, string value) => type.MetadataType switch
+    {
+        MetadataType.Byte => NarrowByte(value),
+        MetadataType.SByte => $"(i32.extend8_s {value})",
+        MetadataType.Int16 => $"(i32.extend16_s {value})",
+        MetadataType.UInt16 or MetadataType.Char => $"(i32.and {value} (i32.const 65535))",
+        _ => value
+    };
+
     private string PopArray()
     {
-        if (stack.Count == 0 || stack[^1] is not (IntArray or ByteArray))
+        if (stack.Count == 0 || ArrayKinds.ForReference(stack[^1]) is null)
             throw new InvalidDataException("Expected an array reference");
         return Pop(null);
     }
@@ -201,7 +211,7 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
                 var index = i.Operand is ParameterDefinition p ? p.Index : code - Code.Ldarg_0;
                 var type = method.Parameters[index].ParameterType;
                 var value = $"(local.get $p{index})";
-                Push(type.MetadataType == MetadataType.Byte ? NarrowByte(value) : value, ValueType(type));
+                Push(Normalize(type, value), ValueType(type));
                 break;
             }
             case Code.Starg: case Code.Starg_S:
@@ -221,7 +231,7 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
                 var index = i.Operand is VariableDefinition v ? v.Index : code - Code.Stloc_0;
                 var type = method.Body.Variables[index].VariableType;
                 var value = Pop(ValueType(type));
-                Emit($"(local.set $v{index} {(type.MetadataType == MetadataType.Byte ? NarrowByte(value) : value)})");
+                Emit($"(local.set $v{index} {Normalize(type, value)})");
                 break;
             }
             case Code.Pop: Pop(null); break;
@@ -240,7 +250,11 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
             // Native int is 32 bits in this wasm32 mapping. Narrowing int64 keeps the low 32 bits, as the CLR does.
             case Code.Conv_I4: case Code.Conv_U4: case Code.Conv_I: case Code.Conv_U:
                 Push(Narrow32(PopNumeric(), code is Code.Conv_U4 or Code.Conv_U)); break;
+            // Conversions to small types truncate the int32 (or saturated float) value to the target width.
             case Code.Conv_U1: Push(NarrowByte(Narrow32(PopNumeric()))); break;
+            case Code.Conv_I1: Push($"(i32.extend8_s {Narrow32(PopNumeric())})"); break;
+            case Code.Conv_I2: Push($"(i32.extend16_s {Narrow32(PopNumeric())})"); break;
+            case Code.Conv_U2: Push($"(i32.and {Narrow32(PopNumeric())} (i32.const 65535))"); break;
             case Code.Conv_I8: case Code.Conv_U8:
             {
                 // ECMA-335 III.3.27: conv.i8 sign-extends an int32 and conv.u8 zero-extends it. int64 passes through.
@@ -294,38 +308,28 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
                 Push($"({type}.rem_s {dividend} {divisor})", type);
                 break;
             }
-            case Code.Newarr when ((TypeReference)i.Operand).FullName == "System.Int32":
-                Push($"(array.new_default $ints {Pop()})", IntArray); break;
-            case Code.Newarr when ((TypeReference)i.Operand).FullName == "System.Byte":
-                Push($"(array.new_default $bytes {Pop()})", ByteArray); break;
+            case Code.Newarr:
+            {
+                // new T[n] zero-initializes like the CLR. A negative n traps where the CLR throws OverflowException.
+                var element = (TypeReference)i.Operand;
+                var kind = ArrayKinds.ForElement(element.FullName)
+                    ?? throw new NotSupportedException($"Arrays of {element.FullName} are not supported");
+                Push($"(array.new_default {kind.TypeName} {Pop()})", kind.Reference); break;
+            }
             case Code.Ldlen: Push($"(array.len {PopArray()})"); break;
-            case Code.Ldelem_U1:
-            case Code.Ldelem_I1:
+            case var _ when ArrayKinds.Load(code) is { } load:
             {
-                // A packed i8 cell needs the extension mode requested by the IL.
+                // Bounds and null checks trap where the CLR throws IndexOutOfRange/NullReference.
                 var index = Pop();
-                var instruction = code == Code.Ldelem_U1 ? "get_u" : "get_s";
-                Push($"(array.{instruction} $bytes {Pop(ByteArray)} {index})");
+                Push($"({load.Accessor} {load.Kind.TypeName} {Pop(load.Kind.Reference)} {index})", load.Kind.Element);
                 break;
             }
-            case Code.Ldelem_I4:
+            case var _ when ArrayKinds.Store(code) is { } store:
             {
+                var value = Pop(store.Element);
                 var index = Pop();
-                Push($"(array.get $ints {Pop(IntArray)} {index})"); break;
-            }
-            case Code.Stelem_I1:
-            {
-                var value = Pop();
-                var index = Pop();
-                // Wasm stores the low eight bits into the packed cell.
-                Emit($"(array.set $bytes {Pop(ByteArray)} {index} {value})");
+                Emit($"(array.set {store.TypeName} {Pop(store.Reference)} {index} {value})");
                 break;
-            }
-            case Code.Stelem_I4:
-            {
-                var value = Pop();
-                var index = Pop();
-                Emit($"(array.set $ints {Pop(IntArray)} {index} {value})"); break;
             }
             case Code.Call:
             {
@@ -376,7 +380,7 @@ internal sealed class MethodCompiler(ModuleCompiler module, MethodDefinition met
             {
                 var value = method.ReturnType.MetadataType == MetadataType.Void ? "" : Pop(ModuleCompiler.ValueType(method.ReturnType));
                 if (stack.Count != 0) throw new InvalidDataException("Unexpected stack at return");
-                if (method.ReturnType.MetadataType == MetadataType.Byte) value = NarrowByte(value);
+                value = Normalize(method.ReturnType, value);
                 Emit($"(return {value})"); return true;
             }
             default:
