@@ -35,7 +35,7 @@ npm ci
 npm test
 ```
 
-The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds three netstandard2.0 libraries, records expected results on the CLR, compiles the DLLs and executes the binaries in Node and a headless browser. It also verifies rejection of checked addition and exercises one million tail calls. Traps are compared as failures, without matching exception classes.
+The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds four netstandard2.0 libraries, records expected results on the CLR, compiles the DLLs and executes the binaries in Node and a headless browser. It also verifies rejection of checked addition and exercises one million tail calls. Traps are compared as failures, without matching exception classes.
 
 To compile another DLL:
 

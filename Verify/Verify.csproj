@@ -8,6 +8,7 @@
     <ProjectReference Include="../demos/stage-01-scalars/Sample.csproj" />
     <ProjectReference Include="../demos/stage-02-managed-arrays/ArrayLibrary.csproj" />
     <ProjectReference Include="../demos/stage-03-byte-buffers/ByteLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-04-pe-metadata/PeLibrary.csproj" />
     <ProjectReference Include="../demos/stage-08-integer-division/IntegerDivision.csproj" />
   </ItemGroup>
 </Project>

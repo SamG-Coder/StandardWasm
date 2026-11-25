@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { compile, run } from "./toolchain.mjs";
-import { listDemos } from "./demos.mjs";
+import { invoke } from "./invoke.mjs";
+import { demoInputs, listDemos } from "./demos.mjs";
 
 const demos = listDemos();
 const demo = demos.find(d => d.stage === process.argv[2]);
@@ -12,6 +13,6 @@ if (!demo) {
 run("dotnet", ["build", "-c", "Release", demo.project]);
 compile(demo.dll, demo.exportType, demo.wasm);
 const { instance } = await WebAssembly.instantiate(readFileSync(demo.wasm));
-const result = instance.exports[demo.method](...demo.inputs);
+const result = invoke(instance.exports, demo.method, demoInputs(demo));
 assert.equal(result, demo.expected);
-console.log(demo.stage + ": " + demo.method + "(" + demo.inputs.join(", ") + ") = " + result);
+console.log(demo.stage + ": " + demo.method + "(" + demo.inputs.map(input => input?.file === "self" ? demo.assembly + ".dll" : input).join(", ") + ") = " + result);

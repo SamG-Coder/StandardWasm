@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { listDemos } from "./demos.mjs";
+import { invoke } from "./invoke.mjs";
+import { demoInputs, listDemos } from "./demos.mjs";
 import { chromium } from "playwright-core";
 import { compile, root, run } from "./toolchain.mjs";
 import { verify } from "./verify.mjs";
@@ -13,7 +14,7 @@ const demos = listDemos();
 for (const demo of demos) {
     compile(demo.dll, demo.exportType, demo.wasm);
     const { instance } = await WebAssembly.instantiate(readFileSync(demo.wasm));
-    assert.equal(instance.exports[demo.method](...demo.inputs), demo.expected, demo.stage);
+    assert.equal(invoke(instance.exports, demo.method, demoInputs(demo)), demo.expected, demo.stage);
 }
 const scalarDemo = demos.find(d => d.assembly === "Sample");
 const rejected = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",
@@ -31,6 +32,7 @@ try {
     const page = await browser.newPage();
     // Serve only these fixture assets to the isolated test page.
     const assets = new Map([
+        ["/invoke.mjs", ["text/javascript", readFileSync("scripts/invoke.mjs")]],
         ["/verify.mjs", ["text/javascript", readFileSync("scripts/verify.mjs")]],
         ...demos.map(d => ["/" + d.assembly, ["application/wasm", readFileSync(d.wasm)]])
     ]);
