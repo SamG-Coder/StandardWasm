@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../Model/ProfileModel.csproj" />
+    <ProjectReference Include="../../stage-33-shared-winforms-source/ProfileBrowser.csproj" />
     <ProjectReference Include="../../stage-13-complete-bootstrap/BootstrapLibrary.csproj" />
   </ItemGroup>
 </Project>

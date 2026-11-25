@@ -73,7 +73,23 @@ if (verify) {
         await record();
 
         assert.equal(await input.evaluate(node => node === document.activeElement), true);
-        assert.deepEqual(states, JSON.parse(readFileSync(artifacts + "/native.json", "utf8")));
+        const native = JSON.parse(readFileSync(artifacts + "/native.json", "utf8"));
+        assert.deepEqual(states, native.states);
+        const surfaceBounds = await surface.boundingBox();
+        const button = page.getByRole("button", { name: "Clear" });
+        async function bounds(locator) {
+            const box = await locator.boundingBox();
+            return [box.x - surfaceBounds.x, box.y - surfaceBounds.y, box.width, box.height].map(Math.round);
+        }
+        const controls = {
+            title: await page.locator("#title").textContent(),
+            limit: await input.evaluate(node => node.maxLength),
+            buttonText: await button.textContent(),
+            inputBounds: await bounds(input),
+            previewBounds: JSON.parse(await page.locator("#profile").getAttribute("data-preview-bounds")),
+            buttonBounds: await bounds(button)
+        };
+        assert.deepEqual(controls, native.controls);
         assert.deepEqual(states.map(state => state.input), ["", "Zo\u00eb \ud83d\ude80!", "Ada \ud83d\ude80!", "Ada \ud83d\ude80", ""]);
         const changedPixels = await page.evaluate(async ({ before, after }) => {
             async function read(bytes) {
@@ -90,7 +106,7 @@ if (verify) {
         }, { before: Array.from(before), after: Array.from(after) });
         assert.ok(changedPixels > 100, "WebGPU preview pixels must change after editing.");
         assert.deepEqual(errors, []);
-        const evidence = { engine: browser.version(), states, changedPixels };
+        const evidence = { engine: browser.version(), states, controls, changedPixels };
         writeFileSync(artifacts + "/browser.json", JSON.stringify(evidence, null, 2) + "\n");
         console.log(JSON.stringify(evidence, null, 2));
     } finally {

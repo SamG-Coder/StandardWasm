@@ -34,7 +34,13 @@ internal static class Program
         Record();
         if (form.ActiveControl != form.Input)
             throw new InvalidOperationException("Clear did not return focus to the native text box.");
-        File.WriteAllText(args[0], JsonSerializer.Serialize(states));
+        static int[] Bounds(Control control) => [control.Left, control.Top, control.Width, control.Height];
+        var controls = new
+        {
+            title = form.Text, limit = form.Input.MaxLength, buttonText = form.Clear.Text,
+            inputBounds = Bounds(form.Input), previewBounds = Bounds(form.Preview), buttonBounds = Bounds(form.Clear)
+        };
+        File.WriteAllText(args[0], JsonSerializer.Serialize(new { states, controls }));
     }
 
     [DllImport("user32.dll", EntryPoint = "SendMessageW")]
@@ -44,39 +50,21 @@ internal static class Program
 internal sealed class ProfileForm : Form
 {
     private readonly ProfileState state = ProfileHandlers.Create();
-    internal readonly TextBox Input = new() { MaxLength = ProfileHandlers.InputLimit(), AccessibleName = ProfileHandlers.InputLabel() };
+    internal readonly TextBox Input = new() { AutoSize = false, AccessibleName = ProfileHandlers.InputLabel() };
     internal readonly Label Preview = new();
-    internal readonly Button Clear = new() { Text = ProfileHandlers.ClearLabel() };
+    internal readonly Button Clear = new();
 
     internal ProfileForm()
     {
-        Text = ProfileHandlers.Title();
         ClientSize = new Size(ProfileHandlers.ClientWidth(), ProfileHandlers.ClientHeight());
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         var prompt = new Label { Text = ProfileHandlers.InputLabel(), Left = 32, Top = 30 };
         Preview.Font = new Font("Segoe UI", 19);
-        Preview.Bounds = BoundsFor(ProfileHandlers.PreviewBox);
         Input.Font = new Font("Segoe UI", 12);
-        Input.Bounds = BoundsFor(ProfileHandlers.Input);
-        Clear.Bounds = BoundsFor(ProfileHandlers.ClearButton);
-        Input.TextChanged += (_, _) => RefreshPreview();
-        Clear.Click += (_, _) =>
-        {
-            Input.Clear();
-            Input.Focus();
-        };
+        ProfileApplication.Initialize(state, this, Input, Preview, Clear);
+        Input.TextChanged += (_, _) => ProfileApplication.NameChanged(state, Input, Preview);
+        Clear.Click += (_, _) => ProfileApplication.Clear(Input);
         Controls.AddRange([prompt, Input, Clear, Preview]);
-        RefreshPreview();
     }
-
-    private void RefreshPreview()
-    {
-        ProfileHandlers.Edit(state, Input.Text);
-        Preview.Text = ProfileHandlers.Preview(state);
-    }
-
-    private static Rectangle BoundsFor(int control) =>
-        new(ProfileHandlers.Left(control), ProfileHandlers.Top(control),
-            ProfileHandlers.Width(control), ProfileHandlers.Height(control));
 }

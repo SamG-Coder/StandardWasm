@@ -33,6 +33,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [30 · Portable floating point](stage-30-portable-floats/README.md) | `npm run demo -- stage-30-portable-floats` | Filter(9, 3) = 8 |
 | [31 · Resizable WinForms layout](stage-31-resize-winforms/README.md) | `npm run demo -- stage-31-resize-winforms` | Additional button X after resizing = 264 |
 | [32 · WinForms text entry](stage-32-winforms-textbox/README.md) | `npm run demo -- stage-32-winforms-textbox` | Editing Name updates the WebGPU greeting |
+| [33 · Shared WinForms application source](stage-33-shared-winforms-source/README.md) | `npm run demo -- stage-33-shared-winforms-source` | The same C# initializes the Profile controls on Windows and in Wasm |
 
 ## Adding a stage
 

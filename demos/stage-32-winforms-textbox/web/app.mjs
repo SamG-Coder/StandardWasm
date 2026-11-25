@@ -10,27 +10,34 @@ async function start() {
         return units.join("");
     }
 
-    const state = wasm.Create();
+    const state = wasm.CreateState();
+    const form = wasm.CreateForm(), inputModel = wasm.CreateInput();
+    const preview = wasm.CreatePreview(), button = wasm.CreateClearButton();
+    wasm.Initialize(state, form, inputModel, preview, button);
     const width = wasm.ClientWidth(), height = wasm.ClientHeight();
-    const face = (name, kind) => ({
-        name, kind, x: wasm.Left(name), y: wasm.Top(name),
-        width: wasm.Width(name), height: wasm.Height(name)
+    const face = (name, kind, bound, control) => ({
+        name, kind, x: bound(control, 0), y: bound(control, 1),
+        width: bound(control, 2), height: bound(control, 3)
     });
-    const inputBox = face(1, "input"), previewBox = face(2, "label"), clearBox = face(3, "button");
+    const inputBox = face(1, "input", wasm.InputBound, inputModel);
+    const previewBox = face(2, "label", wasm.PreviewBound, preview);
+    const clearBox = face(3, "button", wasm.ButtonBound, button);
     const model = { width, height, controls: [previewBox, clearBox] };
     const canvas = document.querySelector("#surface");
     canvas.width = width;
     canvas.height = height;
-    document.querySelector("#profile").style.width = width + "px";
+    const profile = document.querySelector("#profile");
+    profile.style.width = width + "px";
+    profile.dataset.previewBounds = JSON.stringify([previewBox.x, previewBox.y, previewBox.width, previewBox.height]);
 
     const input = document.querySelector("#name");
-    input.maxLength = wasm.InputLimit();
+    input.maxLength = wasm.ReadLimit(inputModel);
     const clear = document.querySelector("#clear");
     const result = document.querySelector("#preview");
-    const caption = readText(wasm.ClearLabel());
+    const caption = readText(wasm.ReadButton(button));
     clear.textContent = caption;
     document.querySelector("#prompt").textContent = readText(wasm.InputLabel());
-    document.querySelector("#title").textContent = readText(wasm.Title());
+    document.querySelector("#title").textContent = readText(wasm.ReadTitle(form));
     for (const [node, box] of [[input, inputBox], [clear, clearBox]]) {
         node.style.left = 100 * box.x / width + "%";
         node.style.top = 100 * box.y / height + "%";
@@ -44,7 +51,7 @@ async function start() {
     gpu.lost.then(details => report(Error("WebGPU device lost: " + details.message)));
 
     function repaint() {
-        result.value = readText(wasm.Preview(state));
+        result.value = readText(wasm.ReadPreview(preview));
         captions.set(previewBox.name, result.value);
         text.update(captions);
         gpu.upload();
@@ -57,7 +64,7 @@ async function start() {
         const units = wasm.CreateChars(value.length);
         for (let i = 0; i < value.length; i++)
             wasm.SetCodeUnit(units, i, value.charCodeAt(i));
-        wasm.EditChars(state, units);
+        wasm.Edit(state, inputModel, preview, units);
         repaint();
     }
 
@@ -66,9 +73,10 @@ async function start() {
     });
     input.addEventListener("compositionend", edit);
     clear.addEventListener("click", () => {
-        input.value = "";
-        edit();
-        input.focus();
+        wasm.Clear(state, inputModel, preview);
+        input.value = readText(wasm.ReadInput(inputModel));
+        repaint();
+        if (wasm.TakeFocusRequest(inputModel)) input.focus();
     });
     repaint();
     document.querySelector("#renderer").textContent = "WebGPU";

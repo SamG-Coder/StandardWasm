@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../stage-33-shared-winforms-source/ProfileApplication.cs" Link="ProfileApplication.cs" />
     <ProjectReference Include="../Model/ProfileModel.csproj" />
   </ItemGroup>
 </Project>
