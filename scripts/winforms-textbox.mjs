@@ -3,25 +3,35 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
 import { root, run } from "./toolchain.mjs";
+import { comparePixels, recordProfileTiming, timingOptions } from "../demos/stage-38-profile-rendering/measurements.mjs";
 
 process.chdir(root);
 const stage = "demos/stage-32-winforms-textbox";
 const artifacts = "artifacts/profile";
-const verify = process.argv.includes("--verify");
+const benchmark = process.argv.includes("--benchmark");
+const verify = benchmark || process.argv.includes("--verify");
+const timingOutput = "artifacts/profile-rendering";
 mkdirSync(artifacts, { recursive: true });
 run("dotnet", ["run", "-c", "Release", "--project", stage + "/BrowserModel", "--", artifacts + "/Profile.wasm"]);
 if (verify)
     run("dotnet", ["run", "-c", "Release", "--project", stage + "/Desktop", "--", artifacts + "/native.json"]);
+if (benchmark) {
+    mkdirSync(timingOutput, { recursive: true });
+    const { samples, warmup, repeats, values } = timingOptions;
+    run("dotnet", ["run", "-c", "Release", "--no-build", "--project", stage + "/Desktop", "--",
+        "--benchmark", timingOutput + "/native.json", String(samples * repeats), String(warmup), ...values]);
+}
 
 const files = new Map([
     ["/", ["text/html", stage + "/web/index.html"]],
     ["/style.css", ["text/css", stage + "/web/style.css"]],
     ["/app.mjs", ["text/javascript", stage + "/web/app.mjs"]],
+    ["/profile-timing.mjs", ["text/javascript", "demos/stage-38-profile-rendering/profile-timing.mjs"]],
     ["/render.mjs", ["text/javascript", "demos/stage-14-winforms-webgpu/web/render.mjs"]],
     ["/Profile.wasm", ["application/wasm", artifacts + "/Profile.wasm"]]
 ]);
 const server = createServer((request, response) => {
-    const asset = files.get(request.url);
+    const asset = files.get(request.url.split("?")[0]);
     if (!asset) { response.writeHead(404).end(); return; }
     response.writeHead(200, { "Content-Type": asset[0] });
     response.end(readFileSync(asset[1]));
@@ -44,7 +54,7 @@ if (verify) {
         const page = await browser.newPage({ viewport: { width: 640, height: 440 } });
         const errors = [];
         page.on("pageerror", error => errors.push(error.message));
-        await page.goto(url);
+        await page.goto(benchmark ? url + "/?benchmark" : url);
         await page.waitForFunction(() => document.querySelector("#renderer").textContent !== "Starting");
         assert.equal(await page.locator("#renderer").textContent(), "WebGPU", await page.locator("#error").textContent());
 
@@ -95,24 +105,16 @@ if (verify) {
         };
         assert.deepEqual(controls, native.controls);
         assert.deepEqual(states.map(state => state.input), ["", "Zo\u00eb \ud83d\ude80!", "Ada \ud83d\ude80!", "Ada \ud83d\ude80", ""]);
-        const changedPixels = await page.evaluate(async ({ before, after }) => {
-            async function read(bytes) {
-                const bitmap = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: "image/png" }));
-                const context = new OffscreenCanvas(bitmap.width, bitmap.height).getContext("2d");
-                context.drawImage(bitmap, 0, 0);
-                return context.getImageData(32, 116, 356, 90).data;
-            }
-            const [a, b] = await Promise.all([read(before), read(after)]);
-            let changed = 0;
-            for (let i = 0; i < a.length; i += 4)
-                if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) changed++;
-            return changed;
-        }, { before: Array.from(before), after: Array.from(after) });
+        const { changed: changedPixels } = await comparePixels(page, before, after, 0, [32, 116, 356, 90]);
         assert.ok(changedPixels > 100, "WebGPU preview pixels must change after editing.");
         assert.deepEqual(errors, []);
         const evidence = { engine: browser.version(), states, controls, changedPixels };
         writeFileSync(artifacts + "/browser.json", JSON.stringify(evidence, null, 2) + "\n");
         console.log(JSON.stringify(evidence, null, 2));
+        if (benchmark) {
+            await recordProfileTiming(page, browser.version(), timingOutput);
+            assert.deepEqual(errors, []);
+        }
     } finally {
         try { if (browser) await browser.close(); }
         finally { await new Promise(resolve => server.close(resolve)); }

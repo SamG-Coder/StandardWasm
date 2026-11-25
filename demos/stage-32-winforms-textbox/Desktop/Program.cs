@@ -10,6 +10,11 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         using var profile = new ProfileWindow();
         var form = profile.Form;
+        if (args is ["--benchmark", ..])
+        {
+            ProfileTiming.Measure(profile, args);
+            return;
+        }
         if (args.Length != 1)
         {
             Application.Run(form);

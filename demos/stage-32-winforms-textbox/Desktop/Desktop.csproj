@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../stage-34-shared-winforms-source/ProfileApplication.cs" Link="ProfileApplication.cs" />
+    <Compile Include="../../stage-38-profile-rendering/ProfileTiming.cs" Link="ProfileTiming.cs" />
     <ProjectReference Include="../Model/ProfileModel.csproj" />
   </ItemGroup>
 </Project>

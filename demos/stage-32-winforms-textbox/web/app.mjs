@@ -71,13 +71,16 @@ async function start() {
         gpu.draw();
     }
 
-    function edit() {
-        const value = input.value;
+    function setManagedText(value) {
         // Copy UTF-16 code units so paired surrogates reach the managed string intact.
         const units = wasm.CreateChars(value.length);
         for (let i = 0; i < value.length; i++)
             wasm.SetCodeUnit(units, i, value.charCodeAt(i));
         wasm.Edit(inputModel, units);
+    }
+
+    function edit() {
+        setManagedText(input.value);
         repaint();
     }
 
@@ -91,6 +94,13 @@ async function start() {
         repaint();
         if (wasm.TakeFocusRequest(inputModel)) input.focus();
     });
+    if (new URLSearchParams(location.search).has("benchmark")) {
+        const { prepareProfileTiming } = await import("./profile-timing.mjs");
+        window.profileTiming = prepareProfileTiming({
+            canvas, model, text, gpu, captions, setManagedText,
+            readPreview: () => readText(wasm.ReadLabel(preview))
+        });
+    }
     repaint();
     document.querySelector("#renderer").textContent = "WebGPU";
 }
