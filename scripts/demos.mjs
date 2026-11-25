@@ -18,3 +18,9 @@ export function listDemos() {
             };
         });
 }
+
+export function demoInputs(demo) {
+    return demo.inputs.map(input => input?.file === "self"
+        ? { bytes: Array.from(readFileSync(demo.dll)) }
+        : input);
+}

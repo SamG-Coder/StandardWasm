@@ -43,4 +43,5 @@ foreach (var (count, index) in new[] { (1, 0), (3, 2), (0, 0), (3, -1), (3, 3), 
     Check("ByteLibrary", "RoundTrip", [count, index, 255], () => Buffers.RoundTrip(count, index, 255));
 }
 
+PeCases.Add(cases);
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));

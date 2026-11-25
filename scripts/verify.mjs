@@ -1,3 +1,5 @@
+import { invoke } from "./invoke.mjs";
+
 export async function verify(load, cases) {
     const modules = {};
     for (const name of new Set(cases.map(c => c.module))) {
@@ -7,12 +9,12 @@ export async function verify(load, cases) {
     }
     for (const c of cases) {
         let actual;
-        try { actual = modules[c.module][c.method](...c.inputs); }
+        try { actual = invoke(modules[c.module], c.method, c.inputs); }
         catch (error) {
             if (!(error instanceof WebAssembly.RuntimeError)) throw error;
             actual = null;
         }
-        if (actual !== c.expected) throw Error(JSON.stringify({ ...c, actual }));
+        if (actual !== c.expected) throw Error(JSON.stringify({ ...c, inputs: c.inputs.map(input => input?.bytes ? "<" + input.bytes.length + " bytes>" : input), actual }));
     }
     if (modules.Sample.Countdown(1000000, 7) !== 1000007) throw Error("Deep tail call failed");
     return cases.length + " CLR comparisons and 1,000,000 tail calls passed";
