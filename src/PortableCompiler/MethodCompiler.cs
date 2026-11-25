@@ -197,6 +197,9 @@ namespace PortableCompiler
                     status = BranchIl.Decode(image, body[0], body[1], parameters, locals, records, location);
                     if (status < 0)
                         return status;
+                    status = ArrayInitializers.Lower(image, heaps, layout, records, literals, literalSize, location);
+                    if (status < 0)
+                        return status;
                     functions = LinkOperands(main, bundle, ranges, image, layout, heaps, owner, records, owners, rows,
                         bases, indices, arities, offsets, signatures, objects, thunks, literals, literalSize, functions, location);
                     if (functions < 0)
@@ -299,7 +302,7 @@ namespace PortableCompiler
                     if (EventMetadata.Reference(image, heaps, layout, coded) != EventHandlerReference) return -2;
                     continue;
                 }
-                if (kind == BranchIl.MethodSpecCall) return -2;
+                if (kind == BranchIl.MethodSpecCall || kind == BranchIl.FieldToken) return -2;
                 if (kind == BranchIl.GetField || kind == BranchIl.SetField || kind == BranchIl.FieldAddress)
                 {
                     int field = records[slot + 1];

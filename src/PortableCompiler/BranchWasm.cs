@@ -351,10 +351,13 @@ namespace PortableCompiler
                     used = WasmBinary.Unsigned(code, used, operand);
                     if (kind == GetField) used = Local(code, used, 0x21, Spill(spills, maximum, value, top));
                 }
-                else if (kind == NewArray)
+                else if (kind == NewArray || kind == InitializedArray)
                 {
+                    if (kind == InitializedArray)
+                        used = Const(code, used, records[slot + 3]);
                     used = Local(code, used, 0x20, spills + top);
-                    used = Gc(code, used, 7, operand);
+                    used = Gc(code, used, kind == NewArray ? 7 : 9, operand); // default or passive data
+                    if (kind == InitializedArray) code[used++] = 0; // shared data segment index
                     used = Local(code, used, 0x21, Spill(spills, maximum, (byte)operand, top));
                 }
                 else if (kind == ArrayLength)

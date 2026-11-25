@@ -183,7 +183,7 @@ namespace PortableCompiler
             if (kind == SetField)
                 return Match(stack, depth - 1, (byte)(extra >> 8)) &&
                     Assignable(stack[depth - 1], unchecked((byte)extra)) ? depth - 2 : -1;
-            if (kind == NewArray)
+            if (kind == NewArray || kind == InitializedArray)
             {
                 if (!Match(stack, depth, I32)) return -1;
                 stack[depth - 1] = (byte)operand;

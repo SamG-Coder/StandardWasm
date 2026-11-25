@@ -38,5 +38,6 @@
   <ItemGroup>
     <ProjectReference Include="../demos/stage-39-portable-primitive-arrays/PrimitiveStorage.csproj" />
     <ProjectReference Include="../demos/stage-41-portable-narrow-scalars/NarrowScalars.csproj" />
+    <ProjectReference Include="../demos/stage-43-array-literals/ArrayLiterals.csproj" />
   </ItemGroup>
 </Project>

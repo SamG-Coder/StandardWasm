@@ -10,6 +10,7 @@ namespace PortableCompiler
         internal const int UnsignedSingle = 0x100;
         internal const int LoadEventArgsEmpty = 38, NewEventArgs = 39, CombineHandler = 40, CastHandler = 41, RemoveHandler = 42;
         internal const int FieldAddress = 43, MethodSpecCall = 44, ExchangeHandlerField = 45;
+        internal const int FieldToken = 46, InitializedArray = 47;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
@@ -184,6 +185,15 @@ namespace PortableCompiler
                     if (length - pc < 4) return -1;
                     operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
                     pc += 4;
+                }
+                else if (op == 0xd0)
+                {
+                    if (length - pc < 4) return -1;
+                    uint token = ImageBytes.U32(image, (uint)(start + pc));
+                    pc += 4;
+                    if (token >> 24 != 4) return -2;
+                    kind = FieldToken;
+                    operand = (int)(token & 0xffffff);
                 }
                 else if (op == 0x8e) kind = ArrayLength;
                 else if (op >= 0x90 && op <= 0x96 || op == 0x98 || op == 0x99)
