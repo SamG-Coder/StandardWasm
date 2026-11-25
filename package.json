@@ -1,0 +1,17 @@
+{
+  "name": "standardwasm",
+  "version": "1.0.0",
+  "description": "Experimental .NET Standard IL to WebAssembly compiler",
+  "scripts": {
+    "test": "node scripts/test.mjs",
+    "compile": "node scripts/compile.mjs"
+  },
+  "type": "commonjs",
+  "dependencies": {
+    "binaryen": "132.0.0"
+  },
+  "devDependencies": {
+    "playwright-core": "1.65.1"
+  },
+  "private": true
+}

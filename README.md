@@ -17,4 +17,48 @@ Separate assembly loading, IL lowering, Wasm emission, library implementations a
 
 ## Status
 
-Project bootstrap. Full .NET Standard coverage, self-hosting, WinForms and WebGPU rendering are milestones. See the commit history for implemented compiler paths.
+The first working backend takes a DLL and a public export type, follows reachable in-assembly static calls, and emits a standalone module with zero runtime imports. Public static methods become named exports. The host compiler runs on .NET 10. Mono.Cecil reads the IL, our C# backend lowers it to WAT, and Binaryen assembles the binary.
+
+| Available today | Current boundary |
+| --- | --- |
+| 32-bit integers, unsigned comparisons, booleans, locals, loops, conditional branches, static calls and recursion | No general BCL linker, virtual dispatch, generics, strings or floating-point lowering |
+| Managed one-dimensional int arrays backed by Wasm GC | Only int elements, with allocation, length, indexed read and write |
+| Direct tail calls for eligible call/return pairs | Managed exception handling and stack-trace fidelity are open |
+| Integer arithmetic and array access | Runtime arithmetic and array failures surface as Wasm traps. Typed CLR exceptions are open. Checked arithmetic currently produces a compile-time diagnostic. |
+
+## Build and test
+
+Install the .NET 10 SDK and Node 24 or newer. From this directory run:
+
+```sh
+npm ci
+npm test
+```
+
+The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds two netstandard2.0 libraries, records expected results on the CLR, compiles both DLLs and executes the binaries in Node and a headless browser. It also verifies rejection of checked addition and exercises one million tail calls. Traps are compared as failures, without matching exception classes.
+
+To compile another DLL:
+
+```sh
+npm run compile -- path/to/Library.dll YourNamespace.ExportType artifacts/library.wasm
+```
+
+After running the tests, serve the repository locally, for example with `python -m http.server 8000 --bind 127.0.0.1`. Open localhost:8000 in a recent browser and run this example in its developer console:
+
+```js
+const { instance } = await WebAssembly.instantiateStreaming(fetch("./artifacts/Sample.wasm"));
+instance.exports.SumSquares(10); // 385
+```
+
+## Source map and bootstrap dependencies
+
+- `Compiler/ModuleCompiler.cs` selects exports, links reachable methods and maps CLR types.
+- `Compiler/MethodCompiler.cs` translates IL evaluation stacks and control flow. Basic blocks currently use a dispatcher for correctness. Efficient structured control flow is a future optimization.
+- `Compiler/IntegerOps.cs` maps numeric and comparison instructions.
+- `Sample/` and `ArrayLibrary/` are independent .NET Standard libraries. `Verify/` generates deterministic expected results on the CLR.
+- `scripts/` contains assembly, engine validation and browser tests. Generated modules are written to `artifacts/`.
+
+Self-hosting requires a metadata reader and binary writer that can run inside the compiled module, plus enough support for the compiler's own strings, collections, object model and error paths. The current bootstrap also needs a file/byte-buffer boundary to replace host filesystem calls. The existing compiler uses Mono.Cecil and Binaryen on the build host. Generated sample modules have neither dependency.
+
+The modern instructions used here are standardized Wasm GC array instructions and `return_call`. See the [WebAssembly 3.0 release](https://webassembly.org/news/2025-09-17-wasm-3.0/) and [engine feature matrix](https://webassembly.org/features/).
+
