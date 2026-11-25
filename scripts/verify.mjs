@@ -1,5 +1,5 @@
 import { verifyBootstrap } from "./bootstrap.mjs";
-import { invoke, invokeGenerated } from "./invoke.mjs";
+import { decode, invoke, invokeGenerated } from "./invoke.mjs";
 
 export async function verify(load, cases, saveCompiler) {
     const modules = {};
@@ -21,7 +21,11 @@ export async function verify(load, cases, saveCompiler) {
             if (c.generated || !(error instanceof WebAssembly.RuntimeError)) throw error;
             actual = null;
         }
-        if (actual !== c.expected) throw Error(JSON.stringify({ ...c, inputs: c.inputs.map(input => input?.bytes ? "<" + input.bytes.length + " bytes>" : input), actual }));
+        if (!Object.is(actual, decode(c.expected))) {
+            const inputs = c.inputs.map(input => input?.bytes ? "<" + input.bytes.length + " bytes>" : input);
+            const printable = typeof actual === "bigint" ? { i64: actual.toString() } : actual;
+            throw Error(JSON.stringify({ ...c, inputs, actual: printable }));
+        }
     }
     if (modules.Sample.Countdown(1000000, 7) !== 1000007) throw Error("Deep tail call failed");
     const summary = (cases.length - (bootstrap ? 1 : 0)) + " CLR comparisons and 1,000,000 tail calls passed";

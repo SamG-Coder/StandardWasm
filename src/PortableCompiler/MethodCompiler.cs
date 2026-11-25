@@ -149,7 +149,7 @@ namespace PortableCompiler
                         return -2;
                     if (owner != 0)
                         for (int i = 0; i < locals; i++)
-                            if (frame[parameters + i] != I32) return -2;
+                            if (!IsInteger(frame[parameters + i])) return -2;
                 }
                 if (body[1] > (int.MaxValue - 32) / 64)
                     return -2;
@@ -231,7 +231,8 @@ namespace PortableCompiler
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
             {
                 int op = records[slot];
-                if (owner != 0 && op >= BranchIl.NewArray && op != BranchIl.Narrow && op != BranchIl.MemberCall)
+                if (owner != 0 && op >= BranchIl.NewArray && op != BranchIl.Narrow && op != BranchIl.MemberCall &&
+                    op != BranchIl.WideConstant && op != BranchIl.ConvertInteger)
                     return -2; // The dependency backend currently admits only scalar state.
                 if (records[slot] == BranchIl.NewArray)
                 {
@@ -407,9 +408,9 @@ namespace PortableCompiler
 
         private static bool IsScalarSignature(byte[] types, int offset, int arity)
         {
-            if (types[offset] != I32 && types[offset] != Void) return false;
+            if (!IsInteger(types[offset]) && types[offset] != Void) return false;
             for (int index = 1; index <= arity; index++)
-                if (types[offset + index] != I32) return false;
+                if (!IsInteger(types[offset + index])) return false;
             return true;
         }
 

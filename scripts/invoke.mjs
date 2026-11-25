@@ -1,6 +1,9 @@
+// Represent signed i64 bit patterns as decimal strings to keep the JS boundary exact.
+export const decode = value => value?.i64 !== undefined ? BigInt(value.i64) : value;
+
 export function invoke(exports, method, inputs) {
     const args = inputs.map(input => {
-        if (!Array.isArray(input?.bytes)) return input;
+        if (!Array.isArray(input?.bytes)) return decode(input);
         // Typed Wasm GC arrays are opaque to JavaScript. Populate the array with fixture exports.
         const buffer = exports.CreateBytes(input.bytes.length);
         for (const [index, value] of input.bytes.entries()) exports.SetByte(buffer, index, value);
@@ -57,7 +60,7 @@ export async function invokeGenerated(exports, inputs, generated) {
     if (WebAssembly.Module.imports(module).length) throw Error("Generated module has runtime imports");
     try {
         const exports = instance.exports;
-        const value = exports[generated.export ?? "run"](...generated.arguments);
+        const value = exports[generated.export ?? "run"](...generated.arguments.map(decode));
         if (generated.resultType !== "string") return value;
         const count = exports.TextLength(value);
         const units = new Array(count);

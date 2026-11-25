@@ -73,7 +73,7 @@ internal static class BundleCases
         }
     }
 
-    private static byte[] Pack(params byte[][] assemblies)
+    internal static byte[] Pack(params byte[][] assemblies)
     {
         using var buffer = new MemoryStream();
         using var writer = new BinaryWriter(buffer);

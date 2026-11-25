@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { invoke, invokeGenerated } from "./invoke.mjs";
+import { decode, invoke, invokeGenerated } from "./invoke.mjs";
 import { demoInputs, listDemos } from "./demos.mjs";
 import { chromium } from "playwright-core";
 import { compile, root, run } from "./toolchain.mjs";
@@ -16,7 +16,7 @@ for (const demo of demos) {
     const { instance } = await WebAssembly.instantiate(readFileSync(demo.wasm));
     assert.equal((demo.generated
         ? await invokeGenerated(instance.exports, demoInputs(demo), demo.generated)
-        : invoke(instance.exports, demo.method, demoInputs(demo))), demo.expected, demo.stage);
+        : invoke(instance.exports, demo.method, demoInputs(demo))), decode(demo.expected), demo.stage);
 }
 const scalarDemo = demos.find(d => d.assembly === "Sample");
 const rejected = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler",

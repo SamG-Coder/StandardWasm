@@ -1,4 +1,4 @@
-import { invokeGenerated } from "./invoke.mjs";
+import { decode, invokeGenerated } from "./invoke.mjs";
 
 export async function verifyBootstrap(initial, fixture, cases, saveCompiler) {
     const dll = fixture.inputs[0].bytes;
@@ -35,7 +35,7 @@ export async function verifyBootstrap(initial, fixture, cases, saveCompiler) {
     for (const c of cases) {
         if (!c.generated) continue;
         const actual = await invokeGenerated(second.exports, c.inputs, c.generated);
-        if (actual !== c.expected)
+        if (!Object.is(actual, decode(c.expected)))
             throw Error("Self-recompiled compiler failed " + c.module + " " + c.fixture);
         tested++;
     }

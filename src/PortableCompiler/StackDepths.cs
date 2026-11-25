@@ -75,18 +75,28 @@ namespace PortableCompiler
                 return Push(stack, depth - 1, I32);
             }
             if (kind == Load) return Push(stack, depth, frame[operand]);
-            if (kind == Constant) return Push(stack, depth, I32);
+            if (kind == Constant || kind == WideConstant)
+                return Push(stack, depth, kind == WideConstant ? I64 : I32);
             if (kind == Store) return Match(stack, depth, frame[operand]) ? depth - 1 : -1;
-            if (kind == Unary || kind == Narrow || (kind == Nop && operand != 0))
-                return Match(stack, depth, I32) ? depth : -1;
+            if (kind == Unary || kind == Narrow || kind == ConvertInteger)
+            {
+                if (depth < 1 || !IsInteger(stack[depth - 1])) return -1;
+                if (kind != Unary)
+                    stack[depth - 1] = kind == ConvertInteger && ConvertsToWide(operand) ? I64 : I32;
+                return depth;
+            }
             if (kind == Dup) return depth < 1 ? -1 : Push(stack, depth, stack[depth - 1]);
             if (kind == Pop) return depth - 1;
             if (kind == Binary || kind == Conditional)
             {
                 int needed = kind == Binary || (extra != 0 && extra != 0x45) ? 2 : 1;
-                if (!Match(stack, depth, I32) || (needed == 2 && !Match(stack, depth - 1, I32)))
+                if (depth < needed) return -1;
+                byte type = stack[depth - needed];
+                if (!IsInteger(type)) return -1;
+                if (needed == 2 && !Match(stack, depth, kind == Binary && IsShift(operand) ? I32 : type))
                     return -1;
-                return depth - needed + (kind == Binary ? 1 : 0);
+                int remaining = depth - needed;
+                return kind == Binary ? Push(stack, remaining, IsComparison(operand) ? I32 : type) : remaining;
             }
             if (kind == Call || kind == NewObject)
             {
