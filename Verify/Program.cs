@@ -67,4 +67,6 @@ PortableFloatCases.Add(cases);
 ResizeCases.Add(cases);
 TextBoxCases.Add(cases);
 SharedWinFormsCases.Add(cases);
+ReferenceFieldCases.Add(cases);
+SenderIdentityCases.Add(cases);
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));

@@ -8,7 +8,7 @@ internal static class SharedWinFormsCases
 {
     internal static void Add(List<object> cases)
     {
-        const int capacity = 16384;
+        const int capacity = 32768;
         int Row(Type type, string name) => type.GetMethod(name)!.MetadataToken & 0xffffff;
         byte[] image = File.ReadAllBytes(typeof(BrowserExports).Assembly.Location);
         byte[] manifest = BootstrapCases.Manifest(
@@ -23,7 +23,7 @@ internal static class SharedWinFormsCases
             throw new InvalidOperationException($"Shared form fixture returned {length}.");
         string hex = Convert.ToHexString(output.AsSpan(0, length)).ToLowerInvariant();
         var inputs = new[] { Encode(image), Encode(manifest) };
-        foreach (int action in Enumerable.Range(0, 5))
+        foreach (int action in Enumerable.Range(0, 7))
             cases.Add(new
             {
                 module = "BootstrapLibrary", method = "CompileModule", fixture = $"Shared WinForms source {action}",

@@ -7,7 +7,7 @@ h1 { font-weight: 700; font-size: 1rem; margin: 0; }
 #renderer { color: #a9bdd9; font-size: .8rem; }
 #profile { position: relative; max-width: calc(100vw - 2rem); overflow: hidden; }
 canvas { display: block; width: 100%; }
-#prompt { position: absolute; left: 7.62%; top: 11%; color: #c1d1e9; }
+#prompt { position: absolute; color: #c1d1e9; }
 #name { position: absolute; padding: 0 .55rem; color: #f8fafc; font: inherit; background: #20314a; border: 1px solid #526681; border-radius: 4px; }
 #clear { position: absolute; background: transparent; border: 0; color: transparent; cursor: pointer; border-radius: 4px; }
 #clear:focus-visible, #name:focus-visible { outline: 2px solid #b5f5fc; outline-offset: 2px; }

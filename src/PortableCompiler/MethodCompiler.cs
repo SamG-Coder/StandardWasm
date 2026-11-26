@@ -1,4 +1,5 @@
 using PeLibrary;
+using static PeLibrary.ObjectLayouts;
 using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
@@ -133,7 +134,8 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[6];
+            var frameShape = new int[7];
+            bool eventArgsEmpty = false;
 
             int activeOwner = 0;
             for (int current = 0; current < functions; current++)
@@ -218,6 +220,12 @@ namespace PortableCompiler
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
+                        if (kind == BranchIl.RemoveHandler && depths[slot / BranchIl.Width] != 0)
+                        {
+                            // The structured search and copy expand a single IL call.
+                            if (capacity > int.MaxValue - 320) return -3;
+                            capacity += 320;
+                        }
                         if ((kind != BranchIl.Call && kind != BranchIl.NewObject) ||
                             depths[slot / BranchIl.Width] == 0)
                             continue;
@@ -232,14 +240,16 @@ namespace PortableCompiler
                     frameShape[3] = result;
                     frameShape[4] = objects[0];
                     frameShape[5] = 0;
+                    frameShape[6] = 0;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
-                        if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars)
-                        {
-                            frameShape[5] = 1;
-                            break;
-                        }
+                        if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars) frameShape[5] = 1;
+                        if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
+                            (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
+                            frameShape[6] = 1;
+                        if (kind == BranchIl.LoadEventArgsEmpty && depths[slot / BranchIl.Width] != 0)
+                            eventArgsEmpty = true;
                     }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets, arities, code);
@@ -254,7 +264,7 @@ namespace PortableCompiler
             }
             CompileLocation.Clear(location);
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0]);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], eventArgsEmpty);
         }
 
         private static int LinkOperands(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
@@ -276,7 +286,14 @@ namespace PortableCompiler
                     if (type < 0) return type;
                     records[slot + 1] = type;
                 }
-                if (kind == BranchIl.GetField || kind == BranchIl.SetField)
+                if (kind == BranchIl.CastHandler)
+                {
+                    int coded = (records[slot + 1] << 2) | 1;
+                    if (EventMetadata.Reference(image, heaps, layout, coded) != EventHandlerReference) return -2;
+                    continue;
+                }
+                if (kind == BranchIl.MethodSpecCall) return -2;
+                if (kind == BranchIl.GetField || kind == BranchIl.SetField || kind == BranchIl.FieldAddress)
                 {
                     int field = records[slot + 1];
                     int fieldOwner = ObjectLayouts.Owner(image, heaps, layout, field, true);
@@ -287,6 +304,8 @@ namespace PortableCompiler
                     if (fieldIndex < 0) return -1;
                     records[slot + 1] = fieldIndex;
                     records[slot + 3] = (type << 8) | ObjectLayouts.FieldType(objects, field);
+                    if (kind == BranchIl.FieldAddress && !LinkExchange(image, heaps, layout, records, slot))
+                        return -2;
                     continue;
                 }
                 if (kind == BranchIl.LoadString)
@@ -302,6 +321,35 @@ namespace PortableCompiler
                 if (kind == BranchIl.MemberCall)
                 {
                     int member = records[slot + 1], opcode = records[slot + 3];
+                    int constructorType = Delegate;
+                    if (owner == 0)
+                    {
+                        int eventMember = EventMetadata.Member(image, heaps, layout, member);
+                        if (eventMember == EventMetadata.Empty && opcode == 0x7e)
+                        {
+                            records[slot] = BranchIl.LoadEventArgsEmpty;
+                            continue;
+                        }
+                        if (eventMember == EventMetadata.Construct && opcode == 0x73)
+                        {
+                            records[slot] = BranchIl.NewEventArgs;
+                            continue;
+                        }
+                        if (eventMember == EventMetadata.InvokeHandler && opcode == 0x6f)
+                        {
+                            records[slot] = BranchIl.InvokeDelegate;
+                            records[slot + 1] = EventHandlerReference;
+                            continue;
+                        }
+                        if (eventMember == EventMetadata.ConstructHandler && opcode == 0x73)
+                            constructorType = EventHandlerReference;
+                        if ((eventMember == EventMetadata.CombineHandler || eventMember == EventMetadata.RemoveHandler) && opcode == 0x28)
+                        {
+                            records[slot] = eventMember == EventMetadata.CombineHandler ? BranchIl.CombineHandler : BranchIl.RemoveHandler;
+                            continue;
+                        }
+                    }
+                    if (opcode == 0x7e) return -2;
                     if (opcode == 0x28 && ObjectLayouts.IsObjectConstructor(image, heaps, layout, member))
                     {
                         records[slot] = BranchIl.BaseCtor;
@@ -329,6 +377,7 @@ namespace PortableCompiler
                     if (delegateMember == DelegateMetadata.Invoke && opcode == 0x6f)
                     {
                         records[slot] = BranchIl.InvokeDelegate;
+                        records[slot + 1] = Delegate;
                         continue;
                     }
                     if (delegateMember == 0 && stringMember == 0 && opcode == 0x28 && bundle.Length != 0)
@@ -358,10 +407,11 @@ namespace PortableCompiler
                         continue;
                     }
                     int pointer = slot - 6 * BranchIl.Width;
-                    if (delegateMember != DelegateMetadata.Construct || opcode != 0x73 || pointer < 0 ||
+                    if ((constructorType == Delegate && delegateMember != DelegateMetadata.Construct) || opcode != 0x73 || pointer < 0 ||
                         records[pointer] != BranchIl.LoadFunction || records[pointer + 2] != slot / BranchIl.Width)
                         return -2;
                     records[slot] = BranchIl.NewDelegate;
+                    records[slot + 1] = constructorType;
                     records[slot + 3] = records[pointer + 3];
                     continue;
                 }
@@ -382,11 +432,20 @@ namespace PortableCompiler
                 bool hasReceiver = arities[index] > 0 && signatures[signature + 1] >= ObjectLayouts.FirstClass;
                 if (kind == BranchIl.LoadFunction)
                 {
-                    if (!hasReceiver || arities[index] != 1 || signatures[signature] != I32 ||
+                    if (!hasReceiver ||
                         (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) != 0)
                         return -2;
                     int next = records[slot + 2] * BranchIl.Width;
                     if (next >= records.Length || records[next] != BranchIl.MemberCall || records[next + 3] != 0x73)
+                        return -2;
+                    bool eventHandler = EventMetadata.Member(image, heaps, layout, records[next + 1]) == EventMetadata.ConstructHandler;
+                    if (eventHandler)
+                    {
+                        if (arities[index] != 3 || signatures[signature] != Void ||
+                            signatures[signature + 2] != ObjectReference || signatures[signature + 3] != EventArgsReference)
+                            return -2;
+                    }
+                    else if (arities[index] != 1 || signatures[signature] != I32)
                         return -2;
                     int thunk = 0;
                     while (thunk < thunks[0] && thunks[thunk + 1] != index) thunk++;
@@ -423,6 +482,34 @@ namespace PortableCompiler
                 }
             }
             return functions;
+        }
+
+        private static bool LinkExchange(byte[] image, int[] heaps, int[] layout, int[] records, int slot)
+        {
+            // Keep the interior reference confined to this fused operation.
+            // Only local/argument loads can occur between ldflda and the call.
+            if (unchecked((byte)records[slot + 3]) != EventHandlerReference) return false;
+            int replacement = records[slot + 2] * BranchIl.Width;
+            if (replacement >= records.Length || records[replacement] != BranchIl.Load || records[replacement + 3] != 0)
+                return false;
+            int comparand = records[replacement + 2] * BranchIl.Width;
+            if (comparand >= records.Length || records[comparand] != BranchIl.Load || records[comparand + 3] != 0)
+                return false;
+            int call = records[comparand + 2] * BranchIl.Width;
+            if (call >= records.Length || records[call] != BranchIl.MethodSpecCall || records[call + 3] != 0 ||
+                !EventMetadata.IsHandlerExchange(image, heaps, layout, records[call + 1]))
+                return false;
+
+            // The field token's operand bytes have no IR instructions. Keep
+            // the two captured frame indices in their unused operand slots.
+            records[slot + BranchIl.Width + 1] = records[replacement + 1];
+            records[slot + 2 * BranchIl.Width + 1] = records[comparand + 1];
+            records[slot] = BranchIl.ExchangeHandlerField;
+            records[slot + 2] = records[call + 2];
+            records[replacement] = 0;
+            records[comparand] = 0;
+            records[call] = 0;
+            return true;
         }
 
         private static int Register(byte[] image, int[] layout, int[] heaps, int owner, int row,

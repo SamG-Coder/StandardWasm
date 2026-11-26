@@ -4,16 +4,95 @@ namespace System.Windows.Forms
     // DOM event delivery and rendering stay in the host.
     public sealed class Form
     {
+        private readonly ControlCollection controls = new ControlCollection();
         public string Text { get; set; } = "";
+        public ControlCollection Controls => controls;
+    }
+
+    // A linked collection retains typed child references, including multiple
+    // children of one type, in insertion order.
+    public sealed class ControlCollection
+    {
+        private ControlEntry first, last;
+        private int count;
+
+        public void Add(TextBox value)
+        {
+            var entry = new ControlEntry();
+            entry.Kind = 1;
+            entry.Input = value;
+            Append(entry);
+        }
+
+        public void Add(Label value)
+        {
+            var entry = new ControlEntry();
+            entry.Kind = 2;
+            entry.Label = value;
+            Append(entry);
+        }
+
+        public void Add(Button value)
+        {
+            var entry = new ControlEntry();
+            entry.Kind = 3;
+            entry.Button = value;
+            Append(entry);
+        }
+
+        private void Append(ControlEntry entry)
+        {
+            if (last == null)
+                first = entry;
+            else
+                last.Next = entry;
+            last = entry;
+            count++;
+        }
+
+        internal int Count() => count;
+
+        internal ControlEntry First() => first;
+    }
+
+    public sealed class ControlEntry
+    {
+        internal ControlEntry Next;
+        internal int Kind;
+        internal TextBox Input;
+        internal Label Label;
+        internal Button Button;
+
+        internal string Name()
+        {
+            if (Kind == 1) return Input.Name;
+            if (Kind == 2) return Label.Name;
+            return Button.Name;
+        }
     }
 
     public sealed class TextBox
     {
         private readonly int[] bounds = new int[4];
+        private string text = "";
         private int focusRequested;
 
-        public string Text { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Text
+        {
+            get => text;
+            set
+            {
+                if (value == null) value = "";
+                if (SameText(text, value)) return;
+                text = value;
+                TextChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        public event EventHandler TextChanged;
         public int MaxLength { get; set; }
+        public bool AutoSize { set { } } // This host uses the explicitly supplied bounds.
 
         public void SetBounds(int x, int y, int width, int height) =>
             ControlBounds.Set(bounds, x, y, width, height);
@@ -32,11 +111,20 @@ namespace System.Windows.Forms
             focusRequested = 0;
             return requested;
         }
+
+        private static bool SameText(string left, string right)
+        {
+            if (left.Length != right.Length) return false;
+            for (int i = 0; i < left.Length; i++)
+                if (left[i] != right[i]) return false;
+            return true;
+        }
     }
 
     public sealed class Label
     {
         private readonly int[] bounds = new int[4];
+        public string Name { get; set; } = "";
         public string Text { get; set; } = "";
 
         public void SetBounds(int x, int y, int width, int height) =>
@@ -48,7 +136,10 @@ namespace System.Windows.Forms
     public sealed class Button
     {
         private readonly int[] bounds = new int[4];
+        public string Name { get; set; } = "";
         public string Text { get; set; } = "";
+        public event EventHandler Click;
+        public void PerformClick() => Click?.Invoke(this, EventArgs.Empty);
 
         public void SetBounds(int x, int y, int width, int height) =>
             ControlBounds.Set(bounds, x, y, width, height);

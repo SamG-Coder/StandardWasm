@@ -87,7 +87,11 @@ if (verify) {
             buttonText: await button.textContent(),
             inputBounds: await bounds(input),
             previewBounds: JSON.parse(await page.locator("#profile").getAttribute("data-preview-bounds")),
-            buttonBounds: await bounds(button)
+            buttonBounds: await bounds(button),
+            promptBounds: await bounds(page.locator("#prompt")),
+            promptText: await page.locator("#prompt").textContent(),
+            children: await page.locator("#profile").evaluate(node => Array.from(node.children)
+                .filter(child => child.matches("input, output, button, label")).map(child => child.id))
         };
         assert.deepEqual(controls, native.controls);
         assert.deepEqual(states.map(state => state.input), ["", "Zo\u00eb \ud83d\ude80!", "Ada \ud83d\ude80!", "Ada \ud83d\ude80", ""]);
