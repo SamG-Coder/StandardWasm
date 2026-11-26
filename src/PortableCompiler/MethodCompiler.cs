@@ -296,7 +296,8 @@ namespace PortableCompiler
                                 capacity += unwindBytes;
                             }
                             int tags = 0;
-                            if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion || kind == BranchIl.NewArray)
+                            if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion || kind == BranchIl.NewArray ||
+                                (kind == BranchIl.MathCall && MathWasm.CanOverflow(operation)))
                                 tags = ExceptionTypes.Overflow;
                             else if (kind == BranchIl.CastClass)
                                 tags = ExceptionTypes.InvalidCast;

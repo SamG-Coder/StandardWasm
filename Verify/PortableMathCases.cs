@@ -49,6 +49,7 @@ internal static class PortableMathCases
         foreach (int a in ints)
         {
             Check(nameof(Measures.AbsInt), [a], () => Measures.AbsInt(a));
+            Check(nameof(Measures.CatchAbsInt), [a], () => Measures.CatchAbsInt(a));
             Check(nameof(Measures.AbsLong), [(long)a * 4294967296L], () => Measures.AbsLong((long)a * 4294967296L));
             foreach (int b in ints)
             {
@@ -63,6 +64,7 @@ internal static class PortableMathCases
         foreach (long a in longs)
         {
             Check(nameof(Measures.AbsLong), [a], () => Measures.AbsLong(a));
+            Check(nameof(Measures.CatchAbsLong), [a], () => Measures.CatchAbsLong(a));
             foreach (long b in longs)
             {
                 Check(nameof(Measures.MaxLong), [a, b], () => Measures.MaxLong(a, b));
@@ -95,15 +97,16 @@ internal static class PortableMathCases
                 hex = Convert.ToHexString(output.AsSpan(0, size)).ToLowerInvariant();
                 compiled.Add(method, hex);
             }
-            object? expected;
+            object? expected = null;
+            string? exception = null;
             try { expected = Encode(evaluate()); }
-            catch (OverflowException) { expected = null; } // Math.Abs(MinValue): Wasm must trap
+            catch (OverflowException error) { exception = error.GetType().FullName; }
             cases.Add(new
             {
                 module = "BootstrapLibrary", method = "Compile", fixture = "Math." + method,
                 inputs = new object[] { dll, typeof(Measures).GetMethod(method)!.MetadataToken & 0xffffff },
-                generated = new { capacity, arguments = Array.ConvertAll(arguments, Encode), hex },
-                expected
+                generated = new { capacity, arguments = Array.ConvertAll(arguments, Encode), hex, exceptionType = exception },
+                expected, exception
             });
         }
 
