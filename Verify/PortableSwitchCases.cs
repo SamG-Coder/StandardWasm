@@ -12,11 +12,6 @@ using SwitchLibrary;
 
 internal static class PortableSwitchCases
 {
-    private static readonly Dictionary<short, OpCode> Opcodes = typeof(OpCodes).GetFields(BindingFlags.Public | BindingFlags.Static)
-        .Where(field => field.FieldType == typeof(OpCode))
-        .Select(field => (OpCode)field.GetValue(null)!)
-        .ToDictionary(opcode => opcode.Value);
-
     internal static void Add(List<object> cases)
     {
         const int capacity = 32768;
@@ -34,7 +29,7 @@ internal static class PortableSwitchCases
             int row = Row(fixture);
             int rva = metadata.GetMethodDefinition(MetadataTokens.MethodDefinitionHandle(row)).RelativeVirtualAddress;
             byte[] il = pe.GetMethodBody(rva).GetILBytes()!;
-            int table = SwitchOffset(il);
+            int table = IlOffsets.Find(il, OpCodes.Switch);
             if (table < 0) throw new InvalidOperationException($"{fixture} no longer emits IL switch");
 
             string hex = Compile(image, row, fixture);
@@ -156,26 +151,5 @@ internal static class PortableSwitchCases
         int sectionIndex = headers.GetContainingSectionIndex(rva);
         var section = headers.SectionHeaders[sectionIndex];
         return section.PointerToRawData + rva - section.VirtualAddress;
-    }
-
-    private static int SwitchOffset(byte[] il)
-    {
-        for (int cursor = 0; cursor < il.Length;)
-        {
-            int offset = cursor;
-            int first = il[cursor++];
-            short opcode = first == 0xfe ? unchecked((short)(0xfe00 | il[cursor++])) : (short)first;
-            var operand = Opcodes[opcode].OperandType;
-            if (operand == OperandType.InlineSwitch) return offset;
-            cursor += operand switch
-            {
-                OperandType.InlineNone => 0,
-                OperandType.ShortInlineBrTarget or OperandType.ShortInlineI or OperandType.ShortInlineVar => 1,
-                OperandType.InlineVar => 2,
-                OperandType.InlineI8 or OperandType.InlineR => 8,
-                _ => 4
-            };
-        }
-        return -1;
     }
 }

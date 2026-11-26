@@ -6,15 +6,17 @@ namespace PortableCompiler
     {
         internal const int Width = 4;
         internal const int Load = 1, Store = 2, Constant = 3, Unary = 4, Binary = 5,
-            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12, NewArray = 13, ArrayLength = 14, ArrayGet = 15, ArraySet = 16, Narrow = 17, NewObject = 18, GetField = 19, SetField = 20, BaseCtor = 21, LoadFunction = 22, NewDelegate = 23, InvokeDelegate = 24, MemberCall = 25, LoadString = 26, StringLength = 27, StringCharacter = 28, JoinStrings = 29, StringFromChars = 30, NullString = 31, WideConstant = 32, ConvertInteger = 33, Switch = 34;
+            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12, NewArray = 13, ArrayLength = 14, ArrayGet = 15, ArraySet = 16, Narrow = 17, NewObject = 18, GetField = 19, SetField = 20, BaseCtor = 21, LoadFunction = 22, NewDelegate = 23, InvokeDelegate = 24, MemberCall = 25, LoadString = 26, StringLength = 27, StringCharacter = 28, JoinStrings = 29, StringFromChars = 30, NullString = 31, WideConstant = 32, ConvertInteger = 33, Switch = 34, SingleConstant = 35, DoubleConstant = 36, ConvertFloat = 37;
+        internal const int UnsignedSingle = 0x100;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
-        internal static int Decode(byte[] image, int start, int length, int arguments, int locals, int[] records)
+        internal static int Decode(byte[] image, int start, int length, int arguments, int locals, int[] records, int[] location)
         {
             int pc = 0;
             while (pc < length)
             {
+                if (location.Length != 0) location[2] = pc;
                 int slot = pc * Width;
                 int op = image[start + pc++];
                 int kind, operand = 0, comparison = 0;
@@ -75,6 +77,15 @@ namespace PortableCompiler
                     operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
                     comparison = unchecked((int)ImageBytes.U32(image, (uint)(start + pc + 4)));
                     pc += 8;
+                }
+                else if (op == 0x22 || op == 0x23)
+                {
+                    int size = op == 0x22 ? 4 : 8;
+                    if (length - pc < size) return -1;
+                    kind = op == 0x22 ? SingleConstant : DoubleConstant;
+                    operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                    if (size == 8) comparison = unchecked((int)ImageBytes.U32(image, (uint)(start + pc + 4)));
+                    pc += size;
                 }
                 else if (op >= 0x2b && op <= 0x44)
                 {
@@ -160,12 +171,12 @@ namespace PortableCompiler
                     pc += 4;
                 }
                 else if (op == 0x8e) kind = ArrayLength;
-                else if (op == 0x90 || op == 0x91 || op == 0x93 || op == 0x94)
+                else if (op == 0x90 || op == 0x91 || op == 0x93 || op == 0x94 || op == 0x96)
                 {
                     kind = ArrayGet;
                     operand = op;
                 }
-                else if (op == 0x9c || op == 0x9d || op == 0x9e)
+                else if (op == 0x9c || op == 0x9d || op == 0x9e || op == 0x9f)
                 {
                     kind = ArraySet;
                     operand = op;
@@ -206,6 +217,11 @@ namespace PortableCompiler
                     kind = ConvertInteger;
                     operand = op;
                 }
+                else if (op == 0x6b || op == 0x6c || op == 0x76)
+                {
+                    kind = ConvertFloat;
+                    operand = op;
+                }
                 else if (op == 0) kind = Nop;
                 else if (op == 0x2a) kind = Return;
                 else if (op == 0x25) kind = Dup;
@@ -224,19 +240,48 @@ namespace PortableCompiler
 
             for (int pcIndex = 0; pcIndex < length; pcIndex += records[pcIndex * Width + 2] - pcIndex)
             {
+                if (location.Length != 0) location[2] = pcIndex;
                 int slot = pcIndex * Width;
                 int kind = records[slot];
-                if ((kind == Branch || kind == Conditional) && records[records[slot + 1] * Width] == 0)
+                if ((kind == Branch || kind == Conditional) && !NoteTarget(records, records[slot + 1]))
                     return -1;
                 if (kind == Switch)
                 {
                     int table = records[slot + 1], count = records[slot + 3];
                     for (int i = 0; i < count; i++)
-                        if (records[SwitchTarget(records, table, i) * Width] == 0)
-                            return -1;
+                        if (!NoteTarget(records, SwitchTarget(records, table, i))) return -1;
                 }
             }
+            FuseUnsignedSingle(records, length);
             return 0;
+        }
+
+        private static bool NoteTarget(int[] records, int offset)
+        {
+            int slot = offset * Width;
+            if (records[slot] == ConvertFloat) records[slot + 3] = 1;
+            return records[slot] != 0;
+        }
+
+        private static void FuseUnsignedSingle(int[] records, int length)
+        {
+            for (int pc = 0; pc < length;)
+            {
+                int slot = pc * Width;
+                int next = records[slot + 2];
+                // .NET 10 rounds adjacent conv.r.un + conv.r4 once. Keep a
+                // separately reachable conv.r4 and an explicit conv.r8 intact.
+                if (records[slot] == ConvertFloat && records[slot + 1] == 0x76 && next < length)
+                {
+                    int following = next * Width;
+                    if (records[following] == ConvertFloat && records[following + 1] == 0x6b && records[following + 3] == 0)
+                    {
+                        records[slot + 1] = UnsignedSingle;
+                        records[slot + 2] = records[following + 2];
+                    }
+                }
+                pc = records[slot + 2];
+            }
         }
 
         internal static int SwitchTarget(int[] records, int table, int index) =>

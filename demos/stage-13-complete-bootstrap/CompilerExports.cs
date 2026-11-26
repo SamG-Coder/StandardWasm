@@ -12,6 +12,14 @@ namespace BootstrapLibrary
             PortableCompiler.MethodCompiler.CompileExports(image, entries, output);
         public static int CompileBundle(byte[] bundle, byte[] entries, byte[] output) =>
             PortableCompiler.MethodCompiler.CompileBundle(bundle, entries, output);
+        public static int[] CreateDiagnostic() => new int[PortableCompiler.CompileLocation.Size];
+        public static int ReadDiagnostic(int[] location, int index) => location[index];
+        public static int CompileDetailed(byte[] image, int row, byte[] output, int[] location) =>
+            PortableCompiler.MethodCompiler.CompileDetailed(image, row, output, location);
+        public static int CompileModuleDetailed(byte[] image, byte[] entries, byte[] output, int[] location) =>
+            PortableCompiler.MethodCompiler.CompileModuleDetailed(image, entries, output, location);
+        public static int CompileBundleDetailed(byte[] bundle, byte[] entries, byte[] output, int[] location) =>
+            PortableCompiler.MethodCompiler.CompileBundleDetailed(bundle, entries, output, location);
         public static int BootstrapKernel(int value) => value * 2 + 1;
     }
 }

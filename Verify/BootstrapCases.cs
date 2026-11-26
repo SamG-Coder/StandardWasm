@@ -8,7 +8,8 @@ internal static class BootstrapCases
         const int capacity = 1 << 20;
         var type = typeof(CompilerExports);
         byte[] dll = File.ReadAllBytes(type.Assembly.Location);
-        string[] exports = ["CompileModule", "CompileBundle", "Compile", "CreateBytes", "SetByte", "ReadByte", "FindRow"];
+        string[] exports = ["CompileModule", "CompileBundle", "Compile", "CreateBytes", "SetByte", "ReadByte", "FindRow",
+            "CreateDiagnostic", "ReadDiagnostic", "CompileDetailed", "CompileModuleDetailed", "CompileBundleDetailed"];
         byte[] manifest = Manifest(exports.Select(name => (name, Row(name))));
         var image = Encode(dll);
         cases.Add(new { module = "BootstrapLibrary", bootstrap = true, inputs = new[] { image, Encode(manifest) }, exports });

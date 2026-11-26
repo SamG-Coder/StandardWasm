@@ -61,4 +61,7 @@ DynamicControlsCases.Add(cases);
 BundleCases.Add(cases);
 PortableWideCases.Add(cases);
 PortableSwitchCases.Add(cases);
+DiagnosticCases.Add(cases);
+WideStorageCases.Add(cases);
+PortableFloatCases.Add(cases);
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));
