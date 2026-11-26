@@ -39,7 +39,8 @@
     <ProjectReference Include="../demos/stage-35-managed-control-tree/ReferenceLibrary.csproj" />
     <ProjectReference Include="../demos/stage-36-managed-events/EventLibrary.csproj" />
     <Compile Remove="Fixtures/**/*.cs" />
-    <ProjectReference Include="Fixtures/PlatformIdentity/ThirdPartyTypes/ThirdPartyTypes.csproj" Aliases="ThirdParty" />
+    <!-- A separate alias: main's ThirdParty alias also covers ThirdPartyText, which defines its own System.String. -->
+    <ProjectReference Include="Fixtures/PlatformIdentity/ThirdPartyTypes/ThirdPartyTypes.csproj" Aliases="PlatformThirdParty" />
     <ProjectReference Include="Fixtures/PlatformIdentity/PlatformIdentityProbe/PlatformIdentityProbe.csproj" />
     <ProjectReference Include="../demos/stage-21-managed-formatting/identity/ThirdPartyText/ThirdPartyText.csproj" Aliases="ThirdParty" />
     <ProjectReference Include="../demos/stage-21-managed-formatting/identity/TextIdentityProbe/TextIdentityProbe.csproj" />
