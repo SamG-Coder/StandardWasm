@@ -44,6 +44,8 @@ namespace NativeLayout
             return bytes[position] + bytes.Length;
         }
 
+        public static bool HasArrayItems(int length) => new int[length].Length != 0;
+
         public static nint RejectNativeAdd(nint left, nint right) => left + right;
     }
 

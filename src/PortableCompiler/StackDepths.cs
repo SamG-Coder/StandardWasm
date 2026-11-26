@@ -194,10 +194,10 @@ namespace PortableCompiler
                 byte top = stack[depth - 1];
                 if (type == Native || top == Native)
                 {
-                    // Native arithmetic and mixed-width numeric operations
-                    // need CLI-specific validation. Same-kind comparisons
-                    // and truth tests use the wasm32 bits directly.
-                    if (type != top || kind == Binary && !IsComparison(operand)) return -2;
+                    // CLI comparisons can mix native int and int32. Both
+                    // use i32 bits here, including the common ldlen test.
+                    if ((type != Native && type != I32) || (top != Native && top != I32) ||
+                        kind == Binary && !IsComparison(operand)) return -2;
                     return kind == Binary ? Push(stack, depth - 2, I32) : depth - needed;
                 }
                 if (type == NullValue || top == NullValue || IsReference(type) || IsReference(top))

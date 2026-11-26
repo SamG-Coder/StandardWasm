@@ -37,6 +37,8 @@ internal static class NativeStorageCases
         }
         foreach (var (length, index) in new[] { (1, 0), (4, 2), (127, 126) })
             Check(nameof(Kernels.ArrayAt), [length, index], Kernels.ArrayAt(length, index));
+        foreach (int length in new[] { 0, 1, 127 })
+            Check(nameof(Kernels.HasArrayItems), [length], Kernels.HasArrayItems(length) ? 1 : 0);
 
         Reject(bundle, nameof(Kernels.RejectNativeAdd), Offset(nameof(Kernels.RejectNativeAdd), OpCodes.Add), -2);
 
