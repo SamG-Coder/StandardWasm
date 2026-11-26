@@ -40,7 +40,8 @@ namespace PortableCompiler
         // closed declaring layout or 0]. context is the caller's own closed
         // declaring layout, which substitutes VAR in a TypeSpec parent.
         internal static int Resolve(byte[] main, byte[] bundle, int[] ranges, byte[] caller,
-            int[] layout, int[] heaps, int owner, int member, int opcode, bool baseCall, int[] objects, int[] symbol, int context, int callerType)
+            int[] layout, int[] heaps, int owner, int member, int opcode, bool baseCall, int[] objects, int[] symbol, int context, int callerType,
+            bool valueAddress = false)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedParent: true);
@@ -105,7 +106,9 @@ namespace PortableCompiler
                 {
                     if (!constructor || (flags & 0x1800) != 0x1800) return -2;
                 }
-                else if (constructor ? !baseCall || opcode != 0x28 : access != 6 && !local) return -2;
+                // call .ctor runs a base constructor, or constructs a value on a
+                // location's address. The linker then requires a value receiver.
+                else if (constructor ? !baseCall && !valueAddress || opcode != 0x28 : access != 6 && !local) return -2;
                 if (opcode == 0x6f && (flags & 0x40) != 0) return -2;
                 if (row != 0) return -5;
                 row = candidate;
