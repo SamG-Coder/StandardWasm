@@ -9,9 +9,8 @@ namespace PortableCompiler
     {
         internal const int FunctionCount = 2, TypeBytes = 12;
         private const string ModuleName = "standardwasm:resources";
-        private const string Memory = "memory", Reserve = "reserveName", Locate = "locate";
+        private const string Reserve = "reserveName", Locate = "locate";
         private static int EntryPrefixBytes => 1 + ModuleName.Length + 1 + 1;
-        internal static int MemoryEntryBytes => EntryPrefixBytes + Memory.Length + 2;
 
         internal static int WriteTypes(byte[] output, int cursor)
         {
@@ -33,14 +32,6 @@ namespace PortableCompiler
         internal static int ImportEntryBytes(int firstType) =>
             FunctionCount * EntryPrefixBytes + Reserve.Length + Locate.Length +
             WasmBinary.UnsignedSize(firstType) + WasmBinary.UnsignedSize(firstType + 1);
-
-        internal static int WriteMemory(byte[] output, int cursor)
-        {
-            cursor = Entry(output, cursor, Memory, 2);
-            output[cursor++] = 0; // wasm32 limits with no maximum
-            output[cursor++] = 1; // one initial page
-            return cursor;
-        }
 
         internal static int WriteEntries(byte[] output, int cursor, int firstType)
         {

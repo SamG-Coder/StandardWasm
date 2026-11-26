@@ -90,8 +90,13 @@ export async function invokeGenerated(exports, inputs, generated, reportDiagnost
         const hex = Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
         if (hex !== generated.hex) throw Error("Emitted bytes differ from the CLR compiler");
     }
-    const { instance, module } = await WebAssembly.instantiate(bytes);
-    if (WebAssembly.Module.imports(module).length) throw Error("Generated module has runtime imports");
+    // A pointer module (decision 0060) imports only the host-lent memory 0. Every
+    // other generated module stays import-free.
+    const memory = generated.memory ? { "standardwasm:resources": { memory: new WebAssembly.Memory({ initial: 1 }) } } : undefined;
+    const { instance, module } = await WebAssembly.instantiate(bytes, memory);
+    const imports = WebAssembly.Module.imports(module).map(entry => entry.module + "." + entry.name + ":" + entry.kind).join();
+    if (imports !== (generated.memory ? "standardwasm:resources.memory:memory" : ""))
+        throw Error("Generated module has unexpected runtime imports: " + imports);
     try {
         const exports = instance.exports;
         const entry = exports[generated.export ?? "run"];

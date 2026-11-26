@@ -47,13 +47,17 @@ async function check(compiler, images, entry, inline, inputs) {
     const { instance } = await WebAssembly.instantiate(code);
     new DataView(manifest.buffer).setUint32(0, inline, true);
     const inlineStatus = build.CompileBundleDetailed(bundle, upload(manifest), output, diagnostic);
-    if (inlineStatus !== -2 || locate().join(",") !== [0, inline, -1].join(","))
-        throw Error("Unexpected inline-array diagnostic " + inlineStatus + " at " + locate());
-    return { bytes: Array.from(code), inlineStatus, actual: inputs.map(input => instance.exports.run(BigInt(input)).toString()) };
+    if (inlineStatus < 1 || inlineStatus > capacity)
+        throw Error("Inline-array compilation returned " + inlineStatus + " at " + locate());
+    const inlineCode = Uint8Array.from({ length: inlineStatus }, (_, index) => build.ReadByte(output, index));
+    const { instance: inlineModule } = await WebAssembly.instantiate(inlineCode);
+    return { bytes: Array.from(code), inlineValue: inlineModule.exports.run(19),
+        actual: inputs.map(input => instance.exports.run(BigInt(input)).toString()) };
 }
 
 const node = await check(files[0], files.slice(1), oracle.entry, oracle.inline, oracle.inputs);
 assert.deepEqual(node.actual, oracle.expected);
+assert.equal(node.inlineValue, oracle.inlineExpected);
 const browser = await chromium.launch({ channel: "msedge" });
 try {
     const page = await browser.newPage();
@@ -70,9 +74,9 @@ try {
     assert.deepEqual(edge, node);
     writeFileSync(join(evidence, "overlay.wasm"), Uint8Array.from(node.bytes));
     writeFileSync(join(evidence, "results.json"), JSON.stringify({
-        runtime: oracle.runtime, node: process.version, edge: browser.version(), results: node.actual, inlineStatus: node.inlineStatus, bytes: node.bytes.length
+        runtime: oracle.runtime, node: process.version, edge: browser.version(), results: node.actual, inlineValue: node.inlineValue, bytes: node.bytes.length
     }, null, 2) + "\n");
-    console.log("Node and Edge matched " + node.actual.length + " installed CoreLib DateTime overlays on " + oracle.runtime + " and diagnosed the inline-array fixture.");
+    console.log("Node and Edge matched " + node.actual.length + " installed CoreLib DateTime overlays on " + oracle.runtime + " and matched the inline-array value copy.");
 } finally {
     await browser.close();
 }

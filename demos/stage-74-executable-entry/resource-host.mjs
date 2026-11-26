@@ -98,6 +98,11 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
             throw Error("The generated module requests an unsupported runtime import.");
     }
     if (!requestedResources.size) return WebAssembly.instantiate(module, runtimeImports);
+    // Native pointers and stackalloc need memory even without resource lookup.
+    if (requestedResources.size === 1 && requestedResources.has("memory")) {
+        const memory = new WebAssembly.Memory({ initial: 1 });
+        return WebAssembly.instantiate(module, { ...runtimeImports, [resourceImportModule]: { memory } });
+    }
     if (requestedResources.size === 1 && requestedResources.has("memory"))
         return WebAssembly.instantiate(module, { ...runtimeImports, [resourceImportModule]: { memory: createMemory() } });
     if (requestedResources.size !== resourceImportKinds.size || typeof compiler.FindEmbeddedResource !== "function")

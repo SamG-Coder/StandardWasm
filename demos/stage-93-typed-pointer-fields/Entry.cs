@@ -33,7 +33,8 @@ namespace TypedPointerDemo
             return 0;
         }
 
-        public static int RejectDereference(DrawingSlot slot) => *slot.Signed;
+        // A default int* field is null: ldind.i4 raises NullReferenceException (Stage 132).
+        public static int DereferenceNullField() => *new DrawingSlot().Signed;
         public static NativeFont* RejectExport() => null;
     }
 
