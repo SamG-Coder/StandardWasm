@@ -1,4 +1,4 @@
-# 0042 · Sequential reference layouts
+# 0045 · Sequential reference layouts
 
 Status: accepted for Stage 115 (#220).
 

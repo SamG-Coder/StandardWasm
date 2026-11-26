@@ -9,14 +9,17 @@ internal static class IlOffsets
         .Select(field => (OpCode)field.GetValue(null)!)
         .ToDictionary(opcode => opcode.Value);
 
-    internal static int Find(byte[] il, OpCode target)
+    internal static int Find(byte[] il, OpCode target) => Find(il, target, 0);
+
+    // Returns the offset of the given zero-based occurrence of the opcode.
+    internal static int Find(byte[] il, OpCode target, int occurrence)
     {
         for (int cursor = 0; cursor < il.Length;)
         {
             int offset = cursor;
             int first = il[cursor++];
             short value = first == 0xfe ? unchecked((short)(0xfe00 | il[cursor++])) : (short)first;
-            if (value == target.Value) return offset;
+            if (value == target.Value && occurrence-- == 0) return offset;
             cursor += Opcodes[value].OperandType switch
             {
                 OperandType.InlineNone => 0,

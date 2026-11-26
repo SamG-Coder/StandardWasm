@@ -21,6 +21,6 @@ The compiler reports `-2` at the `newobj` for these shapes:
   throws `TypeLoadException` for this shape outside the platform CoreLib.
 - a sequential class with a precise static constructor
 
-See [decision 0042](../../docs/decisions/0042-sequential-reference-layouts.md).
+See [decision 0045](../../docs/decisions/0045-sequential-reference-layouts.md).
 
 The verifier also checks that the compiler diagnoses a sequential COM-imported class whose original DLL the CLR rejects.

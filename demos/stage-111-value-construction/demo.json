@@ -1,0 +1,1 @@
+{"assembly":"ValueConstructionDemo","exportType":"ValueConstructionDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["ValueConstructionDependency.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":65536,"arguments":[5]},"expected":16610}

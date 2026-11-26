@@ -10,6 +10,16 @@ namespace PortableCompiler
             return RegisterClosed(main, bundle, ranges, image, layout, heaps, owner, row, objects, new int[0]);
         }
 
+        // A value-type definition in its own assembly. Returns -2 for a
+        // reference type or an enum, so callers keep their class diagnostics.
+        internal static int RegisterValue(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+            int[] layout, int[] heaps, int owner, int row, int[] objects)
+        {
+            int type = RegisterClosed(main, bundle, ranges, image, layout, heaps, owner, row, objects, new int[0], true);
+            if (type < 0) return type;
+            return ObjectLayouts.IsValueType(objects, type) ? type : -2;
+        }
+
         private static int RegisterClosed(byte[] main, byte[] bundle, int[] ranges, byte[] image,
             int[] layout, int[] heaps, int owner, int row, int[] objects, int[] arguments, bool valueType = false, bool enumIdentity = false)
         {
