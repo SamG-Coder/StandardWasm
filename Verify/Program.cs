@@ -155,6 +155,7 @@ VirtualDispatchCases.Add(cases);
 AllocatedReceiverCases.Add(cases);
 RuntimeDispatchCases.Add(cases);
 InterfaceDispatchCases.Add(cases);
+FieldlessValueCases.Add(cases);
 GenericBaseCases.Add(cases);
 RuntimeTypeCases.Add(cases);
 StringVectorCases.Add(cases);

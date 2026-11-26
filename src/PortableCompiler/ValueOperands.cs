@@ -6,7 +6,7 @@ namespace PortableCompiler
     internal static class ValueOperands
     {
         internal static int LowerLocal(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
-            int owner, int[] records, int slot, int[] frame, int[] objects, int[] clauses)
+            int owner, int methodCount, int[] records, int slot, int[] frame, int[] objects, int[] clauses)
         {
             int local = records[slot + 1], type = frame[local];
             if (type != RuntimeTypeMetadata.Handle && !ObjectLayouts.IsValueType(objects, type)) return -2;
@@ -21,7 +21,7 @@ namespace PortableCompiler
                 records[slot] = Load;
                 return 0;
             }
-            return LowerAddressUse(records, slot, local, clauses);
+            return LowerAddressUse(image, layout, heaps, methodCount, records, slot, local, clauses);
         }
 
         // In a value-type instance constructor, ldarg.0 pushes the managed
@@ -34,7 +34,7 @@ namespace PortableCompiler
         // same address, so initobj, stfld and a chained constructor stay
         // diagnosed and the callee never writes the caller's location.
         internal static int LowerReceiver(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
-            int owner, int[] records, int slot, int[] frame, int[] objects, int[] clauses, bool readOnly = false)
+            int owner, int methodCount, int[] records, int slot, int[] frame, int[] objects, int[] clauses, bool readOnly = false)
         {
             int next = records[slot + 2] * Width;
             if (next >= records.Length || Entry(records, next / Width, clauses)) return -2;
@@ -43,7 +43,7 @@ namespace PortableCompiler
             if (kind == GetField) return 0;
             if (kind == InitializeValue)
                 return readOnly ? -2 : Clear(bundle, image, layout, heaps, owner, records, slot, next, frame[0], objects);
-            return LowerAddressUse(records, slot, 0, clauses, readOnly);
+            return LowerAddressUse(image, layout, heaps, methodCount, records, slot, 0, clauses, readOnly);
         }
 
         // ldloca/ldarg.0 followed by initobj of the same type clears the location.
@@ -81,7 +81,8 @@ namespace PortableCompiler
         // that ends in stfld or in a call on that address. Track the
         // temporary stack separately so the sequence cannot consume values
         // below the original address or pass it anywhere else.
-        private static int LowerAddressUse(int[] records, int slot, int local, int[] clauses, bool readOnly = false)
+        private static int LowerAddressUse(byte[] image, int[] layout, int[] heaps, int methodCount,
+            int[] records, int slot, int local, int[] clauses, bool readOnly = false)
         {
             int next = records[slot + 2] * Width;
             int depth = 0;
@@ -99,6 +100,17 @@ namespace PortableCompiler
                 }
                 if (kind == Call && records[next + 3] == 0 || kind == MemberCall && records[next + 3] == 0x28)
                 {
+                    int after = StaticCallDepth(image, layout, heaps, methodCount,
+                        kind, records[next + 1], depth);
+                    if (after >= 0)
+                    {
+                        // This call consumes only the temporary operands.
+                        // The address stays pending for the later field store.
+                        depth = after;
+                        next = records[next + 2] * Width;
+                        continue;
+                    }
+
                     // [&value, arguments] -> call -> []. The link step accepts only
                     // a value-type instance constructor (ConstructValue) or a
                     // read-only instance method (decision 0049) with exactly
@@ -124,6 +136,41 @@ namespace PortableCompiler
                 next = records[next + 2] * Width;
             }
             return -2;
+        }
+
+        // Read only the stack effect. Normal call binding still validates the
+        // signature, the target and the types of every argument and result.
+        private static int StaticCallDepth(byte[] image, int[] layout, int[] heaps, int methodCount,
+            int kind, int row, int depth)
+        {
+            int blob;
+            if (kind == Call)
+            {
+                if (row < 1 || row > methodCount ||
+                    (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x10) == 0) return -1;
+                blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
+            }
+            else
+            {
+                var reference = new int[AssemblyReferences.SymbolWidth];
+                if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference, allowClosedParent: true) < 0)
+                    return -1;
+                blob = reference[5];
+            }
+
+            if (blob < 1 || blob >= heaps[1]) return -1;
+            int limit = heaps[0] + heaps[1];
+            var cursor = new int[1];
+            int size = ImageBytes.CompressedUnsigned(image, heaps[0] + blob, limit, cursor);
+            int start = cursor[0];
+            // Default calling convention, with neither this nor a generic arity.
+            if (size < 3 || size > limit - start || image[start] != 0) return -1;
+            int end = start + size;
+            int parameters = ImageBytes.CompressedUnsigned(image, start + 1, end, cursor);
+            if (parameters < 0 || parameters > depth || cursor[0] >= end) return -1;
+            int result = image[cursor[0]];
+            if (result == 0x1f || result == 0x20) return -1; // Return custom modifiers.
+            return depth - parameters + (result == 1 ? 0 : 1);
         }
 
         internal static bool Entry(int[] records, int target, int[] clauses)
