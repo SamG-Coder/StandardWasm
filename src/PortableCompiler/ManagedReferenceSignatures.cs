@@ -27,7 +27,7 @@ namespace PortableCompiler
         }
 
         internal static int Read(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
-            int owner, int[] next, int end, int context, int[] objects, int depth)
+            int owner, int[] next, int end, int context, int[] objects, int depth, int[] substitutions = null)
         {
             int at = next[0];
             if (at >= end) return -1;
@@ -53,32 +53,83 @@ namespace PortableCompiler
             {
                 int token = CompressedUnsigned(image, at + 1, end, next);
                 if (token < 0) return -1;
-                return element == 0x13 ? ObjectLayouts.Argument(objects, context, token) :
-                    BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, token, objects);
+                if (element == 0x13)
+                {
+                    if (substitutions == null) return ObjectLayouts.Argument(objects, context, token);
+                    return token < substitutions.Length ? substitutions[token] : -2;
+                }
+                return BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, token, objects);
             }
             if (element == 0x1d)
             {
-                int item = Read(bundle, image, layout, heaps, owner, next, end, context, objects, depth + 1);
+                int item = Read(bundle, image, layout, heaps, owner, next, end, context, objects, depth + 1, substitutions);
                 if (item < 0) return item;
                 // An enum vector needs separate nominal identity and array lowering.
                 if (ObjectLayouts.IsEnumKey(item)) return -2;
                 return GenericScalar.IsScalar(item) ? GenericScalar.VectorKey(item) : ObjectLayouts.RegisterArray(objects, item);
             }
-            if (element != 0x15 || at + 1 >= end) return -2;
-            int definitionKind = image[at + 1];
-            if (definitionKind != 0x12 && definitionKind != 0x11) return -2;
-            int definition = CompressedUnsigned(image, at + 2, end, next);
-            if (definition <= 0) return -1;
-            int count = CompressedUnsigned(image, next[0], end, next);
-            if (count <= 0 || count > end - next[0]) return -1;
+            if (element != 0x15) return -2;
+            var head = new int[2];
+            int count = ReadGenericHeader(image, next, end, head);
+            if (count < 0) return count;
             var arguments = new int[count];
-            for (int i = 0; i < count; i++)
+            int status = ReadArguments(bundle, image, layout, heaps, owner, next, end, context, objects,
+                depth + 1, substitutions, arguments);
+            if (status < 0) return status;
+            return BundleLayouts.RegisterInstantiation(bundle, image, layout, heaps, owner, head[0], objects, arguments, head[1] == 0x11);
+        }
+
+        // TypeSpec extends is read while the child has no layout. Interpret
+        // VAR in the child's argument vector and reserve the parent only.
+        internal static int ReserveBase(BundleImages bundle, byte[] image, int[] layout,
+            int[] heaps, int owner, int row, int[] objects, int[] substitutions)
+        {
+            int blob = AssemblyReferences.TypeSpecBlob(image, heaps, layout, row);
+            if (blob < 0) return blob;
+            int limit = heaps[0] + heaps[1];
+            var next = new int[1];
+            int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
+            int start = next[0];
+            if (size < 1 || size > limit - start) return -1;
+            if (image[start] != 0x15) return -2;
+            int end = start + size;
+            next[0] = start + 1;
+            var head = new int[2];
+            int count = ReadGenericHeader(image, next, end, head);
+            if (count < 0) return count;
+            if (head[1] != 0x12) return -2;
+            var arguments = new int[count];
+            int status = ReadArguments(bundle, image, layout, heaps, owner, next, end, 0, objects, 0, substitutions, arguments);
+            if (status < 0) return status;
+            if (next[0] != end) return -1;
+            return BundleLayouts.ReserveParent(bundle, image, layout, heaps, owner, head[0], objects, arguments);
+        }
+
+        private static int ReadGenericHeader(byte[] image, int[] cursor, int end, int[] head)
+        {
+            int start = cursor[0];
+            if (start >= end) return -1;
+            int definitionKind = image[start];
+            if (definitionKind != 0x12 && definitionKind != 0x11) return -2;
+            int definition = CompressedUnsigned(image, start + 1, end, cursor);
+            if (definition <= 0) return -1;
+            int count = CompressedUnsigned(image, cursor[0], end, cursor);
+            if (count <= 0 || count > end - cursor[0]) return -1;
+            head[0] = definition;
+            head[1] = definitionKind;
+            return count;
+        }
+
+        private static int ReadArguments(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int[] cursor, int end, int context, int[] objects, int depth, int[] substitutions, int[] arguments)
+        {
+            for (int i = 0; i < arguments.Length; i++)
             {
-                int argument = Read(bundle, image, layout, heaps, owner, next, end, context, objects, depth + 1);
+                int argument = Read(bundle, image, layout, heaps, owner, cursor, end, context, objects, depth, substitutions);
                 if (argument < 0) return argument;
                 arguments[i] = argument;
             }
-            return BundleLayouts.RegisterInstantiation(bundle, image, layout, heaps, owner, definition, objects, arguments, definitionKind == 0x11);
+            return 0;
         }
     }
 }
