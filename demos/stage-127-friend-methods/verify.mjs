@@ -93,7 +93,8 @@ try {
     }, { count: files.length, cases: oracle.cases, source: runCases.toString() });
     assert.deepEqual(edge, node);
     writeFileSync(join(evidence, "results.json"), JSON.stringify({ node: process.version, edge: browser.version(), results: node }, null, 2) + "\n");
-    const accepted = node.filter(result => result.values).length;
-    console.log("Node " + process.version + " and Edge " + browser.version() + " matched " + accepted +
-        " granted friend calls and " + (node.length - accepted) + " CLR access denials.");
+    const accepted = node.filter(result => result.values);
+    const comparisons = accepted.reduce((count, result) => count + result.values.length, 0);
+    console.log("Node " + process.version + " and Edge " + browser.version() + " matched " + comparisons +
+        " CLR call results and " + (node.length - accepted.length) + " CLR access denials.");
 } finally { await browser.close(); }

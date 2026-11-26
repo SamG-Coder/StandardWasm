@@ -27,4 +27,8 @@ The CLR oracle loads each caller with the provider under test in its own `Assemb
 | Unsigned caller, ungranted provider | MethodAccessException | -6 at the refused call, output untouched |
 | Key B caller, key A grant | MethodAccessException | -6 at the refused call, output untouched |
 
+A derived caller also invokes a protected virtual base implementation explicitly
+and a protected nonvirtual instance method. Both return the CLR's results for every
+provider, including the ungranted provider and the provider that grants another key.
+
 The design is decision 0055.

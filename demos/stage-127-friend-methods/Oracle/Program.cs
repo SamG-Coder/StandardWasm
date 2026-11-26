@@ -31,7 +31,7 @@ void Pair(string label, string callerVariant, string providerVariant)
     var context = new AssemblyLoadContext(label, isCollectible: true);
     context.Resolving += (_, name) => name.Name == "FriendProvider" ? context.LoadFromAssemblyPath(provider) : null;
     Type type = context.LoadFromAssemblyPath(caller).GetType("FriendFixture.Caller", throwOnError: true)!;
-    foreach (string name in new[] { "Run", "ComputeOnly", "PublicOnly" })
+    foreach (string name in new[] { "Run", "ComputeOnly", "PublicOnly", "ProtectedOnly" })
     {
         MethodInfo method = type.GetMethod(name)!;
         int row = method.MetadataToken & 0xffffff;

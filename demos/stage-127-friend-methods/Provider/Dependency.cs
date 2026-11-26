@@ -47,4 +47,10 @@ namespace FriendFixture
         internal int Twice() => Value * 2;
     }
 #endif
+
+    public class ProtectedBase
+    {
+        protected virtual int Transform(int input) => input + 11;
+        protected int Scale(int input) => input * 3;
+    }
 }

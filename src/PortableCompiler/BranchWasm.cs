@@ -521,7 +521,7 @@ namespace PortableCompiler
                         used = Gc(code, used, 1, type); // struct.new_default
                         used = Local(code, used, 0x22, temp);
                     }
-                    if (kind == Call && records[slot + 3] != 0)
+                    if (kind == Call && (records[slot + 3] & 1) != 0)
                     {
                         // The receiver and arguments have already been evaluated.
                         // Keep callvirt's managed null check before calling the known body.

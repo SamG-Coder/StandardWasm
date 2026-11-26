@@ -400,7 +400,13 @@ namespace PortableCompiler
                 return Push(stack, allocated, depth - arity, type);
             }
             if (kind == Call || kind == NewObject)
-                return CallShape(stack, allocated, depth, signatures, offsets[operand], arities[operand], kind == NewObject ? 1 : 0, objects);
+            {
+                int count = arities[operand];
+                int protectedReceiver = kind == Call ? extra >> 1 : 0;
+                if (protectedReceiver != 0 && (depth < count ||
+                    !Assignable(stack[depth - count], protectedReceiver, objects))) return -2;
+                return CallShape(stack, allocated, depth, signatures, offsets[operand], count, kind == NewObject ? 1 : 0, objects);
+            }
             if (kind == ConstructValue)
             {
                 // The receiver entry is the addressed location's value, pushed by

@@ -524,7 +524,7 @@ namespace PortableCompiler
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
                                 kind == BranchIl.LoadObjectIndirect || kind == BranchIl.StoreObjectIndirect ||
-                                kind == BranchIl.ExchangeHandlerField || (kind == BranchIl.Call && records[slot + 3] != 0))
+                                kind == BranchIl.ExchangeHandlerField || (kind == BranchIl.Call && (records[slot + 3] & 1) != 0))
                                 tags = ExceptionTypes.NullReference;
                             else if (kind == BranchIl.Binary)
                             {
@@ -1176,13 +1176,14 @@ namespace PortableCompiler
                     }
                     if (delegateMember == 0 && stringMember == 0 && constructorType == Delegate && bundle.Length != 0)
                     {
-                        var symbol = new int[5];
+                        var symbol = new int[6];
                         bool baseCall = opcode == 0x28 && callerReceiver >= ObjectLayouts.FirstClass &&
                             ObjectLayouts.IsConstructor(image, heaps, layout, callerRow);
                         if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
                         if (callerType < 0) return -1;
                         int resolved = AssemblyBundle.Resolve(bundle, image, layout, heaps, owner, member, opcode, baseCall, objects, symbol,
-                            context, callerType, allowVirtual: !addressed, valueAddress: addressed, callerMethodArguments: methodArguments);
+                            context, callerType, allowVirtual: !addressed, valueAddress: addressed, callerMethodArguments: methodArguments,
+                            callerReceiver: addressed ? 0 : callerReceiver);
                         if (resolved < 0) return resolved;
                         int targetOwner = symbol[0], targetRow = symbol[1], targetContext = symbol[3];
                         if (address < 0) targetContext = ~targetContext;
@@ -1239,7 +1240,9 @@ namespace PortableCompiler
                         }
                         records[slot] = opcode == 0x73 ? BranchIl.NewObject : BranchIl.Call;
                         records[slot + 1] = linked;
-                        records[slot + 3] = opcode == 0x6f ? 1 : 0;
+                        // Bit 0 is the callvirt null check. The upper bits carry the
+                        // derived type required on the stack for protected access.
+                        records[slot + 3] = (symbol[5] << 1) | (opcode == 0x6f ? 1 : 0);
                         continue;
                     }
                     int pointer = slot - 6 * BranchIl.Width;

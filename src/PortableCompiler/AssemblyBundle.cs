@@ -13,7 +13,7 @@ namespace PortableCompiler
         internal static int Resolve(BundleImages bundle, byte[] caller,
             int[] layout, int[] heaps, int owner, int member, int opcode, bool baseCall, int[] objects, int[] symbol, int context, int callerType,
             bool allowVirtual = false, bool valueAddress = false,
-            int methodArity = 0, int[] callerMethodArguments = null)
+            int methodArity = 0, int[] callerMethodArguments = null, int callerReceiver = 0)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedParent: true);
@@ -70,8 +70,8 @@ namespace PortableCompiler
                     (access == 3 || access == 5 || access == 1 && callerType == declaring);
                 // Assembly (internal) and FamORAssem (protected internal) members of another
                 // bundle assembly are accessible when it names the caller in InternalsVisibleTo,
-                // with the identity rules of decision 0028 (decision 0055). Private, FamANDAssem
-                // and Family-only access stay rejected here; Family keeps the base-call rule below.
+                // with the identity rules of decision 0028 (decision 0055). Access through
+                // inheritance is checked separately below.
                 if (!local && matched >= 0 && matched != owner && (access == 3 || access == 5))
                 {
                     if (friend == FriendUnknown)
@@ -83,7 +83,25 @@ namespace PortableCompiler
                     if (friend < 0) return friend;
                     local = friend != 0;
                 }
-                if (access != 6 && !local && !(baseCall && opcode == 0x28 && (access == 4 || access == 5))) continue;
+                bool familyAccess = !isStatic && (access == 4 || access == 5);
+                bool family = false;
+                if (access != 6 && !local)
+                {
+                    if (!familyAccess) continue;
+                    // A nonvirtual call can carry the protected receiver constraint to stack analysis.
+                    // A virtual dispatch requires its own proof, and base constructors have a separate check.
+                    if (callerReceiver >= ObjectLayouts.FirstClass &&
+                        (opcode == 0x28 || opcode == 0x6f && (flags & 0x40) == 0) &&
+                        ObjectLayouts.AssemblyOf(objects, callerReceiver) == owner &&
+                        ObjectLayouts.TypeDef(objects, callerReceiver) == callerType)
+                    {
+                        int declaringLayout = closed;
+                        if (declaringLayout == 0)
+                            declaringLayout = ObjectLayouts.Find(objects, matched, declaring, new int[0]);
+                        family = ObjectLayouts.Inherits(objects, callerReceiver, declaringLayout);
+                    }
+                    if (!family && !(baseCall && opcode == 0x28)) continue;
+                }
                 int signature = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 4);
                 int match = methodArity == 0
                     ? BundleSignatures.Match(bundle, caller, layout, heaps, owner, reference[5],
@@ -101,12 +119,13 @@ namespace PortableCompiler
                 }
                 // call .ctor runs a base constructor, or constructs a value on a
                 // location's address. The linker then requires a value receiver.
-                else if (constructor ? !baseCall && !valueAddress || opcode != 0x28 : access != 6 && !local) return -2;
+                else if (constructor ? !baseCall && !valueAddress || opcode != 0x28 : access != 6 && !local && !family) return -2;
                 if (opcode == 0x6f && (flags & 0x40) != 0 && !allowVirtual) return -2;
                 if (row != 0) return -5;
                 row = candidate;
                 symbol[2] = constructor ? declaring : 0;
                 if (allowVirtual) symbol[4] = flags & 0x40;
+                if (family && !constructor) symbol[5] = callerReceiver;
             }
             if (row == 0) return -6;
             symbol[0] = matched;
