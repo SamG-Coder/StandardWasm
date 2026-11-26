@@ -39,6 +39,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [38 Â· Profile rendering timings](stage-38-profile-rendering/README.md) | `npm run demo -- stage-38-profile-rendering` | Same-device timing and WebGPU/Canvas 2D pixel comparison |
 | [39 Â· Portable primitive array storage](stage-39-portable-primitive-arrays/README.md) | `npm run demo -- stage-39-portable-primitive-arrays` | ReadSigned(-32769) = 32767 |
 | [41 Â· Portable narrow scalar signatures](stage-41-portable-narrow-scalars/README.md) | `npm run demo -- stage-41-portable-narrow-scalars` | ReadSigned(255, 32768) = -32769 |
+| [42 Â· Generate the Profile in the browser](stage-42-generated-profile/README.md) | `npm run demo -- stage-42-generated-profile` | Generated compiler emits Profile in Edge, then the WebGPU form matches Windows interaction |
 | [43 Â· Primitive array literals](stage-43-array-literals/README.md) | `npm run demo -- stage-43-array-literals` | IntegerAt(1) = -93 |
 | [44 Â· Portable checked integers](stage-44-checked-integers/README.md) | `npm run demo -- stage-44-checked-integers` | MulI32(-12, 7) = -84 |
 | [45 Â· Checked fixed-width numeric casts](stage-45-checked-casts/README.md) | `npm run demo -- stage-45-checked-casts` | F64ToU8(255.9) = 255 |
@@ -65,6 +66,8 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [66 Â· Managed exception base catches](stage-66-base-exception-catches/README.md) | `npm run demo -- stage-66-base-exception-catches` | Rethrow runs cleanup and returns 118 |
 | [67 Â· Explicit null throws](stage-67-null-throw/README.md) | `npm run demo -- stage-67-null-throw` | A typed null exception runs cleanup and returns 113 |
 | [68 Â· Bare catch clauses](stage-68-bare-catch/README.md) | `npm run demo -- stage-68-bare-catch` | A bare catch rethrows to a typed handler and returns -301 |
+| [69 Â· Profile WebGPU text uploads](stage-69-profile-text-uploads/README.md) | `npm run demo -- stage-69-profile-text-uploads` | Partial and full text uploads produce identical pixels |
+| [70 Â· Profile preview redraw](stage-70-profile-caption-redraw/README.md) | `npm run demo -- stage-70-profile-caption-redraw` | Only the preview caption is rasterized on an edit |
 | [75 Â· Inherited layouts](stage-75-inherited-layouts/README.md) | `npm run demo -- stage-75-inherited-layouts` | Base and derived field storage are shared across three DLLs |
 | [76 Â· Initializer reachability](stage-76-initializer-reachability/README.md) | `npm run demo -- stage-76-initializer-reachability` | Unused type initializers leave independent calls available |
 | [78 Â· Strong-named assembly identity](stage-78-strong-names/README.md) | `npm run demo -- stage-78-strong-names` | A compiled DLL binds a signed dependency by its public key token |
@@ -80,16 +83,16 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [91 Â· Embedded sequential value types](stage-91-embedded-value-types/README.md) | `npm run demo -- stage-91-embedded-value-types` | Embedded values retain defaults and independent copies |
 | [92 Â· Nominal enum fields](stage-92-nominal-enums/README.md) | `npm run demo -- stage-92-nominal-enums` | Linked enum identity preserves backing width and flags behavior |
 | [89 Â· Unmanaged null pointer fields](stage-89-unmanaged-pointer-fields/README.md) | `npm run demo -- stage-89-unmanaged-pointer-fields` | Linked void pointer fields preserve safe null flows |
-| [93 · Typed null pointer fields](stage-93-typed-pointer-fields/README.md) | `npm run demo -- stage-93-typed-pointer-fields` | Pointer levels and CLR pointee identity survive linked null storage |
-| [94 · Floating-point instance fields](stage-94-floating-point-fields/README.md) | `npm run demo -- stage-94-floating-point-fields` | Linked Single and Double fields preserve storage precision |
-| [96 · Primitive generic layouts](stage-96-primitive-generic-layouts/README.md) | `npm run demo -- stage-96-primitive-generic-layouts` | Closed scalar and vector arguments retain CLI identity through linked value copies |
-| [97 · Generic byref-like permission](stage-97-byref-like-permission/README.md) | `npm run demo -- stage-97-byref-like-permission` | Ordinary arguments bind to .NET 10 generic definitions with AllowByRefLike |
-| [98 · Non-nullable value constraints](stage-98-nonnullable-value-constraints/README.md) | `npm run demo -- stage-98-nonnullable-value-constraints` | Closed struct constraints and original CoreLib Nullable field layout |
-| [99 · Named value arguments](stage-99-named-value-arguments/README.md) | `npm run demo -- stage-99-named-value-arguments` | Closed generics with linked sequential struct arguments |
-| [100 · Explicit scalar layouts](stage-100-explicit-scalar-layouts/README.md) | `npm run demo -- stage-100-explicit-scalar-layouts` | Shared bytes for overlapping scalar fields |
-| [101 · Nested overlay views](stage-101-nested-overlay-views/README.md) | `npm run demo -- stage-101-nested-overlay-views` | Nested scalar value views of the same explicit bytes |
-| [102 · Nominal enum arguments](stage-102-nominal-enum-arguments/README.md) | `npm run demo -- stage-102-nominal-enum-arguments` | Closed generic layouts retain enum identity and scalar storage |
-| [103 · Handle generic constraints](stage-103-handle-generic-constraints/README.md) | `npm run demo -- stage-103-handle-generic-constraints` | Compiled unmanaged marker and closed nominal interface constraints |
+| [93 ï¿½ Typed null pointer fields](stage-93-typed-pointer-fields/README.md) | `npm run demo -- stage-93-typed-pointer-fields` | Pointer levels and CLR pointee identity survive linked null storage |
+| [94 ï¿½ Floating-point instance fields](stage-94-floating-point-fields/README.md) | `npm run demo -- stage-94-floating-point-fields` | Linked Single and Double fields preserve storage precision |
+| [96 ï¿½ Primitive generic layouts](stage-96-primitive-generic-layouts/README.md) | `npm run demo -- stage-96-primitive-generic-layouts` | Closed scalar and vector arguments retain CLI identity through linked value copies |
+| [97 ï¿½ Generic byref-like permission](stage-97-byref-like-permission/README.md) | `npm run demo -- stage-97-byref-like-permission` | Ordinary arguments bind to .NET 10 generic definitions with AllowByRefLike |
+| [98 ï¿½ Non-nullable value constraints](stage-98-nonnullable-value-constraints/README.md) | `npm run demo -- stage-98-nonnullable-value-constraints` | Closed struct constraints and original CoreLib Nullable field layout |
+| [99 ï¿½ Named value arguments](stage-99-named-value-arguments/README.md) | `npm run demo -- stage-99-named-value-arguments` | Closed generics with linked sequential struct arguments |
+| [100 ï¿½ Explicit scalar layouts](stage-100-explicit-scalar-layouts/README.md) | `npm run demo -- stage-100-explicit-scalar-layouts` | Shared bytes for overlapping scalar fields |
+| [101 ï¿½ Nested overlay views](stage-101-nested-overlay-views/README.md) | `npm run demo -- stage-101-nested-overlay-views` | Nested scalar value views of the same explicit bytes |
+| [102 ï¿½ Nominal enum arguments](stage-102-nominal-enum-arguments/README.md) | `npm run demo -- stage-102-nominal-enum-arguments` | Closed generic layouts retain enum identity and scalar storage |
+| [103 ï¿½ Handle generic constraints](stage-103-handle-generic-constraints/README.md) | `npm run demo -- stage-103-handle-generic-constraints` | Compiled unmanaged marker and closed nominal interface constraints |
 
 ## Adding a stage
 
