@@ -38,9 +38,9 @@ internal static class GenericLayoutCases
         int replacement = typeof(Kernels).GetMethod(nameof(Kernels.ReadRight))!.MetadataToken;
         BinaryPrimitives.WriteInt32LittleEndian(changed.AsSpan(body + header + call + 1), replacement);
         Reject("distinct instantiation", BundleCases.Pack(changed, dependency), nameof(Kernels.Store), OpCodes.Stfld, -1);
-        if (Kernels.ReadConstructed(5) != 5)
-            throw new InvalidOperationException("The CLR generic constructor fixture did not execute.");
-        Reject("specialized constructor", bundle, nameof(Kernels.ReadConstructed), OpCodes.Newobj, -2);
+        // Issue #193 specializes the closed constructor instead of rejecting it.
+        foreach (int value in new[] { int.MinValue, 0, 5, int.MaxValue })
+            Check(nameof(Kernels.ReadConstructed), [value], () => Kernels.ReadConstructed(value));
 
         void Check(string name, int[] arguments, Func<int> clr)
         {

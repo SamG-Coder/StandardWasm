@@ -474,7 +474,7 @@ namespace PortableCompiler
 
         // Positive heap indices are encoded as signed LEB values. The sign
         // bit reserves one additional bit compared with an unsigned index.
-        private static int HeapTypeSize(int index) => UnsignedSize(index * 2);
+        internal static int HeapTypeSize(int index) => UnsignedSize(index * 2);
 
         private static int ThunkSize(int receiver, int function, int arity) =>
             7 + HeapTypeSize(HeapType(receiver)) + 2 * (arity - 1) + UnsignedSize(function);

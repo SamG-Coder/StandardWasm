@@ -8,8 +8,9 @@ vectors declared as `T[]`. A second assembly reads and writes the closed
 references and exercises array allocation, null, index checks and identity.
 
 The stage supports reference arguments, exact noncovariant array assignments,
-and layout of closed reference type signatures. Generic method specialization,
-direct calls on generic declaring types, value-type arguments, generic base
-classes and nominal generic constraints need separate support.
+and layout of closed reference type signatures. Direct calls on closed generic
+declaring types are specialized by [Stage 105](../stage-105-generic-method-bodies/README.md).
+Generic methods, generic base classes and reference array covariance need
+separate support.
 
 See the [closed generic layout decision](../../docs/decisions/0029-closed-generic-reference-layouts.md).

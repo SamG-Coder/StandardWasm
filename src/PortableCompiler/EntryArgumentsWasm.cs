@@ -36,8 +36,8 @@ namespace PortableCompiler
         }
 
         // Value types encode the heap type as s33; instructions encode a u32 type index.
-        private static int ValueHeapWidth(int array) => WasmBinary.HeapType((byte)array) <= 63 ? 1 : 2;
-        private static int IndexWidth(int array) => WasmBinary.UnsignedSize(WasmBinary.HeapType((byte)array));
+        private static int ValueHeapWidth(int array) => WasmBinary.HeapTypeSize(WasmBinary.HeapType(array));
+        private static int IndexWidth(int array) => WasmBinary.UnsignedSize(WasmBinary.HeapType(array));
 
         internal static int TypeBytes(int array) =>
             // (i32) -> ref null array; (i32) -> ref null Char[]; (Char[], i32, i32) -> (); (array, i32, Char[]) -> ()
@@ -76,7 +76,7 @@ namespace PortableCompiler
 
         internal static int WriteBodies(byte[] output, int cursor, int array)
         {
-            int heap = WasmBinary.HeapType((byte)array);
+            int heap = WasmBinary.HeapType(array);
             cursor = WasmBinary.Unsigned(output, cursor, 6 + IndexWidth(array));
             cursor = Allocate(output, cursor, heap);
             cursor = WasmBinary.Unsigned(output, cursor, 7);

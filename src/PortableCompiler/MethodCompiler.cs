@@ -118,13 +118,19 @@ namespace PortableCompiler
             // Closed instantiations have distinct field slices and argument
             // vectors even when they share a CLI definition.
             var objects = new int[ObjectLayouts.FieldMapStart + imageBytes / 6 + interfaces * 2 + output.Length / 4];
-            var owners = new int[symbols];
-            var rows = new int[symbols];
+            // One MethodDef can have a body per closed declaring instantiation.
+            // Reserve as many specialized bodies as definitions; exceeding that
+            // is a reported capacity failure, never a shared approximation.
+            if (symbols > int.MaxValue / 2 - 1) return -3;
+            int functionCapacity = symbols * 2;
+            var owners = new int[functionCapacity];
+            var rows = new int[functionCapacity];
+            var contexts = new int[functionCapacity];
             var indices = new int[symbols + 1];
-            var arities = new int[symbols];
-            var offsets = new int[symbols];
-            var sizes = new int[symbols];
-            var thunks = new int[symbols + 1];
+            var arities = new int[functionCapacity];
+            var offsets = new int[functionCapacity];
+            var sizes = new int[functionCapacity];
+            var thunks = new int[functionCapacity + 1];
             var signatures = new int[output.Length];
             var frame = new int[output.Length];
             var moduleCode = new byte[output.Length];
@@ -143,7 +149,7 @@ namespace PortableCompiler
                 int index = indices[row] - 1;
                 if (index < 0)
                 {
-                    functions = Register(main, bundle, ranges, image, layout, heaps, 0, (int)row, owners, rows, bases, indices,
+                    functions = Register(main, bundle, ranges, image, layout, heaps, 0, (int)row, 0, owners, rows, contexts, bases, indices,
                         arities, offsets, signatures, objects, functions);
                     if (functions < 0) return functions;
                     index = functions - 1;
@@ -171,7 +177,7 @@ namespace PortableCompiler
             int activeOwner = 0;
             for (int current = 0; current < functions; current++)
             {
-                int owner = owners[current], source = rows[current];
+                int owner = owners[current], source = rows[current], context = contexts[current];
                 CompileLocation.Set(location, owner, source, -1);
                 if (owner != activeOwner)
                 {
@@ -231,7 +237,7 @@ namespace PortableCompiler
                     int localBlob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, body[3]);
                     if (localBlob < 0)
                         return -1;
-                    locals = SignatureTypes.Read(main, bundle, ranges, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner);
+                    locals = SignatureTypes.Read(main, bundle, ranges, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context);
                     if (locals < 0)
                         return locals;
                     if (locals > 0 && body[4] == 0)
@@ -252,8 +258,8 @@ namespace PortableCompiler
                     status = ArrayInitializers.Lower(image, heaps, layout, records, literals, literalSize, location);
                     if (status < 0)
                         return status;
-                    functions = LinkOperands(main, bundle, ranges, image, layout, heaps, owner, source,
-                        parameters == 0 ? 0 : signatures[signature + 1], records, owners, rows,
+                    functions = LinkOperands(main, bundle, ranges, image, layout, heaps, owner, source, context,
+                        parameters == 0 ? 0 : signatures[signature + 1], records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse);
                     if (functions < 0)
                         return functions;
@@ -411,9 +417,10 @@ namespace PortableCompiler
         }
 
         private static int LinkOperands(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
-            int[] heaps, int owner, int callerRow, int callerReceiver, int[] records, int[] owners, int[] rows, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
+            int[] heaps, int owner, int callerRow, int context, int callerReceiver, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse)
         {
+            int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
             {
                 int kind = records[slot];
@@ -466,8 +473,10 @@ namespace PortableCompiler
                     {
                         if (bundle.Length == 0) return -2;
                         var linkedField = new int[2];
+                        if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
+                        if (callerType < 0) return -1;
                         int status = AssemblyBundle.ResolveField(main, bundle, ranges, image, layout, heaps, owner,
-                            field, kind == BranchIl.SetField, false, objects, globals, linkedField);
+                            field, kind == BranchIl.SetField, false, objects, globals, linkedField, context, callerType);
                         if (status < 0) return status;
                         records[slot + 1] = linkedField[0];
                         records[slot + 3] = linkedField[1];
@@ -524,7 +533,7 @@ namespace PortableCompiler
 
                     if (linked && bundle.Length == 0) return -2;
                     int status = linked ? AssemblyBundle.ResolveField(main, bundle, ranges, image, layout, heaps, owner,
-                        field, write, true, objects, globals, symbol) :
+                        field, write, true, objects, globals, symbol, context, callerType) :
                         StaticFields.ResolveLocal(main, bundle, ranges, image, layout, heaps, owner, field, write, objects, globals, symbol);
                     if (status < 0) return status;
                     records[slot + 1] = symbol[0];
@@ -621,13 +630,16 @@ namespace PortableCompiler
                     }
                     if (delegateMember == 0 && stringMember == 0 && constructorType == Delegate && bundle.Length != 0)
                     {
-                        var symbol = new int[3];
+                        var symbol = new int[4];
                         bool baseCall = opcode == 0x28 && callerReceiver >= ObjectLayouts.FirstClass &&
                             ObjectLayouts.IsConstructor(image, heaps, layout, callerRow);
-                        int resolved = AssemblyBundle.Resolve(main, bundle, ranges, image, layout, heaps, owner, member, opcode, baseCall, objects, symbol);
+                        if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
+                        if (callerType < 0) return -1;
+                        int resolved = AssemblyBundle.Resolve(main, bundle, ranges, image, layout, heaps, owner, member, opcode, baseCall, objects, symbol,
+                            context, callerType);
                         if (resolved < 0) return resolved;
-                        int targetOwner = symbol[0], targetRow = symbol[1];
-                        int linked = indices[bases[targetOwner] + targetRow] - 1;
+                        int targetOwner = symbol[0], targetRow = symbol[1], targetContext = symbol[3];
+                        int linked = Lookup(owners, rows, contexts, bases, indices, functions, targetOwner, targetRow, targetContext);
                         if (linked < 0)
                         {
                             byte[] targetImage = AssemblyBundle.Load(main, bundle, ranges, targetOwner);
@@ -636,7 +648,7 @@ namespace PortableCompiler
                             if (CompressedTables.FindWithHeaps(targetImage, targetLayout, targetHeaps) < 0)
                                 return -1;
                             functions = Register(main, bundle, ranges, targetImage, targetLayout, targetHeaps, targetOwner, targetRow,
-                                owners, rows, bases, indices, arities, offsets, signatures, objects, functions);
+                                targetContext, owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions);
                             if (functions < 0) return functions;
                             linked = functions - 1;
                         }
@@ -678,7 +690,7 @@ namespace PortableCompiler
                 int index = indices[bases[owner] + target] - 1;
                 if (index < 0)
                 {
-                    functions = Register(main, bundle, ranges, image, layout, heaps, owner, target, owners, rows, bases, indices,
+                    functions = Register(main, bundle, ranges, image, layout, heaps, owner, target, 0, owners, rows, contexts, bases, indices,
                         arities, offsets, signatures, objects, functions);
                     if (functions < 0) return functions;
                     index = functions - 1;
@@ -768,16 +780,31 @@ namespace PortableCompiler
             return true;
         }
 
-        private static int Register(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps, int owner, int row,
-            int[] owners, int[] rows, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int functions)
+        // A function is identified by (assembly, MethodDef, closed declaring
+        // layout). Nongeneric definitions use context zero and the dense
+        // per-row index; specialized bodies are found by their full key.
+        private static int Lookup(int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int functions,
+            int owner, int row, int context)
         {
+            if (context == 0) return indices[bases[owner] + row] - 1;
+            for (int function = 0; function < functions; function++)
+                if (contexts[function] == context && rows[function] == row && owners[function] == owner) return function;
+            return -1;
+        }
+
+        private static int Register(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps, int owner, int row,
+            int context, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures,
+            int[] objects, int functions)
+        {
+            if (functions >= owners.Length) return -3;
             int offset = functions == 0 ? 0 : offsets[functions - 1] + arities[functions - 1] + 1;
-            int arity = MethodShape(main, bundle, ranges, image, layout, heaps, owner, row, signatures, offset, objects);
+            int arity = MethodShape(main, bundle, ranges, image, layout, heaps, owner, row, context, signatures, offset, objects);
             if (arity < 0)
                 return arity;
             owners[functions] = owner;
             rows[functions] = row;
-            indices[bases[owner] + row] = functions + 1;
+            contexts[functions] = context;
+            if (context == 0) indices[bases[owner] + row] = functions + 1;
             arities[functions] = arity;
             offsets[functions] = offset;
             return functions + 1;
@@ -796,7 +823,8 @@ namespace PortableCompiler
             return true;
         }
 
-        private static int MethodShape(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps, int assembly, int row, int[] types, int offset, int[] objects)
+        private static int MethodShape(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps, int assembly, int row,
+            int context, int[] types, int offset, int[] objects)
         {
             int attributes = MethodDefinitions.ReadColumn(image, layout, row, 2);
             int implementation = MethodDefinitions.ReadColumn(image, layout, row, 1);
@@ -810,15 +838,27 @@ namespace PortableCompiler
             int initialization = TypeInitializers.RejectDeclaringType(image, layout, heaps, owner,
                 allowBeforeFieldInit: true);
             if (initialization < 0) return initialization;
-            int receiver = 0;
-            if (!isStatic)
+            if (context != 0)
+            {
+                // The closed layout must instantiate this method's own definition.
+                if (ObjectLayouts.AssemblyOf(objects, context) != assembly || ObjectLayouts.TypeDef(objects, context) != owner)
+                    return -1;
+            }
+            else
+            {
+                // An open generic body needs a closed declaring instantiation.
+                int open = GenericParameters.Check(image, heaps, layout, owner, new int[0], objects, new int[8]);
+                if (open != 0) return open < 0 ? open : -2;
+            }
+            int receiver = isStatic ? 0 : context;
+            if (!isStatic && receiver == 0)
             {
                 receiver = BundleLayouts.Register(main, bundle, ranges, image, layout, heaps, assembly, owner, objects);
                 if (receiver < 0) return receiver;
                 if (ObjectLayouts.IsInterface(objects, receiver)) return -2;
             }
             int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
-            return SignatureTypes.Read(main, bundle, ranges, image, heaps, signature, types, offset, receiver, layout, objects, assembly);
+            return SignatureTypes.Read(main, bundle, ranges, image, heaps, signature, types, offset, receiver, layout, objects, assembly, context);
         }
     }
 }
