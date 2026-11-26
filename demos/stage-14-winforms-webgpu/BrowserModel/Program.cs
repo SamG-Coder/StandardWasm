@@ -8,7 +8,7 @@ if (args.Length != 2)
 
 var resources = new
 {
-    keys = new { increment = CounterLayout.Increment, result = CounterLayout.Result },
+    keys = new { result = CounterLayout.Result },
     kinds = new { button = ControlTree.Button, label = ControlTree.Label },
     columns = new
     {

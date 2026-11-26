@@ -42,8 +42,12 @@ export function canvasBaseline(model, text, canvas = new OffscreenCanvas(model.w
     const background = rgb(tones.background);
     const initialColors = model.controls.map(control => rgb(controlTone(control, false)));
     const activeColor = rgb(tones.active);
-    const states = new Uint8Array(model.controls.length);
+    const states = new Uint8Array(model.capacity ?? model.controls.length);
     return {
+        updateControl(index, control) {
+            initialColors[index] = rgb(controlTone(control, false));
+            states[index] = 0;
+        },
         update(start, count, active) {
             states.fill(active ? 1 : 0, start, start + count);
         },
@@ -103,16 +107,21 @@ export async function webgpuRenderer(canvas, model, text) {
     const format = navigator.gpu.getPreferredCanvasFormat();
     context.configure({ device, format, alphaMode: "opaque" });
 
-    const rectangles = new Float32Array(model.controls.length * 4);
-    const initialColors = new Uint8Array(model.controls.length * 4);
-    const activeColors = new Uint8Array(model.controls.length * 4);
+    const capacity = model.capacity ?? model.controls.length;
+    const rectangles = new Float32Array(capacity * 4);
+    const initialColors = new Uint8Array(capacity * 4);
+    const activeColors = new Uint8Array(capacity * 4);
 
     const rgba = tone => [...tone.map(value => Math.round(value * 255)), 255];
     const active = rgba(tones.active);
-    for (const [i, control] of model.controls.entries()) {
-        initialColors.set(rgba(controlTone(control, false)), i * 4);
+    for (let i = 0; i < capacity; i++)
         activeColors.set(active, i * 4);
+
+    function encodeColor(index, control) {
+        initialColors.set(rgba(controlTone(control, false)), index * 4);
     }
+    for (const [i, control] of model.controls.entries())
+        encodeColor(i, control);
 
     function encodeBounds(i, c) {
         const left = 2 * c.x / model.width - 1;
@@ -173,6 +182,12 @@ export async function webgpuRenderer(canvas, model, text) {
         dispose() {
             context.unconfigure();
             device.destroy();
+        },
+        updateControl(index, control) {
+            encodeBounds(index, control);
+            encodeColor(index, control);
+            device.queue.writeBuffer(geometryBuffer, index * 16, rectangles, index * 4, 4);
+            device.queue.writeBuffer(colorBuffer, index * 4, initialColors, index * 4, 4);
         },
         updateBounds(index, control) {
             encodeBounds(index, control);

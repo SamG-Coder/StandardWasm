@@ -12,4 +12,4 @@ The Stage 14 browser now gets the control count, kind, key and bounds from the r
 
 The click delegate mutates the C# tree. Native WinForms applies the resulting rectangles. Edge reads the same live tree and updates one instanced WebGPU rectangle and the glyph layer. Both hosts report label x coordinates of 32, 56 and 32 after startup, click and Enter. The browser test confirms the position changed in the WebGPU framebuffer and saves the intermediate screenshot to artifacts/winforms/browser-moved.png.
 
-The browser adapter handles the supported Button and Label kinds and property changes for its existing controls. Runtime child insertion/removal, wider WinForms layout features and general managed control types are open.
+The browser adapter handles the supported Button and Label kinds and property changes for its existing controls. [Stage 22](../stage-22-dynamic-controls/README.md) adds runtime insertion and removal for the counter. Wider WinForms layout features and general managed control types are open.

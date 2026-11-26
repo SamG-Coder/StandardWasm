@@ -84,8 +84,8 @@ const rejectedCulture = spawnSync("dotnet", ["run", "-c", "Release", "--no-build
 assert.equal(rejectedCulture.status, 1);
 assert.match(rejectedCulture.stderr, /Measures::Sqrt\(System\.Double\) at IL_[0-9a-f]+ \([a-z.0-9]+\): Unsupported value type: System\.Double in netstandard/);
 assert.equal(existsSync("artifacts/unsupported-culture.wat"), false);
-const cases = JSON.parse(readFileSync("artifacts/oracle.json"));
-console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases,
+const oracle = readFileSync("artifacts/oracle.json");
+console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), JSON.parse(oracle),
     bytes => writeFileSync("artifacts/StandardWasm.Compiler.wasm", bytes)));
 
 const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
@@ -96,6 +96,8 @@ try {
     const page = await browser.newPage();
     // Serve only these fixture assets to the isolated test page.
     const assets = new Map([
+        // Passing the parsed byte arrays through Playwright can exceed the Node heap.
+        ["/oracle.json", ["application/json", oracle]],
         ["/bootstrap.mjs", ["text/javascript", readFileSync("scripts/bootstrap.mjs")]],
         ["/invoke.mjs", ["text/javascript", readFileSync("scripts/invoke.mjs")]],
         ["/verify.mjs", ["text/javascript", readFileSync("scripts/verify.mjs")]],
@@ -107,10 +109,11 @@ try {
         await route.fulfill({ contentType, body });
     });
     await page.goto("http://standardwasm.test/");
-    const result = await page.evaluate(async cases => {
+    const result = await page.evaluate(async () => {
+        const cases = await (await fetch("/oracle.json")).json();
         const { verify } = await import("/verify.mjs");
         return verify(async name => (await fetch("/" + name)).arrayBuffer(), cases);
-    }, cases);
+    });
     console.log("Chromium " + browser.version() + ":", result);
 } finally {
     await browser.close();
