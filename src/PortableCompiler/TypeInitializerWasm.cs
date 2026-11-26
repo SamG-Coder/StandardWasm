@@ -99,17 +99,33 @@ namespace PortableCompiler
         }
 
         // A host export entry: (arguments) -> result of `target`. Returns -3 when
-        // the destination is too small.
-        internal static int ExportEntry(byte[] code, int used, int epoch, int active, int target, int arity)
+        // the destination is too small. Either part is omitted when its globals are -1.
+        // The host never re-enters an export while managed frames are live, so at entry
+        // no initializer can legitimately be running and no shadow-stack frame is live.
+        internal static int ExportEntry(byte[] code, int used, int epoch, int active, int target, int arity,
+            int stackPointer = -1, int stackLimit = -1)
         {
             if (arity > (code.Length - used - ExportCapacity) / 6) return -3;
             code[used++] = 0; // no locals
-            used = Global(code, used, 0x23, active);
-            code[used++] = 0x04; code[used++] = 0x40; // initializers left running by a raw trap
-            used = Adjust(code, used, epoch, 1);
-            used = BranchWasm.Const(code, used, 0);
-            used = Global(code, used, 0x24, active);
-            code[used++] = 0x0b;
+            if (epoch >= 0)
+            {
+                used = Global(code, used, 0x23, active);
+                code[used++] = 0x04; code[used++] = 0x40; // initializers left running by a raw trap
+                used = Adjust(code, used, epoch, 1);
+                used = BranchWasm.Const(code, used, 0);
+                used = Global(code, used, 0x24, active);
+                code[used++] = 0x0b;
+            }
+            if (stackPointer >= 0)
+            {
+                // A raw trap can skip a frame's release: start each host call with an
+                // empty shadow stack (decision 0065). Zero means not yet reserved.
+                used = Global(code, used, 0x23, stackPointer);
+                code[used++] = 0x04; code[used++] = 0x40;
+                used = Global(code, used, 0x23, stackLimit);
+                used = Global(code, used, 0x24, stackPointer);
+                code[used++] = 0x0b;
+            }
             for (int i = 0; i < arity; i++) used = BranchWasm.Local(code, used, 0x20, i);
             code[used++] = 0x10;
             used = WasmBinary.Unsigned(code, used, target);
@@ -117,7 +133,7 @@ namespace PortableCompiler
             return used;
         }
 
-        private const int ExportCapacity = 48;
+        private const int ExportCapacity = 64;
 
         private static int Adjust(byte[] code, int used, int global, int delta)
         {
