@@ -7,7 +7,7 @@ namespace PortableCompiler
     internal static class StackDepths
     {
         internal static int Analyze(int[] records, int[] depths, byte[] states, int maximum,
-            int[] frame, int result, int[] signatures, int[] offsets, int[] arities, int[] location)
+            int[] frame, int result, int[] signatures, int[] offsets, int[] arities, int[] location, int[] catchRegion)
         {
             if (depths.Length == 0)
                 return -1;
@@ -15,6 +15,12 @@ namespace PortableCompiler
             var stack = new byte[maximum];
             depths[0] = 1;
             int head = 0, tail = 1;
+            if (catchRegion.Length != 0)
+            {
+                int handler = catchRegion[OverflowCatch.Resume];
+                depths[handler] = 1;
+                pending[tail++] = handler;
+            }
             while (head < tail)
             {
                 int pc = pending[head++];
@@ -22,6 +28,7 @@ namespace PortableCompiler
                 int slot = pc * BranchIl.Width;
                 int kind = records[slot];
                 int depth = depths[pc] - 1;
+                if (catchRegion.Length != 0 && pc == catchRegion[OverflowCatch.TryStart] && depth != 0) return -1;
                 int operand = records[slot + 1];
                 for (int i = 0; i < depth; i++)
                     stack[i] = states[pc * maximum + i];
@@ -33,7 +40,12 @@ namespace PortableCompiler
                 }
 
                 int next;
-                if (kind == ExchangeHandlerField)
+                if (kind == Leave)
+                {
+                    if (catchRegion.Length == 0) return -2;
+                    next = 0; // leave clears the CIL evaluation stack.
+                }
+                else if (kind == ExchangeHandlerField)
                 {
                     if (!Match(stack, depth, (byte)(records[slot + 3] >> 8)) ||
                         frame[records[slot + BranchIl.Width + 1]] != EventHandlerReference ||
@@ -45,7 +57,7 @@ namespace PortableCompiler
                     signatures, offsets, arities);
                 if (next < 0)
                     return next;
-                if (kind == Branch || kind == Conditional)
+                if (kind == Branch || kind == Conditional || kind == Leave)
                 {
                     tail = Edge(operand, next, maximum, stack, depths, states, pending, tail);
                     if (tail < 0) return -1;
@@ -59,7 +71,7 @@ namespace PortableCompiler
                         if (tail < 0) return -1;
                     }
                 }
-                if (kind != Branch)
+                if (kind != Branch && kind != Leave)
                 {
                     tail = Edge(records[slot + 2], next, maximum, stack, depths, states, pending, tail);
                     if (tail < 0) return -1;

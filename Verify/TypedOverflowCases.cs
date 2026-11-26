@@ -14,7 +14,7 @@ internal static class TypedOverflowCases
         (int Operation, int A, int B)[] branchInputs =
             [(0, 10, 7), (0, int.MaxValue, 1), (0, int.MinValue, -1), (1, 10, 2), (1, 1, 0), (1, int.MinValue, -1)];
         Check(nameof(Faults.AddOrDivide), branchInputs.Select(value =>
-            (new object[] { value.Operation, value.A, value.B }, value.Operation == 0,
+            (new object[] { value.Operation, value.A, value.B }, true,
                 (Func<object>)(() => Faults.AddOrDivide(value.Operation, value.A, value.B)))));
 
         (long A, long B)[] products = [(long.MinValue, -1), (-1, long.MinValue), (long.MinValue, 0), (long.MaxValue, 2), (3, -7)];
@@ -51,7 +51,7 @@ internal static class TypedOverflowCases
                 {
                     module = "BootstrapLibrary", method = "Compile", fixture = method,
                     inputs = new object[] { encoded, row }, generated = new { capacity, arguments, hex,
-                        exceptionType = typed ? exception : null }, expected, exception
+                        exceptionType = typed && exception == typeof(OverflowException).FullName ? exception : null }, expected, exception
                 });
             }
         }

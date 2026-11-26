@@ -57,7 +57,7 @@ namespace PortableCompiler
             for (int slot = 0; slot < records.Length; slot += Width)
             {
                 int kind = records[slot], operand = records[slot + 1];
-                if ((kind == Branch || kind == Conditional) && operand >= first && operand <= last)
+                if ((kind == Branch || kind == Conditional || kind == Leave) && operand >= first && operand <= last)
                     return true;
                 if (kind != Switch) continue;
                 for (int i = 0; i < records[slot + 3]; i++)

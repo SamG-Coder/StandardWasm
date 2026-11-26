@@ -11,7 +11,7 @@ namespace PortableCompiler
         internal const int LoadEventArgsEmpty = 38, NewEventArgs = 39, CombineHandler = 40, CastHandler = 41, RemoveHandler = 42;
         internal const int FieldAddress = 43, MethodSpecCall = 44, ExchangeHandlerField = 45;
         internal const int FieldToken = 46, InitializedArray = 47;
-        internal const int CheckedInteger = 48, CheckedConversion = 49;
+        internal const int CheckedInteger = 48, CheckedConversion = 49, Leave = 50;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
@@ -131,6 +131,16 @@ namespace PortableCompiler
                         if (delta < -pc || delta >= length - pc) return -1;
                         records[entry * Width + 1] = pc + delta;
                     }
+                }
+                else if (op == 0xdd || op == 0xde)
+                {
+                    int size = op == 0xdd ? 4 : 1;
+                    if (length - pc < size) return -1;
+                    int delta = size == 4 ? unchecked((int)ImageBytes.U32(image, (uint)(start + pc))) : SignedByte(image[start + pc]);
+                    pc += size;
+                    if (delta < -pc || delta >= length - pc) return -1;
+                    operand = pc + delta;
+                    kind = Leave;
                 }
                 else if (op == 0x28 || op == 0x6f || op == 0x73 || op == 0x7b || op == 0x7c || op == 0x7d || op == 0x7e)
                 {
@@ -279,7 +289,7 @@ namespace PortableCompiler
                 if (location.Length != 0) location[2] = pcIndex;
                 int slot = pcIndex * Width;
                 int kind = records[slot];
-                if ((kind == Branch || kind == Conditional) && !NoteTarget(records, records[slot + 1]))
+                if ((kind == Branch || kind == Conditional || kind == Leave) && !NoteTarget(records, records[slot + 1]))
                     return -1;
                 if (kind == Switch)
                 {
@@ -315,6 +325,7 @@ namespace PortableCompiler
                     {
                         records[slot + 1] = UnsignedSingle;
                         records[slot + 2] = records[following + 2];
+                        records[following] = 0;
                     }
                 }
                 pc = records[slot + 2];

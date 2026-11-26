@@ -7,7 +7,7 @@ namespace PortableCompiler
     internal static class BranchWasm
     {
         internal static int Emit(int[] records, int[] depths, byte[] states, int[] frameShape, int[] frame,
-            int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup)
+            int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -68,6 +68,7 @@ namespace PortableCompiler
             }
             code[used++] = 0x03;
             code[used++] = 0x40;
+            if (catchRegion.Length != 0) used = OverflowCatchWasm.Begin(code, used);
             for (int pc = 0; pc < depths.Length; pc++)
             {
                 if (depths[pc] == 0) continue;
@@ -277,7 +278,8 @@ namespace PortableCompiler
                     }
                     else
                     {
-                        if (operand == 0x6f) used = GuardRemainder(code, used, type, left, right);
+                        if (operand == 0x6d || operand == 0x6f)
+                            used = OverflowWasm.ThrowIf(code, IsMinAndMinusOne(code, used, type, left, right));
                         used = NumericLocal(code, used, left, type, width);
                         used = NumericLocal(code, used, right, rightType, width);
                         if (type == I64 && IsShift(operand)) code[used++] = 0xad;
@@ -445,14 +447,15 @@ namespace PortableCompiler
                     }
                     else if (kind == Switch)
                         used = SwitchDispatch(code, used, records, operand, records[slot + 3], next, spills + top);
-                    else used = Const(code, used, kind == Branch ? operand : next);
+                    else used = Const(code, used, kind == Branch || kind == Leave ? operand : next);
                     used = Local(code, used, 0x21, pcLocal);
                     code[used++] = 0x0c;
-                    code[used++] = 1;
+                    code[used++] = catchRegion.Length == 0 ? (byte)1 : (byte)3;
                 }
                 code[used++] = 0x0b;
             }
             code[used++] = 0;
+            if (catchRegion.Length != 0) used = OverflowCatchWasm.End(code, used, pcLocal, catchRegion);
             code[used++] = 0x0b;
             code[used++] = 0;
             code[used++] = 0x0b;
@@ -500,11 +503,6 @@ namespace PortableCompiler
         internal static byte NumericOpcode(int instruction, byte type) =>
             (byte)(type == I32 ? instruction : instruction + (IsComparison(instruction) ? 0x0b : 0x12));
 
-        // The CLR throws for MinValue % -1 even though Wasm rem_s returns zero.
-        // Keep the failure observable as a Wasm trap until typed exceptions are available.
-        private static int GuardRemainder(byte[] code, int used, byte type, int left, int right) =>
-            TrapIf(code, IsMinAndMinusOne(code, used, type, left, right));
-
         internal static int IsMinAndMinusOne(byte[] code, int used, byte type, int left, int right)
         {
             used = Local(code, used, 0x20, left);
@@ -514,15 +512,6 @@ namespace PortableCompiler
             used = type == I64 ? WideConst(code, used, -1, -1) : Const(code, used, -1);
             code[used++] = NumericOpcode(0x46, type);
             code[used++] = 0x71; // i32.and
-            return used;
-        }
-
-        internal static int TrapIf(byte[] code, int used)
-        {
-            code[used++] = 0x04; // if
-            code[used++] = 0x40; // void
-            code[used++] = 0; // unreachable
-            code[used++] = 0x0b;
             return used;
         }
 

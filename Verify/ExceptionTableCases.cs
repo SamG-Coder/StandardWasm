@@ -49,7 +49,7 @@ internal static class ExceptionTableCases
         }
 
         var small = methods[nameof(Examples.SmallCatch)];
-        RejectCompiler("valid EH remains unsupported", image, small.Row, -2);
+        RejectCompiler("multiple handlers remain unsupported", image, methods[nameof(Examples.TwoCatches)].Row, -2);
         byte[] badToken = (byte[])image.Clone();
         BinaryPrimitives.WriteUInt32LittleEndian(badToken.AsSpan(small.Table + 12), 0x06000001);
         Probe("catch token with wrong table", badToken, small.Rva, 6, -1);

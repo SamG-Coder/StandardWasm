@@ -138,6 +138,7 @@ namespace PortableCompiler
             var frameShape = new int[8];
             bool eventArgsEmpty = false;
             bool overflowTag = false;
+            var noCatch = new int[0];
 
             int activeOwner = 0;
             for (int current = 0; current < functions; current++)
@@ -157,10 +158,15 @@ namespace PortableCompiler
                 int status = MethodBodies.Read(image, rva, body);
                 if (status != 0)
                     return status == MethodBodies.Malformed ? -1 : -2;
+                int[] catchRegion = noCatch;
                 if (body[5] != 0)
                 {
-                    int regions = ExceptionRegions.Count(image, rva, body);
-                    return regions < 0 ? regions : -2; // Managed handlers still require lowering.
+                    catchRegion = new int[OverflowCatch.Width];
+                    int regions = ExceptionRegions.Read(image, rva, body, catchRegion);
+                    if (regions < 0) return regions == ExceptionRegions.Capacity ? -2 : regions;
+                    if (regions != 1 || catchRegion[0] != 0 || !ExceptionTypes.IsOverflow(image, heaps, layout, catchRegion[5]))
+                        return -2;
+                    overflowTag = true;
                 }
 
                 int parameters = arities[current];
@@ -194,7 +200,8 @@ namespace PortableCompiler
                     return -2;
 
                 var code = new byte[body[1] * 4 + 2];
-                int used = scalar && locals == 0 ? StraightLineIl.Translate(image, body, parameters, code) : -2;
+                int used = scalar && locals == 0 && catchRegion.Length == 0
+                    ? StraightLineIl.Translate(image, body, parameters, code) : -2;
                 if (used < 0)
                 {
                     var records = new int[body[1] * BranchIl.Width];
@@ -215,12 +222,22 @@ namespace PortableCompiler
                         return -2;
                     var depths = new int[body[1]];
                     var states = new byte[body[1] * maximum];
+                    if (catchRegion.Length != 0)
+                    {
+                        status = OverflowCatch.Validate(records, catchRegion, location);
+                        if (status < 0) return status;
+                    }
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
-                        result, signatures, offsets, arities, location);
+                        result, signatures, offsets, arities, location, catchRegion);
                     if (status < 0) return status;
 
                     if (location.Length != 0) location[2] = -1;
                     int capacity = body[1] * 64 + 32;
+                    if (catchRegion.Length != 0)
+                    {
+                        if (capacity > int.MaxValue - 64) return -3;
+                        capacity += 64;
+                    }
                     if (locals > (int.MaxValue - capacity) / 3)
                         return -3;
                     capacity += locals * 3;
@@ -239,8 +256,12 @@ namespace PortableCompiler
                             if (capacity > int.MaxValue - 320) return -3;
                             capacity += 320;
                         }
-                        if ((kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion) &&
-                            depths[slot / BranchIl.Width] != 0)
+                        int pc = slot / BranchIl.Width;
+                        int operation = records[slot + 1];
+                        if (depths[pc] != 0 &&
+                            (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion ||
+                             kind == BranchIl.Binary && (operation == 0x6d || operation == 0x6f) &&
+                             IsInteger(states[pc * maximum + depths[pc] - 2])))
                         {
                             if (capacity > int.MaxValue - 48) return -3;
                             capacity += 48;
@@ -273,7 +294,7 @@ namespace PortableCompiler
                             eventArgsEmpty = true;
                     }
                     code = new byte[capacity];
-                    used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets, arities, code, remainderFixup);
+                    used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets, arities, code, remainderFixup, catchRegion);
                 }
 
                 if (used > moduleCode.Length - length)
@@ -300,7 +321,7 @@ namespace PortableCompiler
                 if (owner != 0 && kind >= BranchIl.NewArray && kind != BranchIl.Narrow && kind != BranchIl.MemberCall &&
                     kind != BranchIl.WideConstant && kind != BranchIl.ConvertInteger && kind != BranchIl.Switch &&
                     kind != BranchIl.SingleConstant && kind != BranchIl.DoubleConstant && kind != BranchIl.ConvertFloat &&
-                    kind != BranchIl.CheckedInteger && kind != BranchIl.CheckedConversion)
+                    kind != BranchIl.CheckedInteger && kind != BranchIl.CheckedConversion && kind != BranchIl.Leave)
                     return -2; // The dependency backend currently admits only scalar state.
                 if (kind == BranchIl.NewArray)
                 {
