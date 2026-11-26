@@ -400,7 +400,7 @@ namespace PortableCompiler
                     }
                     int fieldOwner = ObjectLayouts.Owner(image, heaps, layout, field, true);
                     if (fieldOwner < 0) return -1;
-                    int type = ObjectLayouts.Register(image, heaps, layout, objects, owner, fieldOwner);
+                    int type = BundleLayouts.Register(main, bundle, ranges, image, layout, heaps, owner, fieldOwner, objects);
                     if (type < 0) return type;
                     int fieldIndex = ObjectLayouts.FieldOrdinal(objects, type, field);
                     if (fieldIndex < 0) return -1;
@@ -655,7 +655,7 @@ namespace PortableCompiler
             {
                 int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
                 if (owner < 0) return -1;
-                receiver = ObjectLayouts.Register(image, heaps, layout, objects, assembly, owner);
+                receiver = BundleLayouts.Register(main, bundle, ranges, image, layout, heaps, assembly, owner, objects);
                 if (receiver < 0) return receiver;
             }
             int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);

@@ -11,7 +11,7 @@ namespace PeLibrary
 
         // The header stores class count and occupied field slots. Each class
         // maps an assembly-local TypeDef and Field range to its own field storage.
-        internal static int Register(byte[] image, int[] streams, int[] methods, int[] registry, int assembly, int row)
+        internal static int Find(int[] registry, int assembly, int row)
         {
             for (int i = 0; i < registry[0]; i++)
             {
@@ -19,6 +19,11 @@ namespace PeLibrary
                 if (registry[candidate + Assembly] == assembly && registry[candidate + TypeRow] == row)
                     return FirstClass + i;
             }
+            return 0;
+        }
+
+        internal static int Reserve(byte[] image, int[] streams, int[] methods, int[] registry, int assembly, int row, int[] shape)
+        {
             if (registry[0] >= MaxClasses) return -2;
 
             var counts = new int[45];
@@ -56,54 +61,44 @@ namespace PeLibrary
             registry[slot + FirstField] = (int)first;
             registry[slot + Fields] = count;
             registry[slot + Storage] = storage;
-            int fields = defs + counts[2] * defWidth;
-            int blobs = methods[3];
-            for (uint field = first; field < end; field++)
-            {
-                uint at = (uint)fields + (field - 1) * (uint)(2 + strings + blobs);
-                uint fieldFlags = U16(image, at);
-                if ((fieldFlags & 0x50) == 0x50)
-                    continue; // A literal is in metadata and has no instance storage.
-                if ((fieldFlags & 0x10) != 0) return -2;
-                uint sig = ReadIndex(image, at + (uint)(2 + strings), blobs);
-                if (!Fits(sig, 3, (uint)streams[1])) return -1;
-                uint blob = (uint)streams[0] + sig;
-                int size = image[blob];
-                if (size < 2 || !Fits(sig, (uint)(size + 1), (uint)streams[1])) return -1;
-                if (image[blob + 1] != 6) return -2;
-                int type;
-                if (image[blob] == 2 && image[blob + 2] == 8)
-                    type = 1;
-                else if (image[blob] == 2 && image[blob + 2] == 0x0e)
-                    type = 6; // String. The Wasm slot defaults to a null reference.
-                else if (image[blob] == 2 && image[blob + 2] == 0x1c)
-                    type = ObjectReference;
-                else if (image[blob] == 2 && WideStorage.IsIntegerElement(image[blob + 2]))
-                    type = WideStorage.Scalar;
-                else if (image[blob] == 3 && Fits(sig, 4, (uint)streams[1]) && image[blob + 2] == 0x1d)
-                {
-                    type = ArrayTypeRefs.Storage(image[blob + 3]);
-                    if (type == 0) return -2;
-                }
-                else if (image[blob + 2] == 0x12)
-                {
-                    int endSignature = (int)blob + 1 + size;
-                    var next = new int[1];
-                    int coded = CompressedUnsigned(image, (int)blob + 3, endSignature, next);
-                    if (coded <= 0 || next[0] != endSignature) return -2;
-                    if ((coded & 3) == 0)
-                        type = Register(image, streams, methods, registry, assembly, coded >> 2);
-                    else
-                    {
-                        type = EventMetadata.Reference(image, streams, methods, coded);
-                        if (type == 0) return -2;
-                    }
-                    if (type < 0) return type;
-                }
-                else return -2;
-                registry[storage + (int)(field - first)] = type;
-            }
+            shape[0] = defs + counts[2] * defWidth;
+            shape[1] = (int)first;
+            shape[2] = count;
             return FirstClass + index;
+        }
+
+        // Return storage directly for known types. A class signature yields
+        // its image-local TypeDefOrRef code for the linker to resolve.
+        internal static int ReadStorage(byte[] image, int[] streams, int[] methods, int table, int row, int[] reference)
+        {
+            reference[0] = 0;
+            int strings = methods[2], blobs = methods[3];
+            uint at = (uint)(table + (row - 1) * (2 + strings + blobs));
+            uint flags = U16(image, at);
+            if ((flags & 0x50) == 0x50) return 0; // A literal has no instance storage.
+            if ((flags & 0x10) != 0) return -2;
+            uint sig = ReadIndex(image, at + (uint)(2 + strings), blobs);
+            if (!Fits(sig, 3, (uint)streams[1])) return -1;
+            uint blob = (uint)streams[0] + sig;
+            int size = image[blob];
+            if (size < 2 || !Fits(sig, (uint)(size + 1), (uint)streams[1])) return -1;
+            if (image[blob + 1] != 6) return -2;
+            byte element = image[blob + 2];
+            if (size == 2 && element == 8) return 1;
+            if (size == 2 && element == 0x0e) return 6;
+            if (size == 2 && element == 0x1c) return ObjectReference;
+            if (size == 2 && WideStorage.IsIntegerElement(element)) return WideStorage.Scalar;
+            if (size == 3 && element == 0x1d)
+            {
+                byte type = ArrayTypeRefs.Storage(image[blob + 3]);
+                return type == 0 ? -2 : type;
+            }
+            if (element != 0x12) return -2;
+            int end = (int)blob + 1 + size;
+            int coded = CompressedUnsigned(image, (int)blob + 3, end, reference);
+            if (coded <= 0 || reference[0] != end) return -2;
+            reference[0] = coded;
+            return 0;
         }
 
         internal static int Owner(byte[] image, int[] streams, int[] methods, int member, bool field)
@@ -139,6 +134,9 @@ namespace PeLibrary
 
         internal static int FieldTypeAt(int[] registry, int type, int offset) =>
             registry[registry[Slot(type) + Storage] + offset];
+
+        internal static void SetFieldType(int[] registry, int type, int offset, int fieldType) =>
+            registry[registry[Slot(type) + Storage] + offset] = fieldType;
 
         internal static int FieldType(int[] registry, int type, int row) =>
             FieldTypeAt(registry, type, row - registry[Slot(type) + FirstField]);
