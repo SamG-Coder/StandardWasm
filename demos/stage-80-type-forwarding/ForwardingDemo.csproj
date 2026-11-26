@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>netstandard2.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Types.cs;Original/**/*.cs;Implementation/**/*.cs;Facade/**/*.cs" />
+    <ProjectReference Include="Original/Original.csproj" />
+    <ProjectReference Include="Facade/Facade.csproj" ReferenceOutputAssembly="false" />
+    <Compile Include="../../src/AssemblyReader/*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="../../src/PortableCompiler/*.cs" Link="%(Filename)%(Extension)" />
+  </ItemGroup>
+  <Target Name="CopyForwardingDeployment" AfterTargets="Build">
+    <ItemGroup>
+      <ForwardedAsset Include="$(MSBuildThisFileDirectory)Facade/bin/$(Configuration)/netstandard2.0/ForwardContract.dll" />
+      <ForwardedAsset Include="$(MSBuildThisFileDirectory)Implementation/bin/$(Configuration)/netstandard2.0/ForwardImplementation.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ForwardedAsset)" DestinationFolder="$(OutDir)forwarded" />
+  </Target>
+</Project>
