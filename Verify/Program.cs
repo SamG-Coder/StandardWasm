@@ -199,6 +199,7 @@ SwitchCases.Add(cases);
 RemainderCases.Add(cases);
 MathCases.Add(cases);
 ArrayCases.Add(cases);
+NativeVectorCases.Add(cases);
 CultureProbe.Write(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args.Single()))!, "culture-probe", "MathIntrinsics.dll"));
 // The stack's shared-blob oracle format replaces main's plain JSON array; scripts/oracle.mjs reads both.
 OracleWriter.Write(args.Single(), cases);

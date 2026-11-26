@@ -322,7 +322,8 @@ namespace PortableCompiler
                     return Assignable(stack[depth - 1], element, objects) ? depth - 3 : -1;
                 }
                 byte array = ArrayStoreType(operand);
-                if (!Match(stack, depth, ArrayValueType(array)) || !ArrayIndex(stack, depth - 1) ||
+                if (depth == 0 || !Assignable(stack[depth - 1], ArrayValueType(array), objects) ||
+                    !ArrayIndex(stack, depth - 1) ||
                     !Match(stack, depth - 2, array))
                     return -1;
                 return depth - 3;
