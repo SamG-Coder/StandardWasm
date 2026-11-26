@@ -101,4 +101,5 @@ InheritedLayoutCases.Add(cases);
 InitializerReachabilityCases.Add(cases);
 StrongNameCases.Add(cases);
 ForwardingCases.Add(cases);
+CoreRootGuardCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);
