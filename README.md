@@ -50,6 +50,10 @@ const { instance } = await WebAssembly.instantiateStreaming(fetch("./artifacts/S
 instance.exports.SumSquares(10); // 385
 ```
 
+## Self-recompilation
+
+Stage 13 compares the portable compiler's CLR output with three Wasm generations built from the same DLL and export manifest. Each generated compiler provides its own byte transport. The second generation replays the portable generated-code fixtures in Node and Edge. See the [Stage 13 instructions](demos/stage-13-complete-bootstrap/README.md).
+
 ## Source map and bootstrap dependencies
 
 - `Compiler/ModuleCompiler.cs` selects exports, links reachable methods and maps CLR types.
@@ -57,9 +61,9 @@ instance.exports.SumSquares(10); // 385
 - `Compiler/IntegerOps.cs` maps numeric and comparison instructions.
 - `demos/stage-*/` contains the independently buildable .NET Standard libraries. `Verify/` generates deterministic expected results on the CLR.
 - `src/AssemblyReader/` contains the portable PE/CLI discovery code shared by the reader stages.
-- `src/PortableCompiler/` contains the compiler-in-Wasm path demonstrated by Stages 09 through 11.
+- `src/PortableCompiler/` contains the compiler-in-Wasm path demonstrated by Stages 09 through 13.
 - `scripts/` contains assembly, engine validation and browser tests. Generated modules are written to `artifacts/`.
 
-Self-hosting requires a metadata reader and binary writer that can run inside the compiled module, plus enough support for the compiler's own strings, collections, object model and error paths. The current bootstrap also needs a file/byte-buffer boundary to replace host filesystem calls. The existing compiler uses Mono.Cecil and Binaryen on the build host. Generated sample modules have neither dependency.
+The initial compiler uses Mono.Cecil and Binaryen on the build host. The portable compiler uses its own metadata reader, binary writer, and managed byte-array boundary. The generated compiler and sample modules have zero runtime imports. The CLR-equivalence suite includes additional capabilities that still need portable implementations.
 
 The modern instructions used here are standardized Wasm GC array instructions, `return_call` and the non-trapping float-to-int conversions (`trunc_sat`). See the [WebAssembly 3.0 release](https://webassembly.org/news/2025-09-17-wasm-3.0/) and [engine feature matrix](https://webassembly.org/features/).

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { decode, invoke, invokeGenerated } from "./invoke.mjs";
 import { demoInputs, listDemos } from "./demos.mjs";
 import { chromium } from "playwright-core";
@@ -83,7 +83,8 @@ assert.equal(rejectedCulture.status, 1);
 assert.match(rejectedCulture.stderr, /Measures::Sqrt\(System\.Double\) at IL_[0-9a-f]+ \([a-z.0-9]+\): Unsupported value type: System\.Double in netstandard/);
 assert.equal(existsSync("artifacts/unsupported-culture.wat"), false);
 const cases = JSON.parse(readFileSync("artifacts/oracle.json"));
-console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases));
+console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases,
+    bytes => writeFileSync("artifacts/StandardWasm.Compiler.wasm", bytes)));
 
 const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const browser = await chromium.launch({

@@ -7,10 +7,29 @@ namespace PortableCompiler
     {
         internal static int Compile(byte[] image, int row, byte[] output)
         {
+            var entries = new byte[11];
+            entries[0] = unchecked((byte)row);
+            entries[1] = unchecked((byte)(row >> 8));
+            entries[2] = unchecked((byte)(row >> 16));
+            entries[3] = unchecked((byte)(row >> 24));
+            entries[4] = 3;
+            entries[8] = 0x72;
+            entries[9] = 0x75;
+            entries[10] = 0x6e;
+            return CompileExports(image, entries, output);
+        }
+
+        internal static int CompileExports(byte[] image, byte[] entries, byte[] output)
+        {
+            var entryOffsets = new int[entries.Length / 9];
+            int exportCount = EntryPoints.Read(entries, entryOffsets);
+            if (exportCount < 0)
+                return exportCount;
+            var exports = new int[exportCount];
             var layout = new int[4];
             var heaps = new int[6];
             int count = CompressedTables.FindWithHeaps(image, layout, heaps);
-            if (row < 1 || row > count)
+            if (count < 0)
                 return count == MethodDefinitions.Unsupported ? -2 : -1;
             if (MethodNames.HasInitializer(image, layout, heaps, count))
                 return -2;
@@ -23,13 +42,22 @@ namespace PortableCompiler
             var signatures = new byte[output.Length];
             var frame = new byte[output.Length];
             var moduleCode = new byte[output.Length];
-            int firstArity = MethodShape(image, layout, heaps, row, signatures, 0);
-            if (firstArity < 0)
-                return firstArity;
-            rows[0] = row;
-            indices[row] = 1;
-            arities[0] = firstArity;
-            int functions = 1, length = 0;
+            int functions = 0, length = 0;
+            for (int export = 0; export < exportCount; export++)
+            {
+                uint row = ImageBytes.U32(entries, (uint)entryOffsets[export]);
+                if (row == 0 || row > (uint)count)
+                    return -1;
+                int index = indices[row] - 1;
+                if (index < 0)
+                {
+                    functions = Register(image, layout, heaps, (int)row, rows, indices,
+                        arities, offsets, signatures, functions);
+                    if (functions < 0) return functions;
+                    index = functions - 1;
+                }
+                exports[export] = index;
+            }
             var body = new int[6];
             var frameShape = new int[4];
 
@@ -118,7 +146,8 @@ namespace PortableCompiler
                 sizes[current] = used;
                 length += used;
             }
-            return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, functions, moduleCode);
+            return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, functions,
+                moduleCode, entries, entryOffsets, exports);
         }
 
         private static int LinkOperands(byte[] image, int[] layout, int[] heaps, int[] records,
@@ -140,20 +169,28 @@ namespace PortableCompiler
                 int index = indices[target] - 1;
                 if (index < 0)
                 {
-                    int previous = functions - 1;
-                    int offset = offsets[previous] + arities[previous] + 1;
-                    int arity = MethodShape(image, layout, heaps, target, signatures, offset);
-                    if (arity < 0)
-                        return arity;
-                    index = functions++;
-                    rows[index] = target;
-                    indices[target] = index + 1;
-                    arities[index] = arity;
-                    offsets[index] = offset;
+                    functions = Register(image, layout, heaps, target, rows, indices,
+                        arities, offsets, signatures, functions);
+                    if (functions < 0) return functions;
+                    index = functions - 1;
                 }
                 records[slot + 1] = index;
             }
             return functions;
+        }
+
+        private static int Register(byte[] image, int[] layout, int[] heaps, int row, int[] rows,
+            int[] indices, int[] arities, int[] offsets, byte[] signatures, int functions)
+        {
+            int offset = functions == 0 ? 0 : offsets[functions - 1] + arities[functions - 1] + 1;
+            int arity = MethodShape(image, layout, heaps, row, signatures, offset);
+            if (arity < 0)
+                return arity;
+            rows[functions] = row;
+            indices[row] = functions + 1;
+            arities[functions] = arity;
+            offsets[functions] = offset;
+            return functions + 1;
         }
 
         private static int MethodShape(byte[] image, int[] layout, int[] heaps, int row, byte[] types, int offset)

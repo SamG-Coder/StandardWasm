@@ -22,11 +22,16 @@ export async function invokeGenerated(exports, inputs, generated) {
         for (let i = 0; i < generated.capacity; i++) exports.SetByte(output, i, 0xa5);
     // The host only moves bytes and asks the engine to validate and execute the result.
     const [image, selection] = inputs;
-    const row = Array.isArray(selection?.name)
-        ? invoke(exports, "FindRow", [image, { bytes: selection.name }])
-        : selection;
-    if (Array.isArray(selection?.name) && row < 1) throw Error("Fixture method was not found");
-    const length = invoke(exports, "Compile", [image, row, output]);
+    let length;
+    if (generated.multiExport) {
+        length = invoke(exports, "CompileModule", [image, selection, output]);
+    } else {
+        const row = Array.isArray(selection?.name)
+            ? invoke(exports, "FindRow", [image, { bytes: selection.name }])
+            : selection;
+        if (Array.isArray(selection?.name) && row < 1) throw Error("Fixture method was not found");
+        length = invoke(exports, "Compile", [image, row, output]);
+    }
     if (generated.reject) {
         if (length >= 0) throw Error("Expected a compiler diagnostic");
         for (let i = 0; i < generated.capacity; i++)
@@ -43,7 +48,7 @@ export async function invokeGenerated(exports, inputs, generated) {
     const { instance, module } = await WebAssembly.instantiate(bytes);
     if (WebAssembly.Module.imports(module).length) throw Error("Generated module has runtime imports");
     try {
-        return instance.exports.run(...generated.arguments);
+        return instance.exports[generated.export ?? "run"](...generated.arguments);
     } catch (error) {
         if (!(error instanceof WebAssembly.RuntimeError)) throw error;
         return null;
