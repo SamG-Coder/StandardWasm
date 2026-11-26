@@ -27,8 +27,21 @@ namespace PortableCompiler
             type >= ObjectLayouts.FirstClass ||
             type >= ObjectLayouts.ObjectReference && type <= ObjectLayouts.EventHandlerReference;
 
+        // Zero denotes the CLI null literal in a live stack slot and void in a method signature.
+        internal const byte NullValue = 0;
+
+        internal static bool IsReference(byte type) =>
+            type == String || type == Delegate || IsArray(type) || IsObjectReference(type);
+
+        internal static bool ReferenceComparison(byte left, byte right) =>
+            (left == NullValue && (right == NullValue || IsReference(right))) ||
+            (right == NullValue && IsReference(left)) ||
+            (IsObjectReference(left) && IsObjectReference(right) &&
+                (Assignable(left, right) || Assignable(right, left)));
+
         internal static bool Assignable(byte source, int target) =>
-            source == StackType(target) || target == ObjectLayouts.ObjectReference && IsObjectReference(source);
+            source == StackType(target) || source == NullValue && IsReference(StackType(target)) ||
+            target == ObjectLayouts.ObjectReference && IsObjectReference(source);
 
         internal static byte FloatWidth(byte left, byte right) => left == F64 || right == F64 ? F64 : F32;
 
@@ -117,16 +130,8 @@ namespace PortableCompiler
                     int coded = CompressedUnsigned(image, cursor, end, next);
                     if (coded <= 0) return -2;
                     cursor = next[0];
-                    int type;
-                    if ((coded & 3) == 0)
-                        type = ObjectLayouts.Register(image, heap, methods, objects, assembly, coded >> 2);
-                    else
-                    {
-                        type = EventMetadata.Reference(image, heap, methods, coded);
-                        if (type == 0)
-                            type = AssemblyBundle.RegisterClassReference(main, bundle, ranges, image, methods,
-                                heap, assembly, coded, objects);
-                    }
+                    int type = BundleLayouts.RegisterReference(main, bundle, ranges, image, methods,
+                        heap, assembly, coded, objects);
                     if (type < 0) return type;
                     types[target] = type;
                 }
