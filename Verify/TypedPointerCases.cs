@@ -39,8 +39,12 @@ internal static class TypedPointerCases
         byte[] primitiveMismatch = ReplacePrimitiveParameter(image, readPrimitive, call);
         VerifyClrMismatch<MissingMethodException>(primitiveMismatch, dependency, readPrimitive);
         Reject("distinct primitive pointee", BundleCases.Pack(primitiveMismatch, dependency), readPrimitive, call, -6);
-        Reject("nonzero native address", bundle, nameof(Kernels.RejectAddress),
-            Offset(nameof(Kernels.RejectAddress), OpCodes.Stfld), -1);
+        // Stage 143 (decision 0071): NativeFont* is a native address in memory 0.
+        byte[] storeEntries = Manifest(nameof(Kernels.StoreFontAddress));
+        Check("nonzero struct pointer", storeEntries, Compile(nameof(Kernels.StoreFontAddress), storeEntries), [],
+            Kernels.StoreFontAddress());
+        byte[] exportEntries = Manifest(nameof(Kernels.ExportNullFont));
+        Check("null struct pointer export", exportEntries, Compile(nameof(Kernels.ExportNullFont), exportEntries), [], 0);
         // Stage 132 (decision 0060): reading through the null int* field raises the
         // typed NullReferenceException on both runtimes. The module imports memory 0.
         string dereference = nameof(Kernels.DereferenceNullField);
@@ -64,7 +68,6 @@ internal static class TypedPointerCases
                 expected = (int?)null, exception = typeof(NullReferenceException).FullName
             });
         }
-        Reject("exported pointer", bundle, nameof(Kernels.RejectExport), -1, -2);
 
         string Compile(string name, byte[] entries)
         {

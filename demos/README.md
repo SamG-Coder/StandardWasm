@@ -136,6 +136,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [130 · Fieldless sequential values](stage-130-fieldless-values/README.md) | `npm run demo -- stage-130-fieldless-values` | One-byte nominal empty values keep their managed identity |
 | [132 · Primitive unmanaged pointers](stage-132-unmanaged-pointers/README.md) | `npm run demo -- stage-132-unmanaged-pointers` | `byte*`, `int*` and other primitive pointers read and write host-lent memory; null raises NullReferenceException |
 | [137 · stackalloc on a shadow stack](stage-137-stackalloc/README.md) | `npm run demo -- stage-137-stackalloc` | `stackalloc` into primitive pointers; frames release on return and exceptions; exhaustion traps |
+| [143 · Struct pointers and sizeof](stage-143-struct-pointers/README.md) | `npm run demo -- stage-143-struct-pointers` | 32-bit CLR `sizeof`; `p->F`, `&p->F` and `p[i]` on blittable sequential structs in memory 0 |
 
 ## Adding a stage
 
