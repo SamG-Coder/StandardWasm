@@ -26,16 +26,17 @@ namespace PortableCompiler
         internal const int LoadTypeToken = 67, TypeFromHandle = 68;
         // newobj System.Object::.ctor: a fresh plain object (decision 0057). [] -> [Object].
         internal const int NewRootObject = 69;
-        internal const int ReadReflection = 70, StringEquals = 71;
+        internal const int ReadReflection = 70, StringEquals = 71, ResourceLookup = 72;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
-        internal static int Decode(byte[] image, int start, int length, int arguments, int locals, int[] records, int[] location, bool hasCatches)
+        internal static int Decode(byte[] image, int start, int length, int arguments, int locals,
+            int[] records, int[] location, bool hasCatches, int first = 0)
         {
-            int pc = 0;
+            int pc = first;
             while (pc < length)
             {
                 if (location.Length != 0) location[2] = pc;

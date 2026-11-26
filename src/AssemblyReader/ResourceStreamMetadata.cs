@@ -4,6 +4,8 @@ namespace PeLibrary
 {
     internal static class ResourceStreamMetadata
     {
+        internal const int NativeCallOffset = 12, AfterNativeSetup = 18;
+
         // The original public override remains responsible for the null
         // branch and constructing its own managed ManifestResourceStream.
         // Bind only the native prelude after proving the managed shape.

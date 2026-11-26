@@ -271,6 +271,7 @@ namespace PortableCompiler
                 int parameters = arities[current];
                 int signature = offsets[current];
                 int result = signatures[signature];
+                bool resourceOpen = reflection.ResourceOwner == owner && reflection.ResourceOpen == source;
                 // The Wasm result of a value constructor is its receiver's final
                 // value. Its IL returns void, so stack analysis checks void.
                 bool valueConstructor = IsValueConstructor(image, layout, heaps, source, signatures, signature, parameters, objects);
@@ -288,7 +289,12 @@ namespace PortableCompiler
                     if (IsNarrow(type)) narrowParameters++;
                 }
                 int locals = 0;
-                if (body[3] != 0)
+                if (resourceOpen)
+                {
+                    locals = ResourceOpenIl.Frame(frame, parameters);
+                    if (locals < 0) return locals;
+                }
+                else if (body[3] != 0)
                 {
                     int localBlob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, body[3]);
                     if (localBlob < 0)
@@ -312,7 +318,9 @@ namespace PortableCompiler
                 if (used < 0)
                 {
                     var records = new int[body[1] * BranchIl.Width];
-                    status = BranchIl.Decode(image, body[0], body[1], parameters, locals, records, location, catchRegion.Length != 0);
+                    status = resourceOpen
+                        ? ResourceOpenIl.Decode(image, body, records, location, parameters)
+                        : BranchIl.Decode(image, body[0], body[1], parameters, locals, records, location, catchRegion.Length != 0);
                     if (status < 0)
                         return status;
                     status = ArrayInitializers.Lower(image, heaps, layout, records, literals, literalSize, location);
@@ -325,6 +333,14 @@ namespace PortableCompiler
                         initializers, reflection);
                     if (functions < 0)
                         return functions;
+
+                    // Until the native failure statuses can raise the matching
+                    // managed exceptions, do not publish a partial stream body.
+                    if (resourceOpen)
+                    {
+                        if (location.Length != 0) location[2] = ResourceStreamMetadata.NativeCallOffset;
+                        return -2;
+                    }
 
                     if (location.Length != 0) location[2] = -1;
                     int maximum = body[2];
