@@ -177,6 +177,9 @@ namespace PeLibrary
         internal static int ArrayElement(int[] registry, int type) =>
             type >= FirstClass && type - FirstClass < registry[0] ? GenericScalar.Storage(registry[Slot(type) + Element]) : 0;
 
+        internal static bool HasArguments(int[] registry, int type) =>
+            type >= FirstClass && type - FirstClass < registry[0] && registry[Slot(type) + Arity] != 0;
+
         internal static int Argument(int[] registry, int type, int index)
         {
             if (type < FirstClass || type - FirstClass >= registry[0]) return -2;

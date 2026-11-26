@@ -78,16 +78,18 @@ namespace PortableCompiler
             return left[0] == leftEnd && right[0] == rightEnd ? 1 : 0;
         }
 
-        private static int Start(byte[] image, int[] heaps, int index, int[] next, int arity)
+        internal static int Start(byte[] image, int[] heaps, int index, int[] next, int arity)
         {
             if (index <= 0 || index >= heaps[1]) return -1;
             int limit = heaps[0] + heaps[1];
             int size = CompressedUnsigned(image, heaps[0] + index, limit, next);
             int start = next[0];
-            if (size < 4 || size > limit - start) return -1;
-            if (image[start] != 0x10) return 0; // Static generic default calling convention.
+            if (size < (arity == 0 ? 3 : 4) || size > limit - start) return -1;
+            if (image[start] != (arity == 0 ? 0 : 0x10)) return 0;
             int end = start + size;
-            return CompressedUnsigned(image, start + 1, end, next) == arity ? end : 0;
+            next[0] = start + 1;
+            if (arity == 0) return end;
+            return CompressedUnsigned(image, next[0], end, next) == arity ? end : 0;
         }
     }
 }

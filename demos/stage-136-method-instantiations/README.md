@@ -15,5 +15,7 @@ method-typed locals and arrays, class and struct constraints, and
 generic methods on closed declaring types. It verifies overloads with
 the same Wasm parameter types and field access through a constructed
 type. The fixture also verifies nominal, constructed and recursive
-interface constraints. A check against the original .NET 10 CoreLib
-reaches constrained static dispatch inside its generic range guard.
+interface constraints. A separate .NET 10 fixture verifies constrained
+static dispatch through the original CoreLib Int64 implementation and
+through user-defined MethodImpl mappings. The range guard's error path
+still needs support for boxing a closed generic value.

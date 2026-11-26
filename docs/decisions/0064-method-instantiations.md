@@ -42,5 +42,13 @@ constructed generic types. Method interface constraints use the actual
 implementation edges. Primitive arguments keep scalar storage and use
 their nominal CoreLib definitions to verify those edges. A bound that
 recurs on the same closed interface requires proof of that exact edge.
-The original CoreLib range guard binds and its body reaches a
-constrained static call, which needs dispatch support.
+A constrained static call binds its closed interface declaration by
+nominal identity and exact signature. The compiler selects an explicit
+MethodImpl on the concrete type, then checks the implementation's
+signature against the declaration after substitution. The resulting
+call targets the original managed body. Default interface implementations
+and unresolved targets stay diagnosed.
+
+The .NET 10 fixture verifies original Int64 numeric dispatch and two
+user-defined implementations. The original range guard advances to the
+generic exception helper, where boxing a closed value is still pending.

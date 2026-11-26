@@ -45,29 +45,17 @@ namespace PortableCompiler
             return 0;
         }
 
-        private static int Implements(BundleImages bundle, int[] objects, int argument, int[] required, int depth)
+        internal static int Implements(BundleImages bundle, int[] objects, int argument, int[] required, int depth)
         {
             var noParameters = new int[0];
             if (GenericScalar.IsScalar(argument))
             {
                 // The primitive keeps its Wasm scalar storage. Read the
                 // actual interface edges from the selected CoreLib instead.
-                int definitionOwner = -1, definitionRow = 0;
-                for (int owner = 0; owner < bundle.Count; owner++)
-                {
-                    byte[] image = bundle.Get(owner);
-                    var layout = new int[4];
-                    var heaps = new int[8];
-                    if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
-                    int row = ArrayTypeRefs.CoreDefinition(image, heaps, layout, GenericScalar.Element(argument));
-                    if (row < 0) return row;
-                    if (row == 0) continue;
-                    if (definitionOwner >= 0) return -5;
-                    definitionOwner = owner;
-                    definitionRow = row;
-                }
-                return definitionOwner < 0 ? 0 :
-                    Search(bundle, objects, required, definitionOwner, definitionRow, noParameters, 0, depth);
+                var definition = new int[2];
+                int status = FindPrimitive(bundle, argument, definition);
+                return status <= 0 ? status :
+                    Search(bundle, objects, required, definition[0], definition[1], noParameters, 0, depth);
             }
             if (argument < ObjectLayouts.FirstClass || argument - ObjectLayouts.FirstClass >= objects[0]) return 0;
             for (int source = argument; source != 0; source = ObjectLayouts.Parent(objects, source))
@@ -79,6 +67,28 @@ namespace PortableCompiler
                 if (status != 0) return status;
             }
             return 0;
+        }
+
+        internal static int FindPrimitive(BundleImages bundle, int argument, int[] definition)
+        {
+            int definitionOwner = -1, definitionRow = 0;
+            for (int owner = 0; owner < bundle.Count; owner++)
+            {
+                byte[] image = bundle.Get(owner);
+                var layout = new int[4];
+                var heaps = new int[8];
+                if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+                int row = ArrayTypeRefs.CoreDefinition(image, heaps, layout, GenericScalar.Element(argument));
+                if (row < 0) return row;
+                if (row == 0) continue;
+                if (definitionOwner >= 0) return -5;
+                definitionOwner = owner;
+                definitionRow = row;
+            }
+            if (definitionOwner < 0) return 0;
+            definition[0] = definitionOwner;
+            definition[1] = definitionRow;
+            return 1;
         }
 
         private static int Search(BundleImages bundle, int[] objects, int[] required,
@@ -152,7 +162,7 @@ namespace PortableCompiler
             return 1;
         }
 
-        private static int[] ReadInterface(BundleImages bundle, byte[] image, int[] layout,
+        internal static int[] ReadInterface(BundleImages bundle, byte[] image, int[] layout,
             int[] heaps, int owner, int[] objects, int coded, int[] substitutions, int context, int[] methodArguments = null)
         {
             var symbol = new int[2];
@@ -230,7 +240,7 @@ namespace PortableCompiler
             return size > 0 && size <= limit - cursor[0] ? cursor[0] + size : -1;
         }
 
-        private static bool Same(int[] left, int[] right)
+        internal static bool Same(int[] left, int[] right)
         {
             if (left.Length != right.Length) return false;
             for (int i = 0; i < left.Length; i++)

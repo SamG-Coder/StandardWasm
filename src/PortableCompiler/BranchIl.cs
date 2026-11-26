@@ -25,7 +25,7 @@ namespace PortableCompiler
         internal const int ConstructValue = 66;
         internal const int LoadTypeToken = 67, TypeFromHandle = 68;
         // newobj System.Object::.ctor: a fresh plain object (decision 0057). [] -> [Object].
-        internal const int NewRootObject = 69;
+        internal const int NewRootObject = 69, ConstrainedStatic = 75;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
@@ -300,6 +300,19 @@ namespace PortableCompiler
                         operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
                         pc += 4;
                         kind = InitializeValue;
+                    }
+                    else if (extended == 0x16)
+                    {
+                        // Only the static MemberRef call form is lowered here.
+                        if (length - pc < 9) return -1;
+                        operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                        pc += 4;
+                        if (image[start + pc++] != 0x28) return -2;
+                        uint member = ImageBytes.U32(image, (uint)(start + pc));
+                        pc += 4;
+                        if ((member >> 24) != 0x0a || (member & 0xffffff) == 0) return -2;
+                        kind = ConstrainedStatic;
+                        comparison = (int)(member & 0xffffff);
                     }
                     else if (extended == 0x1a)
                     {

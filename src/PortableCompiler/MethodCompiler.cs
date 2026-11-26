@@ -604,6 +604,30 @@ namespace PortableCompiler
                     if (lowered < 0) return lowered;
                     continue;
                 }
+                if (kind == BranchIl.ConstrainedStatic)
+                {
+                    var symbol = new int[3];
+                    int status = StaticInterfaceSlots.Resolve(bundle, image, layout, heaps, owner, records[slot + 1],
+                        records[slot + 3], context, methodArguments, objects, symbol);
+                    if (status < 0) return status;
+                    int targetOwner = symbol[0], row = symbol[1], targetContext = symbol[2];
+                    int function = Lookup(owners, rows, contexts, bases, indices, functions, targetOwner, row, targetContext);
+                    if (function < 0)
+                    {
+                        byte[] implementationImage = bundle.Get(targetOwner);
+                        var targetLayout = new int[4];
+                        var targetHeaps = new int[8];
+                        if (CompressedTables.FindWithHeaps(implementationImage, targetLayout, targetHeaps) < 0) return -1;
+                        functions = Register(bundle, implementationImage, targetLayout, targetHeaps, targetOwner, row, targetContext,
+                            owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions);
+                        if (functions < 0) return functions;
+                        function = functions - 1;
+                    }
+                    records[slot] = BranchIl.Call;
+                    records[slot + 1] = function;
+                    records[slot + 3] = 0;
+                    continue;
+                }
                 if (kind == BranchIl.MethodSpecCall)
                 {
                     var counts = new int[45];

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { root, run } from "../../scripts/toolchain.mjs";
-import { wasm32Runtime } from "../../scripts/runtime-packs.mjs";
+import { runOn32BitClr, wasm32Runtime } from "../../scripts/runtime-packs.mjs";
 import { packEntry } from "../stage-74-executable-entry/companions.mjs";
 
 const stage = join(root, "demos", "stage-136-method-instantiations");
@@ -36,6 +36,15 @@ const tests = cases.map(({ source, row }) => ({ source, row }));
 const [bundle] = packEntry({ path: fixture, bytes: assets.get("/fixture") },
     [{ path: dependency, bytes: readFileSync(join(built("Fixture"), dependency)) }], execution.entries[0].row);
 assets.set("/bundle", bundle);
+const coreProject = join(stage, "CoreFixture");
+const coreDll = join(coreProject, "bin", "Release", "net10.0", "CoreFixture.dll");
+const coreOracle = join(evidence, "core-execution.json");
+runOn32BitClr(runtime, coreProject, coreDll, [coreOracle]);
+const coreExecution = JSON.parse(readFileSync(coreOracle, "utf8"));
+const [coreBundle] = packEntry({ path: "CoreFixture.dll", bytes: readFileSync(coreDll) },
+    [core, "System.Runtime.dll"].map(path => ({ path, bytes: readFileSync(join(runtime.directory, path)) })),
+    coreExecution.entries[0].row);
+assets.set("/core-bundle", coreBundle);
 
 async function inspect(get, tests) {
     const { instance: { exports: reader } } = await WebAssembly.instantiate(await get("/reader"));
@@ -55,7 +64,7 @@ async function inspect(get, tests) {
     return results;
 }
 
-async function execute(get, execution) {
+async function execute(get, execution, path) {
     const { instance: { exports: compiler } } = await WebAssembly.instantiate(await get("/compiler"));
     function upload(bytes) {
         const input = compiler.CreateBytes(bytes.length);
@@ -76,7 +85,7 @@ async function execute(get, execution) {
     }
     const output = compiler.CreateBytes(1 << 20);
     const location = compiler.CreateDiagnostic();
-    const size = compiler.CompileBundleDetailed(upload(await get("/bundle")), upload(manifest), output, location);
+    const size = compiler.CompileBundleDetailed(upload(await get(path)), upload(manifest), output, location);
     if (size < 1) throw Error("Compiler returned " + size + " at [" +
         [0, 1, 2].map(i => compiler.ReadDiagnostic(location, i)) + "]");
     const bytes = Uint8Array.from({ length: size }, (_, i) => compiler.ReadByte(output, i));
@@ -85,9 +94,14 @@ async function execute(get, execution) {
 }
 
 const get = path => assets.get(path);
-const node = { metadata: await inspect(get, tests), execution: await execute(get, execution) };
+const node = {
+    metadata: await inspect(get, tests),
+    execution: await execute(get, execution, "/bundle"),
+    coreExecution: await execute(get, coreExecution, "/core-bundle")
+};
 assert.deepEqual(node.metadata, cases.map(test => test.expected));
 assert.deepEqual(node.execution, execution.calls.map(call => call.expected));
+assert.deepEqual(node.coreExecution, coreExecution.calls.map(call => call.expected));
 const browser = await chromium.launch({ channel: "msedge" });
 try {
     const page = await browser.newPage();
@@ -97,17 +111,22 @@ try {
             : { contentType: "text/html", body: "<title>Generic method metadata</title>" });
     });
     await page.goto("http://localhost/");
-    const edge = await page.evaluate(async ({ tests, execution, metadataSource, executionSource }) => {
+    const edge = await page.evaluate(async ({ tests, execution, coreExecution, metadataSource, executionSource }) => {
         const inspect = (0, eval)("(" + metadataSource + ")");
         const execute = (0, eval)("(" + executionSource + ")");
         const get = async path => new Uint8Array(await (await fetch(path, { signal: AbortSignal.timeout(15000) })).arrayBuffer());
-        return { metadata: await inspect(get, tests), execution: await execute(get, execution) };
-    }, { metadataSource: inspect.toString(), executionSource: execute.toString(), tests, execution });
+        return {
+            metadata: await inspect(get, tests),
+            execution: await execute(get, execution, "/bundle"),
+            coreExecution: await execute(get, coreExecution, "/core-bundle")
+        };
+    }, { metadataSource: inspect.toString(), executionSource: execute.toString(), tests, execution, coreExecution });
     assert.deepEqual(edge, node);
     const report = { node: process.version, edge: browser.version(), comparisons: cases.length,
         results: tests.map((test, index) => ({ ...test, values: node.metadata[index] })),
-        execution: node.execution };
+        execution: node.execution, coreExecution: node.coreExecution };
     writeFileSync(join(evidence, "results.json"), JSON.stringify(report, null, 2));
     console.log("Node and Edge matched " + cases.length + " CLR metadata observations and " +
-        execution.calls.length + " generic method results.");
+        execution.calls.length + " generic method results, plus " +
+        coreExecution.calls.length + " static interface dispatch results against x86 .NET " + runtime.version + ".");
 } finally { await browser.close(); }
