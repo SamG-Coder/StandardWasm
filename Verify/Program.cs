@@ -142,6 +142,7 @@ ByRefPermissionCases.Add(cases);
 ValueConstraintCases.Add(cases);
 NamedValueCases.Add(cases);
 ExplicitScalarCases.Add(cases);
+SequentialLayoutCases.Add(cases);
 NestedOverlayCases.Add(cases);
 EnumArgumentCases.Add(cases);
 HandleConstraintCases.Add(cases);
