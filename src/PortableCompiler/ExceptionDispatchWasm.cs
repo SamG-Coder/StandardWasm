@@ -171,7 +171,7 @@ namespace PortableCompiler
 
         // throw; re-raises whichever kind entered the handler: the managed object
         // with its original reference, otherwise the captured fixed exnref.
-        internal static int Rethrow(byte[] code, int used, int exception, int obj)
+        internal static int ReraiseCaught(byte[] code, int used, int exception, int obj)
         {
             used = Local(code, used, 0x20, exception);
             code[used++] = 0xd1; // ref.is_null

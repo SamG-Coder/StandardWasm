@@ -645,7 +645,7 @@ namespace PortableCompiler
                     }
                 }
                 else if (kind == Rethrow)
-                    used = ExceptionDispatchWasm.Rethrow(code, used, pcLocal + 2 + operand, objectBase + 1 + operand);
+                    used = ExceptionDispatchWasm.ReraiseCaught(code, used, pcLocal + 2 + operand, objectBase + 1 + operand);
                 else
                 {
                     if (hasNull)
