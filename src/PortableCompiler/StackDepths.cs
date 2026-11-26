@@ -52,6 +52,12 @@ namespace PortableCompiler
         private static int Transition(byte[] stack, int depth, int kind, int operand, int extra, byte[] frame,
             byte[] signatures, int[] offsets, int[] arities)
         {
+            if (kind == LoadString) return Push(stack, depth, String);
+            if (kind == StringLength)
+                return Match(stack, depth, String) ? Push(stack, depth - 1, I32) : -1;
+            if (kind == StringCharacter)
+                return Match(stack, depth, I32) && Match(stack, depth - 1, String)
+                    ? Push(stack, depth - 2, I32) : -1;
             if (kind == LoadFunction) return Push(stack, depth, MethodPointer);
             if (kind == NewDelegate)
             {

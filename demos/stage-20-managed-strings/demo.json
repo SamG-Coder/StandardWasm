@@ -1,0 +1,1 @@
+{"assembly":"StringLibrary","exportType":"StringLibrary.StringDemo","method":"Compile","inputs":[{"file":"self"},{"name":"CodeUnit"}],"generated":{"capacity":16384,"arguments":[0,3]},"expected":55357}

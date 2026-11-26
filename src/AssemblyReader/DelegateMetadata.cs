@@ -79,7 +79,7 @@ namespace PeLibrary
             return args + 2;
         }
 
-        private static int TableStart(int[] streams, int[] methods, int[] counts, int table)
+        internal static int TableStart(int[] streams, int[] methods, int[] counts, int table)
         {
             int cursor = methods[0] + counts[6] * methods[1];
             int end = streams[4] + streams[5];

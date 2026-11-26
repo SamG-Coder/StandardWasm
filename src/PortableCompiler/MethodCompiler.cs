@@ -27,7 +27,7 @@ namespace PortableCompiler
                 return exportCount;
             var exports = new int[exportCount];
             var layout = new int[4];
-            var heaps = new int[6];
+            var heaps = new int[8];
             int count = CompressedTables.FindWithHeaps(image, layout, heaps);
             if (count < 0)
                 return count == MethodDefinitions.Unsupported ? -2 : -1;
@@ -44,6 +44,8 @@ namespace PortableCompiler
             var signatures = new byte[output.Length];
             var frame = new byte[output.Length];
             var moduleCode = new byte[output.Length];
+            var literals = new byte[output.Length];
+            var literalSize = new int[1];
             int functions = 0, length = 0;
             for (int export = 0; export < exportCount; export++)
             {
@@ -107,7 +109,7 @@ namespace PortableCompiler
                     if (status < 0)
                         return status;
                     functions = LinkOperands(image, layout, heaps, records, rows, indices,
-                        arities, offsets, signatures, objects, thunks, functions);
+                        arities, offsets, signatures, objects, thunks, literals, literalSize, functions);
                     if (functions < 0)
                         return functions;
 
@@ -155,11 +157,12 @@ namespace PortableCompiler
                 length += used;
             }
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0]);
         }
 
         private static int LinkOperands(byte[] image, int[] layout, int[] heaps, int[] records,
-            int[] rows, int[] indices, int[] arities, int[] offsets, byte[] signatures, int[] objects, int[] thunks, int functions)
+            int[] rows, int[] indices, int[] arities, int[] offsets, byte[] signatures, int[] objects, int[] thunks,
+            byte[] literals, int[] literalSize, int functions)
         {
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
             {
@@ -183,12 +186,29 @@ namespace PortableCompiler
                     records[slot + 3] = (type << 8) | ObjectLayouts.FieldType(objects, field);
                     continue;
                 }
+                if (kind == BranchIl.LoadString)
+                {
+                    int start = literalSize[0];
+                    int characters = StringMetadata.CopyLiteral(image, heaps, records[slot + 1], literals, start);
+                    if (characters < 0) return characters;
+                    records[slot + 1] = start;
+                    records[slot + 3] = characters;
+                    literalSize[0] = start + characters * 2;
+                    continue;
+                }
                 if (kind == BranchIl.MemberCall)
                 {
                     int member = records[slot + 1], opcode = records[slot + 3];
                     if (opcode == 0x28 && ObjectLayouts.IsObjectConstructor(image, heaps, layout, member))
                     {
                         records[slot] = BranchIl.BaseCtor;
+                        continue;
+                    }
+                    int stringMember = StringMetadata.Member(image, heaps, layout, member);
+                    if (stringMember != 0 && (opcode == 0x6f || opcode == 0x28))
+                    {
+                        records[slot] = stringMember == StringMetadata.Length
+                            ? BranchIl.StringLength : BranchIl.StringCharacter;
                         continue;
                     }
                     int delegateMember = DelegateMetadata.Member(image, heaps, layout, member);
