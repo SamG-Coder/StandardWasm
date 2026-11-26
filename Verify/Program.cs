@@ -73,4 +73,5 @@ PortableNarrowScalarCases.Add(cases);
 ArrayLiteralCases.Add(cases);
 CheckedIntegerCases.Add(cases);
 CheckedCastCases.Add(cases);
+TypedOverflowCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

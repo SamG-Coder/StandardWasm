@@ -35,7 +35,8 @@ internal static class CheckedCastCases
                 cases.Add(new
                 {
                     module = "BootstrapLibrary", method = "Compile", fixture = method.Name,
-                    inputs = new object[] { encoded, row }, generated = new { capacity, arguments = new[] { Encode(input) }, hex },
+                    inputs = new object[] { encoded, row },
+                    generated = new { capacity, arguments = new[] { Encode(input) }, hex, exceptionType = exception },
                     expected, exception
                 });
             }

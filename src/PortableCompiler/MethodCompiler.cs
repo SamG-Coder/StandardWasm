@@ -137,6 +137,7 @@ namespace PortableCompiler
             var body = new int[6];
             var frameShape = new int[8];
             bool eventArgsEmpty = false;
+            bool overflowTag = false;
 
             int activeOwner = 0;
             for (int current = 0; current < functions; current++)
@@ -240,6 +241,7 @@ namespace PortableCompiler
                         {
                             if (capacity > int.MaxValue - 48) return -3;
                             capacity += 48;
+                            overflowTag = true;
                         }
                         if ((kind != BranchIl.Call && kind != BranchIl.NewObject) ||
                             depths[slot / BranchIl.Width] == 0)
@@ -280,7 +282,7 @@ namespace PortableCompiler
             }
             CompileLocation.Clear(location);
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], eventArgsEmpty, remainderFixup[0]);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], eventArgsEmpty, remainderFixup[0], overflowTag);
         }
 
         private static int LinkOperands(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,

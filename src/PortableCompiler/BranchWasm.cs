@@ -502,7 +502,10 @@ namespace PortableCompiler
 
         // The CLR throws for MinValue % -1 even though Wasm rem_s returns zero.
         // Keep the failure observable as a Wasm trap until typed exceptions are available.
-        private static int GuardRemainder(byte[] code, int used, byte type, int left, int right)
+        private static int GuardRemainder(byte[] code, int used, byte type, int left, int right) =>
+            TrapIf(code, IsMinAndMinusOne(code, used, type, left, right));
+
+        internal static int IsMinAndMinusOne(byte[] code, int used, byte type, int left, int right)
         {
             used = Local(code, used, 0x20, left);
             used = type == I64 ? WideConst(code, used, 0, int.MinValue) : Const(code, used, int.MinValue);
@@ -511,7 +514,7 @@ namespace PortableCompiler
             used = type == I64 ? WideConst(code, used, -1, -1) : Const(code, used, -1);
             code[used++] = NumericOpcode(0x46, type);
             code[used++] = 0x71; // i32.and
-            return TrapIf(code, used);
+            return used;
         }
 
         internal static int TrapIf(byte[] code, int used)

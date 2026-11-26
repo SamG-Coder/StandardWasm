@@ -12,7 +12,7 @@ namespace PortableCompiler
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup)
+            byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup, bool overflowTag)
         {
             int typeOffset = objects[0] + FirstClassHeap;
             bool hasRemainder = remainderFixup != 0;
@@ -44,8 +44,10 @@ namespace PortableCompiler
             // The entry and invocation list also share one fixed recursive type group.
             int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 1;
             if (hasRemainder) typeEntries++;
+            if (overflowTag) typeEntries++;
             int prefix = UnsignedSize(typeEntries) + 63 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
+            if (overflowTag) prefix += 3; // () -> () exception payload
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;
             int functionSize = UnsignedSize(totalFunctions) + thunks[0];
@@ -73,7 +75,10 @@ namespace PortableCompiler
                 codeSize += code;
                 functionSize += index;
             }
-            int exportSize = UnsignedSize(exports.Length);
+            int exportCount = exports.Length + (overflowTag ? 1 : 0);
+            int exportSize = UnsignedSize(exportCount) + (overflowTag ? OverflowWasm.ExportSize : 0);
+            int tagType = typeOffset + functions + (hasRemainder ? 1 : 0);
+            int tagSize = 2 + UnsignedSize(tagType);
             for (int i = 0; i < exports.Length; i++)
             {
                 int name = (int)ImageBytes.U32(names, (uint)entryOffsets[i] + 4);
@@ -101,6 +106,8 @@ namespace PortableCompiler
             remaining = Reserve(remaining, functionSize);
             if (thunks[0] != 0)
                 remaining = Reserve(remaining, tableSize);
+            if (overflowTag)
+                remaining = Reserve(remaining, tagSize);
             if (eventArgsEmpty)
                 remaining = Reserve(remaining, 8);
             remaining = Reserve(remaining, exportSize);
@@ -228,6 +235,12 @@ namespace PortableCompiler
                     cursor = ValueType(output, cursor, result);
             }
             if (hasRemainder) cursor = FloatRemainderWasm.WriteType(output, cursor);
+            if (overflowTag)
+            {
+                output[cursor++] = 0x60;
+                output[cursor++] = 0;
+                output[cursor++] = 0;
+            }
 
             cursor = Section(output, cursor, 3, functionSize);
             cursor = Unsigned(output, cursor, totalFunctions);
@@ -244,6 +257,14 @@ namespace PortableCompiler
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, thunks[0]);
             }
+            if (overflowTag)
+            {
+                // Tag sections precede globals and exports despite section ID 13.
+                cursor = Section(output, cursor, 13, tagSize);
+                output[cursor++] = 1;
+                output[cursor++] = 0; // exception attribute
+                cursor = Unsigned(output, cursor, tagType);
+            }
 
             if (eventArgsEmpty)
             {
@@ -257,7 +278,7 @@ namespace PortableCompiler
                 output[cursor++] = 0x0b;
             }
             cursor = Section(output, cursor, 7, exportSize);
-            cursor = Unsigned(output, cursor, exports.Length);
+            cursor = Unsigned(output, cursor, exportCount);
             for (int i = 0; i < exports.Length; i++)
             {
                 int source = entryOffsets[i];
@@ -268,6 +289,7 @@ namespace PortableCompiler
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, exports[i]);
             }
+            if (overflowTag) cursor = OverflowWasm.WriteExport(output, cursor);
 
             if (thunks[0] != 0)
             {

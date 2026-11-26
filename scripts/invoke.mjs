@@ -2,6 +2,12 @@
 export const decode = value => value?.i64 !== undefined ? BigInt(value.i64)
     : value?.f64 !== undefined ? Number(value.f64) : value;
 
+export function managedExceptionType(exports, error) {
+    const overflow = exports["\0overflow"];
+    return overflow instanceof WebAssembly.Tag && error instanceof WebAssembly.Exception && error.is(overflow)
+        ? "System.OverflowException" : null;
+}
+
 export function invoke(exports, method, inputs) {
     const args = inputs.map(input => {
         if (!Array.isArray(input?.bytes)) return decode(input);
@@ -80,6 +86,12 @@ export async function invokeGenerated(exports, inputs, generated, reportDiagnost
             units[index] = String.fromCharCode(exports.TextCodeUnit(value, index));
         return units.join("");
     } catch (error) {
+        if (generated.exceptionType != null) {
+            const actual = managedExceptionType(instance.exports, error);
+            if (actual !== generated.exceptionType)
+                throw Error("Expected " + generated.exceptionType + ", got " + (actual ?? String(error)), { cause: error });
+            return null;
+        }
         if (!(error instanceof WebAssembly.RuntimeError)) throw error;
         return null;
     }

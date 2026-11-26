@@ -42,6 +42,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [43 · Primitive array literals](stage-43-array-literals/README.md) | `npm run demo -- stage-43-array-literals` | IntegerAt(1) = -93 |
 | [44 · Portable checked integers](stage-44-checked-integers/README.md) | `npm run demo -- stage-44-checked-integers` | MulI32(-12, 7) = -84 |
 | [45 · Checked fixed-width numeric casts](stage-45-checked-casts/README.md) | `npm run demo -- stage-45-checked-casts` | F64ToU8(255.9) = 255 |
+| [46 · Typed checked overflow](stage-46-typed-overflow/README.md) | `npm run demo -- stage-46-typed-overflow` | AddOrDivide raises the OverflowException tag |
 
 ## Adding a stage
 

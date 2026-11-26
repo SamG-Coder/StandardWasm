@@ -1,0 +1,1 @@
+{"assembly":"TypedOverflow","exportType":"TypedOverflow.OverflowDemo","method":"Compile","inputs":[{"file":"self"},{"name":"AddOrDivide"}],"generated":{"capacity":8192,"arguments":[0,2147483647,1],"exceptionType":"System.OverflowException"},"expected":null}
