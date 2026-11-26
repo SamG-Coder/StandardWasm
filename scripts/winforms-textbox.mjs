@@ -12,8 +12,11 @@ const generated = process.argv.includes("--generated");
 const compiler = "artifacts/StandardWasm.Compiler.wasm";
 const artifacts = generated ? "artifacts/profile-generated" : "artifacts/profile";
 const benchmark = process.argv.includes("--benchmark");
+const redraw = process.argv.includes("--region-redraw");
+const regional = redraw || process.argv.includes("--regional");
 const verify = benchmark || process.argv.includes("--verify");
-const timingOutput = "artifacts/profile-rendering";
+const timingOutput = redraw ? "artifacts/profile-caption-redraw" :
+    regional ? "artifacts/profile-text-uploads" : "artifacts/profile-rendering";
 mkdirSync(artifacts, { recursive: true });
 const browserModel = ["run", "-c", "Release", "--project", stage + "/BrowserModel", "--"];
 const reference = artifacts + "/Profile.wasm";
@@ -61,6 +64,8 @@ await new Promise((resolve, reject) => {
 const url = new URL("http://127.0.0.1:" + server.address().port);
 if (generated) url.searchParams.set("generated", "");
 if (benchmark) url.searchParams.set("benchmark", "");
+if (regional) url.searchParams.set("regional", "");
+if (redraw) url.searchParams.set("region-redraw", "");
 console.log("Profile form at " + url.href);
 
 if (verify) {
@@ -97,7 +102,12 @@ if (verify) {
         }
         const surface = page.locator("#surface");
         await record();
-        const before = await surface.screenshot();
+        // Exclude DOM overlays and rounded clipping from GPU pixel comparisons.
+        const captureSurface = () => surface.screenshot({
+            style: regional ? "#profile > :not(canvas) { opacity: 0 !important; } " +
+                "main { border-radius: 0 !important; }" : undefined
+        });
+        const before = await captureSurface();
         await input.focus();
         await input.pressSequentially("Zo");
         await page.keyboard.insertText("\u00eb \ud83d\ude80!");
@@ -108,7 +118,7 @@ if (verify) {
         await input.press("End");
         await input.press("Backspace");
         await record();
-        const after = await surface.screenshot();
+        const after = await captureSurface();
         await page.screenshot({ path: artifacts + "/browser.png" });
         await page.getByRole("button", { name: "Clear" }).click();
         await record();
@@ -138,6 +148,19 @@ if (verify) {
         assert.deepEqual(states.map(state => state.input), ["", "Zo\u00eb \ud83d\ude80!", "Ada \ud83d\ude80!", "Ada \ud83d\ude80", ""]);
         const { changed: changedPixels } = await comparePixels(page, before, after, 0, [32, 116, 356, 90]);
         assert.ok(changedPixels > 100, "WebGPU preview pixels must change after editing.");
+        if (regional) {
+            const [x, y, width, height] = controls.previewBounds;
+            const w = Math.round(surfaceBounds.width), h = Math.round(surfaceBounds.height);
+            const outside = [[0, 0, w, y], [0, y + height, w, h - y - height],
+                [0, y, x, height], [x + width, y, w - x - width, height]];
+            for (const area of outside) {
+                const { changed } = await comparePixels(page, before, after, 0, area);
+                assert.equal(changed, 0, "Editing must leave pixels outside the preview intact: " + JSON.stringify({ area, bounds: controls.previewBounds, surfaceBounds }));
+            }
+            const cleared = await captureSurface();
+            const { changed } = await comparePixels(page, before, cleared, 0);
+            assert.equal(changed, 0, "Clearing must fully restore the initial frame.");
+        }
         assert.deepEqual(errors, []);
         const evidence = { engine: browser.version(), states, controls, changedPixels, portable };
         writeFileSync(artifacts + "/browser.json", JSON.stringify(evidence, null, 2) + "\n");

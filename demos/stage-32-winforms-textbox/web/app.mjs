@@ -36,6 +36,7 @@ async function start() {
         ["prompt", { node: document.querySelector("#prompt"), get: wasm.GetLabel, bound: wasm.LabelBound }]
     ]);
     const model = { width, height, controls: [] };
+    let previewControl, previewRegion;
     for (let child = wasm.FirstChild(form); child !== null; child = wasm.NextChild(child)) {
         const name = readText(wasm.ChildName(child));
         const role = roles.get(name);
@@ -43,10 +44,15 @@ async function start() {
         role.control = role.get(child);
         const [x, y, w, h] = [0, 1, 2, 3].map(i => role.bound(role.control, i));
         profile.append(role.node); // Use the managed insertion order in the DOM too.
-        if (name === "preview" || name === "clear")
-            model.controls.push({ name, kind: name === "clear" ? "button" : "label", x, y, width: w, height: h });
+        if (name === "preview" || name === "clear") {
+            const visual = { name, kind: name === "clear" ? "button" : "label",
+                x, y, width: w, height: h, clipText: name === "preview" };
+            model.controls.push(visual);
+            if (name === "preview") previewControl = visual;
+        }
         if (name === "preview") {
-            profile.dataset.previewBounds = JSON.stringify([x, y, w, h]);
+            previewRegion = [x, y, w, h];
+            profile.dataset.previewBounds = JSON.stringify(previewRegion);
         } else {
             role.node.style.left = 100 * x / width + "%";
             role.node.style.top = 100 * y / height + "%";
@@ -70,11 +76,12 @@ async function start() {
     const captions = new Map([["clear", caption]]);
     gpu.lost.then(details => report(Error("WebGPU device lost: " + details.message)));
 
-    function repaint() {
+    function repaint(previewOnly = false) {
         result.value = readText(wasm.ReadLabel(preview));
         captions.set("preview", result.value);
-        text.update(captions);
-        gpu.upload();
+        if (previewOnly) text.updateClippedCaption(previewControl, result.value);
+        else text.update(captions);
+        gpu.upload(previewOnly ? previewRegion : undefined);
         gpu.draw();
     }
 
@@ -88,7 +95,7 @@ async function start() {
 
     function edit() {
         setManagedText(input.value);
-        repaint();
+        repaint(true);
     }
 
     input.addEventListener("input", event => {
@@ -98,13 +105,15 @@ async function start() {
     clear.addEventListener("click", () => {
         wasm.Click(button);
         input.value = readText(wasm.ReadInput(inputModel));
-        repaint();
+        repaint(true);
         if (wasm.TakeFocusRequest(inputModel)) input.focus();
     });
     if (options.has("benchmark")) {
         const { prepareProfileTiming } = await import("./profile-timing.mjs");
         window.profileTiming = prepareProfileTiming({
             canvas, model, text, gpu, captions, setManagedText,
+            previewRegion: options.has("regional") ? previewRegion : undefined,
+            previewControl: options.has("region-redraw") ? previewControl : undefined,
             readPreview: () => readText(wasm.ReadLabel(preview))
         });
     }
