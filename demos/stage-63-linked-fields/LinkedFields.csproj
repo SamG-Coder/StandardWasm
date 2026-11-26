@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/AssemblyReader/*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="../../src/PortableCompiler/*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Remove="Dependencies/**/*.cs" />
+    <ProjectReference Include="Dependencies/Left/FieldLeft.csproj" Aliases="left" />
+    <ProjectReference Include="Dependencies/Right/FieldRight.csproj" Aliases="right" />
+  </ItemGroup>
+</Project>

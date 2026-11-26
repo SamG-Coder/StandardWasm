@@ -1,0 +1,1 @@
+{"assembly":"NestedHandlers","exportType":"NestedHandlers.NestedDemo","method":"Compile","inputs":[{"file":"self"},{"name":"HandlerEscapesToOuter"}],"generated":{"capacity":8192,"arguments":[2147483647,0]},"expected":-201}

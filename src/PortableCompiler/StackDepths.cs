@@ -7,32 +7,39 @@ namespace PortableCompiler
     internal static class StackDepths
     {
         internal static int Analyze(int[] records, int[] depths, byte[] states, int maximum,
-            int[] frame, int result, int[] signatures, int[] offsets, int[] arities, int[] location, int[] catchRegion)
+            int[] frame, int result, int[] signatures, int[] offsets, int[] arities, int[] location, int[] catchRegion,
+            byte[] outgoingNulls)
         {
             if (depths.Length == 0)
                 return -1;
             var pending = new int[depths.Length];
             var stack = new byte[maximum];
             depths[0] = 1;
-            int head = 0, tail = 1;
+            // Link pending offsets through their own entries. A refined join can
+            // enqueue a processed instruction again, with at most one entry per offset.
+            pending[0] = 1;
+            int head = 1;
             if (catchRegion.Length != 0)
             {
-                for (int kind = ArithmeticCatch.OverflowResume; kind <= ArithmeticCatch.DivideResume; kind++)
+                for (int clause = 0; clause < catchRegion.Length; clause += ExceptionClauses.Width)
                 {
-                    int handler = catchRegion[kind];
-                    if (handler == 0 || depths[handler] != 0) continue;
+                    int handler = catchRegion[clause + ExceptionClauses.Resume];
+                    if (depths[handler] != 0) continue;
                     depths[handler] = 1; // Handler resumes after discarding the exception.
-                    pending[tail++] = handler;
+                    pending[handler] = head + 1;
+                    head = handler + 1;
                 }
             }
-            while (head < tail)
+            while (head != 0)
             {
-                int pc = pending[head++];
+                int pc = head - 1;
+                head = pending[pc] - 1;
+                pending[pc] = 0;
                 if (location.Length != 0) location[2] = pc;
                 int slot = pc * BranchIl.Width;
                 int kind = records[slot];
                 int depth = depths[pc] - 1;
-                if (catchRegion.Length != 0 && pc == catchRegion[ArithmeticCatch.TryStart] && depth != 0) return -1;
+                if (depth != 0 && ExceptionClauses.StartsTry(catchRegion, pc)) return -1;
                 int operand = records[slot + 1];
                 for (int i = 0; i < depth; i++)
                     stack[i] = states[pc * maximum + i];
@@ -42,6 +49,8 @@ namespace PortableCompiler
                         return -1;
                     continue;
                 }
+
+                if (kind == Rethrow || kind == EndFinally) continue; // Unwinding drops the evaluation stack.
 
                 int next;
                 if (kind == Leave)
@@ -61,24 +70,27 @@ namespace PortableCompiler
                     signatures, offsets, arities);
                 if (next < 0)
                     return next;
+                if (outgoingNulls.Length != 0)
+                    for (int i = 0; i < next; i++)
+                        outgoingNulls[pc * maximum + i] = stack[i] == NullValue ? (byte)1 : (byte)0;
                 if (kind == Branch || kind == Conditional || kind == Leave)
                 {
-                    tail = Edge(operand, next, maximum, stack, depths, states, pending, tail);
-                    if (tail < 0) return -1;
+                    head = Edge(operand, next, maximum, stack, depths, states, pending, head);
+                    if (head < 0) return -1;
                 }
                 if (kind == Switch)
                 {
                     int count = records[slot + 3];
                     for (int i = 0; i < count; i++)
                     {
-                        tail = Edge(SwitchTarget(records, operand, i), next, maximum, stack, depths, states, pending, tail);
-                        if (tail < 0) return -1;
+                        head = Edge(SwitchTarget(records, operand, i), next, maximum, stack, depths, states, pending, head);
+                        if (head < 0) return -1;
                     }
                 }
                 if (kind != Branch && kind != Leave)
                 {
-                    tail = Edge(records[slot + 2], next, maximum, stack, depths, states, pending, tail);
-                    if (tail < 0) return -1;
+                    head = Edge(records[slot + 2], next, maximum, stack, depths, states, pending, head);
+                    if (head < 0) return -1;
                 }
             }
             return 0;
@@ -87,13 +99,20 @@ namespace PortableCompiler
         private static int Transition(byte[] stack, int depth, int kind, int operand, int extra, int[] frame,
             int[] signatures, int[] offsets, int[] arities)
         {
-            if (kind == LoadString || kind == NullString) return Push(stack, depth, String);
+            if (kind == LoadString) return Push(stack, depth, String);
+            if (kind == NullLiteral) return Push(stack, depth, NullValue);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, depth, EventArgsReference);
             if (kind == CombineHandler || kind == RemoveHandler)
                 return Match(stack, depth, EventHandlerReference) && Match(stack, depth - 1, EventHandlerReference)
                     ? depth - 1 : -1;
             // The supported delegate operations already proved the result's concrete type.
             if (kind == CastHandler) return Match(stack, depth, EventHandlerReference) ? depth : -1;
+            if (kind == CastClass || kind == TestClass)
+            {
+                if (depth < 1 || (stack[depth - 1] != NullValue && !IsReference(stack[depth - 1]))) return -1;
+                stack[depth - 1] = (byte)operand;
+                return depth;
+            }
             if (kind == JoinStrings)
                 return Match(stack, depth, String) && Match(stack, depth - 1, String)
                     ? Push(stack, depth - 2, String) : -1;
@@ -107,7 +126,7 @@ namespace PortableCompiler
             if (kind == LoadFunction) return Push(stack, depth, MethodPointer);
             if (kind == NewDelegate)
             {
-                if (!Match(stack, depth, MethodPointer) || !Match(stack, depth - 1, (byte)extra)) return -1;
+                if (!Match(stack, depth, MethodPointer) || depth < 2 || stack[depth - 2] != (byte)extra) return -1;
                 return Push(stack, depth - 2, (byte)operand);
             }
             if (kind == InvokeDelegate)
@@ -165,14 +184,16 @@ namespace PortableCompiler
                 if (depth < needed) return -1;
                 byte type = stack[depth - needed];
                 byte top = stack[depth - 1];
-                if (type == String || top == String)
-                    return kind == Conditional && needed == 1 ? depth - 1 : -1;
-                if (IsObjectReference(type) || IsObjectReference(top))
+                if (type == NullValue || top == NullValue || IsReference(type) || IsReference(top))
                 {
-                    if (!Assignable(type, top) && !Assignable(top, type)) return -1;
+                    if (needed == 1) return depth - 1;
+                    if (!ReferenceComparison(type, top)) return -1;
                     if (kind == Conditional)
-                        return needed == 1 || extra == 0x46 || extra == 0x47 ? depth - needed : -1;
-                    return operand == 0x46 ? Push(stack, depth - 2, I32) : -1;
+                        return extra == 0x46 || extra == 0x47 ? depth - needed : -1;
+                    // C# materializes a boolean type test with isinst, ldnull,
+                    // cgt.un. Only accept this reference ordering against null.
+                    return operand == 0x46 || (operand == 0x4b && top == NullValue)
+                        ? Push(stack, depth - 2, I32) : -1;
                 }
                 if (IsFloat(type) || IsFloat(top))
                 {
@@ -218,7 +239,7 @@ namespace PortableCompiler
             }
             else if (kind == ArrayLength)
             {
-                if (depth < 1 || !IsArray(stack[depth - 1])) return -1;
+                if (depth < 1 || (stack[depth - 1] != NullValue && !IsArray(stack[depth - 1]))) return -1;
                 stack[depth - 1] = I32;
             }
             else if (kind == ArrayGet)
@@ -240,7 +261,7 @@ namespace PortableCompiler
         }
 
         private static bool Match(byte[] stack, int depth, byte type) =>
-            depth > 0 && stack[depth - 1] == type;
+            depth > 0 && (stack[depth - 1] == type || stack[depth - 1] == NullValue && IsReference(type));
 
         private static int Push(byte[] stack, int depth, byte type)
         {
@@ -250,22 +271,32 @@ namespace PortableCompiler
         }
 
         private static int Edge(int pc, int count, int maximum, byte[] stack, int[] depths,
-            byte[] states, int[] pending, int tail)
+            byte[] states, int[] pending, int head)
         {
             if (pc >= depths.Length) return -1;
             int offset = pc * maximum;
-            if (depths[pc] != 0)
+            bool changed = depths[pc] == 0;
+            if (changed)
+            {
+                depths[pc] = count + 1;
+                for (int i = 0; i < count; i++)
+                    states[offset + i] = stack[i];
+            }
+            else
             {
                 if (depths[pc] != count + 1) return -1;
                 for (int i = 0; i < count; i++)
-                    if (states[offset + i] != stack[i]) return -1;
-                return tail;
+                {
+                    byte current = states[offset + i], incoming = stack[i];
+                    if (current == incoming || incoming == NullValue && IsReference(current)) continue;
+                    if (current != NullValue || !IsReference(incoming)) return -1;
+                    states[offset + i] = incoming;
+                    changed = true;
+                }
             }
-            depths[pc] = count + 1;
-            for (int i = 0; i < count; i++)
-                states[offset + i] = stack[i];
-            pending[tail] = pc;
-            return tail + 1;
+            if (!changed || pending[pc] != 0) return head;
+            pending[pc] = head + 1;
+            return pc + 1;
         }
     }
 }

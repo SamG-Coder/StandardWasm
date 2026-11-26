@@ -1,0 +1,1 @@
+{"assembly":"LinkedInstances","exportType":"LinkedInstances.LinkDemo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["ForeignCounter.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":32768,"arguments":[5,3]},"expected":1110}
