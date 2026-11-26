@@ -171,14 +171,14 @@ namespace PeLibrary
 
         // Return storage directly for known types. A class signature yields
         // its image-local TypeDefOrRef code for the linker to resolve.
-        internal static int ReadStorage(byte[] image, int[] streams, int[] methods, int table, int row, int[] reference)
+        internal static int ReadStorage(byte[] image, int[] streams, int[] methods, int table, int row, int[] reference, bool staticField)
         {
             reference[0] = 0;
             reference[1] = 0;
             int strings = methods[2], blobs = methods[3];
             uint at = (uint)(table + (row - 1) * (2 + strings + blobs));
             uint flags = U16(image, at);
-            if ((flags & 0x10) != 0) return 0; // Static fields have no instance storage.
+            if (!staticField && (flags & 0x10) != 0) return 0; // Static fields have no instance storage.
             uint sig = ReadIndex(image, at + (uint)(2 + strings), blobs);
             if (sig == 0 || sig >= (uint)streams[1]) return -1;
             int limit = streams[0] + streams[1];

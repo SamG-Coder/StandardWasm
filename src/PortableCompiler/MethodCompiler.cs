@@ -157,7 +157,8 @@ namespace PortableCompiler
             }
             var body = new int[6];
             var frameShape = new int[10];
-            bool eventArgsEmpty = false;
+            // Each emitted global needs at least five bytes in the destination.
+            var globals = new int[1 + output.Length / 5 * 3];
             int exceptionTags = 0;
             var noCatch = new int[0];
             var sizingBuffer = new byte[0];
@@ -248,7 +249,7 @@ namespace PortableCompiler
                         return status;
                     functions = LinkOperands(main, bundle, ranges, image, layout, heaps, owner, source,
                         parameters == 0 ? 0 : signatures[signature + 1], records, owners, rows,
-                        bases, indices, arities, offsets, signatures, objects, thunks, literals, literalSize, functions, location, frame, catchRegion);
+                        bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion);
                     if (functions < 0)
                         return functions;
 
@@ -373,8 +374,6 @@ namespace PortableCompiler
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
                             frameShape[6] = 1;
-                        if (kind == BranchIl.LoadEventArgsEmpty && depths[slot / BranchIl.Width] != 0)
-                            eventArgsEmpty = true;
                     }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
@@ -390,12 +389,12 @@ namespace PortableCompiler
             }
             CompileLocation.Clear(location);
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], eventArgsEmpty, remainderFixup[0], exceptionTags);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags);
         }
 
         private static int LinkOperands(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
             int[] heaps, int owner, int callerRow, int callerReceiver, int[] records, int[] owners, int[] rows, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
-            byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses)
+            int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses)
         {
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
             {
@@ -448,7 +447,7 @@ namespace PortableCompiler
                         if (bundle.Length == 0) return -2;
                         var linkedField = new int[2];
                         int status = AssemblyBundle.ResolveField(main, bundle, ranges, image, layout, heaps, owner,
-                            field, kind == BranchIl.SetField, objects, linkedField);
+                            field, kind == BranchIl.SetField, false, objects, globals, linkedField);
                         if (status < 0) return status;
                         records[slot + 1] = linkedField[0];
                         records[slot + 3] = linkedField[1];
@@ -488,6 +487,30 @@ namespace PortableCompiler
                     }
                     continue;
                 }
+                if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField)
+                {
+                    var symbol = new int[2];
+                    int field = records[slot + 1];
+                    bool write = kind == BranchIl.StoreStaticField;
+                    bool linked = records[slot + 3] != 0;
+                    if (!write && linked && owner == 0 && EventMetadata.Member(image, heaps, layout, field) == EventMetadata.Empty)
+                    {
+                        int eventGlobal = StaticFields.Register(globals, StaticFields.EventOwner, 0, EventArgsReference);
+                        if (eventGlobal < 0) return eventGlobal;
+                        records[slot] = BranchIl.LoadEventArgsEmpty;
+                        records[slot + 1] = eventGlobal;
+                        continue;
+                    }
+
+                    if (linked && bundle.Length == 0) return -2;
+                    int status = linked ? AssemblyBundle.ResolveField(main, bundle, ranges, image, layout, heaps, owner,
+                        field, write, true, objects, globals, symbol) :
+                        StaticFields.ResolveLocal(main, bundle, ranges, image, layout, heaps, owner, field, write, objects, globals, symbol);
+                    if (status < 0) return status;
+                    records[slot + 1] = symbol[0];
+                    records[slot + 3] = symbol[1];
+                    continue;
+                }
                 if (kind == BranchIl.LoadString)
                 {
                     int start = literalSize[0];
@@ -505,11 +528,6 @@ namespace PortableCompiler
                     if (owner == 0)
                     {
                         int eventMember = EventMetadata.Member(image, heaps, layout, member);
-                        if (eventMember == EventMetadata.Empty && opcode == 0x7e)
-                        {
-                            records[slot] = BranchIl.LoadEventArgsEmpty;
-                            continue;
-                        }
                         if (eventMember == EventMetadata.Construct && opcode == 0x73)
                         {
                             records[slot] = BranchIl.NewEventArgs;
@@ -529,7 +547,6 @@ namespace PortableCompiler
                             continue;
                         }
                     }
-                    if (opcode == 0x7e) return -2;
                     if (opcode == 0x28 && ObjectLayouts.IsObjectConstructor(image, heaps, layout, member))
                     {
                         records[slot] = BranchIl.BaseCtor;

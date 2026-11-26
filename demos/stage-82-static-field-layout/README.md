@@ -7,5 +7,5 @@ static storage from their Wasm GC layouts, including inherited field offsets.
 The generated code agrees with the CLR for individual field reads and writes
 through the base and derived types.
 
-The tests also require diagnostics for static reads and writes and for a
-reached type initializer. Those features are tracked in [#170](https://github.com/SamG-Coder/StandardWasm/issues/170).
+The tests also cover linked static storage from [Stage 106](../stage-106-static-field-storage/README.md)
+and require a diagnostic for a reached type initializer.

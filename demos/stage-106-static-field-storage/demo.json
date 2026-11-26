@@ -1,0 +1,1 @@
+{"assembly":"StaticStorageDemo","exportType":"StaticStorageDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["StaticStorageDependency.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":65536,"arguments":[5]},"expected":22}

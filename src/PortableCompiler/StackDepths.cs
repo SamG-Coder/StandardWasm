@@ -254,6 +254,9 @@ namespace PortableCompiler
             if (kind == BaseCtor)
                 return depth > 0 && stack[depth - 1] >= FirstClass && !IsInterface(objects, stack[depth - 1]) &&
                     !IsValueType(objects, stack[depth - 1]) ? depth - 1 : -1;
+            if (kind == LoadStaticField) return Push(stack, depth, StackType(extra));
+            if (kind == StoreStaticField)
+                return depth > 0 && Assignable(stack[depth - 1], extra, objects) ? depth - 1 : -1;
             if (kind == GetField)
             {
                 if (depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(extra), objects)) return -1;

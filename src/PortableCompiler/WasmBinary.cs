@@ -12,7 +12,7 @@ namespace PortableCompiler
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup, int exceptionTags)
+            byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags)
         {
             if (!ValueFieldsWasm.CheckLayouts(objects)) return -2;
             int typeOffset = objects[0] + FirstClassHeap;
@@ -129,8 +129,9 @@ namespace PortableCompiler
                 remaining = Reserve(remaining, tableSize);
             if (tagCount != 0)
                 remaining = Reserve(remaining, tagSize);
-            if (eventArgsEmpty)
-                remaining = Reserve(remaining, 8);
+            int globalSize = WasmGlobals.Size(globals, objects);
+            if (globalSize != 0)
+                remaining = Reserve(remaining, globalSize);
             remaining = Reserve(remaining, exportSize);
             if (thunks[0] != 0)
                 remaining = Reserve(remaining, elementSize);
@@ -311,16 +312,10 @@ namespace PortableCompiler
                 }
             }
 
-            if (eventArgsEmpty)
+            if (globalSize != 0)
             {
-                cursor = Section(output, cursor, 6, 8);
-                output[cursor++] = 1;
-                cursor = ValueType(output, cursor, EventArgsReference);
-                output[cursor++] = 0; // immutable global, initialized once per module instance
-                output[cursor++] = 0xfb;
-                output[cursor++] = 1; // struct.new_default
-                output[cursor++] = EventArgsHeap;
-                output[cursor++] = 0x0b;
+                cursor = Section(output, cursor, 6, globalSize);
+                cursor = WasmGlobals.Write(output, cursor, globals, objects);
             }
             cursor = Section(output, cursor, 7, exportSize);
             cursor = Unsigned(output, cursor, exportCount);
@@ -407,7 +402,7 @@ namespace PortableCompiler
             return cursor;
         }
 
-        private static int ValueWidth(int type) =>
+        internal static int ValueWidth(int type) =>
             type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference || type == NullPointer ? 1 :
                 1 + HeapTypeSize(HeapType(StackType(type)));
 
@@ -459,7 +454,7 @@ namespace PortableCompiler
             return Unsigned(bytes, cursor, payload);
         }
 
-        private static int UnsignedSize(int value)
+        internal static int UnsignedSize(int value)
         {
             int count = 1;
             while (value >= 128)

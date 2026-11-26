@@ -152,7 +152,7 @@ namespace PortableCompiler
                     if (kind == LoadEventArgsEmpty)
                     {
                         code[used++] = 0x23; // global.get EventArgs.Empty
-                        code[used++] = 0;
+                        used = WasmBinary.Unsigned(code, used, operand);
                     }
                     else used = Gc(code, used, 1, EventArgsReference); // struct.new_default
                     used = Local(code, used, 0x21, Spill(spills, maximum, EventArgsReference, depth));
@@ -409,6 +409,23 @@ namespace PortableCompiler
                     used = Gc(code, used, 5, owner);
                     used = WasmBinary.Unsigned(code, used, operand);
                     code[used++] = 0x0b;
+                }
+                else if (kind == LoadStaticField)
+                {
+                    code[used++] = 0x23; // global.get
+                    used = WasmBinary.Unsigned(code, used, operand);
+                    int storage = StackType(records[slot + 3]);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, storage, depth));
+                }
+                else if (kind == StoreStaticField)
+                {
+                    int storage = records[slot + 3], source = states[state + top];
+                    used = LoadOperand(code, used, Spill(spills, maximum, source, top), source, storage);
+                    // Globals have full-width Wasm value types. Normalize CLI
+                    // byte and short assignments before persisting them.
+                    used = NormalizeSlot(code, used, storage);
+                    code[used++] = 0x24; // global.set
+                    used = WasmBinary.Unsigned(code, used, operand);
                 }
                 else if (kind == GetField || kind == SetField)
                 {
