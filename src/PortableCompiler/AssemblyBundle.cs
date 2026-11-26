@@ -118,13 +118,15 @@ namespace PortableCompiler
                 row = candidate;
             }
             if (row == 0) return -6;
-            int type = BundleLayouts.Register(main, bundle, ranges, target, targetLayout, targetHeaps, matched, declaringType, objects);
+            int type = ObjectLayouts.Find(objects, matched, declaringType, new int[0]);
+            if (type == 0)
+                type = BundleLayouts.Register(main, bundle, ranges, target, targetLayout, targetHeaps, matched, declaringType, objects);
             if (type < 0) return type;
             int index = ObjectLayouts.FieldOrdinal(objects, type, row);
             if (index < 0) return index;
             field[0] = index;
             // The receiver layout and value type come from the same owning DLL.
-            field[1] = (type << 8) | ObjectLayouts.FieldType(objects, type, row);
+            field[1] = FieldAccess.Encode(type, ObjectLayouts.FieldType(objects, type, row));
             return 0;
         }
 

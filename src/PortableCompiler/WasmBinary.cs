@@ -14,6 +14,7 @@ namespace PortableCompiler
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
             byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup, int exceptionTags)
         {
+            if (!ValueFieldsWasm.CheckLayouts(objects)) return -2;
             int typeOffset = objects[0] + FirstClassHeap;
             bool hasRemainder = remainderFixup != 0;
             bool overflow = (exceptionTags & ExceptionTypes.Overflow) != 0;
@@ -256,8 +257,11 @@ namespace PortableCompiler
                 {
                     int fieldType = LayoutFieldType(objects, classType, field);
                     if (fieldType == 0) continue;
-                    cursor = ValueType(output, cursor, Representation(objects, fieldType));
-                    output[cursor++] = 1;
+                    if (IsNarrow(fieldType))
+                        output[cursor++] = fieldType == Signed8 || fieldType == Unsigned8 ? (byte)0x78 : (byte)0x77;
+                    else
+                        cursor = ValueType(output, cursor, Representation(objects, fieldType));
+                    output[cursor++] = IsValueType(objects, classType) ? (byte)0 : (byte)1;
                 }
             }
             for (int type = 0; type < functions; type++)
@@ -404,14 +408,16 @@ namespace PortableCompiler
         }
 
         private static int ValueWidth(int type) =>
-            type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference ? 1 :
+            type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference || type == VoidPointer ? 1 :
                 HeapType(StackType(type)) <= 63 ? 2 : 3;
 
         internal static int ValueType(byte[] output, int cursor, int slot)
         {
             byte type = StackType(slot);
-            if (type == I32 || type == MethodPointer || type == Native)
+            if (type == I32 || type == MethodPointer || IsNativeInteger(type))
                 output[cursor++] = 0x7f;
+            else if (type == VoidPointer)
+                output[cursor++] = NullSpillWasm.NullRef; // Only the null pointer inhabits the browser storage type.
             else if (type == I64)
                 output[cursor++] = 0x7e;
             else if (IsFloat(type))

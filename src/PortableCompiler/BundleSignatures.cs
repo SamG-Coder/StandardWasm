@@ -20,7 +20,18 @@ namespace PortableCompiler
 
             // A field has exactly one type, without a parameter count.
             int count = 0;
-            if (!field)
+            if (field)
+            {
+                next[0] = left;
+                int leftModifier = ObjectLayouts.ReadFieldModifier(caller, callerHeaps, callerLayout, next, leftEnd);
+                if (leftModifier < 0) return leftModifier;
+                left = next[0];
+                next[0] = right;
+                int rightModifier = ObjectLayouts.ReadFieldModifier(target, targetHeaps, targetLayout, next, rightEnd);
+                if (leftModifier != rightModifier) return 0;
+                right = next[0];
+            }
+            else
             {
                 count = CompressedUnsigned(caller, left, leftEnd, next);
                 left = next[0];
@@ -58,7 +69,7 @@ namespace PortableCompiler
                     else return 0;
                     continue;
                 }
-                if (element == 0x12)
+                if (element == 0x12 || element == 0x11)
                 {
                     int leftToken = CompressedUnsigned(caller, left, leftEnd, next);
                     left = next[0];
@@ -97,6 +108,13 @@ namespace PortableCompiler
                     if (match <= 0) return match;
                     left = next[0];
                     right = match;
+                }
+                else if (element == PointerStorage.Element)
+                {
+                    if (!PointerStorage.IsVoidPointer(caller, left, leftEnd) ||
+                        !PointerStorage.IsVoidPointer(target, right, rightEnd)) return 0;
+                    left++;
+                    right++;
                 }
                 else if ((element < 1 || element > 0x0e) && !NativeStorage.IsIntegerElement(element) && element != 0x1c)
                     return 0;
