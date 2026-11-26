@@ -43,6 +43,12 @@ internal static class DelegateCases
         int unsupported = typeof(Kernels).GetMethod(nameof(Kernels.UnsupportedSignature))!.MetadataToken & 0xffffff;
         Reject("unsupported Func<bool> signature", image, unsupported);
 
+        if (FuncIdentityProbe.Probe.Invoke(() => 29) != 29)
+            throw new InvalidOperationException("The CLR did not invoke the third-party delegate.");
+        var thirdParty = typeof(FuncIdentityProbe.Probe).GetMethod(nameof(FuncIdentityProbe.Probe.Invoke))!;
+        Reject("third-party System.Func signature", File.ReadAllBytes(thirdParty.Module.Assembly.Location),
+            thirdParty.MetadataToken & 0xffffff);
+
         void Reject(string fixture, byte[] source, int method)
         {
             Array.Fill(output, (byte)0xa5);
