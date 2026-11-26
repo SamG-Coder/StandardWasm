@@ -80,4 +80,5 @@ ArithmeticHandlerCases.Add(cases);
 NestedHandlerCases.Add(cases);
 RethrowCases.Add(cases);
 ArrayBoundsCases.Add(cases);
+NullAccessCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

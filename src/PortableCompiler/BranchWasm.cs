@@ -158,7 +158,11 @@ namespace PortableCompiler
                 else if (kind == StringLength || kind == StringCharacter)
                 {
                     int at = top - (kind == StringCharacter ? 1 : 0);
-                    used = Local(code, used, 0x20, Spill(spills, maximum, String, at));
+                    int reference = Spill(spills, maximum, String, at);
+                    used = GuardNull(code, used, reference);
+                    if (kind == StringCharacter)
+                        used = GuardArrayIndex(code, used, reference, spills + top, true);
+                    used = Local(code, used, 0x20, reference);
                     used = StringWasm.Unwrap(code, used);
                     if (kind == StringCharacter)
                     {
@@ -373,7 +377,9 @@ namespace PortableCompiler
                     int descriptor = records[slot + 3];
                     byte type = (byte)(descriptor >> 8), value = unchecked((byte)descriptor);
                     int address = kind == GetField ? top : top - 1;
-                    used = Local(code, used, 0x20, Spill(spills, maximum, type, address));
+                    int reference = Spill(spills, maximum, type, address);
+                    used = GuardNull(code, used, reference);
+                    used = Local(code, used, 0x20, reference);
                     if (kind == SetField)
                         used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
                     used = Gc(code, used, kind == GetField ? 2 : 5, type);
@@ -391,7 +397,9 @@ namespace PortableCompiler
                 }
                 else if (kind == ArrayLength)
                 {
-                    used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
+                    int reference = Spill(spills, maximum, states[state + top], top);
+                    used = GuardNull(code, used, reference);
+                    used = Local(code, used, 0x20, reference);
                     code[used++] = 0xfb;
                     code[used++] = 0x0f;
                     used = Local(code, used, 0x21, spills + top);
@@ -400,7 +408,8 @@ namespace PortableCompiler
                 {
                     byte array = states[state + top - 1];
                     int reference = Spill(spills, maximum, array, top - 1), index = spills + top;
-                    used = GuardArrayIndex(code, used, reference, index);
+                    used = GuardNull(code, used, reference);
+                    used = GuardArrayIndex(code, used, reference, index, false);
                     used = Local(code, used, 0x20, reference);
                     used = Local(code, used, 0x20, index);
                     // The opcode selects the extension of packed cells. Full-
@@ -414,7 +423,8 @@ namespace PortableCompiler
                 {
                     byte array = states[state + top - 2];
                     int reference = Spill(spills, maximum, array, top - 2), index = spills + top - 1;
-                    used = GuardArrayIndex(code, used, reference, index);
+                    used = GuardNull(code, used, reference);
+                    used = GuardArrayIndex(code, used, reference, index, false);
                     used = Local(code, used, 0x20, reference);
                     used = Local(code, used, 0x20, index);
                     used = Local(code, used, 0x20, Spill(spills, maximum, ArrayValueType(array), top));
@@ -481,12 +491,21 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int GuardArrayIndex(byte[] code, int used, int reference, int index)
+        private static int GuardNull(byte[] code, int used, int reference)
         {
+            used = Local(code, used, 0x20, reference);
+            code[used++] = 0xd1; // ref.is_null
+            return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.NullTag);
+        }
+
+        private static int GuardArrayIndex(byte[] code, int used, int reference, int index, bool wrapped)
+        {
+            // A managed null check precedes this helper, even for negative indices.
             used = Local(code, used, 0x20, index);
             used = Local(code, used, 0x20, reference);
+            if (wrapped) used = StringWasm.Unwrap(code, used);
             code[used++] = 0xfb;
-            code[used++] = 0x0f; // array.len, which still traps on null
+            code[used++] = 0x0f; // array.len
             // An unsigned comparison rejects negative indices and indices at or above length.
             code[used++] = 0x4f;
             return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.IndexTag);

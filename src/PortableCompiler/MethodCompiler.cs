@@ -246,7 +246,7 @@ namespace PortableCompiler
                     int capacity = body[1] * 64 + 32;
                     if (catchRegion.Length != 0)
                     {
-                        int handlerBytes = 64 + catchRegion.Length / ExceptionClauses.Width * 120;
+                        int handlerBytes = 80 + catchRegion.Length / ExceptionClauses.Width * 160;
                         if (capacity > int.MaxValue - handlerBytes) return -3;
                         capacity += handlerBytes;
                     }
@@ -275,8 +275,11 @@ namespace PortableCompiler
                             int tags = 0;
                             if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion)
                                 tags = ExceptionTypes.Overflow;
-                            else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet)
-                                tags = ExceptionTypes.IndexOutOfRange;
+                            else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet || kind == BranchIl.StringCharacter)
+                                tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
+                            else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
+                                kind == BranchIl.SetField || kind == BranchIl.StringLength)
+                                tags = ExceptionTypes.NullReference;
                             else if (kind == BranchIl.Binary)
                             {
                                 byte type = states[pc * maximum + depths[pc] - 2];

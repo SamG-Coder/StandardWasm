@@ -19,8 +19,9 @@ namespace PortableCompiler
             bool overflow = (exceptionTags & ExceptionTypes.Overflow) != 0;
             bool divide = (exceptionTags & ExceptionTypes.DivideByZero) != 0;
             bool bounds = (exceptionTags & ExceptionTypes.IndexOutOfRange) != 0;
+            bool nullReference = (exceptionTags & ExceptionTypes.NullReference) != 0;
             // Tag indices stay stable even when lower tags are unused.
-            int tagCount = bounds ? ExceptionTagsWasm.Count : divide ? 2 : overflow ? 1 : 0;
+            int tagCount = nullReference ? ExceptionTagsWasm.Count : bounds ? 3 : divide ? 2 : overflow ? 1 : 0;
             int remainderIndex = functions + thunks[0];
             int totalFunctions = remainderIndex + (hasRemainder ? 1 : 0);
             var remainderBody = new byte[hasRemainder ? FloatRemainderWasm.BodyCapacity : 0];
@@ -80,9 +81,10 @@ namespace PortableCompiler
                 codeSize += code;
                 functionSize += index;
             }
-            int exportCount = exports.Length + (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0);
+            int exportCount = exports.Length + (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) + (nullReference ? 1 : 0);
             int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
-                (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0);
+                (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
+                (nullReference ? ExceptionTagsWasm.NullExportSize : 0);
             int tagType = typeOffset + functions + (hasRemainder ? 1 : 0);
             int tagSize = 1 + tagCount * (1 + UnsignedSize(tagType));
             for (int i = 0; i < exports.Length; i++)
@@ -301,6 +303,7 @@ namespace PortableCompiler
             if (overflow) cursor = ExceptionTagsWasm.WriteOverflowExport(output, cursor);
             if (divide) cursor = ExceptionTagsWasm.WriteDivideExport(output, cursor);
             if (bounds) cursor = ExceptionTagsWasm.WriteIndexExport(output, cursor);
+            if (nullReference) cursor = ExceptionTagsWasm.WriteNullExport(output, cursor);
 
             if (thunks[0] != 0)
             {
