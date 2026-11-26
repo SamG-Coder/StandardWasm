@@ -152,7 +152,7 @@ namespace PeLibrary
             int assembly = (int)(scope >> 2);
             return (type == InterlockedType
                 ? PlatformAssemblyIdentity.IsThreadingAssembly(image, heaps, methods, counts, assembly)
-                : PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, assembly)) ? type : 0;
+                : PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, assembly, includeRuntimeExtensions: false)) ? type : 0;
         }
 
         // CLR metadata names are UTF-8. These ASCII signatures are packed in

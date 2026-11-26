@@ -10,7 +10,9 @@ assemblies in this fixture are built that way, as the original WinForms
 executable is. The compiler binds these names by platform identity to its own
 EventHandler invocation-list representation, in every bundled assembly. A
 linked signature that takes an `EventHandler` therefore matches by identity,
-without bundling the System.Runtime facade.
+without bundling the System.Runtime facade. The negative fixtures verify
+that EventHandler through System.Runtime.Extensions and Interlocked through
+System.Runtime fail to bind, as they do on the installed CLR.
 
 The fixture compares the following against the CLR:
 

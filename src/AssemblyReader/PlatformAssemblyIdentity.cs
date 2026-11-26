@@ -6,7 +6,7 @@ namespace PeLibrary
     {
         // Validate the exact AssemblyRef name, token and neutral culture.
         internal static bool IsPlatformAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row,
-            bool netstandardOnly = false, bool includeRuntimeExtensions = true)
+            bool netstandardOnly = false, bool includeRuntimeExtensions = true, bool includeRuntime = true)
         {
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 35);
             if (table < 0 || row < 1 || row > counts[35]) return false;
@@ -33,7 +33,7 @@ namespace PeLibrary
                 if (!Fits(name, 15, size) || U32(image, n) != 0x74737953 ||
                     U32(image, n + 4) != 0x522e6d65 || U32(image, n + 8) != 0x69746e75)
                     return false;
-                return U16(image, n + 12) == 0x656d && image[n + 14] == 0 ||
+                return includeRuntime && U16(image, n + 12) == 0x656d && image[n + 14] == 0 ||
                     includeRuntimeExtensions && Fits(name, 26, size) &&
                     U32(image, n + 12) == 0x452e656d && U32(image, n + 16) == 0x6e657478 &&
                     U32(image, n + 20) == 0x6e6f6973 && U16(image, n + 24) == 0x73;
@@ -69,11 +69,12 @@ namespace PeLibrary
                 U32(image, n + 8) == 0x6f736e6f && U16(image, n + 12) == 0x656c && image[n + 14] == 0;
         }
 
-        // .NET Core reference assemblies place Interlocked in System.Threading,
-        // which carries the System.Runtime public key token.
+        // Interlocked uses System.Threading on modern .NET. The older
+        // netstandard/mscorlib facades and CoreLib are also valid scopes.
         internal static bool IsThreadingAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row)
         {
-            if (IsPlatformAssembly(image, heaps, methods, counts, row)) return true;
+            if (IsPlatformAssembly(image, heaps, methods, counts, row,
+                includeRuntimeExtensions: false, includeRuntime: false)) return true;
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 35);
             if (table < 0 || row < 1 || row > counts[35]) return false;
             int strings = methods[2], blobs = methods[3];

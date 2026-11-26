@@ -11,3 +11,9 @@ namespace FrameworkDelegateDependency
         public void Raise() => Raised?.Invoke(this, EventArgs.Empty);
     }
 }
+
+// Keep this name in #Strings so the verifier can change just an AssemblyRef column.
+namespace System.Runtime.Extensions
+{
+    internal sealed class FacadeName { }
+}
