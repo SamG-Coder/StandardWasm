@@ -74,6 +74,12 @@ At the lookup boundary, -8 denotes a null name and -9 denotes an empty
 name after applying Windows termination rules. The managed binding must
 translate these results to the corresponding CLR exceptions.
 
+The linker binds the platform `Assembly.GetManifestResourceStream(string)`
+call to the verified `RuntimeAssembly` override in the selected CoreLib.
+The method takes the canonical Assembly descriptor as its receiver and
+keeps the original Stream result type. An unsupported instruction from
+that override is reported with its original CoreLib location.
+
 [CoreCLR 10.0.10](https://github.com/dotnet/runtime/blob/v10.0.10/src/coreclr/System.Private.CoreLib/src/System/Reflection/RuntimeAssembly.cs)
 gets the payload through its native resource lookup and returns a read-only
 manifest stream. Keep the embedded image alive while a stream owns its

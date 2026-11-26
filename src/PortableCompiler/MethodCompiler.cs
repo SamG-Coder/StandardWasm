@@ -721,6 +721,31 @@ namespace PortableCompiler
                         continue;
                     }
                     int reflectionMember = opcode == 0x6f && !addressed ? ReflectionMembers.Identify(image, heaps, layout, member) : 0;
+                    if (reflectionMember == ReflectionMembers.ResourceStream)
+                    {
+                        int status = reflection.BindResource(bundle);
+                        if (status < 0) return status;
+                        int targetOwner = reflection.ResourceOwner;
+                        int row = reflection.ResourceOpen;
+                        int linked = Lookup(owners, rows, contexts, bases, indices, functions, targetOwner, row, 0);
+                        if (linked < 0)
+                        {
+                            byte[] targetImage = bundle.Get(targetOwner);
+                            var targetLayout = new int[4];
+                            var targetHeaps = new int[8];
+                            if (CompressedTables.FindWithHeaps(targetImage, targetLayout, targetHeaps) < 0) return -1;
+                            functions = Register(bundle, targetImage, targetLayout, targetHeaps, targetOwner, row, 0,
+                                owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions,
+                                allowVirtual: true, receiverOverride: RuntimeTypeMetadata.Assembly);
+                            if (functions < 0) return functions;
+                            linked = functions - 1;
+                        }
+                        if (signatures[offsets[linked] + 1] != RuntimeTypeMetadata.Assembly) return -2;
+                        records[slot] = BranchIl.Call;
+                        records[slot + 1] = linked;
+                        records[slot + 3] = 1; // callvirt receiver null check
+                        continue;
+                    }
                     if (reflectionMember != 0)
                     {
                         int status = reflection.Bind(bundle, globals, literals, literalSize);
@@ -1244,11 +1269,11 @@ namespace PortableCompiler
 
         internal static int Register(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner, int row,
             int context, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures,
-            int[] objects, int functions, bool allowVirtual = false, bool initializer = false)
+            int[] objects, int functions, bool allowVirtual = false, bool initializer = false, int receiverOverride = 0)
         {
             if (functions >= owners.Length) return -3;
             int offset = NextSignature(offsets, arities, functions);
-            int arity = MethodShape(bundle, image, layout, heaps, owner, row, context, signatures, offset, objects, allowVirtual, initializer);
+            int arity = MethodShape(bundle, image, layout, heaps, owner, row, context, signatures, offset, objects, allowVirtual, initializer, receiverOverride);
             if (arity < 0)
                 return arity;
             owners[functions] = owner;
@@ -1278,7 +1303,7 @@ namespace PortableCompiler
         }
 
         private static int MethodShape(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int assembly, int row,
-            int context, int[] types, int offset, int[] objects, bool allowVirtual, bool initializer)
+            int context, int[] types, int offset, int[] objects, bool allowVirtual, bool initializer, int receiverOverride)
         {
             int attributes = MethodDefinitions.ReadColumn(image, layout, row, 2);
             int implementation = MethodDefinitions.ReadColumn(image, layout, row, 1);
@@ -1312,7 +1337,9 @@ namespace PortableCompiler
                 int open = GenericParameters.Check(image, heaps, layout, owner, new int[0], objects, new int[8]);
                 if (open != 0) return open < 0 ? open : -2;
             }
-            int receiver = isStatic ? 0 : context;
+            // Canonical runtime Assembly descriptors use their shared ABI
+            // while executing this verified CoreLib override.
+            int receiver = isStatic ? 0 : receiverOverride != 0 ? receiverOverride : context;
             if (!isStatic && receiver == 0)
             {
                 receiver = BundleLayouts.Register(bundle, image, layout, heaps, assembly, owner, objects);

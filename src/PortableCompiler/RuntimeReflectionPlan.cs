@@ -12,6 +12,28 @@ namespace PortableCompiler
 
         internal readonly int[] HeapFixups = new int[1];
         internal int[] Slots { get; private set; }
+        internal int ResourceOwner { get; private set; } = -1;
+        internal int ResourceOpen { get; private set; }
+
+        internal int BindResource(BundleImages bundle)
+        {
+            if (ResourceOpen != 0) return 0;
+            var layout = new int[4];
+            var heaps = new int[8];
+            var methods = new int[4];
+            for (int owner = 0; owner < bundle.Count; owner++)
+            {
+                byte[] image = bundle.Get(owner);
+                if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+                int match = ResourceNativeMetadata.Identify(image, heaps, layout, methods);
+                if (match < 0) return match;
+                if (match == 0) continue;
+                if (ResourceOpen != 0) return -2;
+                ResourceOwner = owner;
+                ResourceOpen = methods[2];
+            }
+            return ResourceOpen == 0 ? -2 : 0;
+        }
 
         internal int Bind(BundleImages bundle, int[] globals, byte[] literals, int[] literalSize)
         {

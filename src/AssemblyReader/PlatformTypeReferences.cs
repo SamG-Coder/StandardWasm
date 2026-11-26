@@ -7,7 +7,7 @@ namespace PeLibrary
     // platform AssemblyRef, so a user type with the same spelling never binds.
     internal static class PlatformTypeReferences
     {
-        internal const int Console = 1, TextWriter = 2, String = 3, Type = 4, TypeHandle = 5, TypeBase = 6, Module = 7, Assembly = 8;
+        internal const int Console = 1, TextWriter = 2, String = 3, Type = 4, TypeHandle = 5, TypeBase = 6, Module = 7, Assembly = 8, Stream = 9;
 
         internal static int Identify(byte[] image, int[] streams, int[] methods, int[] counts, int first, int row)
         {
@@ -35,9 +35,14 @@ namespace PeLibrary
                     return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly, includeRuntimeExtensions: false) ? TypeHandle : 0;
                 return 0;
             }
-            if (Named(image, heap, heapSize, space, 9, 0x74737953, 0x492e6d65, 0x4f) && // System.IO
-                Named(image, heap, heapSize, name, 10, 0x74786554, 0x74697257, 0x7265)) // TextWriter
-                return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly) ? TextWriter : 0;
+            if (Named(image, heap, heapSize, space, 9, 0x74737953, 0x492e6d65, 0x4f)) // System.IO
+            {
+                if (Named(image, heap, heapSize, name, 10, 0x74786554, 0x74697257, 0x7265)) // TextWriter
+                    return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly) ? TextWriter : 0;
+                if (MatchesAscii(image, streams, name, "Stream"))
+                    return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly, includeRuntimeExtensions: false)
+                        ? Stream : 0;
+            }
             if (Named17(image, heap, heapSize, space, 0x74737953, 0x522e6d65, 0x656c6665, 0x6f697463, 0x6e) && // System.Reflection
                 PlatformAssemblyIdentity.IsReflectionAssembly(image, streams, methods, counts, assembly))
             {
