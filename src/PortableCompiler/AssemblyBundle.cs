@@ -4,6 +4,7 @@ namespace PortableCompiler
 {
     internal static class AssemblyBundle
     {
+        internal const int ObjectOwner = -1; // Canonical root has no emitted TypeDef slot.
         // An explicit sequence of [little-endian length, complete PE image].
         internal static int Count(byte[] bundle)
         {
@@ -132,6 +133,12 @@ namespace PortableCompiler
         {
             int row = coded >> 2;
             if (row < 1) return -1;
+            if (ObjectLayouts.IsCoreObjectType(image, heaps, layout, coded))
+            {
+                symbol[0] = ObjectOwner;
+                symbol[1] = 0;
+                return 0;
+            }
             if ((coded & 3) == 0)
             {
                 symbol[0] = owner;
@@ -142,9 +149,17 @@ namespace PortableCompiler
             var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadType(image, heaps, layout, row, reference);
             if (status < 0) return status;
-            ResolveType(main, bundle, ranges, image, heaps, reference, false,
-                symbol, new int[4], new int[8], new int[2]);
-            return symbol[1] < 0 ? symbol[1] : 0;
+            var targetLayout = new int[4];
+            var targetHeaps = new int[8];
+            byte[] target = ResolveType(main, bundle, ranges, image, heaps, reference, false,
+                symbol, targetLayout, targetHeaps, new int[2]);
+            if (symbol[1] < 0) return symbol[1];
+            if (ObjectLayouts.IsCoreObjectType(target, targetHeaps, targetLayout, symbol[1] << 2))
+            {
+                symbol[0] = ObjectOwner;
+                symbol[1] = 0;
+            }
+            return 0;
         }
 
         // Find the final TypeDef. Keep the caller's type/member names and

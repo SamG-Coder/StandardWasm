@@ -542,6 +542,12 @@ namespace PortableCompiler
                 int target = records[slot + 1];
                 if (target < 1 || target > bases[owner + 1] - bases[owner])
                     return -1;
+                if (kind == BranchIl.Call && records[slot + 3] == 0 &&
+                    ObjectLayouts.IsCoreObjectConstructor(image, heaps, layout, target))
+                {
+                    records[slot] = BranchIl.BaseCtor;
+                    continue;
+                }
                 int index = indices[bases[owner] + target] - 1;
                 if (index < 0)
                 {

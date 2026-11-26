@@ -26,7 +26,8 @@ namespace PortableCompiler
                 var symbol = new int[2];
                 status = AssemblyBundle.ClassIdentity(main, bundle, ranges, image, layout, heaps, owner, shape[3], symbol);
                 if (status < 0) return status;
-                if (symbol[0] == owner)
+                if (symbol[0] == AssemblyBundle.ObjectOwner) parent = 0;
+                else if (symbol[0] == owner)
                     parent = ReserveTree(main, bundle, ranges, image, layout, heaps, owner, symbol[1], objects, depth + 1);
                 else
                 {
@@ -38,7 +39,7 @@ namespace PortableCompiler
                         symbol[0], symbol[1], objects, depth + 1);
                 }
                 if (parent < 0) return parent;
-                if (ObjectLayouts.IsSealed(objects, parent)) return -2;
+                if (parent != 0 && ObjectLayouts.IsSealed(objects, parent)) return -2;
             }
             // The parent must precede the child in the Wasm recursive type group.
             // Defer all fields until that ordering is fixed, even if a base field
@@ -86,14 +87,13 @@ namespace PortableCompiler
         internal static int RegisterReference(byte[] main, byte[] bundle, int[] ranges, byte[] image,
             int[] layout, int[] heaps, int owner, int coded, int[] objects)
         {
-            if ((coded & 3) == 0)
-                return Register(main, bundle, ranges, image, layout, heaps, owner, coded >> 2, objects);
             int platformType = EventMetadata.Reference(image, heaps, layout, coded);
             if (platformType != 0) return platformType;
 
             var symbol = new int[2];
             int status = AssemblyBundle.ClassIdentity(main, bundle, ranges, image, layout, heaps, owner, coded, symbol);
             if (status < 0) return status;
+            if (symbol[0] == AssemblyBundle.ObjectOwner) return ObjectLayouts.ObjectReference;
             if (symbol[0] == owner)
                 return Register(main, bundle, ranges, image, layout, heaps, owner, symbol[1], objects);
             byte[] target = AssemblyBundle.Load(main, bundle, ranges, symbol[0]);

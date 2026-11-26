@@ -24,7 +24,10 @@ namespace PeLibrary
         // CLR metadata defines a token as the final eight SHA-1 digest bytes
         // in reverse order. The digest covers the complete stored public key.
         // This calculates identity only; it does not verify a signature.
-        internal static bool MatchesToken(byte[] token, int start, byte[] key, int offset, int length)
+        internal static bool MatchesToken(byte[] token, int start, byte[] key, int offset, int length) =>
+            MatchesTokenWords(key, offset, length, U32(token, (uint)start), U32(token, (uint)start + 4));
+
+        internal static bool MatchesTokenWords(byte[] key, int offset, int length, uint low, uint high)
         {
             uint h0 = 0x67452301, h1 = 0xefcdab89, h2 = 0x98badcfe, h3 = 0x10325476, h4 = 0xc3d2e1f0;
             var words = new int[16];
@@ -74,7 +77,7 @@ namespace PeLibrary
                 h4 = unchecked(h4 + e);
             }
 
-            return U32(token, (uint)start) == h4 && U32(token, (uint)start + 4) == h3;
+            return low == h4 && high == h3;
         }
 
         private static uint Rotate(uint value, int count) => (value << count) | (value >> (32 - count));

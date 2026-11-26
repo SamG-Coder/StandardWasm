@@ -36,7 +36,28 @@ namespace PortableCompiler
             {
                 if (left >= leftEnd || right >= rightEnd) return 0;
                 int element = caller[left++];
-                if (target[right++] != element) return 0;
+                int other = target[right++];
+                if (element != other)
+                {
+                    if (element == 0x12 && other == 0x1c)
+                    {
+                        int token = CompressedUnsigned(caller, left, leftEnd, next);
+                        left = next[0];
+                        int status = ObjectIdentity(main, bundle, ranges, caller, callerLayout, callerHeaps,
+                            callerOwner, token, leftClass);
+                        if (status <= 0) return status;
+                    }
+                    else if (element == 0x1c && other == 0x12)
+                    {
+                        int token = CompressedUnsigned(target, right, rightEnd, next);
+                        right = next[0];
+                        int status = ObjectIdentity(main, bundle, ranges, target, targetLayout, targetHeaps,
+                            targetOwner, token, rightClass);
+                        if (status <= 0) return status;
+                    }
+                    else return 0;
+                    continue;
+                }
                 if (element == 0x12)
                 {
                     int leftToken = CompressedUnsigned(caller, left, leftEnd, next);
@@ -64,6 +85,14 @@ namespace PortableCompiler
                     return 0;
             }
             return left == leftEnd && right == rightEnd ? 1 : 0;
+        }
+
+        private static int ObjectIdentity(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+            int[] layout, int[] heaps, int owner, int coded, int[] symbol)
+        {
+            int status = AssemblyBundle.ClassIdentity(main, bundle, ranges, image, layout, heaps, owner, coded, symbol);
+            if (status < 0) return status;
+            return symbol[0] == AssemblyBundle.ObjectOwner ? 1 : 0;
         }
 
         private static int Start(byte[] image, int[] heaps, int index, int[] next, bool field)

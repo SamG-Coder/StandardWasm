@@ -38,11 +38,32 @@ namespace PeLibrary
                     U32(image, n + 20) == 0x6e6f6973 && U16(image, n + 24) == 0x73;
             }
             // System.Private.CoreLib
-            return low == 0xd785ec7c && high == 0x8e79a7be && Fits(name, 23, size) &&
-                U32(image, n) == 0x74737953 && U32(image, n + 4) == 0x502e6d65 &&
-                U32(image, n + 8) == 0x61766972 && U32(image, n + 12) == 0x432e6574 &&
-                U32(image, n + 16) == 0x4c65726f && U16(image, n + 20) == 0x6269 && image[n + 22] == 0;
+            return low == 0xd785ec7c && high == 0x8e79a7be && IsCoreLibName(image, n, name, size);
         }
+
+        internal static bool IsCoreLibDefinition(byte[] image, int[] heaps, int[] methods, int[] counts)
+        {
+            if (counts[32] != 1) return false;
+            int table = MetadataTableRows.TableStart(heaps, methods, counts, 32);
+            if (table < 0) return false;
+            int strings = methods[2], blobs = methods[3];
+            uint at = (uint)table;
+            uint name = Index(image, at + (uint)(16 + blobs), strings);
+            if (U32(image, at + 12) != 1 || Index(image, at + (uint)(16 + blobs + strings), strings) != 0 ||
+                !IsCoreLibName(image, (uint)heaps[2] + name, name, (uint)heaps[3]))
+                return false;
+            var key = new int[1];
+            int length = StrongNames.ReadKey(image, heaps, (int)Index(image, at + 16, blobs), key);
+            return length > 0 && StrongNames.MatchesTokenWords(image, key[0], length, 0xd785ec7c, 0x8e79a7be);
+        }
+
+        // Identity matching does not authenticate a framework pack. The host
+        // must choose the framework inputs before the compiler resolves them.
+        private static bool IsCoreLibName(byte[] image, uint at, uint name, uint limit) =>
+            name != 0 && Fits(name, 23, limit) &&
+            U32(image, at) == 0x74737953 && U32(image, at + 4) == 0x502e6d65 &&
+            U32(image, at + 8) == 0x61766972 && U32(image, at + 12) == 0x432e6574 &&
+            U32(image, at + 16) == 0x4c65726f && U16(image, at + 20) == 0x6269 && image[at + 22] == 0;
 
         private static uint Index(byte[] image, uint at, int width) => width == 2 ? U16(image, at) : U32(image, at);
     }

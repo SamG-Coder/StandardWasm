@@ -251,6 +251,49 @@ namespace PeLibrary
                 U32(image, blob) == 0x01002003; // .ctor, HASTHIS, zero args, void
         }
 
+        internal static bool IsCoreObjectType(byte[] image, int[] streams, int[] methods, int coded)
+        {
+            int tag = coded & 3, row = coded >> 2;
+            if (tag > 1 || row < 1) return false;
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
+            if (first < 0) return false;
+            int strings = methods[2];
+            int refs = TypeRefStart(image, streams, counts, first, strings);
+            if (tag == 1) return IsObjectRef(image, streams, methods, counts, refs, row);
+            if (row > counts[2]) return false;
+            int defs = refs + counts[1] * (ResolutionWidth(counts) + 2 * strings);
+            int extends = CodedWidth(counts[2], counts[1], counts[27]);
+            int fieldWidth = IndexWidth(counts[4]);
+            int fieldColumn = 4 + 2 * strings + extends;
+            int width = fieldColumn + fieldWidth + IndexWidth(counts[6]);
+            uint at = (uint)(defs + (row - 1) * width);
+            uint startField = ReadIndex(image, at + (uint)fieldColumn, fieldWidth);
+            uint endField = row == counts[2] ? (uint)(counts[4] + 1) :
+                ReadIndex(image, at + (uint)(width + fieldColumn), fieldWidth);
+            return (U32(image, at) & 0x1bf) == 1 &&
+                ReadIndex(image, at + (uint)(4 + 2 * strings), extends) == 0 &&
+                startField != 0 && startField == endField &&
+                IsObjectName(image, streams, ReadIndex(image, at + 4, strings),
+                    ReadIndex(image, at + (uint)(4 + strings), strings)) &&
+                PlatformAssemblyIdentity.IsCoreLibDefinition(image, streams, methods, counts);
+        }
+
+        internal static bool IsCoreObjectConstructor(byte[] image, int[] streams, int[] methods, int row)
+        {
+            if (!IsConstructor(image, streams, methods, row)) return false;
+            int owner = Owner(image, streams, methods, row, false);
+            if (owner < 1 || !IsCoreObjectType(image, streams, methods, owner << 2)) return false;
+            int sig = MethodDefinitions.ReadColumn(image, methods, row, 4);
+            if (sig <= 0 || sig > streams[1] - 4 || U32(image, (uint)(streams[0] + sig)) != 0x01002003)
+                return false;
+            // Same-image method definitions can have arbitrary bodies. Only
+            // the actual empty CoreLib constructor can be lowered as a no-op.
+            uint rva = unchecked((uint)MethodDefinitions.ReadColumn(image, methods, row, 0));
+            var body = new int[6];
+            return MethodBodies.Read(image, rva, body) == 0 && body[1] == 1 && body[5] == 0 && image[body[0]] == 0x2a;
+        }
+
         private static bool IsObjectRef(byte[] image, int[] streams, int[] methods, int[] counts, int refs, int row)
         {
             if (row < 1 || row > counts[1]) return false;
@@ -261,11 +304,16 @@ namespace PeLibrary
             if ((scope & 3) != 2) return false;
             uint name = ReadIndex(image, start + (uint)scopeWidth, strings);
             uint ns = ReadIndex(image, start + (uint)(scopeWidth + strings), strings);
+            return IsObjectName(image, streams, name, ns) &&
+                PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, (int)(scope >> 2));
+        }
+
+        private static bool IsObjectName(byte[] image, int[] streams, uint name, uint ns)
+        {
             if (!Fits(name, 7, (uint)streams[3]) || !Fits(ns, 7, (uint)streams[3])) return false;
             uint n = (uint)streams[2] + name, s = (uint)streams[2] + ns;
             return U32(image, n) == 0x656a624f && U16(image, n + 4) == 0x7463 && image[n + 6] == 0 &&
-                U32(image, s) == 0x74737953 && U16(image, s + 4) == 0x6d65 && image[s + 6] == 0 &&
-                PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, (int)(scope >> 2));
+                U32(image, s) == 0x74737953 && U16(image, s + 4) == 0x6d65 && image[s + 6] == 0;
         }
 
         private static int TypeRefStart(byte[] image, int[] streams, int[] counts, int first, int strings) =>
