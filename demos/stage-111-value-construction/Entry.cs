@@ -41,7 +41,7 @@ namespace ValueConstructionDemo
     {
         public int Value;
 
-        // Calling an instance method on the receiver needs a general byref.
+        // Assign writes through its receiver, which needs copy-out (decision 0049).
         public Rejected(int value) : this()
         {
             Assign(value);

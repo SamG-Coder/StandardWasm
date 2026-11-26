@@ -124,7 +124,9 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [118 · Bundle image reuse](stage-118-bundle-image-reuse/README.md) | `npm run demo -- stage-118-bundle-image-reuse` | Measure unchanged WinForms compilation in Node and Edge |
 | [119 · Framework delegates](stage-119-framework-delegates/README.md) | `npm run demo -- stage-119-framework-delegates` | EventHandler subscribe, combine and remove through System.Runtime match the CLR |
 | [120 · Virtual calls on newly allocated objects](stage-120-allocated-virtual-receivers/README.md) | `npm run demo -- stage-120-allocated-virtual-receivers` | Bind unsealed virtual receivers when the evaluation stack proves their class |
+| [121 · Read-only value-type instance methods](stage-121-value-instance-methods/README.md) | `npm run demo -- stage-121-value-instance-methods` | Call non-mutating struct methods on locals and receivers; diagnose writes through `this` |
 | [122 · Runtime class dispatch](stage-122-runtime-class-dispatch/README.md) | `npm run demo -- stage-122-runtime-class-dispatch` | Select the original virtual override for a polymorphic managed receiver |
+| [124 · Closed generic bases](stage-124-closed-generic-bases/README.md) | `npm run demo -- stage-124-closed-generic-bases` | Substitute and reserve closed generic base classes from original managed DLLs |
 
 ## Adding a stage
 

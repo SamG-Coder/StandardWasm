@@ -39,8 +39,8 @@ A value-type instance constructor is compiled to the Wasm function type
   the enclosing constructor's receiver. Copies taken before the call keep
   their values, because aggregates are immutable.
 
-Only constructors take a value receiver. Other value-type instance methods,
-calls through a value address to anything but a value constructor, `ref`
+Only constructors take a value receiver here. [Decision 0049](0049-read-only-value-methods.md)
+later admits read-only instance methods. Mutating instance methods, `ref`
 arguments, closed generic value constructors, and `callvirt` on a
 constructor remain unsupported diagnostics at the method and IL offset.
 

@@ -23,9 +23,11 @@ internal static class ValueConstructionCases
         Check(nameof(Kernels.Argument), Kernels.Argument);
         Check(nameof(Kernels.Guarded), Kernels.Guarded);
 
-        // A receiver method call and a byref argument need general managed byrefs.
-        ConstructorInfo rejected = typeof(Rejected).GetConstructor([typeof(int)])!;
-        Reject(Method(nameof(Kernels.RejectReceiverCall)), [0, Row(rejected), Offset(rejected, OpCodes.Call)]);
+        // A receiver method that writes through this needs copy-out (decision
+        // 0049), and a byref argument needs general managed byrefs. The write
+        // is diagnosed in the callee at its stfld.
+        MethodInfo assign = typeof(Rejected).GetMethod("Assign", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        Reject(Method(nameof(Kernels.RejectReceiverCall)), [0, Row(assign), 0]);
         MethodInfo borrow = Method(nameof(Kernels.RejectBorrow));
         Reject(borrow, [0, Row(borrow), Offset(borrow, OpCodes.Call, 1)]);
 

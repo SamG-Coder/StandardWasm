@@ -23,18 +23,27 @@ namespace PortableCompiler
         private static int RegisterClosed(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int row, int[] objects, int[] arguments, bool valueType = false, bool enumIdentity = false)
         {
-            int type = ReserveTree(bundle, image, layout, heaps, owner, row, objects, arguments, new int[0], 0, valueType);
+            int type = ReserveTree(bundle, image, layout, heaps, owner, row, objects, arguments, valueType);
             if (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0])
                 return enumIdentity && type > 0 ? ObjectLayouts.RegisterEnum(objects, owner, row, type) : type;
             return Complete(bundle, image, layout, heaps, owner, type, objects);
         }
 
         private static int ReserveTree(BundleImages bundle, byte[] image,
-            int[] layout, int[] heaps, int owner, int row, int[] objects, int[] arguments, int[] noArguments, int depth, bool valueType)
+            int[] layout, int[] heaps, int owner, int row, int[] objects, int[] arguments, bool valueType)
         {
             int known = ObjectLayouts.Find(objects, owner, row, arguments);
             if (known != 0) return ObjectLayouts.IsValueType(objects, known) == valueType ? known : -2;
-            if (depth >= ObjectLayouts.MaxTypeDepth) return -2;
+            if (bundle.LayoutDepth >= ObjectLayouts.MaxTypeDepth) return -2;
+            bundle.LayoutDepth++;
+            int reserved = ReserveNew(bundle, image, layout, heaps, owner, row, objects, arguments, valueType);
+            bundle.LayoutDepth--;
+            return reserved;
+        }
+
+        private static int ReserveNew(BundleImages bundle, byte[] image,
+            int[] layout, int[] heaps, int owner, int row, int[] objects, int[] arguments, bool valueType)
+        {
             var shape = new int[5];
             var deferred = new int[8];
             int status = GenericParameters.Check(image, heaps, layout, row, arguments, objects, deferred);
@@ -49,21 +58,10 @@ namespace PortableCompiler
             int parent = 0;
             if (shape[3] != 0)
             {
-                var symbol = new int[2];
-                status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, shape[3], symbol);
-                if (status < 0) return status;
-                if (symbol[0] == AssemblyBundle.ObjectOwner) parent = 0;
-                else if (symbol[0] == owner)
-                    parent = ReserveTree(bundle, image, layout, heaps, owner, symbol[1], objects, noArguments, noArguments, depth + 1, false);
-                else
-                {
-                    byte[] target = bundle.Get(symbol[0]);
-                    var targetLayout = new int[4];
-                    var targetHeaps = new int[8];
-                    if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
-                    parent = ReserveTree(bundle, target, targetLayout, targetHeaps,
-                        symbol[0], symbol[1], objects, noArguments, noArguments, depth + 1, false);
-                }
+                int baseType = shape[3];
+                parent = (baseType & 3) == 2
+                    ? ManagedReferenceSignatures.ReserveBase(bundle, image, layout, heaps, owner, baseType >> 2, objects, arguments)
+                    : ReserveParent(bundle, image, layout, heaps, owner, baseType, objects, new int[0]);
                 if (parent < 0) return parent;
                 if (parent != 0 && (ObjectLayouts.IsSealed(objects, parent) || ObjectLayouts.IsInterface(objects, parent)))
                     return -2;
@@ -71,10 +69,30 @@ namespace PortableCompiler
                     ObjectLayouts.RequiresLayoutParent(image, heaps, layout, shape))
                     return -2;
             }
-            // The parent must precede the child in the Wasm recursive type group.
-            // Defer all fields until that ordering is fixed, even if a base field
-            // refers back to the derived type being registered.
+            // A field of a base argument can re-enter registration and reserve
+            // this class after the argument's own nominal identity is available.
+            int known = ObjectLayouts.Find(objects, owner, row, arguments);
+            if (known != 0)
+                return ObjectLayouts.Parent(objects, known) == parent && ObjectLayouts.IsValueType(objects, known) == valueType ? known : -2;
+
+            // Reserve the parent before the child in the Wasm recursive type group.
             return ObjectLayouts.Reserve(objects, owner, row, shape, parent, arguments);
+        }
+
+        internal static int ReserveParent(BundleImages bundle, byte[] image,
+            int[] layout, int[] heaps, int owner, int coded, int[] objects, int[] arguments)
+        {
+            var symbol = new int[2];
+            int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, coded, symbol);
+            if (status < 0) return status;
+            if (symbol[0] == AssemblyBundle.ObjectOwner) return arguments.Length == 0 ? 0 : -2;
+            if (symbol[0] == owner)
+                return ReserveTree(bundle, image, layout, heaps, owner, symbol[1], objects, arguments, false);
+            byte[] target = bundle.Get(symbol[0]);
+            var targetLayout = new int[4];
+            var targetHeaps = new int[8];
+            if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
+            return ReserveTree(bundle, target, targetLayout, targetHeaps, symbol[0], symbol[1], objects, arguments, false);
         }
 
         private static int Complete(BundleImages bundle, byte[] image,

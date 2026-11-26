@@ -77,8 +77,8 @@ namespace PeLibrary
             uint flags = U32(image, def);
             bool isInterface = (flags & 0x20) != 0;
             uint baseType = ReadIndex(image, def + (uint)(4 + 2 * strings), extends);
-            if (isInterface ? baseType != 0 : baseType == 0 || (baseType & 3) > 1) return -2;
-            int valueBase = baseType == 0 ? 0 : ValueBase(image, streams, methods, counts, refs, baseType);
+            if (isInterface ? baseType != 0 : baseType == 0 || (baseType & 3) == 3) return -2;
+            int valueBase = baseType == 0 || (baseType & 3) == 2 ? 0 : ValueBase(image, streams, methods, counts, refs, baseType);
             uint first = ReadIndex(image, def + (uint)fieldColumn, fieldIndex);
             uint end = row == counts[2] ? (uint)(counts[4] + 1) :
                 ReadIndex(image, def + (uint)(defWidth + fieldColumn), fieldIndex);
