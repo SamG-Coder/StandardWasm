@@ -18,15 +18,23 @@ namespace PortableCompiler
             int exceptionLocals = frameShape[8], continuations = frameShape[9];
             bool hasNull = outgoingNulls.Length != 0;
             int spillKinds = NativeZero + classes;
-            int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
-                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (exceptionLocals != 0 ? 1 : 0) +
-                (continuations != 0 ? 1 : 0));
+            // V8 counts parameters together with function locals. Reject
+            // before emitting a body that Node and Edge cannot instantiate.
+            const int MaxLocals = 50000;
+            if (arguments > MaxLocals || locals > MaxLocals || exceptionLocals > MaxLocals ||
+                continuations > MaxLocals) return -2;
             int spills = arguments + locals + (hasNull ? 1 : 0);
+            int fixedLocals = spills + classes + (stringScratch ? 5 : 0) +
+                (eventScratch ? 6 : 0) + 1 + exceptionLocals + continuations;
+            if (fixedLocals > MaxLocals || maximum > (MaxLocals - fixedLocals) / spillKinds) return -2;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
             int eventLocals = scratch + (stringScratch ? 5 : 0);
             int pcLocal = eventLocals + (eventScratch ? 6 : 0);
             int continuationBase = pcLocal + 1 + exceptionLocals;
+            int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
+                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (exceptionLocals != 0 ? 1 : 0) +
+                (continuations != 0 ? 1 : 0));
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < arguments + locals; i++)
             {

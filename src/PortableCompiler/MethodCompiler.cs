@@ -380,6 +380,7 @@ namespace PortableCompiler
                         arities, code, remainderFixup, catchRegion, outgoingNulls, objects);
                 }
 
+                if (used < 0) return used;
                 if (used > moduleCode.Length - length)
                     return -3;
                 for (int i = 0; i < used; i++)
