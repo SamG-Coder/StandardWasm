@@ -21,3 +21,5 @@ WebGPU draws the control geometry and composites a cached glyph texture. Canvas 
 On Windows, the test constructs and shows a real WinForms form, calls Button.PerformClick, and exercises Enter through WinForms' dialog-key handling. In Edge, it sends a pointer click and an Enter key event and checks both the accessible output and visible changes in the WebGPU label. Both runs must produce Count: 0, Count: 1 and Count: 2. Generated screenshots and timings are under artifacts/winforms.
 
 One run on Edge 158.0.4370.33, using a hardware NVIDIA Blackwell adapter, changed 302 pixels in the label region. For 90 redraws of the 420 by 240 form after warm-up, main-thread draw-call p95 was about 0.1 ms for WebGPU and about 0.1 ms for the offscreen Canvas 2D baseline. Both reused the same cached glyph image. Medians were below the clock resolution. The final WebGPU queue drain was about 0.3 ms. This measures cached draw submission, with queue drain reported separately. It establishes no speedup for this small form.
+
+See [Stage 17](../stage-17-dense-webgpu/README.md) for the batched renderer and a dense same-device comparison.

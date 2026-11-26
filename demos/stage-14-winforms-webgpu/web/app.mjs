@@ -85,7 +85,7 @@ async function start() {
         const queuedAt = performance.now();
         await gpu.finished();
         const queueDrainMs = performance.now() - queuedAt;
-        const canvas2d = await measure(baseline);
+        const canvas2d = await measure(baseline.draw);
         return { frames, adapter: gpu.info, webgpu, canvas2d, queueDrainMs };
     };
 }
