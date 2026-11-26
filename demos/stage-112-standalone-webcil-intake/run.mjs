@@ -48,10 +48,9 @@ const node = await inspectStandaloneEntry(compilerBytes, selection);
 assert.equal(node.entryToken, reference.token);
 assert.ok(node.managedAssemblies > 1);
 assert.equal(node.compilerStatus, -2);
-// TaskAwaiter.GetResult at IL_000e links as a read-only value method (Stage 121).
-// The boundary is the async Program::<Main>$ (MethodDef 1). Its state machine
-// reaches System.Threading.Tasks.VoidTaskResult, an empty struct with ClassSize 1.
-assert.deepEqual(node.diagnostic, [0, 1, -1]);
+// Stage 130 admits the fieldless VoidTaskResult. The async Program::<Main>$
+// now reaches the managed addresses of its state machine and nested builder.
+assert.deepEqual(node.diagnostic, [0, 1, 0x1c]);
 assert.equal(node.diagnosticAssembly, node.entry);
 
 const pages = new Map();
