@@ -34,6 +34,9 @@
     <ProjectReference Include="../demos/stage-34-shared-winforms-source/ProfileBrowser.csproj" Aliases="BrowserForms" />
     <ProjectReference Include="../demos/stage-35-managed-control-tree/ReferenceLibrary.csproj" />
     <ProjectReference Include="../demos/stage-36-managed-events/EventLibrary.csproj" />
+    <Compile Remove="Fixtures/**/*.cs" />
+    <ProjectReference Include="Fixtures/PlatformIdentity/ThirdPartyTypes/ThirdPartyTypes.csproj" Aliases="ThirdParty" />
+    <ProjectReference Include="Fixtures/PlatformIdentity/PlatformIdentityProbe/PlatformIdentityProbe.csproj" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../demos/stage-39-portable-primitive-arrays/PrimitiveStorage.csproj" />
@@ -43,5 +46,26 @@
     <ProjectReference Include="../demos/stage-45-checked-casts/CheckedCasts.csproj" />
     <ProjectReference Include="../demos/stage-46-typed-overflow/TypedOverflow.csproj" />
     <ProjectReference Include="../demos/stage-47-exception-tables/ExceptionTables.csproj" />
+    <ProjectReference Include="../demos/stage-48-overflow-catch/OverflowHandlers.csproj" />
+    <ProjectReference Include="../demos/stage-49-arithmetic-catches/ArithmeticHandlers.csproj" />
+    <ProjectReference Include="../demos/stage-50-nested-catches/NestedHandlers.csproj" />
+    <ProjectReference Include="../demos/stage-51-arithmetic-rethrow/RethrowHandlers.csproj" />
+    <ProjectReference Include="../demos/stage-52-array-bounds-exceptions/ArrayBounds.csproj" />
+    <ProjectReference Include="../demos/stage-53-typed-null-access/NullAccess.csproj" />
+    <ProjectReference Include="../demos/stage-54-finally/FinallyLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-55-allocation-delegates/AllocationDelegates.csproj" />
+    <ProjectReference Include="../demos/stage-56-instance-null/InstanceNull.csproj" />
+    <ProjectReference Include="../demos/stage-57-linked-exceptions/LinkedExceptions.csproj" />
+    <ProjectReference Include="../demos/stage-58-linked-references/LinkedReferences.csproj" />
+    <ProjectReference Include="../demos/stage-59-linked-objects/LinkedObjects.csproj" />
+    <ProjectReference Include="../demos/stage-60-nominal-linking/LinkedNominal.csproj" />
+    <ProjectReference Include="../demos/stage-61-linked-instances/LinkedInstances.csproj" />
+    <ProjectReference Include="../demos/stage-62-null-stack/NullStack.csproj" />
+    <ProjectReference Include="../demos/stage-63-linked-fields/LinkedFields.csproj" />
+    <ProjectReference Include="../demos/stage-64-foreign-field-types/ForeignFieldTypes.csproj" />
+    <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />
+    <Compile Remove="Fixtures/**/*.cs" />
+    <ProjectReference Include="Fixtures/PlatformIdentity/ThirdPartyTypes/ThirdPartyTypes.csproj" Aliases="ThirdParty" />
+    <ProjectReference Include="Fixtures/PlatformIdentity/PlatformIdentityProbe/PlatformIdentityProbe.csproj" />
   </ItemGroup>
 </Project>

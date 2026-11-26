@@ -49,7 +49,6 @@ internal static class ExceptionTableCases
         }
 
         var small = methods[nameof(Examples.SmallCatch)];
-        RejectCompiler("valid EH remains unsupported", image, small.Row, -2);
         byte[] badToken = (byte[])image.Clone();
         BinaryPrimitives.WriteUInt32LittleEndian(badToken.AsSpan(small.Table + 12), 0x06000001);
         Probe("catch token with wrong table", badToken, small.Rva, 6, -1);
@@ -67,8 +66,9 @@ internal static class ExceptionTableCases
         int filterClause = Enumerable.Range(0, (image[filtered.Table + 1] - 4) / 12)
             .Select(index => filtered.Table + 4 + index * 12)
             .Single(offset => BinaryPrimitives.ReadUInt16LittleEndian(image.AsSpan(offset)) == 1);
-        byte[] badFilter = (byte[])image.Clone();
         uint handler = BinaryPrimitives.ReadUInt16LittleEndian(image.AsSpan(filterClause + 5));
+        RejectCompiler("filters and finally remain unsupported", image, filtered.Row, -2, (int)handler);
+        byte[] badFilter = (byte[])image.Clone();
         BinaryPrimitives.WriteUInt32LittleEndian(badFilter.AsSpan(filterClause + 8), handler);
         Probe("filter starts at handler", badFilter, filtered.Rva, 12, -1);
 
@@ -115,12 +115,12 @@ internal static class ExceptionTableCases
             });
         }
 
-        void RejectCompiler(string fixture, byte[] bytes, int row, int expected)
+        void RejectCompiler(string fixture, byte[] bytes, int row, int expected, int ilOffset = -1)
         {
             int[] location = CompilerExports.CreateDiagnostic();
             byte[] output = Enumerable.Repeat((byte)0xa5, capacity).ToArray();
             int actual = CompilerExports.CompileDetailed(bytes, row, output, location);
-            if (actual != expected || !location.SequenceEqual(new[] { 0, row, -1 }) || output.Any(value => value != 0xa5))
+            if (actual != expected || !location.SequenceEqual(new[] { 0, row, ilOffset }) || output.Any(value => value != 0xa5))
                 throw new InvalidOperationException($"{fixture} returned {actual} at [{string.Join(", ", location)}]");
             cases.Add(new
             {

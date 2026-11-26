@@ -12,27 +12,35 @@ namespace PortableCompiler
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup, bool overflowTag)
+            byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup, int exceptionTags)
         {
             int typeOffset = objects[0] + FirstClassHeap;
             bool hasRemainder = remainderFixup != 0;
+            bool overflow = (exceptionTags & ExceptionTypes.Overflow) != 0;
+            bool divide = (exceptionTags & ExceptionTypes.DivideByZero) != 0;
+            bool bounds = (exceptionTags & ExceptionTypes.IndexOutOfRange) != 0;
+            bool nullReference = (exceptionTags & ExceptionTypes.NullReference) != 0;
+            bool invalidCast = (exceptionTags & ExceptionTypes.InvalidCast) != 0;
+            // Tag indices stay stable even when lower tags are unused.
+            int tagCount = invalidCast ? ExceptionTagsWasm.Count : nullReference ? ExceptionTagsWasm.NullTag + 1 :
+                bounds ? ExceptionTagsWasm.IndexTag + 1 : divide ? ExceptionTagsWasm.DivideTag + 1 : overflow ? 1 : 0;
             int remainderIndex = functions + thunks[0];
             int totalFunctions = remainderIndex + (hasRemainder ? 1 : 0);
             var remainderBody = new byte[hasRemainder ? FloatRemainderWasm.BodyCapacity : 0];
             int remainderSize = hasRemainder ? FloatRemainderWasm.WriteBody(remainderBody) : 0;
             int classBytes = 0;
-            bool recursive = false;
+            // Separate singleton groups with identical structs canonicalize to
+            // the same Wasm type. Preserve class identity by group position.
+            bool recursive = objects[0] != 0;
             for (int i = 0; i < objects[0]; i++)
             {
-                int slot = 1 + i * Width;
-                int first = objects[slot + 1], fields = objects[slot + 2];
+                int classType = FirstClass + i, fields = FieldCount(objects, classType);
                 int size = 1, stored = 0;
                 for (int field = 0; field < fields; field++)
                 {
-                    int type = FieldType(objects, first + field);
+                    int type = FieldTypeAt(objects, classType, field);
                     if (type == 0) continue;
                     size += 1 + ValueWidth((byte)type);
-                    if (type >= FirstClass) recursive = true;
                     stored++;
                 }
                 size += UnsignedSize(stored);
@@ -44,10 +52,10 @@ namespace PortableCompiler
             // The entry and invocation list also share one fixed recursive type group.
             int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 1;
             if (hasRemainder) typeEntries++;
-            if (overflowTag) typeEntries++;
+            if (tagCount != 0) typeEntries++;
             int prefix = UnsignedSize(typeEntries) + 63 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
-            if (overflowTag) prefix += 3; // () -> () exception payload
+            if (tagCount != 0) prefix += 3; // () -> () exception payload
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;
             int functionSize = UnsignedSize(totalFunctions) + thunks[0];
@@ -75,10 +83,13 @@ namespace PortableCompiler
                 codeSize += code;
                 functionSize += index;
             }
-            int exportCount = exports.Length + (overflowTag ? 1 : 0);
-            int exportSize = UnsignedSize(exportCount) + (overflowTag ? OverflowWasm.ExportSize : 0);
+            int exportCount = exports.Length + (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) +
+                (nullReference ? 1 : 0) + (invalidCast ? 1 : 0);
+            int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
+                (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
+                (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0);
             int tagType = typeOffset + functions + (hasRemainder ? 1 : 0);
-            int tagSize = 2 + UnsignedSize(tagType);
+            int tagSize = 1 + tagCount * (1 + UnsignedSize(tagType));
             for (int i = 0; i < exports.Length; i++)
             {
                 int name = (int)ImageBytes.U32(names, (uint)entryOffsets[i] + 4);
@@ -106,7 +117,7 @@ namespace PortableCompiler
             remaining = Reserve(remaining, functionSize);
             if (thunks[0] != 0)
                 remaining = Reserve(remaining, tableSize);
-            if (overflowTag)
+            if (tagCount != 0)
                 remaining = Reserve(remaining, tagSize);
             if (eventArgsEmpty)
                 remaining = Reserve(remaining, 8);
@@ -207,16 +218,15 @@ namespace PortableCompiler
             }
             for (int i = 0; i < objects[0]; i++)
             {
-                int slot = 1 + i * Width;
-                int first = objects[slot + 1], fields = objects[slot + 2];
+                int classType = FirstClass + i, fields = FieldCount(objects, classType);
                 output[cursor++] = 0x5f; // struct
                 int stored = 0;
                 for (int field = 0; field < fields; field++)
-                    if (FieldType(objects, first + field) != 0) stored++;
+                    if (FieldTypeAt(objects, classType, field) != 0) stored++;
                 cursor = Unsigned(output, cursor, stored);
                 for (int field = 0; field < fields; field++)
                 {
-                    int fieldType = FieldType(objects, first + field);
+                    int fieldType = FieldTypeAt(objects, classType, field);
                     if (fieldType == 0) continue;
                     cursor = ValueType(output, cursor, (byte)fieldType);
                     output[cursor++] = 1;
@@ -235,7 +245,7 @@ namespace PortableCompiler
                     cursor = ValueType(output, cursor, result);
             }
             if (hasRemainder) cursor = FloatRemainderWasm.WriteType(output, cursor);
-            if (overflowTag)
+            if (tagCount != 0)
             {
                 output[cursor++] = 0x60;
                 output[cursor++] = 0;
@@ -257,13 +267,16 @@ namespace PortableCompiler
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, thunks[0]);
             }
-            if (overflowTag)
+            if (tagCount != 0)
             {
                 // Tag sections precede globals and exports despite section ID 13.
                 cursor = Section(output, cursor, 13, tagSize);
-                output[cursor++] = 1;
-                output[cursor++] = 0; // exception attribute
-                cursor = Unsigned(output, cursor, tagType);
+                output[cursor++] = (byte)tagCount;
+                for (int tag = 0; tag < tagCount; tag++)
+                {
+                    output[cursor++] = 0; // exception attribute
+                    cursor = Unsigned(output, cursor, tagType);
+                }
             }
 
             if (eventArgsEmpty)
@@ -289,7 +302,11 @@ namespace PortableCompiler
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, exports[i]);
             }
-            if (overflowTag) cursor = OverflowWasm.WriteExport(output, cursor);
+            if (overflow) cursor = ExceptionTagsWasm.WriteOverflowExport(output, cursor);
+            if (divide) cursor = ExceptionTagsWasm.WriteDivideExport(output, cursor);
+            if (bounds) cursor = ExceptionTagsWasm.WriteIndexExport(output, cursor);
+            if (nullReference) cursor = ExceptionTagsWasm.WriteNullExport(output, cursor);
+            if (invalidCast) cursor = ExceptionTagsWasm.WriteInvalidCastExport(output, cursor);
 
             if (thunks[0] != 0)
             {

@@ -3,9 +3,17 @@ export const decode = value => value?.i64 !== undefined ? BigInt(value.i64)
     : value?.f64 !== undefined ? Number(value.f64) : value;
 
 export function managedExceptionType(exports, error) {
+    if (!(error instanceof WebAssembly.Exception)) return null;
     const overflow = exports["\0overflow"];
-    return overflow instanceof WebAssembly.Tag && error instanceof WebAssembly.Exception && error.is(overflow)
-        ? "System.OverflowException" : null;
+    if (overflow instanceof WebAssembly.Tag && error.is(overflow)) return "System.OverflowException";
+    const divide = exports["\0divideByZero"];
+    if (divide instanceof WebAssembly.Tag && error.is(divide)) return "System.DivideByZeroException";
+    const index = exports["\0indexOutOfRange"];
+    if (index instanceof WebAssembly.Tag && error.is(index)) return "System.IndexOutOfRangeException";
+    const nullReference = exports["\0nullReference"];
+    if (nullReference instanceof WebAssembly.Tag && error.is(nullReference)) return "System.NullReferenceException";
+    const invalidCast = exports["\0invalidCast"];
+    return invalidCast instanceof WebAssembly.Tag && error.is(invalidCast) ? "System.InvalidCastException" : null;
 }
 
 export function invoke(exports, method, inputs) {
