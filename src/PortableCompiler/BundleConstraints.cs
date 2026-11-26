@@ -5,7 +5,7 @@ namespace PortableCompiler
 {
     internal static class BundleConstraints
     {
-        internal static int Check(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
+        internal static int Check(BundleImages bundle, byte[] image, int[] layout,
             int[] heaps, int owner, int[] objects, int[] arguments, int[] table)
         {
             var parameter = new int[2];
@@ -28,13 +28,13 @@ namespace PortableCompiler
                     continue;
                 }
 
-                int[] required = ReadInterface(main, bundle, ranges, image, layout, heaps,
+                int[] required = ReadInterface(bundle, image, layout, heaps,
                     owner, objects, spec << 2 | 2, arguments, 0);
                 if (required[0] < 0) return required[0];
                 int argument = arguments[parameter[0]];
                 if (argument < ObjectLayouts.FirstClass || argument - ObjectLayouts.FirstClass >= objects[0])
                     return -2;
-                int valid = ValidateInterface(main, bundle, ranges, objects, required);
+                int valid = ValidateInterface(bundle, objects, required);
                 if (valid < 0) return valid;
                 if (valid == 0) return -2;
 
@@ -44,7 +44,7 @@ namespace PortableCompiler
                     int definitionOwner = ObjectLayouts.AssemblyOf(objects, source);
                     int definitionRow = ObjectLayouts.TypeDef(objects, source);
                     if (definitionRow <= 0) break;
-                    int status = Search(main, bundle, ranges, objects, required,
+                    int status = Search(bundle, objects, required,
                         definitionOwner, definitionRow, new int[0], source, 0);
                     if (status < 0) return status;
                     if (status == 0) continue;
@@ -56,11 +56,11 @@ namespace PortableCompiler
             return 0;
         }
 
-        private static int Search(byte[] main, byte[] bundle, int[] ranges, int[] objects, int[] required,
+        private static int Search(BundleImages bundle, int[] objects, int[] required,
             int owner, int row, int[] substitutions, int context, int depth)
         {
             if (depth >= ObjectLayouts.MaxTypeDepth) return -2;
-            byte[] image = AssemblyBundle.Load(main, bundle, ranges, owner);
+            byte[] image = bundle.Get(owner);
             var layout = new int[4];
             var heaps = new int[8];
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
@@ -76,26 +76,26 @@ namespace PortableCompiler
                     int coded = InterfaceImplementations.Read(image, table, i, row);
                     if (coded < 0) return coded;
                     if (coded == 0) continue;
-                    int[] edge = ReadInterface(main, bundle, ranges, image, layout, heaps, owner, objects, coded, substitutions, context);
+                    int[] edge = ReadInterface(bundle, image, layout, heaps, owner, objects, coded, substitutions, context);
                     if (edge[0] == -1) return -1;
                     if (edge[0] < 0) continue;
                     if (Same(edge, required)) return 1;
                     if (pass == 0) continue;
-                    int valid = ValidateInterface(main, bundle, ranges, objects, edge);
+                    int valid = ValidateInterface(bundle, objects, edge);
                     if (valid == -1) return -1;
                     if (valid <= 0) continue;
                     var args = new int[edge.Length - 2];
                     for (int a = 0; a < args.Length; a++) args[a] = edge[2 + a];
-                    int status = Search(main, bundle, ranges, objects, required, edge[0], edge[1], args, 0, depth + 1);
+                    int status = Search(bundle, objects, required, edge[0], edge[1], args, 0, depth + 1);
                     if (status != 0) return status;
                 }
             return 0;
         }
 
-        private static int ValidateInterface(byte[] main, byte[] bundle, int[] ranges, int[] objects, int[] identity)
+        private static int ValidateInterface(BundleImages bundle, int[] objects, int[] identity)
         {
             if (identity[0] < 0 || identity[1] < 1) return 0;
-            byte[] image = AssemblyBundle.Load(main, bundle, ranges, identity[0]);
+            byte[] image = bundle.Get(identity[0]);
             var layout = new int[4];
             var heaps = new int[8];
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
@@ -112,13 +112,13 @@ namespace PortableCompiler
             return status == 0 ? 1 : 0;
         }
 
-        private static int[] ReadInterface(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
+        private static int[] ReadInterface(BundleImages bundle, byte[] image, int[] layout,
             int[] heaps, int owner, int[] objects, int coded, int[] substitutions, int context)
         {
             var symbol = new int[2];
             if ((coded & 3) != 2)
             {
-                int identity = AssemblyBundle.ClassIdentity(main, bundle, ranges, image, layout, heaps, owner, coded, symbol);
+                int identity = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, coded, symbol);
                 return identity < 0 ? Failure(identity) : symbol;
             }
 
@@ -131,7 +131,7 @@ namespace PortableCompiler
             if (named < 1) return Failure(-1);
             int arity = CompressedUnsigned(image, cursor[0], end, cursor);
             if (arity < 1 || arity > end - cursor[0]) return Failure(-1);
-            int status = AssemblyBundle.ClassIdentity(main, bundle, ranges, image, layout, heaps, owner, named, symbol);
+            int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, named, symbol);
             if (status < 0) return Failure(status);
             var result = new int[arity + 2];
             result[0] = symbol[0];
@@ -140,14 +140,14 @@ namespace PortableCompiler
             {
                 // This phase verifies the nominal edge without recursively
                 // registering another layout in the middle of its constraints.
-                int item = Argument(main, bundle, ranges, image, layout, heaps, owner, objects, cursor, end, substitutions, context);
+                int item = Argument(bundle, image, layout, heaps, owner, objects, cursor, end, substitutions, context);
                 if (item < 0) return Failure(item);
                 result[i + 2] = item;
             }
             return cursor[0] == end ? result : Failure(-1);
         }
 
-        private static int Argument(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps,
+        private static int Argument(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int[] objects, int[] cursor, int end, int[] substitutions, int context)
         {
             int at = cursor[0];
@@ -172,7 +172,7 @@ namespace PortableCompiler
                 if (primitive != -2) return primitive;
             }
             var symbol = new int[2];
-            int status = AssemblyBundle.ClassIdentity(main, bundle, ranges, image, layout, heaps, owner, item, symbol);
+            int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, item, symbol);
             if (status < 0) return status;
             if (symbol[0] == AssemblyBundle.ObjectOwner) return element == 0x12 ? ObjectLayouts.ObjectReference : -2;
             int known = ObjectLayouts.Find(objects, symbol[0], symbol[1], new int[0]);

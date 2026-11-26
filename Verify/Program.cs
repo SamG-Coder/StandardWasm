@@ -142,6 +142,7 @@ ByRefPermissionCases.Add(cases);
 ValueConstraintCases.Add(cases);
 NamedValueCases.Add(cases);
 ExplicitScalarCases.Add(cases);
+SequentialLayoutCases.Add(cases);
 NestedOverlayCases.Add(cases);
 EnumArgumentCases.Add(cases);
 HandleConstraintCases.Add(cases);
@@ -149,8 +150,12 @@ WideLayoutCases.Add(cases);
 StaticStorageCases.Add(cases);
 BeforeFieldInitCases.Add(cases);
 VirtualDispatchCases.Add(cases);
+AllocatedReceiverCases.Add(cases);
+RuntimeDispatchCases.Add(cases);
 StringVectorCases.Add(cases);
 GenericBodyCases.Add(cases);
+ValueConstructionCases.Add(cases);
+FrameworkDelegateCases.Add(cases);
 
 // Integer division (stage 08). The grid crosses every signed boundary with every divisor boundary.
 // The unsigned high-bit patterns (0x80000000, 0x80000001, 0xFFFFFFFE, 0xFFFFFFFF) are the same values
@@ -199,6 +204,7 @@ SwitchCases.Add(cases);
 RemainderCases.Add(cases);
 MathCases.Add(cases);
 ArrayCases.Add(cases);
+NativeVectorCases.Add(cases);
 CultureProbe.Write(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args.Single()))!, "culture-probe", "MathIntrinsics.dll"));
 // The stack's shared-blob oracle format replaces main's plain JSON array; scripts/oracle.mjs reads both.
 OracleWriter.Write(args.Single(), cases);

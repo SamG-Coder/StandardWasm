@@ -14,6 +14,7 @@ namespace PeLibrary
             if (WideStorage.IsIntegerElement(element)) return WideStorage.Array;
             if (element == 0x0c) return Singles;
             if (element == 0x0d) return Doubles;
+            if (NativeStorage.IsIntegerElement(element)) return NativeStorage.Vector;
             return 0;
         }
 

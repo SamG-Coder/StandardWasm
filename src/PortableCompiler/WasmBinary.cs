@@ -8,9 +8,10 @@ namespace PortableCompiler
     {
         internal const int ScalarThunkType = 2, EventThunkType = 8, EventEntryHeap = 9, EventHandlerHeap = 10;
         private const int WideArrayHeap = 6, EventArgsHeap = 7, SingleArrayHeap = 11, DoubleArrayHeap = 12;
-        private const int FirstClassHeap = DoubleArrayHeap + 1;
+        private const int NativeArrayHeap = DoubleArrayHeap + 1;
+        private const int FirstClassHeap = NativeArrayHeap + 2;
 
-        internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int functions, byte[] bodies,
+        internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
             byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostImports)
         {
@@ -65,13 +66,13 @@ namespace PortableCompiler
             }
             // A recursive group is one type-section entry but its member
             // types retain individual indices for fields and function signatures.
-            // The entry and invocation list also share one fixed recursive type group.
-            int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 1;
+            // Two fixed recursive groups each occupy a single entry for two types.
+            int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 2;
             if (hasRemainder) typeEntries++;
             if (tagCount != 0) typeEntries++;
             if (hostImports != 0) typeEntries += ConsoleWasm.ImportCount;
             if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
-            int prefix = UnsignedSize(typeEntries) + 63 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+            int prefix = UnsignedSize(typeEntries) + 70 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (tagCount != 0) prefix += 3; // () -> () exception payload
             if (hostImports != 0) prefix += ConsoleWasm.TypeBytes;
@@ -247,6 +248,15 @@ namespace PortableCompiler
             output[cursor++] = 0x5e; // f64 array
             output[cursor++] = 0x7c;
             output[cursor++] = 1;
+            // Keep native vectors nominally distinct from the fixed-width i32 heap.
+            // A separate recursive group prevents structural canonicalization.
+            output[cursor++] = 0x4e;
+            output[cursor++] = 2;
+            output[cursor++] = 0x5e;
+            output[cursor++] = 0x7f;
+            output[cursor++] = 1;
+            output[cursor++] = 0x5f;
+            output[cursor++] = 0;
             if (recursive)
             {
                 output[cursor++] = 0x4e;
@@ -393,14 +403,12 @@ namespace PortableCompiler
 
             cursor = Section(output, cursor, 10, codeSize);
             cursor = Unsigned(output, cursor, totalFunctions);
-            int start = 0;
             for (int body = 0; body < functions; body++)
             {
-                int size = sizes[body];
+                int size = sizes[body], start = bodyOffsets[body];
                 cursor = Unsigned(output, cursor, size);
                 for (int i = 0; i < size; i++)
                     output[cursor++] = bodies[start + i];
-                start += size;
             }
             for (int i = 0; i < thunks[0]; i++)
             {
@@ -470,6 +478,7 @@ namespace PortableCompiler
                 type == EventArgsReference ? EventArgsHeap :
                 type == EventHandlerReference ? EventHandlerHeap :
                 type == Singles ? SingleArrayHeap : type == Doubles ? DoubleArrayHeap :
+                type == NativeVector ? NativeArrayHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;
 
         // Positive heap indices are encoded as signed LEB values. The sign

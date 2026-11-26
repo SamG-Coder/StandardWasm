@@ -19,6 +19,10 @@ namespace PortableCompiler
         internal const int ConsoleWriter = 61, ConsoleWrite = 62;
         internal const int LoadStaticField = 63, StoreStaticField = 64;
         internal const int VirtualCall = 65;
+        // call S::.ctor on the managed address of a local or of a value
+        // constructor's receiver: [S, arguments] -> []. The operand is the
+        // function and the auxiliary field is the addressed frame index.
+        internal const int ConstructValue = 66;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
@@ -243,12 +247,12 @@ namespace PortableCompiler
                     operand = (int)(token & 0xffffff);
                 }
                 else if (op == 0x8e) kind = ArrayLength;
-                else if (op >= 0x90 && op <= 0x96 || op >= 0x98 && op <= 0x9a)
+                else if (op >= 0x90 && op <= 0x9a)
                 {
                     kind = ArrayGet;
                     operand = op;
                 }
-                else if (op >= 0x9c && op <= 0xa2)
+                else if (op >= 0x9b && op <= 0xa2)
                 {
                     kind = ArraySet;
                     operand = op;

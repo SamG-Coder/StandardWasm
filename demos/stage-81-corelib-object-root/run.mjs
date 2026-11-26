@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { root, run } from "../../scripts/toolchain.mjs";
 import { verifyCoreRoot } from "./probe.mjs";
+import { runOn32BitClr, wasm32Runtime } from "../../scripts/runtime-packs.mjs";
 
 const stage = "demos/stage-81-corelib-object-root";
 const base = join(root, "artifacts", "corelib-object-root");
@@ -12,7 +13,10 @@ const dir = mkdtempSync(join(base, "run-"));
 const oracleFile = join(dir, "oracle.json");
 const compilerPath = join(root, "artifacts", "StandardWasm.Compiler.wasm");
 if (!existsSync(compilerPath)) throw Error("Build the self-hosted compiler with npm test first.");
-run("dotnet", ["run", "-c", "Release", "--project", stage + "/Oracle", "--", oracleFile]);
+// The constructor chain lowers original CoreLib bodies, which must come from
+// a 32-bit CoreLib (decision 0044). The x86 CLR supplies it and the contract.
+runOn32BitClr(wasm32Runtime(), join(root, stage, "Oracle"),
+    join(root, stage, "Oracle", "bin", "Release", "net10.0", "Oracle.dll"), [oracleFile]);
 const oracle = JSON.parse(readFileSync(oracleFile, "utf8"));
 const files = new Map([
     ["/verify.mjs", ["text/javascript", readFileSync(join(root, stage, "probe.mjs"))]],

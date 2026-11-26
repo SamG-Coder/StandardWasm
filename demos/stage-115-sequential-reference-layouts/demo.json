@@ -1,0 +1,1 @@
+{"assembly":"SequentialLayoutDemo","exportType":"SequentialLayoutDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["SequentialLayoutDependency.dll"]},{"name":"LedgerFields"}],"generated":{"bundle":true,"capacity":65536,"arguments":[3,5]},"expected":61274}

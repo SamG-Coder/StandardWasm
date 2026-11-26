@@ -5,7 +5,7 @@ namespace PortableCompiler
 {
     internal static class ValueOperands
     {
-        internal static int LowerLocal(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps,
+        internal static int LowerLocal(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int[] records, int slot, int[] frame, int[] objects, int[] clauses)
         {
             int local = records[slot + 1], type = frame[local];
@@ -14,48 +14,91 @@ namespace PortableCompiler
             if (next >= records.Length || Entry(records, next / Width, clauses)) return -2;
             int kind = records[next];
             if (kind == InitializeValue)
-            {
-                uint token = unchecked((uint)records[next + 1]);
-                uint table = token >> 24;
-                int row = (int)(token & 0xffffff);
-                int initialized;
-                if (table == 0x1b)
-                {
-                    int blob = AssemblyReferences.TypeSpecBlob(image, heaps, layout, row);
-                    if (blob < 0) return blob;
-                    initialized = ManagedReferenceSignatures.ReadInstantiation(main, bundle, ranges, image, layout, heaps,
-                        owner, blob, objects);
-                }
-                else
-                {
-                    if (table != 1 && table != 2) return -2;
-                    int coded = row << 2 | (table == 1 ? 1 : 0);
-                    initialized = BundleLayouts.RegisterType(main, bundle, ranges, image, layout, heaps, owner, coded, objects, true);
-                }
-                if (initialized < 0 || initialized != type) return -2;
-                records[slot] = ClearValue;
-                records[slot + 2] = records[next + 2];
-                records[next] = 0;
-                return 0;
-            }
+                return Clear(bundle, image, layout, heaps, owner, records, slot, next, type, objects);
             if (kind == GetField)
             {
                 records[slot] = Load;
                 return 0;
             }
+            return LowerAddressUse(records, slot, local, clauses);
+        }
 
-            // A writable local address can survive only this straight-line
-            // calculation. Track its temporary stack separately so it cannot
-            // consume values below the original address or escape via a call.
+        // In a value-type instance constructor, ldarg.0 pushes the managed
+        // address of the value under construction. The Wasm receiver
+        // parameter holds that value's current immutable aggregate, and the
+        // constructor returns it (decision 0042). Every use must be one of
+        // the address forms below, so the address never escapes the frame.
+        internal static int LowerReceiver(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int[] records, int slot, int[] frame, int[] objects, int[] clauses)
+        {
+            int next = records[slot + 2] * Width;
+            if (next >= records.Length || Entry(records, next / Width, clauses)) return -2;
+            int kind = records[next];
+            // [&this] -> ldfld -> [field]. The load already pushes the current value.
+            if (kind == GetField) return 0;
+            if (kind == InitializeValue)
+                return Clear(bundle, image, layout, heaps, owner, records, slot, next, frame[0], objects);
+            return LowerAddressUse(records, slot, 0, clauses);
+        }
+
+        // ldloca/ldarg.0 followed by initobj of the same type clears the location.
+        private static int Clear(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int[] records, int slot, int next, int type, int[] objects)
+        {
+            uint token = unchecked((uint)records[next + 1]);
+            uint table = token >> 24;
+            int row = (int)(token & 0xffffff);
+            int initialized;
+            if (table == 0x1b)
+            {
+                int blob = AssemblyReferences.TypeSpecBlob(image, heaps, layout, row);
+                if (blob < 0) return blob;
+                initialized = ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps,
+                    owner, blob, objects);
+            }
+            else
+            {
+                if (table != 1 && table != 2) return -2;
+                int coded = row << 2 | (table == 1 ? 1 : 0);
+                initialized = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true);
+            }
+            if (initialized < 0 || initialized != type) return -2;
+            // The operand stays the frame index: the local, or argument 0.
+            records[slot] = ClearValue;
+            records[slot + 2] = records[next + 2];
+            records[next] = 0;
+            return 0;
+        }
+
+        // A writable address can survive only a straight-line calculation
+        // that ends in stfld or in a call on that address. Track the
+        // temporary stack separately so the sequence cannot consume values
+        // below the original address or pass it anywhere else.
+        private static int LowerAddressUse(int[] records, int slot, int local, int[] clauses)
+        {
+            int next = records[slot + 2] * Width;
             int depth = 0;
             while (next < records.Length)
             {
                 if (Entry(records, next / Width, clauses)) return -2;
-                kind = records[next];
+                int kind = records[next];
                 if (kind == SetField && depth == 1)
                 {
+                    // [&value, field] -> stfld -> []. UpdateValue replaces the local's aggregate.
                     records[slot] = Nop;
                     records[next + Width + 1] = local + 1;
+                    return 0;
+                }
+                if (kind == Call && records[next + 3] == 0 || kind == MemberCall && records[next + 3] == 0x28)
+                {
+                    // [&value, arguments] -> call -> []. The link step accepts only
+                    // a value-type instance constructor with exactly these
+                    // arguments (ConstructValue). The receiver is pushed as the
+                    // current value, and the call's spare operand records keep
+                    // the location and the argument count.
+                    if (records[slot] == LocalAddress) records[slot] = Load;
+                    records[next + Width + 1] = local + 1;
+                    records[next + 2 * Width + 1] = depth + 1;
                     return 0;
                 }
                 if (kind == Load || kind == Constant || kind == WideConstant || kind == SingleConstant ||
@@ -65,7 +108,9 @@ namespace PortableCompiler
                     if (depth < 2) return -2;
                     depth--;
                 }
-                else if (kind != Nop && (depth == 0 || kind != Unary && kind != Narrow &&
+                // A field read of an operand above the address (for example
+                // this.X = this.Y) observes the location's current contents.
+                else if (kind != Nop && (depth == 0 || kind != Unary && kind != Narrow && kind != GetField &&
                     kind != ConvertInteger && kind != ConvertFloat && kind != CheckedConversion)) return -2;
                 next = records[next + 2] * Width;
             }
