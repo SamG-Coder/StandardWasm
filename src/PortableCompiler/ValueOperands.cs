@@ -28,8 +28,12 @@ namespace PortableCompiler
         // parameter holds that value's current immutable aggregate, and the
         // constructor returns it (decision 0042). Every use must be one of
         // the address forms below, so the address never escapes the frame.
+        // In any other value-type instance method the receiver is read-only
+        // (decision 0049). Its address may only feed ldfld or a call on the
+        // same address, so initobj, stfld and a chained constructor stay
+        // diagnosed and the callee never writes the caller's location.
         internal static int LowerReceiver(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps,
-            int owner, int[] records, int slot, int[] frame, int[] objects, int[] clauses)
+            int owner, int[] records, int slot, int[] frame, int[] objects, int[] clauses, bool readOnly = false)
         {
             int next = records[slot + 2] * Width;
             if (next >= records.Length || Entry(records, next / Width, clauses)) return -2;
@@ -37,8 +41,8 @@ namespace PortableCompiler
             // [&this] -> ldfld -> [field]. The load already pushes the current value.
             if (kind == GetField) return 0;
             if (kind == InitializeValue)
-                return Clear(main, bundle, ranges, image, layout, heaps, owner, records, slot, next, frame[0], objects);
-            return LowerAddressUse(records, slot, 0, clauses);
+                return readOnly ? -2 : Clear(main, bundle, ranges, image, layout, heaps, owner, records, slot, next, frame[0], objects);
+            return LowerAddressUse(records, slot, 0, clauses, readOnly);
         }
 
         // ldloca/ldarg.0 followed by initobj of the same type clears the location.
@@ -74,7 +78,7 @@ namespace PortableCompiler
         // that ends in stfld or in a call on that address. Track the
         // temporary stack separately so the sequence cannot consume values
         // below the original address or pass it anywhere else.
-        private static int LowerAddressUse(int[] records, int slot, int local, int[] clauses)
+        private static int LowerAddressUse(int[] records, int slot, int local, int[] clauses, bool readOnly = false)
         {
             int next = records[slot + 2] * Width;
             int depth = 0;
@@ -84,6 +88,7 @@ namespace PortableCompiler
                 int kind = records[next];
                 if (kind == SetField && depth == 1)
                 {
+                    if (readOnly) return -2;
                     // [&value, field] -> stfld -> []. UpdateValue replaces the local's aggregate.
                     records[slot] = Nop;
                     records[next + Width + 1] = local + 1;
@@ -92,8 +97,9 @@ namespace PortableCompiler
                 if (kind == Call && records[next + 3] == 0 || kind == MemberCall && records[next + 3] == 0x28)
                 {
                     // [&value, arguments] -> call -> []. The link step accepts only
-                    // a value-type instance constructor with exactly these
-                    // arguments (ConstructValue). The receiver is pushed as the
+                    // a value-type instance constructor (ConstructValue) or a
+                    // read-only instance method (decision 0049) with exactly
+                    // these arguments. The receiver is pushed as the
                     // current value, and the call's spare operand records keep
                     // the location and the argument count.
                     if (records[slot] == LocalAddress) records[slot] = Load;

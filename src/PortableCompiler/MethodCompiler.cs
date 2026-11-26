@@ -228,6 +228,9 @@ namespace PortableCompiler
                 // value. Its IL returns void, so stack analysis checks void.
                 bool valueConstructor = IsValueConstructor(image, layout, heaps, source, signatures, signature, parameters, objects);
                 if (valueConstructor) result = Void;
+                // Any other instance method on a value type only reads its receiver.
+                bool valueMethod = !valueConstructor &&
+                    IsValueMethod(image, layout, heaps, source, signatures, signature, parameters, objects);
                 bool scalar = result == I32;
                 int narrowParameters = 0;
                 for (int i = 0; i < parameters; i++)
@@ -266,7 +269,7 @@ namespace PortableCompiler
                         return status;
                     virtualUsed[0] = 0;
                     functions = LinkOperands(main, bundle, ranges, image, layout, heaps, owner, source, context,
-                        parameters == 0 ? 0 : signatures[signature + 1], valueConstructor, records, owners, rows, contexts,
+                        parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod, valueMethod, records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed);
                     if (functions < 0)
                         return functions;
@@ -431,7 +434,7 @@ namespace PortableCompiler
         }
 
         private static int LinkOperands(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
-            int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
+            int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
@@ -475,7 +478,7 @@ namespace PortableCompiler
                     // starg.0 would replace the address itself.
                     if (kind == BranchIl.Store) return -2;
                     int lowered = ValueOperands.LowerReceiver(main, bundle, ranges, image, layout, heaps,
-                        owner, records, slot, frame, objects, clauses);
+                        owner, records, slot, frame, objects, clauses, readOnlyReceiver);
                     if (lowered < 0) return lowered;
                     continue;
                 }
@@ -577,9 +580,11 @@ namespace PortableCompiler
                 {
                     int member = records[slot + 1], opcode = records[slot + 3];
                     // A call on a value location's address can only be a linked
-                    // value constructor. Skip the platform special forms.
+                    // value constructor or read-only instance method. The link
+                    // step below checks which. Skip the platform special forms.
                     bool addressed = records[slot + BranchIl.Width + 1] != 0;
-                    if (addressed && (opcode != 0x28 || bundle.Length == 0 || !NamesConstructor(image, heaps, layout, member)))
+                    // A static member would receive the address as a byref argument.
+                    if (addressed && (opcode != 0x28 || bundle.Length == 0 || !MemberHasThis(image, heaps, layout, member)))
                         return -2;
                     // Exact System.Math intrinsics, identified by platform assembly and signature (decision 0003).
                     int intrinsic = opcode == 0x28 && !addressed ? PlatformMembers.MathIntrinsic(image, heaps, layout, member) : 0;
@@ -697,8 +702,11 @@ namespace PortableCompiler
                             IsLinkedConstructor(main, bundle, ranges, targetOwner, targetRow);
                         if (addressed || linkedValue)
                         {
-                            int lowered = LinkValueConstruction(records, slot, opcode == 0x73, linked, linkedValue,
-                                arities, offsets, signatures, frame, clauses);
+                            bool linkedMethod = !linkedValue && addressed && opcode == 0x28 &&
+                                IsLinkedValueMethod(main, bundle, ranges, targetOwner, targetRow, signatures, offsets[linked],
+                                    arities[linked], objects);
+                            int lowered = LinkValueConstruction(records, slot, opcode == 0x73, linked, linkedValue, linkedMethod,
+                                readOnlyReceiver, arities, offsets, signatures, frame, clauses);
                             if (lowered < 0) return lowered;
                             continue;
                         }
@@ -760,8 +768,10 @@ namespace PortableCompiler
                 if (localValue || addressedCall)
                 {
                     if (kind == BranchIl.Call && records[slot + 3] != 0) return -2; // callvirt on a constructor
-                    int lowered = LinkValueConstruction(records, slot, kind == BranchIl.NewObject, index, localValue,
-                        arities, offsets, signatures, frame, clauses);
+                    bool localMethod = !localValue && addressedCall && records[slot + 3] == 0 &&
+                        IsValueMethod(image, layout, heaps, target, signatures, signature, arities[index], objects);
+                    int lowered = LinkValueConstruction(records, slot, kind == BranchIl.NewObject, index, localValue, localMethod,
+                        readOnlyReceiver, arities, offsets, signatures, frame, clauses);
                     if (lowered < 0) return lowered;
                     continue;
                 }
@@ -824,7 +834,7 @@ namespace PortableCompiler
         // decision 0042. newobj supplies the zero default; call on a
         // location's address supplies that location's current value.
         private static int LinkValueConstruction(int[] records, int slot, bool newObject, int function, bool valueConstructor,
-            int[] arities, int[] offsets, int[] signatures, int[] frame, int[] clauses)
+            bool valueMethod, bool readOnlyReceiver, int[] arities, int[] offsets, int[] signatures, int[] frame, int[] clauses)
         {
             int local = records[slot + BranchIl.Width + 1] - 1;
             if (newObject)
@@ -836,11 +846,25 @@ namespace PortableCompiler
                 records[slot + 3] = 0;
                 return 0;
             }
-            // Any other call through a value address (an instance method or a
-            // byref receiver) would need general managed byrefs.
-            if (!valueConstructor || local < 0) return -2;
+            // Any other call through a value address (a byref receiver or a
+            // virtual method) would need general managed byrefs.
+            if (local < 0 || !valueConstructor && !valueMethod) return -2;
             int arguments = records[slot + 2 * BranchIl.Width + 1] - 1;
             if (arities[function] != arguments + 1 || frame[local] != signatures[offsets[function] + 1]) return -2;
+            if (valueMethod)
+            {
+                // [&value, arguments] -> call S::M -> [result]. The callee only
+                // reads its receiver (decision 0049), and the address does not
+                // escape this frame, so passing the location's current aggregate
+                // observes exactly what the CLR's byref would. The address scan
+                // already replaced ldloca with a load of the local.
+                records[slot] = BranchIl.Call;
+                records[slot + 1] = function;
+                records[slot + 3] = 0;
+                return 0;
+            }
+            // A read-only method cannot construct its own receiver in place.
+            if (readOnlyReceiver && local == 0) return -2;
             // The callee's writes reach the location only when it returns. If
             // the constructor throws inside a protected range, a handler or
             // finally in this frame could observe the CLR's partly constructed
@@ -863,15 +887,33 @@ namespace PortableCompiler
             (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x10) == 0 &&
             ObjectLayouts.IsConstructor(image, heaps, layout, row);
 
-        private static bool NamesConstructor(byte[] image, int[] heaps, int[] layout, int member)
+        // The MemberRef signature declares HASTHIS (ECMA-335 II.23.2.1).
+        private static bool MemberHasThis(byte[] image, int[] heaps, int[] layout, int member)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             if (AssemblyReferences.ReadMember(image, heaps, layout, member, reference, allowClosedParent: true) < 0) return false;
-            int name = reference[4];
-            if (name <= 0 || name > heaps[3] - 6) return false;
-            int at = heaps[2] + name;
-            return image[at] == 0x2e && image[at + 1] == 0x63 && image[at + 2] == 0x74 && image[at + 3] == 0x6f &&
-                image[at + 4] == 0x72 && image[at + 5] == 0; // ".ctor"
+            int index = reference[5];
+            if (index < 1 || index >= heaps[1]) return false;
+            var next = new int[1];
+            int size = ImageBytes.CompressedUnsigned(image, heaps[0] + index, heaps[0] + heaps[1], next);
+            return size > 0 && (image[next[0]] & 0x20) != 0;
+        }
+
+        // A non-constructor instance method whose receiver is a value type.
+        private static bool IsValueMethod(byte[] image, int[] layout, int[] heaps, int row, int[] signatures, int signature,
+            int arity, int[] objects) =>
+            arity > 0 && ObjectLayouts.IsValueType(objects, signatures[signature + 1]) &&
+            (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x10) == 0 &&
+            !ObjectLayouts.IsConstructor(image, heaps, layout, row);
+
+        private static bool IsLinkedValueMethod(byte[] main, byte[] bundle, int[] ranges, int owner, int row,
+            int[] signatures, int signature, int arity, int[] objects)
+        {
+            byte[] targetImage = AssemblyBundle.Load(main, bundle, ranges, owner);
+            var targetLayout = new int[4];
+            var targetHeaps = new int[8];
+            if (CompressedTables.FindWithHeaps(targetImage, targetLayout, targetHeaps) < 0) return false;
+            return IsValueMethod(targetImage, targetLayout, targetHeaps, row, signatures, signature, arity, objects);
         }
 
         private static bool IsLinkedConstructor(byte[] main, byte[] bundle, int[] ranges, int owner, int row)
@@ -1054,9 +1096,10 @@ namespace PortableCompiler
             if (!isStatic && receiver == 0)
             {
                 receiver = BundleLayouts.Register(main, bundle, ranges, image, layout, heaps, assembly, owner, objects);
-                // Only constructors take a value-type receiver (decision 0042).
-                // Other value-type instance methods still need general byrefs.
-                if (receiver == -2 && ObjectLayouts.IsConstructor(image, heaps, layout, row))
+                // Constructors (decision 0042) and non-virtual instance methods
+                // (decision 0049) take a value-type receiver. A method body that
+                // writes through its receiver is diagnosed when it is compiled.
+                if (receiver == -2 && (ObjectLayouts.IsConstructor(image, heaps, layout, row) || (attributes & 0x40) == 0))
                     receiver = BundleLayouts.RegisterValue(main, bundle, ranges, image, layout, heaps, assembly, owner, objects);
                 if (receiver < 0) return receiver;
                 if (ObjectLayouts.IsInterface(objects, receiver)) return -2;

@@ -48,9 +48,10 @@ const node = await inspectStandaloneEntry(compilerBytes, selection);
 assert.equal(node.entryToken, reference.token);
 assert.ok(node.managedAssemblies > 1);
 assert.equal(node.compilerStatus, -2);
-// The constructor linker consumes a local address before diagnosing a non-constructor call.
-// The original entry calls TaskAwaiter.GetResult at IL_000e.
-assert.deepEqual(node.diagnostic, [0, reference.token & 0xffffff, 14]);
+// TaskAwaiter.GetResult at IL_000e links as a read-only value method (Stage 121).
+// The boundary is the async Program::<Main>$ (MethodDef 1). Its state machine
+// reaches System.Threading.Tasks.VoidTaskResult, an empty struct with ClassSize 1.
+assert.deepEqual(node.diagnostic, [0, 1, -1]);
 assert.equal(node.diagnosticAssembly, node.entry);
 
 const pages = new Map();
