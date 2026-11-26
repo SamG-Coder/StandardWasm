@@ -623,28 +623,46 @@ namespace PortableCompiler
                     int storage = FieldAccess.Storage(descriptor);
                     int address = kind == GetField ? top : top - 1;
                     int reference = Spill(spills, maximum, states[state + address], address);
-                    if (IsValueType(objects, type))
-                        used = ValueFieldsWasm.Materialize(code, used, type, reference);
-                    else
+                    if (ManagedValueLocationWasm.UsesCell(objects, type, storage))
                     {
                         used = GuardNull(code, used, reference);
-                        used = Local(code, used, 0x20, reference);
+                        if (kind == GetField)
+                        {
+                            used = ManagedValueLocationWasm.Read(code, used, type, reference, operand, storage);
+                            used = Local(code, used, 0x21, Spill(spills, maximum, StackType(storage), top));
+                        }
+                        else
+                        {
+                            int source = states[state + top];
+                            used = ManagedValueLocationWasm.Write(code, used, type, reference, operand,
+                                Spill(spills, maximum, source, top), source, storage);
+                        }
                     }
-                    if (kind == SetField)
-                    {
-                        int source = states[state + top];
-                        used = LoadOperand(code, used, Spill(spills, maximum, source, top), source, storage);
-                    }
-                    if (IsExplicitValue(objects, type))
-                        used = ExplicitValueWasm.Load(code, used, objects, type, operand, storage, Spill(spills, maximum, I64, top));
                     else
                     {
-                        // Packed cells truncate on assignment. The load selects the CLI extension.
-                        int instruction = kind == GetField ? FieldAccess.LoadInstruction(storage) : 5;
-                        used = Gc(code, used, instruction, type);
-                        used = WasmBinary.Unsigned(code, used, operand);
+                        if (IsValueType(objects, type))
+                            used = ValueFieldsWasm.Materialize(code, used, type, reference);
+                        else
+                        {
+                            used = GuardNull(code, used, reference);
+                            used = Local(code, used, 0x20, reference);
+                        }
+                        if (kind == SetField)
+                        {
+                            int source = states[state + top];
+                            used = LoadOperand(code, used, Spill(spills, maximum, source, top), source, storage);
+                        }
+                        if (IsExplicitValue(objects, type))
+                            used = ExplicitValueWasm.Load(code, used, objects, type, operand, storage, Spill(spills, maximum, I64, top));
+                        else
+                        {
+                            // Packed cells truncate on assignment. The load selects the CLI extension.
+                            int instruction = kind == GetField ? FieldAccess.LoadInstruction(storage) : 5;
+                            used = Gc(code, used, instruction, type);
+                            used = WasmBinary.Unsigned(code, used, operand);
+                        }
+                        if (kind == GetField) used = Local(code, used, 0x21, Spill(spills, maximum, StackType(storage), top));
                     }
-                    if (kind == GetField) used = Local(code, used, 0x21, Spill(spills, maximum, StackType(storage), top));
                 }
                 else if (kind == ClearValue)
                 {
