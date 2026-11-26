@@ -1,0 +1,1 @@
+{"assembly":"ValueMethodDemo","exportType":"ValueMethodDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["ValueMethodDependency.dll"]},{"name":"LinkedChain"}],"generated":{"bundle":true,"capacity":65536,"arguments":[3,5]},"expected":61}
