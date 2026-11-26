@@ -31,7 +31,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [24 · Portable 64-bit integers](stage-24-portable-i64/README.md) | `npm run demo -- stage-24-portable-i64` | Calculate(9007199254740993, 1) = 95496328098598384 |
 | [25 · Switch dispatch](stage-25-switch-dispatch/README.md) | `npm run demo -- stage-25-switch-dispatch` | TokenizeSample(-1, 0) = 20203 |
 | [26 · Portable switch dispatch](stage-26-portable-switch/README.md) | `npm run demo -- stage-26-portable-switch` | Classify(-3) = 17 |
-| [27 · Portable compiler diagnostics](stage-27-portable-diagnostics/README.md) | `npm run demo -- stage-27-portable-diagnostics` | BoxedValue yields -2 at IL_0001 |
+| [27 · Portable compiler diagnostics](stage-27-portable-diagnostics/README.md) | `npm run demo -- stage-27-portable-diagnostics` | BoxedValue yields -2 when it boxes a user-defined struct |
 | [28 · Managed 64-bit storage](stage-28-wide-storage/README.md) | `npm run demo -- stage-28-wide-storage` | Apply(9007199254740993, 1, 3) = 36028797018963972 |
 | [29 · Math intrinsics](stage-29-math-intrinsics/README.md) | `npm run demo -- stage-29-math-intrinsics` | Hypotenuse(3, 4) = 5 |
 | [30 · Portable floating point](stage-30-portable-floats/README.md) | `npm run demo -- stage-30-portable-floats` | Filter(9, 3) = 8 |
@@ -139,6 +139,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [133 · String object identity](stage-133-string-object-identity/README.md) | `npm run demo -- stage-133-string-object-identity` | Preserve identity for identical literals across linked assemblies |
 | [134 · Static aggregate fields](stage-134-static-aggregate-fields/README.md) | `npm run demo -- stage-134-static-aggregate-fields` | Read and write static structs with CLR copy and initializer semantics |
 | [135 · Addressed value arguments](stage-135-addressed-value-arguments/README.md) | `npm run demo -- stage-135-addressed-value-arguments` | Preserve the callee copy when taking the address of a by-value struct argument |
+| [136 · Closed generic methods](stage-136-method-instantiations/README.md) | `npm run demo -- stage-136-method-instantiations` | Verify MethodSpec metadata and execute closed static generic methods |
 | [137 · stackalloc on a shadow stack](stage-137-stackalloc/README.md) | `npm run demo -- stage-137-stackalloc` | `stackalloc` into primitive pointers; frames release on return and exceptions; exhaustion traps |
 | [138 · Inline-array layouts](stage-138-inline-array-layouts/README.md) | `npm run demo -- stage-138-inline-array-layouts` | Preserve the declared element and value copies of managed inline arrays |
 | [146 · Class value-field receivers](stage-146-class-value-receivers/README.md) | `npm run demo -- stage-146-class-value-receivers` | Call original managed methods through stable class-field addresses |

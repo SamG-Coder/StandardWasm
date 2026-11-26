@@ -34,6 +34,7 @@ namespace PortableCompiler
         internal const int ReadReflection = 73, StringEquals = 74, ResourceLookup = 75;
         internal const int TakeValueFieldAddress = 76, LoadValueLocation = 77;
         internal const int LoadConstructorAddress = 78, UpdateConstructorField = 79;
+        internal const int BoxValue = 80, UnboxValue = 81, TestBox = 82, ConstrainedStatic = 83;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
@@ -242,6 +243,13 @@ namespace PortableCompiler
                     kind = LoadString;
                     operand = (int)(token & 0xffffff);
                 }
+                else if (op == 0x8c || op == 0xa5)
+                {
+                    if (length - pc < 4) return -1;
+                    operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                    pc += 4;
+                    kind = op == 0x8c ? BoxValue : UnboxValue;
+                }
                 else if (op == 0x8d)
                 {
                     kind = NewArray;
@@ -313,6 +321,19 @@ namespace PortableCompiler
                     }
                     else if (extended == 0x0f)
                         kind = LocalAllocate;
+                    else if (extended == 0x16)
+                    {
+                        // Only the static MemberRef call form is lowered here.
+                        if (length - pc < 9) return -1;
+                        operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                        pc += 4;
+                        if (image[start + pc++] != 0x28) return -2;
+                        uint member = ImageBytes.U32(image, (uint)(start + pc));
+                        pc += 4;
+                        if ((member >> 24) != 0x0a || (member & 0xffffff) == 0) return -2;
+                        kind = ConstrainedStatic;
+                        comparison = (int)(member & 0xffffff);
+                    }
                     else if (extended == 0x1a)
                     {
                         if (!hasCatches) return -1;

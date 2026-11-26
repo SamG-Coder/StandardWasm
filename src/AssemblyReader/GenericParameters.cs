@@ -7,7 +7,7 @@ namespace PeLibrary
         private const uint Variance = 3, Reference = 4, NonNullableValue = 8,
             DefaultConstructor = 0x10, AllowByRefLike = 0x20;
 
-        internal static int Check(byte[] image, int[] heaps, int[] methods, int typeRow, int[] arguments, int[] objects, int[] deferred)
+        internal static int Check(byte[] image, int[] heaps, int[] methods, int typeRow, int[] arguments, int[] objects, int[] deferred, bool method = false)
         {
             int arity = arguments.Length;
             var counts = new int[45];
@@ -18,7 +18,7 @@ namespace PeLibrary
             if (table < 0) return -1;
             int ownerWidth = counts[2] < 32768 && counts[6] < 32768 ? 2 : 4;
             int width = 4 + ownerWidth + methods[2];
-            int owner = typeRow << 1;
+            int owner = (typeRow << 1) | (method ? 1 : 0);
             // GenericParam is sorted by owner, then by parameter number.
             int low = 0, high = counts[42];
             while (low < high)
@@ -57,7 +57,7 @@ namespace PeLibrary
             int indexWidth = counts[42] < 65536 ? 2 : 4;
             int typeWidth = counts[2] < 16384 && counts[1] < 16384 && counts[27] < 16384 ? 2 : 4;
             int constraintWidth = indexWidth + typeWidth;
-            bool hasTypeSpec = false;
+            bool hasDeferred = false;
             for (int i = 0; i < counts[44]; i++)
             {
                 uint at = (uint)(constraints + i * constraintWidth);
@@ -65,17 +65,15 @@ namespace PeLibrary
                 if (parameter <= first || parameter > low) continue;
                 uint flags = U16(image, (uint)(table + (parameter - 1) * width + 2));
                 int type = Index(image, at + (uint)indexWidth, typeWidth);
-                if ((type & 3) == 2)
-                {
-                    if (type == 2) return -1;
-                    hasTypeSpec = true;
-                    continue;
-                }
+                int tag = type & 3;
+                if (type >> 2 < 1 || tag > 2) return -1;
                 // A plain nominal ValueType row supplements the value-type bit.
-                if ((flags & NonNullableValue) == 0 ||
-                    !ObjectLayouts.IsPlatformValueType(image, heaps, methods, counts, start, type)) return -2;
+                if (tag != 2 && (flags & NonNullableValue) != 0 &&
+                    ObjectLayouts.IsPlatformValueType(image, heaps, methods, counts, start, type)) continue;
+                if (tag != 2 && !method) return -2;
+                hasDeferred = true;
             }
-            if (!hasTypeSpec) return 0;
+            if (!hasDeferred) return 0;
             deferred[0] = constraints;
             deferred[1] = indexWidth;
             deferred[2] = typeWidth;
@@ -87,16 +85,16 @@ namespace PeLibrary
             return 1;
         }
 
-        internal static int ReadDeferred(byte[] image, int[] table, int index, int[] parameter)
+        internal static int ReadDeferred(byte[] image, int[] table, int index, int[] parameter, bool nominal = false)
         {
             uint at = (uint)(table[0] + index * (table[1] + table[2]));
             int owner = Index(image, at, table[1]);
             if (owner <= table[4] || owner > table[5]) return 0;
             int type = Index(image, at + (uint)table[1], table[2]);
-            if ((type & 3) != 2) return 0;
+            if ((type & 3) != 2 && !nominal) return 0;
             parameter[0] = owner - table[4] - 1;
             parameter[1] = (U16(image, (uint)(table[6] + (owner - 1) * table[7] + 2)) & NonNullableValue) != 0 ? 1 : 0;
-            return type >> 2;
+            return type;
         }
 
         private static int Index(byte[] image, uint at, int width) =>

@@ -362,6 +362,16 @@ namespace PortableCompiler
                     used = NormalizeSlot(code, used, frame[operand]);
                     used = Local(code, used, 0x21, operand);
                 }
+                else if (kind == BoxValue || kind == UnboxValue || kind == TestBox)
+                {
+                    int local = Spill(spills, maximum, states[state + top], top);
+                    int type = records[slot + 3];
+                    if (kind == BoxValue) used = PrimitiveBoxing.Box(code, used, local, operand, type);
+                    else if (kind == UnboxValue) used = PrimitiveBoxing.Unbox(code, used, local, operand, type);
+                    else used = PrimitiveBoxing.Test(code, used, local, operand, type);
+                    int resultType = kind == UnboxValue ? StackType(PrimitiveBoxing.Storage(operand)) : ObjectReference;
+                    used = Local(code, used, 0x21, Spill(spills, maximum, resultType, top));
+                }
                 else if (kind == CastClass || kind == TestClass)
                 {
                     int type = operand;
@@ -865,7 +875,7 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int GuardNull(byte[] code, int used, int reference, int tag = ExceptionTagsWasm.NullTag)
+        internal static int GuardNull(byte[] code, int used, int reference, int tag = ExceptionTagsWasm.NullTag)
         {
             used = Local(code, used, 0x20, reference);
             code[used++] = 0xd1; // ref.is_null
@@ -966,7 +976,7 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int NormalizeSlot(byte[] code, int used, int type)
+        internal static int NormalizeSlot(byte[] code, int used, int type)
         {
             if (type == Signed8 || type == Signed16)
                 code[used++] = type == Signed8 ? (byte)0xc0 : (byte)0xc1; // i32.extend8_s / extend16_s

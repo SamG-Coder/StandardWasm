@@ -21,25 +21,19 @@ namespace PeLibrary
         {
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
-            if (first < 0 || row < 1 || row > counts[43]) return false;
-            int specs = MetadataTableRows.TableStart(heaps, methods, counts, 43);
-            if (specs < 0) return false;
-            int memberWidth = MetadataTableRows.MethodRefWidth(counts), blobs = methods[3];
-            uint at = (uint)(specs + (row - 1) * (memberWidth + blobs));
-            uint member = Index(image, at, memberWidth);
-            if ((member & 1) != 1 || Member(image, heaps, methods, (int)(member >> 1)) != ExchangeMember)
+            if (first < 0) return false;
+            var signature = new int[MethodSpecifications.Width];
+            if (MethodSpecifications.Read(image, heaps, methods, counts, row, signature) < 0)
                 return false;
-            uint blob = Index(image, at + (uint)memberWidth, blobs);
-            if (blob == 0 || blob >= (uint)heaps[1]) return false;
-            int end = heaps[0] + heaps[1];
+            int member = signature[MethodSpecifications.Target];
+            if ((member & 1) != 1 || Member(image, heaps, methods, member >> 1) != ExchangeMember ||
+                signature[MethodSpecifications.Arity] != 1)
+                return false;
+            int argument = signature[MethodSpecifications.Arguments], end = signature[MethodSpecifications.End];
+            if (image[argument] != 0x12) return false;
             var next = new int[1];
-            int size = CompressedUnsigned(image, heaps[0] + (int)blob, end, next);
-            int signature = next[0];
-            if (size < 4 || size > end - signature || image[signature] != 0x0a ||
-                image[signature + 1] != 1 || image[signature + 2] != 0x12)
-                return false;
-            int type = CompressedUnsigned(image, signature + 3, signature + size, next);
-            return next[0] == signature + size && (type & 3) == 1 &&
+            int type = CompressedUnsigned(image, argument + 1, end, next);
+            return type > 0 && next[0] == end && (type & 3) == 1 &&
                 ReadType(image, heaps, methods, counts, first, type >> 2) == ObjectLayouts.EventHandlerReference;
         }
 

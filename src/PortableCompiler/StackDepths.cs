@@ -190,6 +190,16 @@ namespace PortableCompiler
                     ? depth - 1 : -1;
             // The supported delegate operations already proved the result's concrete type.
             if (kind == CastHandler) return Match(stack, depth, EventHandlerReference) ? depth : -1;
+            if (kind == BoxValue || kind == UnboxValue || kind == TestBox)
+            {
+                if (depth < 1) return -1;
+                int source = stack[depth - 1], storage = PrimitiveBoxing.Storage(operand);
+                if (kind == BoxValue)
+                    return Assignable(source, storage, objects)
+                        ? Push(stack, allocated, depth - 1, ObjectReference) : -1;
+                if (source != NullValue && !IsReference(source) || IsValueType(objects, source)) return -1;
+                return Push(stack, allocated, depth - 1, kind == UnboxValue ? StackType(storage) : ObjectReference);
+            }
             if (kind == CastClass || kind == TestClass)
             {
                 if (depth < 1 || IsValueType(objects, stack[depth - 1]) ||
