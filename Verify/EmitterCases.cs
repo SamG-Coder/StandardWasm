@@ -26,16 +26,16 @@ internal static class EmitterCases
         int[][] pairs = values.SelectMany(a => values.Select(b => new[] { a, b })).ToArray();
         VerifyMethod("Combine", pairs, a => Kernels.Combine(a[0], a[1]));
         VerifyMethod("Mix", pairs, a => Kernels.Mix(a[0], a[1]));
-        VerifyMethod("Quotient", pairs, a => Kernels.Quotient(a[0], a[1]));
+        VerifyMethod("Quotient", [.. pairs, [int.MinValue, -1]], a => Kernels.Quotient(a[0], a[1]), capacity: 512);
 
         VerifyMethod("UnsupportedSignature", [[-32769], [0], [32768]], a => Kernels.UnsupportedSignature(a[0]));
         Reject("method call", rows["UnsupportedCall"], 256, -2);
         Reject("insufficient capacity", rows["DemoKernel"], 8, -3);
         Reject("missing row", 0, 256, -1);
 
-        void VerifyMethod(string fixture, int[][] inputs, Func<int[], int> oracle)
+        void VerifyMethod(string fixture, int[][] inputs, Func<int[], int> oracle, int capacity = 256)
         {
-            byte[] output = new byte[256];
+            byte[] output = new byte[capacity];
             int row = rows[fixture];
             int length = EmitterDemo.Compile(image, row, output);
             if (length <= 0)
@@ -44,13 +44,18 @@ internal static class EmitterCases
             foreach (var args in inputs)
             {
                 int? expected;
+                string exceptionType = null;
                 try { expected = oracle(args); }
-                catch (ArithmeticException) { expected = null; }
+                catch (ArithmeticException error)
+                {
+                    expected = null;
+                    exceptionType = error.GetType().FullName;
+                }
                 cases.Add(new
                 {
                     module = "EmitterLibrary", method = "Compile", fixture,
                     inputs = new object[] { encoded, row },
-                    generated = new { capacity = output.Length, arguments = args, hex },
+                    generated = new { capacity, arguments = args, hex, exceptionType },
                     expected
                 });
             }

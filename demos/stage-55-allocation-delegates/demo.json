@@ -1,0 +1,1 @@
+{"assembly":"AllocationDelegates","exportType":"AllocationDelegates.TriggerDemo","method":"Compile","inputs":[{"file":"self"},{"name":"AllocationCleanup"}],"generated":{"capacity":16384,"arguments":[-1]},"expected":-17}

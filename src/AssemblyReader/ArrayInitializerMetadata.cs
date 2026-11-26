@@ -125,7 +125,7 @@ namespace PeLibrary
             int strings = methods[2], width = ScopeWidth(counts);
             uint at = (uint)(TypeRefs(image, heaps, methods, first, counts[0]) + (row - 1) * (width + 2 * strings));
             int scope = Index(image, at, width);
-            if ((scope & 3) != 2 || !AssemblyReferences.IsPlatformPrimitiveAssembly(image, heaps, methods, counts, scope >> 2))
+            if ((scope & 3) != 2 || !PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, scope >> 2))
                 return false;
             uint name = (uint)Index(image, at + (uint)width, strings);
             uint ns = (uint)Index(image, at + (uint)(width + strings), strings);
