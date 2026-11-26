@@ -19,6 +19,7 @@
     <ProjectReference Include="../demos/stage-12-portable-arrays/TypedArrayLibrary.csproj" />
     <ProjectReference Include="../demos/stage-13-complete-bootstrap/BootstrapLibrary.csproj" />
     <ProjectReference Include="../demos/stage-15-managed-instances/ObjectLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-16-managed-delegates/DelegateLibrary.csproj" />
     <ProjectReference Include="../demos/stage-15-managed-instances/identity/ObjectIdentityProbe/ObjectIdentityProbe.csproj" />
     <ProjectReference Include="../demos/stage-18-long-integers/LongIntegers.csproj" />
     <ProjectReference Include="../demos/stage-20-floating-point/FloatingPoint.csproj" />
@@ -26,5 +27,7 @@
     <ProjectReference Include="../demos/stage-33-float-remainder/FloatRemainder.csproj" />
     <ProjectReference Include="../demos/stage-29-math-intrinsics/MathIntrinsics.csproj" />
     <ProjectReference Include="../demos/stage-37-primitive-arrays/PrimitiveArrays.csproj" />
+    <ProjectReference Include="../demos/stage-16-managed-delegates/identity/ThirdPartyFunc/ThirdPartyFunc.csproj" Aliases="ThirdParty" />
+    <ProjectReference Include="../demos/stage-16-managed-delegates/identity/FuncIdentityProbe/FuncIdentityProbe.csproj" />
   </ItemGroup>
 </Project>

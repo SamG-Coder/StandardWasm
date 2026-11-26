@@ -6,7 +6,7 @@ namespace PortableCompiler
     {
         internal const int Width = 4;
         internal const int Load = 1, Store = 2, Constant = 3, Unary = 4, Binary = 5,
-            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12, NewArray = 13, ArrayLength = 14, ArrayGet = 15, ArraySet = 16, Narrow = 17, NewObject = 18, GetField = 19, SetField = 20, BaseCtor = 21;
+            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12, NewArray = 13, ArrayLength = 14, ArrayGet = 15, ArraySet = 16, Narrow = 17, NewObject = 18, GetField = 19, SetField = 20, BaseCtor = 21, LoadFunction = 22, NewDelegate = 23, InvokeDelegate = 24, MemberCall = 25;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and branch comparison.
@@ -100,9 +100,10 @@ namespace PortableCompiler
                         if (table != 4) return -2;
                         kind = op == 0x7b ? GetField : SetField;
                     }
-                    else if (op == 0x28 && table == 0x0a)
+                    else if (table == 0x0a)
                     {
-                        kind = BaseCtor;
+                        kind = MemberCall;
+                        comparison = op;
                     }
                     else
                     {
@@ -134,10 +135,22 @@ namespace PortableCompiler
                 {
                     if (pc >= length) return -1;
                     int extended = image[start + pc++];
-                    if (extended < 1 || extended > 5) return -2;
-                    kind = Binary;
-                    operand = extended == 1 ? 0x46 : Comparison(extended == 2 ? 5 :
-                        extended == 3 ? 10 : extended == 4 ? 7 : 12);
+                    if (extended == 6)
+                    {
+                        if (length - pc < 4) return -1;
+                        uint token = ImageBytes.U32(image, (uint)(start + pc));
+                        pc += 4;
+                        if (token >> 24 != 6) return -2;
+                        kind = LoadFunction;
+                        operand = (int)(token & 0xffffff);
+                    }
+                    else
+                    {
+                        if (extended < 1 || extended > 5) return -2;
+                        kind = Binary;
+                        operand = extended == 1 ? 0x46 : Comparison(extended == 2 ? 5 :
+                            extended == 3 ? 10 : extended == 4 ? 7 : 12);
+                    }
                 }
                 else if (op == 0x65 || op == 0x66)
                 {

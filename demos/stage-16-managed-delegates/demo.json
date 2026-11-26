@@ -1,0 +1,1 @@
+{"assembly":"DelegateLibrary","exportType":"DelegateLibrary.DelegateDemo","method":"Compile","inputs":[{"file":"self"},{"name":"Route"}],"generated":{"capacity":16384,"arguments":[10,1]},"expected":12}

@@ -37,6 +37,7 @@ using var manifest = new MemoryStream();
 using var writer = new BinaryWriter(manifest);
 WriteEntry(form.Binding.Export, form.Binding.Row);
 WriteEntry(nameof(CounterHandlers.Create), typeof(CounterHandlers).GetMethod(nameof(CounterHandlers.Create))!.MetadataToken & 0xffffff);
+WriteEntry(nameof(CounterHandlers.Dispatch), typeof(CounterHandlers).GetMethod(nameof(CounterHandlers.Dispatch))!.MetadataToken & 0xffffff);
 WriteEntry(nameof(CounterHandlers.Read), typeof(CounterHandlers).GetMethod(nameof(CounterHandlers.Read))!.MetadataToken & 0xffffff);
 
 void WriteEntry(string export, int row)

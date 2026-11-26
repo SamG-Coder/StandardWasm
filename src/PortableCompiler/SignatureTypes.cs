@@ -1,10 +1,11 @@
 using PeLibrary;
+using static PeLibrary.ImageBytes;
 
 namespace PortableCompiler
 {
     internal static class SignatureTypes
     {
-        internal const byte Void = 0, I32 = 1, Bytes = 2, Ints = 3;
+        internal const byte Void = 0, I32 = 1, Bytes = 2, Ints = 3, Delegate = 4, MethodPointer = 5;
 
         // Destination for a method is [result, parameters...]. Local signatures
         // write only their slots. Stack values normalize CLI small integers to i32.
@@ -45,6 +46,12 @@ namespace PortableCompiler
                     else if (item == 8) types[target] = Ints;
                     else return -2;
                 }
+                else if (element == 0x15)
+                {
+                    cursor = DelegateMetadata.ParseFunc(image, heap, methods, cursor - 1, end);
+                    if (cursor < 0) return -2;
+                    types[target] = Delegate;
+                }
                 else if (element == 0x12)
                 {
                     int coded = CompressedUnsigned(image, cursor, end, next);
@@ -63,28 +70,5 @@ namespace PortableCompiler
             return count + implicitSlots;
         }
 
-        internal static int CompressedUnsigned(byte[] image, int cursor, int end, int[] next)
-        {
-            if (cursor >= end)
-                return -1;
-            int first = image[cursor++];
-            if (first < 128)
-            {
-                next[0] = cursor;
-                return first;
-            }
-            if (first < 192 && end - cursor >= 1)
-            {
-                next[0] = cursor + 1;
-                return ((first & 63) << 8) | image[cursor];
-            }
-            if (first < 224 && end - cursor >= 3)
-            {
-                next[0] = cursor + 3;
-                return ((first & 31) << 24) | (image[cursor] << 16) |
-                    (image[cursor + 1] << 8) | image[cursor + 2];
-            }
-            return -1;
-        }
     }
 }

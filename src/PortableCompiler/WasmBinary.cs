@@ -7,10 +7,11 @@ namespace PortableCompiler
     internal static class WasmBinary
     {
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies,
-            byte[] names, int[] entryOffsets, int[] exports, int[] objects)
+            byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks)
         {
-            int typeOffset = objects[0] + 2;
-            int typeSize = UnsignedSize(functions + typeOffset) + 6;
+            int typeOffset = objects[0] + 4;
+            int totalFunctions = functions + thunks[0];
+            int typeSize = UnsignedSize(functions + typeOffset) + 17;
             for (int i = 0; i < objects[0]; i++)
             {
                 int fields = objects[1 + i * Width + 2];
@@ -18,8 +19,8 @@ namespace PortableCompiler
                 if (size > output.Length - typeSize) return -3;
                 typeSize += size;
             }
-            int functionSize = UnsignedSize(functions);
-            int codeSize = UnsignedSize(functions);
+            int functionSize = UnsignedSize(totalFunctions) + thunks[0];
+            int codeSize = UnsignedSize(totalFunctions);
             // Use one type per function in discovery order. Accumulate against
             // destination capacity before any writes, guarding size arithmetic.
             for (int i = 0; i < functions; i++)
@@ -47,15 +48,29 @@ namespace PortableCompiler
                     return -3;
                 exportSize += metadata + name;
             }
+            int tableSize = 3 + UnsignedSize(thunks[0]);
+            int elementSize = 5 + UnsignedSize(thunks[0]);
+            for (int i = 0; i < thunks[0]; i++)
+            {
+                int function = thunks[i + 1];
+                int receiver = types[offsets[function] + 1];
+                int thunkSize = ThunkSize(receiver, function);
+                if (1 + thunkSize > output.Length - codeSize ||
+                    UnsignedSize(functions + i) > output.Length - elementSize)
+                    return -3;
+                codeSize += 1 + thunkSize;
+                elementSize += UnsignedSize(functions + i);
+            }
+
             int remaining = output.Length - 8;
-            remaining -= SectionOverhead(typeSize);
-            if (remaining < typeSize) return -3;
-            remaining -= typeSize + SectionOverhead(functionSize);
-            if (remaining < functionSize) return -3;
-            remaining -= functionSize + SectionOverhead(exportSize);
-            if (remaining < exportSize) return -3;
-            remaining -= exportSize + SectionOverhead(codeSize);
-            if (remaining < codeSize) return -3;
+            remaining = Reserve(remaining, typeSize);
+            remaining = Reserve(remaining, functionSize);
+            if (thunks[0] != 0)
+                remaining = Reserve(remaining, tableSize);
+            remaining = Reserve(remaining, exportSize);
+            if (thunks[0] != 0)
+                remaining = Reserve(remaining, elementSize);
+            if (Reserve(remaining, codeSize) < 0) return -3;
 
             output[0] = 0;
             output[1] = 0x61;
@@ -73,6 +88,18 @@ namespace PortableCompiler
             output[cursor++] = 0x5e; // array of i32
             output[cursor++] = 0x7f;
             output[cursor++] = 1;
+            // Thunk type: (eqref) -> i32. Its closure holds an eqref and a funcref.
+            output[cursor++] = 0x60;
+            output[cursor++] = 1;
+            output[cursor++] = 0x6d;
+            output[cursor++] = 1;
+            output[cursor++] = 0x7f;
+            output[cursor++] = 0x5f;
+            output[cursor++] = 2;
+            output[cursor++] = 0x6d;
+            output[cursor++] = 0;
+            output[cursor++] = 0x70;
+            output[cursor++] = 0;
             for (int i = 0; i < objects[0]; i++)
             {
                 int fields = objects[1 + i * Width + 2];
@@ -98,9 +125,19 @@ namespace PortableCompiler
             }
 
             cursor = Section(output, cursor, 3, functionSize);
-            cursor = Unsigned(output, cursor, functions);
+            cursor = Unsigned(output, cursor, totalFunctions);
             for (int i = 0; i < functions; i++)
                 cursor = Unsigned(output, cursor, i + typeOffset);
+            for (int i = 0; i < thunks[0]; i++)
+                output[cursor++] = 2;
+            if (thunks[0] != 0)
+            {
+                cursor = Section(output, cursor, 4, tableSize);
+                output[cursor++] = 1;
+                output[cursor++] = 0x70;
+                output[cursor++] = 0;
+                cursor = Unsigned(output, cursor, thunks[0]);
+            }
 
             cursor = Section(output, cursor, 7, exportSize);
             cursor = Unsigned(output, cursor, exports.Length);
@@ -115,8 +152,21 @@ namespace PortableCompiler
                 cursor = Unsigned(output, cursor, exports[i]);
             }
 
+            if (thunks[0] != 0)
+            {
+                cursor = Section(output, cursor, 9, elementSize);
+                output[cursor++] = 1; // one segment
+                output[cursor++] = 0; // active, table zero
+                output[cursor++] = 0x41;
+                output[cursor++] = 0;
+                output[cursor++] = 0x0b;
+                cursor = Unsigned(output, cursor, thunks[0]);
+                for (int i = 0; i < thunks[0]; i++)
+                    cursor = Unsigned(output, cursor, functions + i);
+            }
+
             cursor = Section(output, cursor, 10, codeSize);
-            cursor = Unsigned(output, cursor, functions);
+            cursor = Unsigned(output, cursor, totalFunctions);
             int start = 0;
             for (int body = 0; body < functions; body++)
             {
@@ -126,25 +176,48 @@ namespace PortableCompiler
                     output[cursor++] = bodies[start + i];
                 start += size;
             }
-            return cursor;
-        }
-
-        private static int ValueWidth(byte type) =>
-            type == Void ? 0 : type == I32 ? 1 : type - Bytes <= 63 ? 2 : 3;
-
-        internal static int ValueType(byte[] output, int cursor, byte type)
-        {
-            if (type == I32)
-                output[cursor++] = 0x7f;
-            else
+            for (int i = 0; i < thunks[0]; i++)
             {
-                output[cursor++] = 0x63; // ref null
-                cursor = Signed(output, cursor, type - Bytes);
+                int function = thunks[i + 1], receiver = types[offsets[function] + 1];
+                cursor = Unsigned(output, cursor, ThunkSize(receiver, function));
+                output[cursor++] = 0; // local declarations
+                output[cursor++] = 0x20;
+                output[cursor++] = 0;
+                output[cursor++] = 0xfb;
+                output[cursor++] = 22; // ref.cast to the target's concrete receiver
+                cursor = Signed(output, cursor, receiver - Bytes);
+                output[cursor++] = 0x10;
+                cursor = Unsigned(output, cursor, function);
+                output[cursor++] = 0x0b;
             }
             return cursor;
         }
 
-        private static int SectionOverhead(int payload) => 1 + UnsignedSize(payload);
+        private static int ValueWidth(byte type) =>
+            type == Void ? 0 : type == I32 || type == MethodPointer ? 1 :
+                type == Delegate || type - Bytes <= 63 ? 2 : 3;
+
+        internal static int ValueType(byte[] output, int cursor, byte type)
+        {
+            if (type == I32 || type == MethodPointer)
+                output[cursor++] = 0x7f;
+            else
+            {
+                output[cursor++] = 0x63; // ref null
+                cursor = Signed(output, cursor, type == Delegate ? 3 : type - Bytes);
+            }
+            return cursor;
+        }
+
+        private static int ThunkSize(int receiver, int function) =>
+            7 + (receiver - Bytes <= 63 ? 1 : 2) + UnsignedSize(function);
+
+        private static int Reserve(int remaining, int size)
+        {
+            int overhead = 1 + UnsignedSize(size);
+            if (remaining < overhead || size > remaining - overhead) return -1;
+            return remaining - overhead - size;
+        }
 
         private static int Section(byte[] bytes, int cursor, byte id, int payload)
         {
