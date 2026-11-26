@@ -33,6 +33,7 @@ namespace PortableCompiler
                 clauses[clause + Resume] = resume;
             }
 
+            int exceptionLocals = 1; // The dispatcher holds the caught Wasm reference here.
             for (int pc = 0; pc < length;)
             {
                 int slot = pc * BranchIl.Width;
@@ -41,6 +42,14 @@ namespace PortableCompiler
                 if (kind == Leave)
                 {
                     if (!Edge(clauses, pc, operand, true)) return -1;
+                }
+                else if (kind == Rethrow)
+                {
+                    int handler = InnermostHandler(clauses, pc);
+                    if (handler < 0) return -1;
+                    records[slot + 1] = handler / Width;
+                    // A nested catch can overwrite the dispatcher scratch slot.
+                    exceptionLocals = 1 + clauses.Length / Width;
                 }
                 else if (kind == Return)
                 {
@@ -56,7 +65,20 @@ namespace PortableCompiler
                 }
                 pc = next;
             }
-            return 0;
+            return exceptionLocals;
+        }
+
+        private static int InnermostHandler(int[] clauses, int pc)
+        {
+            int selected = -1, shortest = int.MaxValue;
+            for (int clause = 0; clause < clauses.Length; clause += Width)
+            {
+                int length = clauses[clause + HandlerLength];
+                if (length >= shortest || !InRange(clauses, clause + HandlerStart, pc)) continue;
+                shortest = length;
+                selected = clause;
+            }
+            return selected;
         }
 
         internal static bool StartsTry(int[] clauses, int pc)

@@ -14,9 +14,10 @@ namespace PortableCompiler
             int classes = frameShape[4];
             bool stringScratch = frameShape[5] != 0;
             bool eventScratch = frameShape[6] != 0;
+            int exceptionLocals = frameShape[8];
             int spillKinds = FirstClass - 1 + classes;
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 1 + spillKinds) +
-                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0));
+                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (exceptionLocals != 0 ? 1 : 0));
             int spills = arguments + locals;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
@@ -57,6 +58,11 @@ namespace PortableCompiler
             }
             code[used++] = 1;
             code[used++] = 0x7f;
+            if (exceptionLocals != 0)
+            {
+                used = WasmBinary.Unsigned(code, used, exceptionLocals);
+                code[used++] = ArithmeticCatchWasm.ExceptionReference;
+            }
             // Raw Wasm callers supply i32. Enforce the CLI argument width before
             // the first instruction, including on entry from a managed call.
             for (int i = 0; i < arguments; i++)
@@ -420,6 +426,8 @@ namespace PortableCompiler
                     }
                     code[used++] = 0x0f;
                 }
+                else if (kind == Rethrow)
+                    used = ArithmeticCatchWasm.ThrowReference(code, used, pcLocal + 2 + operand);
                 else
                 {
                     if (kind == Conditional)
@@ -462,7 +470,7 @@ namespace PortableCompiler
                 code[used++] = 0x0b;
             }
             code[used++] = 0;
-            if (catchRegion.Length != 0) used = ArithmeticCatchWasm.End(code, used, pcLocal, catchRegion);
+            if (catchRegion.Length != 0) used = ArithmeticCatchWasm.End(code, used, pcLocal, catchRegion, exceptionLocals > 1);
             code[used++] = 0x0b;
             code[used++] = 0;
             code[used++] = 0x0b;

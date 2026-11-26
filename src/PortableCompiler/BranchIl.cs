@@ -11,11 +11,11 @@ namespace PortableCompiler
         internal const int LoadEventArgsEmpty = 38, NewEventArgs = 39, CombineHandler = 40, CastHandler = 41, RemoveHandler = 42;
         internal const int FieldAddress = 43, MethodSpecCall = 44, ExchangeHandlerField = 45;
         internal const int FieldToken = 46, InitializedArray = 47;
-        internal const int CheckedInteger = 48, CheckedConversion = 49, Leave = 50;
+        internal const int CheckedInteger = 48, CheckedConversion = 49, Leave = 50, Rethrow = 51;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
-        internal static int Decode(byte[] image, int start, int length, int arguments, int locals, int[] records, int[] location)
+        internal static int Decode(byte[] image, int start, int length, int arguments, int locals, int[] records, int[] location, bool hasCatches)
         {
             int pc = 0;
             while (pc < length)
@@ -234,6 +234,11 @@ namespace PortableCompiler
                         if (token >> 24 != 6) return -2;
                         kind = LoadFunction;
                         operand = (int)(token & 0xffffff);
+                    }
+                    else if (extended == 0x1a)
+                    {
+                        if (!hasCatches) return -1;
+                        kind = Rethrow;
                     }
                     else
                     {

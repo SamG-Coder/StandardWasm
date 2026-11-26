@@ -46,5 +46,6 @@
     <ProjectReference Include="../demos/stage-48-overflow-catch/OverflowHandlers.csproj" />
     <ProjectReference Include="../demos/stage-49-arithmetic-catches/ArithmeticHandlers.csproj" />
     <ProjectReference Include="../demos/stage-50-nested-catches/NestedHandlers.csproj" />
+    <ProjectReference Include="../demos/stage-51-arithmetic-rethrow/RethrowHandlers.csproj" />
   </ItemGroup>
 </Project>

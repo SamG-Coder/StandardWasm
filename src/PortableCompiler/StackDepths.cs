@@ -43,6 +43,8 @@ namespace PortableCompiler
                     continue;
                 }
 
+                if (kind == Rethrow) continue; // The exceptional transfer drops the evaluation stack.
+
                 int next;
                 if (kind == Leave)
                 {

@@ -47,6 +47,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [48 · Managed overflow handlers](stage-48-overflow-catch/README.md) | `npm run demo -- stage-48-overflow-catch` | Increment catches overflow and returns -1 |
 | [49 · Ordered arithmetic catches](stage-49-arithmetic-catches/README.md) | `npm run demo -- stage-49-arithmetic-catches` | SpecificThenBase(18, 0) = -101 |
 | [50 · Nested arithmetic catches](stage-50-nested-catches/README.md) | `npm run demo -- stage-50-nested-catches` | HandlerEscapesToOuter(int.MaxValue, 0) = -201 |
+| [51 · Arithmetic exception rethrow](stage-51-arithmetic-rethrow/README.md) | `npm run demo -- stage-51-arithmetic-rethrow` | RetainOuter(int.MaxValue, 0) = -101 |
 
 ## Adding a stage
 

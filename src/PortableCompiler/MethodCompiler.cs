@@ -135,7 +135,7 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[8];
+            var frameShape = new int[9];
             bool eventArgsEmpty = false;
             int exceptionTags = 0;
             var noCatch = new int[0];
@@ -215,7 +215,7 @@ namespace PortableCompiler
                 if (used < 0)
                 {
                     var records = new int[body[1] * BranchIl.Width];
-                    status = BranchIl.Decode(image, body[0], body[1], parameters, locals, records, location);
+                    status = BranchIl.Decode(image, body[0], body[1], parameters, locals, records, location, catchRegion.Length != 0);
                     if (status < 0)
                         return status;
                     status = ArrayInitializers.Lower(image, heaps, layout, records, literals, literalSize, location);
@@ -232,10 +232,11 @@ namespace PortableCompiler
                         return -2;
                     var depths = new int[body[1]];
                     var states = new byte[body[1] * maximum];
+                    int exceptionLocals = 0;
                     if (catchRegion.Length != 0)
                     {
-                        status = ArithmeticCatch.Validate(records, catchRegion, location);
-                        if (status < 0) return status;
+                        exceptionLocals = ArithmeticCatch.Validate(records, catchRegion, location);
+                        if (exceptionLocals < 0) return exceptionLocals;
                     }
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
                         result, signatures, offsets, arities, location, catchRegion);
@@ -304,6 +305,7 @@ namespace PortableCompiler
                     frameShape[5] = 0;
                     frameShape[6] = 0;
                     frameShape[7] = length;
+                    frameShape[8] = exceptionLocals;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
