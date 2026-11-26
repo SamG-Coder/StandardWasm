@@ -27,7 +27,8 @@ Run("Floats", Floats(), [Pointer(0), Pointer(64), Int(12)]);
 Run("IndexOf", Pattern(11), [Pointer(10), Int(100), Int(Pattern(11)[10 + 63])]);
 Run("IndexOf", Pattern(11), [Pointer(10), Int(5), Int(0x100 - 1)]);
 Run("ReadNull", Pattern(0), []);
-Run("InitializeNull", Pattern(0), []);
+Run("InitializeChecks", Pattern(0), [Pointer(4)]);
+Run("WritePastCapacity", Pattern(0), [Pointer(100)]);
 
 File.WriteAllText(Path.Combine(evidence, "oracle.json"), JsonSerializer.Serialize(new
 {

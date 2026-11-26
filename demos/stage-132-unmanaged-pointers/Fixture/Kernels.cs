@@ -11,14 +11,19 @@ namespace UnmanagedPointerFixture
         private long capacity;
         private long position;
 
-        public void Initialize(byte* pointer, long count, long limit)
+        // UnmanagedMemoryStream throws here. Platform exception constructors need
+        // CoreLib, so this fixture reports the same checks as status codes.
+        public int Initialize(byte* pointer, long count, long limit)
         {
-            if (pointer == null) throw new System.ArgumentNullException(nameof(pointer));
-            if (count < 0 || limit < 0 || count > limit) throw new System.ArgumentOutOfRangeException(nameof(count));
+            if (pointer == null) return -1;
+            if (count < 0 || limit < 0 || count > limit) return -2;
+            // Reject a range that wraps the address space, as UnmanagedMemoryStream does.
+            if (pointer + limit < pointer) return -3;
             memory = pointer;
             length = count;
             capacity = limit;
             position = 0;
+            return 0;
         }
 
         public int ReadByte()
@@ -27,11 +32,12 @@ namespace UnmanagedPointerFixture
             return memory[position++];
         }
 
-        public void WriteByte(byte value)
+        public bool WriteByte(byte value)
         {
-            if (position >= capacity) throw new System.NotSupportedException();
+            if (position >= capacity) return false;
             memory[position++] = value;
             if (position > length) length = position;
+            return true;
         }
 
         public long Length => length;
@@ -119,11 +125,22 @@ namespace UnmanagedPointerFixture
             catch (System.NullReferenceException) { return -7; }
         }
 
-        // The reader rejects a null pointer with ArgumentNullException.
-        public static int InitializeNull()
+        // The reader's argument checks: null, a negative length, length above capacity.
+        public static int InitializeChecks(byte* data)
         {
-            try { new Reader().Initialize(null, 0, 0); return 0; }
-            catch (System.ArgumentNullException) { return -9; }
+            var reader = new Reader();
+            return reader.Initialize(null, 0, 0) * 100 + reader.Initialize(data, -1, 4) * 10 +
+                reader.Initialize(data, 5, 4) + (reader.WriteByte(1) ? 1000 : 0);
+        }
+
+        // Writing past capacity is refused without touching memory.
+        public static int WritePastCapacity(byte* data)
+        {
+            var reader = new Reader();
+            reader.Initialize(data, 0, 2);
+            int accepted = 0;
+            for (int i = 0; i < 4; i++) if (reader.WriteByte(0xee)) accepted++;
+            return accepted;
         }
     }
 }

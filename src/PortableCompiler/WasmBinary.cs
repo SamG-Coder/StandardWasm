@@ -16,7 +16,8 @@ namespace PortableCompiler
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostImports)
+            byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostImports,
+            bool linearMemory = false)
         {
             // Imported functions precede defined functions in the Wasm index
             // space. Emitted bodies already include this offset in their calls.
@@ -162,8 +163,10 @@ namespace PortableCompiler
 
             int remaining = output.Length - 8;
             remaining = Reserve(remaining, typeSize);
-            int importSize = hostImports != 0 ? ConsoleWasm.SectionSize(importType) : 0;
-            if (hostImports != 0)
+            // The memory import follows any console imports in the same section.
+            int importSize = hostImports != 0 ? ConsoleWasm.SectionSize(importType) : linearMemory ? 1 : 0;
+            if (linearMemory) importSize += LinearMemoryWasm.ImportBytes;
+            if (importSize != 0)
                 remaining = Reserve(remaining, importSize);
             remaining = Reserve(remaining, functionSize);
             if (thunks[0] != 0)
@@ -338,10 +341,13 @@ namespace PortableCompiler
             if (hostImports != 0) cursor = ConsoleWasm.WriteTypes(output, cursor);
             if (argumentArray != 0) cursor = EntryArgumentsWasm.WriteTypes(output, cursor, argumentArray);
             if (hasDescriptors) cursor = RuntimeTypeWasm.WriteDescriptor(output, cursor);
-            if (hostImports != 0)
+            if (importSize != 0)
             {
                 cursor = Section(output, cursor, 2, importSize);
-                cursor = ConsoleWasm.WriteImports(output, cursor, importType);
+                int count = (hostImports != 0 ? 2 : 0) + (linearMemory ? 1 : 0);
+                if (hostImports != 0) cursor = ConsoleWasm.WriteImports(output, cursor, importType, count);
+                else output[cursor++] = (byte)count;
+                if (linearMemory) cursor = LinearMemoryWasm.WriteImport(output, cursor);
             }
 
             cursor = Section(output, cursor, 3, functionSize);
