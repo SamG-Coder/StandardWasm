@@ -43,6 +43,9 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [36 · Shared WinForms event subscriptions](stage-36-managed-events/README.md) | `npm run demo -- stage-36-managed-events` | SubscriptionOrder() = 12112 through an ordinary C# event |
 | [37 · Primitive arrays](stage-37-primitive-arrays/README.md) | `npm run demo -- stage-37-primitive-arrays` | CountPrimes(100) = 25 |
 | [38 · Profile rendering timings](stage-38-profile-rendering/README.md) | `npm run demo -- stage-38-profile-rendering` | Same-device timing and WebGPU/Canvas 2D pixel comparison |
+| [42 · Generate the Profile in the browser](stage-42-generated-profile/README.md) | `npm run demo -- stage-42-generated-profile` | Generated compiler emits Profile in Edge, then the WebGPU form matches Windows interaction |
+| [69 · Profile WebGPU text uploads](stage-69-profile-text-uploads/README.md) | `npm run demo -- stage-69-profile-text-uploads` | Partial and full text uploads produce identical pixels |
+| [70 · Profile preview redraw](stage-70-profile-caption-redraw/README.md) | `npm run demo -- stage-70-profile-caption-redraw` | Only the preview caption is rasterized on an edit |
 | [72 · Windows reference executable](stage-72-winforms-windows-reference/README.md) | `npm run demo -- stage-72-winforms-windows-reference` | Both .NET 10 apphosts launch, with interaction and dependency evidence |
 | [73 · Windows executable intake](stage-73-executable-intake/README.md) | `npm run demo -- stage-73-executable-intake` | Node and Edge recover the original managed entry and manifests |
 | [74 · Run a dropped .NET entry point](stage-74-executable-entry/README.md) | `npm run demo -- stage-74-executable-entry` | Original console publishes run through the generated compiler |
