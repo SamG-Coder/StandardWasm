@@ -22,4 +22,9 @@ const result = (demo.generated
         ? await invokeGenerated(instance.exports, demoInputs(demo), demo.generated)
         : invoke(instance.exports, demo.method, demoInputs(demo)));
 assert.equal(result, decode(demo.expected));
-console.log(demo.stage + ": " + demo.method + "(" + demo.inputs.map(input => input?.file === "bundle" ? demo.assembly + ".dll and dependencies" : input?.file === "self" ? demo.assembly + ".dll" : input?.name ?? input).join(", ") + ") = " + result);
+const displayedInputs = demo.inputs.map(input => {
+    if (input?.file === "bundle") return demo.assembly + ".dll and dependencies";
+    if (input?.file === "self") return demo.assembly + ".dll";
+    return input?.name ?? decode(input);
+});
+console.log(demo.stage + ": " + demo.method + "(" + displayedInputs.join(", ") + ") = " + result);

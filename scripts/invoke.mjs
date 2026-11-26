@@ -1,5 +1,9 @@
-// Represent signed i64 bit patterns as decimal strings to keep the JS boundary exact.
-export const decode = value => value?.i64 !== undefined ? BigInt(value.i64) : value;
+// JSON carries a 64-bit integer as {"i64": "<signed decimal>"} because a JSON number is exact only to 2^53.
+// The Wasm JS API passes i64 parameters and results as BigInt, so decode those values before calling or comparing.
+// A floating-point value is {"f64": "<17 significant digits>"}, which also covers "NaN", "Infinity", "-Infinity" and
+// "-0". JSON cannot carry those. f32 values are encoded through their exact double value.
+export const decode = value =>
+    value?.i64 !== undefined ? BigInt(value.i64) : value?.f64 !== undefined ? Number(value.f64) : value;
 
 export function invoke(exports, method, inputs) {
     const args = inputs.map(input => {
@@ -60,7 +64,7 @@ export async function invokeGenerated(exports, inputs, generated) {
     if (WebAssembly.Module.imports(module).length) throw Error("Generated module has runtime imports");
     try {
         const exports = instance.exports;
-        const value = exports[generated.export ?? "run"](...generated.arguments.map(decode));
+        const value = exports[generated.export ?? "run"](...generated.arguments);
         if (generated.resultType !== "string") return value;
         const count = exports.TextLength(value);
         const units = new Array(count);

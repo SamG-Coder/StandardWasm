@@ -70,7 +70,8 @@ namespace PeLibrary
             if (table == 32) return 16 + blobs + 2 * strings;
             if (table == 33) return 4;
             if (table == 34) return 12;
-            return table == 35 ? 12 + 2 * blobs + 2 * strings : 0;
+            if (table == 35) return 12 + 2 * blobs + 2 * strings;
+            return 0;
         }
 
         private static int Width(int count) => count < 65536 ? 2 : 4;
