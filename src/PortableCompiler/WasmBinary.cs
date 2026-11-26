@@ -70,18 +70,21 @@ namespace PortableCompiler
             // A recursive group is one type-section entry but its member
             // types retain individual indices for fields and function signatures.
             // Two fixed recursive groups each occupy a single entry for two types.
+            bool hasDescriptors = RuntimeTypeWasm.HasDescriptors(globals);
             int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 2;
             if (hasRemainder) typeEntries++;
             if (tagCount != 0) typeEntries++;
             if (objectTag) typeEntries++;
             if (hostImports != 0) typeEntries += ConsoleWasm.ImportCount;
             if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
+            if (hasDescriptors) typeEntries++;
             int prefix = UnsignedSize(typeEntries) + 70 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (tagCount != 0) prefix += 3; // () -> () exception payload
             if (objectTag) prefix += ExceptionTagsWasm.ObjectTagTypeBytes; // (eqref) -> () managed object payload
             if (hostImports != 0) prefix += ConsoleWasm.TypeBytes;
             if (argumentArray != 0) prefix += EntryArgumentsWasm.TypeBytes(argumentArray);
+            if (hasDescriptors) prefix += RuntimeTypeWasm.DescriptorBytes;
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;
             int functionSize = UnsignedSize(totalFunctions) + thunks[0];
@@ -96,6 +99,8 @@ namespace PortableCompiler
             int objectTagType = tagType + 1;
             int importType = tagType + (tagCount != 0 ? 1 : 0) + (objectTag ? 1 : 0);
             int builderType = importType + (hostImports != 0 ? ConsoleWasm.ImportCount : 0);
+            // Append the optional descriptor type to keep the existing ABI indices stable.
+            int descriptorHeap = builderType + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0);
             if (argumentArray != 0)
             {
                 for (int i = 0; i < EntryArgumentsWasm.FunctionCount; i++)
@@ -162,7 +167,7 @@ namespace PortableCompiler
                 remaining = Reserve(remaining, tableSize);
             if (tagCount != 0)
                 remaining = Reserve(remaining, tagSize);
-            int globalSize = WasmGlobals.Size(globals, objects);
+            int globalSize = WasmGlobals.Size(globals, objects, descriptorHeap);
             if (globalSize != 0)
                 remaining = Reserve(remaining, globalSize);
             remaining = Reserve(remaining, exportSize);
@@ -329,6 +334,7 @@ namespace PortableCompiler
             if (objectTag) cursor = ExceptionTagsWasm.WriteObjectTagType(output, cursor);
             if (hostImports != 0) cursor = ConsoleWasm.WriteTypes(output, cursor);
             if (argumentArray != 0) cursor = EntryArgumentsWasm.WriteTypes(output, cursor, argumentArray);
+            if (hasDescriptors) cursor = RuntimeTypeWasm.WriteDescriptor(output, cursor);
             if (hostImports != 0)
             {
                 cursor = Section(output, cursor, 2, importSize);
@@ -368,7 +374,7 @@ namespace PortableCompiler
             if (globalSize != 0)
             {
                 cursor = Section(output, cursor, 6, globalSize);
-                cursor = WasmGlobals.Write(output, cursor, globals, objects);
+                cursor = WasmGlobals.Write(output, cursor, globals, objects, descriptorHeap);
             }
             cursor = Section(output, cursor, 7, exportSize);
             cursor = Unsigned(output, cursor, exportCount);
@@ -458,7 +464,8 @@ namespace PortableCompiler
         }
 
         internal static int ValueWidth(int type) =>
-            type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference || type == NullPointer || type == ConsoleStorage.Writer ? 1 :
+            type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference || type == NullPointer ||
+                type == ConsoleStorage.Writer || RuntimeTypeMetadata.IsStorage(type) ? 1 :
                 1 + HeapTypeSize(HeapType(StackType(type)));
 
         internal static int ValueType(byte[] output, int cursor, int slot)
@@ -472,7 +479,7 @@ namespace PortableCompiler
                 output[cursor++] = 0x7e;
             else if (IsFloat(type))
                 output[cursor++] = type == F32 ? (byte)0x7d : (byte)0x7c;
-            else if (type == ObjectReference)
+            else if (type == ObjectReference || RuntimeTypeMetadata.IsStorage(type))
                 output[cursor++] = 0x6d; // eqref, the supertype of the managed class structs
             else
             {

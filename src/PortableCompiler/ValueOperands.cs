@@ -9,12 +9,13 @@ namespace PortableCompiler
             int owner, int[] records, int slot, int[] frame, int[] objects, int[] clauses)
         {
             int local = records[slot + 1], type = frame[local];
-            if (!ObjectLayouts.IsValueType(objects, type)) return -2;
+            if (type != RuntimeTypeMetadata.Handle && !ObjectLayouts.IsValueType(objects, type)) return -2;
             int next = records[slot + 2] * Width;
             if (next >= records.Length || Entry(records, next / Width, clauses)) return -2;
             int kind = records[next];
             if (kind == InitializeValue)
                 return Clear(bundle, image, layout, heaps, owner, records, slot, next, type, objects);
+            if (type == RuntimeTypeMetadata.Handle) return -2;
             if (kind == GetField)
             {
                 records[slot] = Load;
@@ -64,7 +65,9 @@ namespace PortableCompiler
             {
                 if (table != 1 && table != 2) return -2;
                 int coded = row << 2 | (table == 1 ? 1 : 0);
-                initialized = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true);
+                initialized = RuntimeTypeMetadata.Storage(image, heaps, layout, coded, true);
+                if (initialized == 0)
+                    initialized = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true);
             }
             if (initialized < 0 || initialized != type) return -2;
             // The operand stays the frame index: the local, or argument 0.

@@ -7,7 +7,7 @@ namespace PeLibrary
     // platform AssemblyRef, so a user type with the same spelling never binds.
     internal static class PlatformTypeReferences
     {
-        internal const int Console = 1, TextWriter = 2, String = 3;
+        internal const int Console = 1, TextWriter = 2, String = 3, Type = 4, TypeHandle = 5, TypeBase = 6;
 
         internal static int Identify(byte[] image, int[] streams, int[] methods, int[] counts, int first, int row)
         {
@@ -29,11 +29,19 @@ namespace PeLibrary
                     return PlatformAssemblyIdentity.IsConsoleAssembly(image, streams, methods, counts, assembly) ? Console : 0;
                 if (Named(image, heap, heapSize, name, 6, 0x69727453, 0x676e, 0)) // String
                     return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly) ? String : 0;
+                if (Named(image, heap, heapSize, name, 4, 0x65707954, 0, 0)) // Type
+                    return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly, includeRuntimeExtensions: false) ? Type : 0;
+                if (Named17(image, heap, heapSize, name, 0x746e7552, 0x54656d69, 0x48657079, 0x6c646e61, 0x65)) // RuntimeTypeHandle
+                    return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly, includeRuntimeExtensions: false) ? TypeHandle : 0;
                 return 0;
             }
             if (Named(image, heap, heapSize, space, 9, 0x74737953, 0x492e6d65, 0x4f) && // System.IO
                 Named(image, heap, heapSize, name, 10, 0x74786554, 0x74697257, 0x7265)) // TextWriter
                 return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly) ? TextWriter : 0;
+            if (Named17(image, heap, heapSize, space, 0x74737953, 0x522e6d65, 0x656c6665, 0x6f697463, 0x6e) && // System.Reflection
+                (Named(image, heap, heapSize, name, 10, 0x626d654d, 0x6e497265, 0x6f66) || // MemberInfo
+                 Named(image, heap, heapSize, name, 8, 0x65707954, 0x6f666e49, 0))) // TypeInfo
+                return PlatformAssemblyIdentity.IsReflectionAssembly(image, streams, methods, counts, assembly) ? TypeBase : 0;
             return 0;
         }
 
@@ -58,6 +66,15 @@ namespace PeLibrary
                 if (image[at + (uint)i] != unchecked((byte)(word >> ((i & 3) * 8)))) return false;
             }
             return image[at + (uint)length] == 0;
+        }
+
+        internal static bool Named17(byte[] image, uint heap, uint size, uint index, uint first, uint second, uint third,
+            uint fourth, uint last)
+        {
+            if (index == 0 || !Fits(index, 18, size)) return false;
+            uint at = heap + index;
+            return U32(image, at) == first && U32(image, at + 4) == second && U32(image, at + 8) == third &&
+                U32(image, at + 12) == fourth && U16(image, at + 16) == last;
         }
 
         private static uint Index(byte[] image, uint at, int width) => width == 2 ? U16(image, at) : U32(image, at);

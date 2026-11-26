@@ -86,6 +86,17 @@ namespace PortableCompiler
                         if (leftPlatform != rightPlatform) return 0;
                         continue;
                     }
+                    if (!field)
+                    {
+                        int leftRuntime = RuntimeTypeMetadata.Storage(caller, callerHeaps, callerLayout, leftToken, element == 0x11);
+                        int rightRuntime = RuntimeTypeMetadata.Storage(target, targetHeaps, targetLayout, rightToken, element == 0x11);
+                        // When one side is a TypeDef, use the ordinary nominal binder.
+                        if (leftRuntime != 0 && rightRuntime != 0)
+                        {
+                            if (leftRuntime != rightRuntime) return 0;
+                            continue;
+                        }
+                    }
 
                     // Local coded indices can differ even when the classes are
                     // identical. Match the resolved assembly and TypeDef row.

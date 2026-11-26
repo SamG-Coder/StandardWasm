@@ -154,14 +154,14 @@ namespace PortableCompiler
                 {
                     int type = signatures[offsets[index] + parameter];
                     if (CanExchangeClass(objects, type)) externalObjects = true;
-                    if (type == NullPointer || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
+                    if (type == NullPointer || RuntimeTypeMetadata.IsStorage(type) || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
                         return -2;
                 }
                 int result = signatures[offsets[index]];
                 // A foreign Wasm caller can mutate an escaped class or array
                 // that still has an alias inside the linked application.
                 if (CanExchangeClass(objects, result)) externalObjects = true;
-                if (result == NullPointer || ObjectLayouts.IsValueType(objects, result)) return -2;
+                if (result == NullPointer || RuntimeTypeMetadata.IsStorage(result) || ObjectLayouts.IsValueType(objects, result)) return -2;
                 exports[export] = index;
             }
             var body = new int[6];
@@ -480,6 +480,13 @@ namespace PortableCompiler
                 int kind = records[slot];
                 if (kind == 0) continue;
                 if (location.Length != 0) location[2] = slot / BranchIl.Width;
+                if (kind == BranchIl.LoadTypeToken)
+                {
+                    int global = RuntimeTypeTokens.Bind(bundle, image, layout, heaps, owner, records[slot + 1], globals);
+                    if (global < 0) return global;
+                    records[slot + 1] = global;
+                    continue;
+                }
                 if (kind == BranchIl.NewArray)
                 {
                     uint token = unchecked((uint)records[slot + 1]);
@@ -500,6 +507,9 @@ namespace PortableCompiler
                 }
                 if (kind == BranchIl.CastClass || kind == BranchIl.TestClass)
                 {
+                    // A descriptor is a Type on the CLR, even after widening to Object.
+                    // These targets need reflection-aware casts before ordinary layout matching applies.
+                    if (RuntimeTypeMetadata.RequiresReflectionCast(image, heaps, layout, records[slot + 1])) return -2;
                     int type = BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner,
                         records[slot + 1], objects);
                     if (type < 0) return type;
@@ -623,6 +633,11 @@ namespace PortableCompiler
                     // A static member would receive the address as a byref argument.
                     if (addressed && (opcode != 0x28 || bundle.Length == 0 || !MemberHasThis(image, heaps, layout, member)))
                         return -2;
+                    if (opcode == 0x28 && !addressed && RuntimeTypeMetadata.IsGetTypeFromHandle(image, heaps, layout, member))
+                    {
+                        records[slot] = BranchIl.TypeFromHandle;
+                        continue;
+                    }
                     // Exact System.Math intrinsics, identified by platform assembly and signature (decision 0003).
                     int intrinsic = opcode == 0x28 && !addressed ? PlatformMembers.MathIntrinsic(image, heaps, layout, member) : 0;
                     if (intrinsic != 0)
@@ -1148,7 +1163,8 @@ namespace PortableCompiler
 
         // Class slots have already resolved to an assembly-qualified layout.
         private static bool IsSharedBundleType(int type) =>
-            IsScalar(type) || type == String || type == ObjectReference || type == NullPointer || IsArray(StackType(type)) ||
+            IsScalar(type) || type == String || type == ObjectReference || type == NullPointer ||
+            RuntimeTypeMetadata.IsStorage(type) || IsArray(StackType(type)) ||
             // The platform EventArgs and EventHandler representations are
             // compiler-owned and bound by identity, so every assembly shares them.
             type == EventArgsReference || type == EventHandlerReference ||

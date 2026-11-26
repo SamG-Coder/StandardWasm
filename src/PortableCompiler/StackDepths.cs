@@ -133,6 +133,10 @@ namespace PortableCompiler
             int[] signatures, int[] offsets, int[] arities, int[] objects)
         {
             if (kind == LoadString) return Push(stack, allocated, depth, String);
+            if (kind == LoadTypeToken) return Push(stack, allocated, depth, PeLibrary.RuntimeTypeMetadata.Handle);
+            if (kind == TypeFromHandle)
+                return depth > 0 && stack[depth - 1] == PeLibrary.RuntimeTypeMetadata.Handle
+                    ? Push(stack, allocated, depth - 1, PeLibrary.RuntimeTypeMetadata.Type) : -1;
             // [] -> [writer]; [writer, string-or-null] -> []; [writer] -> [] for WriteLine().
             if (kind == ConsoleWriter) return Push(stack, allocated, depth, PeLibrary.ConsoleStorage.Writer);
             if (kind == ConsoleWrite)

@@ -6,7 +6,7 @@ namespace PeLibrary
     {
         internal const int SymbolWidth = 13;
         private const int FullKey = 6, KeyStart = 7, KeyLength = 8;
-        private const int Leaf = 9;
+        internal const int Leaf = 9;
         internal const int Depth = 10, AssemblyRow = 11, GenericParent = 12;
 
         // Version byte offset, assembly/type/namespace/member string indexes,
