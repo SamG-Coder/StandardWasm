@@ -64,12 +64,57 @@ B remains the fallback if no strategy works. It is correct and as fast on these 
 
 ## Open items (required before C is normative)
 
-- **Memory-pressure strategy, with a fixture.** Candidates to measure:
-  - an allocation budget that, when exceeded, suspends at the allocation slow path through JSPI (decision 0026) so finalization can run, then retries before raising `OutOfMemoryException`
-  - GC-visible accounting (a ballast object sized to live payload bytes) so the engine's collector schedules itself by payload volume
-  - compiler escape analysis that frees provably non-escaping payloads deterministically
+- **Memory-pressure strategy, with a fixture.** This was measured in stage 88 (#196): `npm run demo -- stage-88-payload-pressure`, with no forced GC, in Node 24.19.0 and Edge 158.0.4370.33. It reports peak linear memory for 625 MiB churned in yielding rounds, and for 312.5 MiB in one synchronous call:
 
-  The fixture must keep a 625 MiB churn of short-lived arrays under a stated linear-memory peak in Node and Edge without forced collection, and turn true exhaustion into a typed `OutOfMemoryException`.
+  | Strategy | Node yielding | Node sync | Edge yielding | Edge sync |
+  | --- | --- | --- | --- | --- |
+  | baseline | 94 MiB | 312.5 | 256 | 312.5 |
+  | ballast 1/8 (GC byte array of payload/8 on each wrapper) | 91 | 312.5 | **9.4** | 312.5 |
+  | ballast 1/32 | 97 | 312.5 | 50 | 312.5 |
+  | budget 32 MiB (JSPI yield in the allocation slow path, decision 0026) | 79 | 157 | 273 | 229 |
+  | ballast 1/32 + budget 32 MiB | 85 | 157 | 110 | **110** |
+
+  - **No strategy enforces a hard bound.** Nearly every slow-path yield found the budget still exceeded, because the engine had not collected yet, and browsers expose no API to request collection or to report external memory.
+  - **Ballast** makes Edge collect promptly for code that yields (256 → 9.4 MiB at 1/8). It had no effect in Node, and none for a synchronous loop, because finalization callbacks only run between tasks.
+  - **Budget plus JSPI yield** is the only measure that lowers synchronous-loop peaks, and it does so in both engines.
+  - **Combined,** they give the lowest worst case (110 MiB in Edge for both patterns, 157 MiB in Node), but the bound is set by the engine's GC schedule, not by StandardWasm.
+
+  **Model B measured on the same churn** (`pressure-b.wat`). Every object lives in linear memory, roots sit on a shadow stack, and a precise mark-sweep collector runs synchronously in the allocation slow path once 32 MiB has been allocated since the last collection. A 10,000-node list stays live and is traced by every collection.
+
+  | B | Node yielding | Node sync | Edge yielding | Edge sync |
+  | --- | --- | --- | --- | --- |
+  | no collection (8 MiB object table) | 633.5 MiB | 320.875 | 633.5 | 320.875 |
+  | 32 MiB collection trigger, 10k live nodes | **40.375 MiB**, 19 collections, max pause ≤ 1.4 ms | **40.4**, 9 collections | **40.4**, max pause 0.1 ms | **40.4** |
+  | 32 MiB collection trigger, **1 M live nodes** | **63.0625 MiB**, max pause 4.9 ms, 35 ms total | **63.1**, max pause 1.6 ms, 13 ms total | **63.1**, max pause 2.1 ms, 34 ms total | **63.1**, max pause 1.7 ms |
+
+  32 MiB is the **collection trigger** (bytes allocated since the last collection), not a cap on memory. The measured peak adds the live graph, the object table (8 MiB here; an earlier 1 MiB table gave 33.375 MiB with 10k nodes), block headers and the allocation that crosses the trigger. The live-list check is a single checksum taken after the churn ends, and the stage fails if it doesn't match.
+
+  **Exhaustion, exercised.** With a configured ceiling, allocation stops with an explicit -1 and the allocator stays valid: its cursor moves only after growth succeeds, and `buildLive` propagates failure before writing. Model C stops at a 4 MiB ceiling after 3.9375 of 312.5 MiB requested. Model B, with no collection and a 12.5 MiB ceiling, stops after 4.1875 MiB with the live list intact. In the compiler, that -1 becomes `OutOfMemoryException`. Every other run completes its full requested churn, and the stage asserts that.
+
+  The live list was intact after every collection. Edge pause figures are at the page's 0.1 ms timer resolution.
+
+  **Consequence.** On memory, B is clearly stronger. Its peak tracks live data plus the collection trigger (plus table and block overhead), even inside one synchronous call, where C peaked at 110–157 MiB at best. Its collections were cheap here. The comparison is not finished, though, because this probe flatters B in two ways:
+  - **Live heap.** With 1,000,000 live list nodes, the bound still held (63 MiB) and the worst pause was 1.6–4.9 ms. That's about 2–5 ns per live object for mark plus sweep, on a simple singly linked graph. Real object graphs, with more pointers per object and less locality, will cost more per object. This is evidence that pauses scale acceptably, not a final figure.
+  - Every reference held by JavaScript (DOM handles, callbacks, WebGPU objects) must become an explicit root or handle table under B. Under C, Wasm GC handles cycles through JS for free.
+
+  B also needs precise stack maps for every compiled frame (shadow-stack spilling of references at every call), and that costs code size and speed in all compiled code, not just allocation. **Frame cost of B's roots** (`spill.wat`). This is a call-heavy probe: a recursive sum over a 262,143-node binary tree, 20 traversals, median of 7, in three forms:
+- C: Wasm GC structs, with references in Wasm locals
+- unrooted: linear nodes with no rooting, a lower bound that is unsafe under a collector
+- B: linear nodes with every reference that is live across a call stored to a shadow-stack slot and cleared on return
+
+| | C (Wasm GC) | linear, unrooted | B (spilled roots) |
+| --- | --- | --- | --- |
+| Node | 12.0 ms | 8.7 ms | 11.1 ms |
+| Edge | 8.2 ms | 6.2 ms | 10.3 ms |
+
+Rooting costs B 28% (Node) to 66% (Edge) over unrooted code, which puts B within −7% to +26% of C. Frame cost is therefore not what decides C versus B. One microbenchmark can't establish more than that.
+
+**Where this leaves the choice.**
+- **B** gives a hard memory bound and synchronous collection, at the cost of its own collector, stack-slot rooting in every frame, and explicit handle tables for every JS-held reference.
+- **C** keeps engine-managed references and free cycles through JS, but only a soft bound that depends on the engine's GC schedule (the best mitigation, ballast plus a JSPI-budgeted yield, reached 85–157 MiB here).
+
+Both are viable, and this decision now needs Codex's judgment on which property matters more for unmodified WinForms applications, rather than another probe. Then C vs B is decided with Codex.
+
 - **Allocator.** A size-class free-list allocator with zero-initialization (the CLR guarantees zeroed arrays) and growth via `memory.grow`. The prototypes use bump and single-size LIFO allocators.
 - **Interior pointers into class fields.** Pinning a field of a class instance (`fixed (int* p = &obj.Field)`) isn't covered, because class instances stay in Wasm GC. Whole-program compilation could find every type whose fields are ever pinned and give those types C-style storage. That needs its own fixture.
 - **Diagnostics until implemented.** IL that pins or takes the address of managed memory remains an explicit unsupported diagnostic at the method and IL offset.
