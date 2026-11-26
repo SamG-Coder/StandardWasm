@@ -2,6 +2,8 @@
 
 Run npm ci once from the repository root. Run npm run demo to list available stages. Compiler stages build a .NET Standard DLL and run its Wasm output. Use npm test for compiler parity and npm run test:winforms for the Windows and browser application check.
 
+The WinForms-style stages (14 onward) are compiler and rendering demonstrations. Binary compatibility with real WinForms applications comes from compiling upstream dotnet/winforms on a browser platform layer ([decision 0024](../docs/decisions/0024-binary-compatible-applications.md), [roadmap](../docs/roadmap.md)).
+
 | Stage | Run from repository root | Expected result |
 | --- | --- | --- |
 | [01 · Scalar methods](stage-01-scalars/README.md) | `npm run demo -- stage-01-scalars` | SumSquares(10) = 385 |
