@@ -84,7 +84,7 @@ namespace PortableCompiler
             int count = CompressedTables.FindWithHeaps(image, layout, heaps);
             if (count < 0)
                 return count == MethodDefinitions.Unsupported ? -2 : -1;
-            int mainInitialization = TypeInitializers.RejectModuleInitializer(image, layout, heaps);
+            int mainInitialization = TypeInitializers.CheckModuleInitializer(image, layout, heaps, count);
             if (mainInitialization < 0) return mainInitialization;
 
             // A MethodDef row is local to its image. Give every row a disjoint
@@ -106,7 +106,7 @@ namespace PortableCompiler
                 int dependencyInterfaces = InterfaceImplementations.ReadTable(dependency, dependencyHeaps, dependencyLayout, interfaceTable);
                 if (dependencyInterfaces < 0) return dependencyInterfaces;
                 interfaces += dependencyInterfaces;
-                int dependencyInitialization = TypeInitializers.RejectModuleInitializer(dependency, dependencyLayout, dependencyHeaps);
+                int dependencyInitialization = TypeInitializers.CheckModuleInitializer(dependency, dependencyLayout, dependencyHeaps, size);
                 if (dependencyInitialization < 0) return dependencyInitialization;
                 if (size >= int.MaxValue - bases[module]) return -2;
                 bases[module + 1] = bases[module] + size;
@@ -133,6 +133,8 @@ namespace PortableCompiler
             var thunks = new int[functionCapacity + 1];
             var signatures = new int[output.Length];
             var frame = new int[output.Length];
+            var virtualTypes = new int[output.Length];
+            var virtualUsed = new int[1];
             var moduleCode = new byte[output.Length];
             var literals = new byte[output.Length];
             var literalSize = new int[1];
@@ -262,9 +264,10 @@ namespace PortableCompiler
                     status = ArrayInitializers.Lower(image, heaps, layout, records, literals, literalSize, location);
                     if (status < 0)
                         return status;
+                    virtualUsed[0] = 0;
                     functions = LinkOperands(main, bundle, ranges, image, layout, heaps, owner, source, context,
                         parameters == 0 ? 0 : signatures[signature + 1], valueConstructor, records, owners, rows, contexts,
-                        bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse);
+                        bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed);
                     if (functions < 0)
                         return functions;
 
@@ -286,8 +289,14 @@ namespace PortableCompiler
                         if (exceptionLocals < 0) return exceptionLocals;
                     }
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
-                        result, signatures, offsets, arities, location, catchRegion, outgoingNulls, objects);
+                        result, signatures, offsets, arities, location, catchRegion, outgoingNulls, objects, virtualTypes);
                     if (status < 0) return status;
+                    if (virtualUsed[0] != 0)
+                    {
+                        functions = LinkVirtualCalls(main, bundle, ranges, records, depths, states, maximum, virtualTypes,
+                            owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions, location);
+                        if (functions < 0) return functions;
+                    }
 
                     if (location.Length != 0) location[2] = -1;
                     int capacity = body[1] * 64 + 32;
@@ -423,7 +432,7 @@ namespace PortableCompiler
 
         private static int LinkOperands(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
             int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
-            int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse)
+            int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
@@ -649,25 +658,34 @@ namespace PortableCompiler
                     }
                     if (delegateMember == 0 && stringMember == 0 && constructorType == Delegate && bundle.Length != 0)
                     {
-                        var symbol = new int[4];
+                        var symbol = new int[5];
                         bool baseCall = opcode == 0x28 && callerReceiver >= ObjectLayouts.FirstClass &&
                             ObjectLayouts.IsConstructor(image, heaps, layout, callerRow);
                         if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
                         if (callerType < 0) return -1;
                         int resolved = AssemblyBundle.Resolve(main, bundle, ranges, image, layout, heaps, owner, member, opcode, baseCall, objects, symbol,
-                            context, callerType, addressed);
+                            context, callerType, allowVirtual: !addressed, valueAddress: addressed);
                         if (resolved < 0) return resolved;
                         int targetOwner = symbol[0], targetRow = symbol[1], targetContext = symbol[3];
                         int linked = Lookup(owners, rows, contexts, bases, indices, functions, targetOwner, targetRow, targetContext);
-                        if (linked < 0)
+                        bool virtualMethod = symbol[4] != 0;
+                        bool deferred = opcode == 0x6f && virtualMethod;
+                        if (deferred && targetContext != 0) return -2;
+                        if (deferred || linked < 0)
                         {
                             byte[] targetImage = AssemblyBundle.Load(main, bundle, ranges, targetOwner);
                             var targetLayout = new int[4];
                             var targetHeaps = new int[8];
-                            if (CompressedTables.FindWithHeaps(targetImage, targetLayout, targetHeaps) < 0)
-                                return -1;
+                            if (CompressedTables.FindWithHeaps(targetImage, targetLayout, targetHeaps) < 0) return -1;
+                            if (deferred)
+                            {
+                                int staged = StageVirtualCall(main, bundle, ranges, targetImage, targetLayout, targetHeaps,
+                                    targetOwner, targetRow, objects, records, slot, virtualTypes, virtualUsed);
+                                if (staged < 0) return staged;
+                                continue;
+                            }
                             functions = Register(main, bundle, ranges, targetImage, targetLayout, targetHeaps, targetOwner, targetRow,
-                                targetContext, owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions);
+                                targetContext, owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions, allowVirtual: virtualMethod);
                             if (functions < 0) return functions;
                             linked = functions - 1;
                         }
@@ -717,11 +735,20 @@ namespace PortableCompiler
                     records[slot] = BranchIl.BaseCtor;
                     continue;
                 }
+                bool virtualMethodLocal = (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x40) != 0;
+                if (virtualMethodLocal && kind == BranchIl.LoadFunction) return -2;
+                if (virtualMethodLocal && kind == BranchIl.Call && records[slot + 3] != 0)
+                {
+                    int staged = StageVirtualCall(main, bundle, ranges, image, layout, heaps, owner, target,
+                        objects, records, slot, virtualTypes, virtualUsed);
+                    if (staged < 0) return staged;
+                    continue;
+                }
                 int index = indices[bases[owner] + target] - 1;
                 if (index < 0)
                 {
                     functions = Register(main, bundle, ranges, image, layout, heaps, owner, target, 0, owners, rows, contexts, bases, indices,
-                        arities, offsets, signatures, objects, functions);
+                        arities, offsets, signatures, objects, functions, allowVirtual: virtualMethodLocal && kind == BranchIl.Call);
                     if (functions < 0) return functions;
                     index = functions - 1;
                 }
@@ -856,6 +883,75 @@ namespace PortableCompiler
             return ObjectLayouts.IsConstructor(targetImage, targetHeaps, targetLayout, row);
         }
 
+        private static int StageVirtualCall(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+            int[] layout, int[] heaps, int owner, int row, int[] objects, int[] records, int slot,
+            int[] types, int[] used)
+        {
+            int declaring = ObjectLayouts.Owner(image, heaps, layout, row, false);
+            if (declaring < 1) return -1;
+            int receiver = BundleLayouts.Register(main, bundle, ranges, image, layout, heaps, owner, declaring, objects);
+            if (receiver < 0) return receiver;
+            if (ObjectLayouts.IsInterface(objects, receiver) || ObjectLayouts.IsValueType(objects, receiver)) return -2;
+            int shape = used[0];
+            int blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
+            int arity = SignatureTypes.Read(main, bundle, ranges, image, heaps, blob, types, shape,
+                receiver, layout, objects, owner, 0);
+            if (arity < 1) return arity < 0 ? arity : -1;
+            if (!IsSharedBundleSignature(types, shape, arity)) return -2;
+            used[0] = shape + arity + 1;
+            records[slot] = BranchIl.VirtualCall;
+            records[slot + 1] = shape;
+            records[slot + 3] = arity;
+            // The following four IL bytes are the token operand. Their
+            // record kinds remain zero, so no control-flow edge enters them.
+            records[slot + BranchIl.Width + 1] = owner;
+            records[slot + BranchIl.Width + 3] = row;
+            return 0;
+        }
+
+        private static int LinkVirtualCalls(byte[] main, byte[] bundle, int[] ranges, int[] records,
+            int[] depths, int[] states, int maximum, int[] types, int[] owners, int[] rows, int[] contexts, int[] bases,
+            int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int functions, int[] location)
+        {
+            var symbol = new int[2];
+            var layout = new int[4];
+            var heaps = new int[8];
+            for (int pc = 0; pc < depths.Length; pc++)
+            {
+                int slot = pc * BranchIl.Width;
+                if (records[slot] != BranchIl.VirtualCall || depths[pc] == 0) continue;
+                if (location.Length != 0) location[2] = pc;
+                int shape = records[slot + 1], arity = records[slot + 3];
+                int actual = states[pc * maximum + depths[pc] - 1 - arity];
+                int status = VirtualSlots.SelectVirtualBody(main, bundle, ranges, objects, actual, types[shape + 1],
+                    records[slot + BranchIl.Width + 1], records[slot + BranchIl.Width + 3], symbol);
+                if (status < 0) return status;
+                int owner = symbol[0], row = symbol[1];
+                int function = indices[bases[owner] + row] - 1;
+                if (function < 0)
+                {
+                    byte[] image = AssemblyBundle.Load(main, bundle, ranges, owner);
+                    if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+                    functions = Register(main, bundle, ranges, image, layout, heaps, owner, row,
+                        0, owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions, allowVirtual: true);
+                    if (functions < 0) return functions;
+                    function = functions - 1;
+                }
+
+                // Stack analysis used the slot's shape. The body may only
+                // narrow its receiver. All other stack types must agree.
+                int bound = offsets[function];
+                if (arities[function] != arity || signatures[bound] != types[shape] ||
+                    !Assignable(actual, signatures[bound + 1], objects)) return -2;
+                for (int arg = 2; arg <= arity; arg++)
+                    if (signatures[bound + arg] != types[shape + arg]) return -2;
+                records[slot] = BranchIl.Call;
+                records[slot + 1] = function;
+                records[slot + 3] = 1; // Preserve the callvirt null check.
+            }
+            return functions;
+        }
+
         private static bool LinkExchange(byte[] image, int[] heaps, int[] layout, int[] records, int slot)
         {
             // Keep the interior reference confined to this fused operation.
@@ -898,11 +994,11 @@ namespace PortableCompiler
 
         private static int Register(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps, int owner, int row,
             int context, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures,
-            int[] objects, int functions)
+            int[] objects, int functions, bool allowVirtual = false)
         {
             if (functions >= owners.Length) return -3;
             int offset = functions == 0 ? 0 : offsets[functions - 1] + arities[functions - 1] + 1;
-            int arity = MethodShape(main, bundle, ranges, image, layout, heaps, owner, row, context, signatures, offset, objects);
+            int arity = MethodShape(main, bundle, ranges, image, layout, heaps, owner, row, context, signatures, offset, objects, allowVirtual);
             if (arity < 0)
                 return arity;
             owners[functions] = owner;
@@ -928,11 +1024,11 @@ namespace PortableCompiler
         }
 
         private static int MethodShape(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps, int assembly, int row,
-            int context, int[] types, int offset, int[] objects)
+            int context, int[] types, int offset, int[] objects, bool allowVirtual)
         {
             int attributes = MethodDefinitions.ReadColumn(image, layout, row, 2);
             int implementation = MethodDefinitions.ReadColumn(image, layout, row, 1);
-            if ((attributes & 0x2440) != 0 || (implementation & 7) != 0)
+            if ((attributes & 0x2400) != 0 || (!allowVirtual && (attributes & 0x40) != 0) || (implementation & 7) != 0)
                 return -2;
             int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
             if (owner < 0) return -1;

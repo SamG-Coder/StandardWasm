@@ -112,8 +112,11 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [106 � Static field storage](stage-106-static-field-storage/README.md) | `npm run demo -- stage-106-static-field-storage` | Private typed Wasm globals shared by linked managed methods |
 | [107 � Framework facades](stage-107-framework-facades/README.md) | `npm run demo -- stage-107-framework-facades` | Run original .NET Standard libraries through the runtime facade |
 | [108 � BeforeFieldInit calls](stage-108-beforefieldinit-calls/README.md) | `npm run demo -- stage-108-beforefieldinit-calls` | Allow non-triggering static calls and diagnose reached initializers |
+| [109 � Virtual dispatch on sealed receivers](stage-109-exact-virtual-dispatch/README.md) | `npm run demo -- stage-109-exact-virtual-dispatch` | Resolve inherited and hidden virtual slots for sealed classes |
 | [110 · Console arguments and streams](stage-110-console-arguments/README.md) | `npm run demo -- stage-110-console-arguments` | Windows, Node and Edge match on exit status and stdout/stderr bytes for `Main(string[])` |
 | [111 · Value-type construction](stage-111-value-construction/README.md) | `npm run demo -- stage-111-value-construction` | Local and linked value constructors, in place and through newobj, match the CLR |
+| [112 · Standalone Webcil intake](stage-112-standalone-webcil-intake/README.md) | `npm run demo -- stage-112-standalone-webcil-intake` | Inspect the original .NET 10 standalone publish in Node and Edge |
+| [114 · Empty module startup](stage-114-empty-module-startup/README.md) | `npm run demo -- stage-114-empty-module-startup` | Prove empty module startup in standalone and linked .NET Standard libraries |
 
 ## Adding a stage
 

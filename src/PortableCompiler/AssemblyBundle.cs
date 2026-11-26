@@ -41,7 +41,7 @@ namespace PortableCompiler
         // declaring layout, which substitutes VAR in a TypeSpec parent.
         internal static int Resolve(byte[] main, byte[] bundle, int[] ranges, byte[] caller,
             int[] layout, int[] heaps, int owner, int member, int opcode, bool baseCall, int[] objects, int[] symbol, int context, int callerType,
-            bool valueAddress = false)
+            bool allowVirtual = false, bool valueAddress = false)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedParent: true);
@@ -99,8 +99,8 @@ namespace PortableCompiler
                     target, targetLayout, targetHeaps, matched, signature, false, objects, closed);
                 if (match < 0) return match;
                 if (match == 0) continue;
-                // Direct calls can bind a known body. callvirt additionally
-                // needs a null check and can only bind nonvirtual methods here.
+                // Bind the declaration. The caller may defer virtual slot
+                // selection until it has proved the receiver's type.
                 bool constructor = ObjectLayouts.IsConstructor(target, targetHeaps, targetLayout, candidate);
                 if (opcode == 0x73)
                 {
@@ -109,10 +109,11 @@ namespace PortableCompiler
                 // call .ctor runs a base constructor, or constructs a value on a
                 // location's address. The linker then requires a value receiver.
                 else if (constructor ? !baseCall && !valueAddress || opcode != 0x28 : access != 6 && !local) return -2;
-                if (opcode == 0x6f && (flags & 0x40) != 0) return -2;
+                if (opcode == 0x6f && (flags & 0x40) != 0 && !allowVirtual) return -2;
                 if (row != 0) return -5;
                 row = candidate;
                 symbol[2] = constructor ? declaring : 0;
+                if (allowVirtual) symbol[4] = flags & 0x40;
             }
             if (row == 0) return -6;
             symbol[0] = matched;

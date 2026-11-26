@@ -1,0 +1,1 @@
+{"assembly":"VirtualDispatchDemo","exportType":"VirtualDispatchDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["VirtualDispatchDependency.dll"]},{"name":"RunInherited"}],"generated":{"bundle":true,"capacity":65536,"arguments":[5]},"expected":16}
