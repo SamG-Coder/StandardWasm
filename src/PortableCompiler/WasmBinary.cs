@@ -13,7 +13,7 @@ namespace PortableCompiler
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostImports)
+            byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostImports, int reflectionHeapFixup)
         {
             // Imported functions precede defined functions in the Wasm index
             // space. Emitted bodies already include this offset in their calls.
@@ -180,7 +180,8 @@ namespace PortableCompiler
             if (remaining < 0 || (literalSize != 0 && (dataOverhead > remaining ||
                 literalSize > remaining - dataOverhead || Reserve(remaining, dataOverhead + literalSize) < 0)))
                 return -3;
-            if (hasRemainder) FloatRemainderWasm.ResolveCalls(bodies, remainderFixup, remainderIndex);
+            if (reflectionHeapFixup != 0) WasmIndexFixups.Resolve(bodies, reflectionHeapFixup, descriptorHeap);
+            if (hasRemainder) WasmIndexFixups.Resolve(bodies, remainderFixup, remainderIndex);
 
             output[0] = 0;
             output[1] = 0x61;

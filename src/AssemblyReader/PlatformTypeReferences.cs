@@ -7,7 +7,7 @@ namespace PeLibrary
     // platform AssemblyRef, so a user type with the same spelling never binds.
     internal static class PlatformTypeReferences
     {
-        internal const int Console = 1, TextWriter = 2, String = 3, Type = 4, TypeHandle = 5, TypeBase = 6;
+        internal const int Console = 1, TextWriter = 2, String = 3, Type = 4, TypeHandle = 5, TypeBase = 6, Module = 7, Assembly = 8;
 
         internal static int Identify(byte[] image, int[] streams, int[] methods, int[] counts, int first, int row)
         {
@@ -39,9 +39,14 @@ namespace PeLibrary
                 Named(image, heap, heapSize, name, 10, 0x74786554, 0x74697257, 0x7265)) // TextWriter
                 return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly) ? TextWriter : 0;
             if (Named17(image, heap, heapSize, space, 0x74737953, 0x522e6d65, 0x656c6665, 0x6f697463, 0x6e) && // System.Reflection
-                (Named(image, heap, heapSize, name, 10, 0x626d654d, 0x6e497265, 0x6f66) || // MemberInfo
-                 Named(image, heap, heapSize, name, 8, 0x65707954, 0x6f666e49, 0))) // TypeInfo
-                return PlatformAssemblyIdentity.IsReflectionAssembly(image, streams, methods, counts, assembly) ? TypeBase : 0;
+                PlatformAssemblyIdentity.IsReflectionAssembly(image, streams, methods, counts, assembly))
+            {
+                if (Named(image, heap, heapSize, name, 6, 0x75646f4d, 0x656c, 0)) return Module;
+                if (Named(image, heap, heapSize, name, 8, 0x65737341, 0x796c626d, 0)) return Assembly;
+                if (Named(image, heap, heapSize, name, 10, 0x626d654d, 0x6e497265, 0x6f66) || // MemberInfo
+                    Named(image, heap, heapSize, name, 8, 0x65707954, 0x6f666e49, 0)) return TypeBase; // TypeInfo
+            }
+
             return 0;
         }
 

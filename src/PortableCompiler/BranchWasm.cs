@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects)
+            byte[] outgoingNulls, int[] objects, RuntimeReflectionPlan reflection)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -160,6 +160,15 @@ namespace PortableCompiler
                     used = Local(code, used, 0x21, Spill(spills, maximum, PeLibrary.RuntimeTypeMetadata.Handle, depth));
                 }
                 // TypeFromHandle changes the CLI category while retaining the reference in the same spill.
+                else if (kind == ReadReflection)
+                {
+                    int source = states[state + top];
+                    int target = operand == PeLibrary.ReflectionMembers.ModuleName ? String : ObjectReference;
+                    int receiver = Spill(spills, maximum, source, top);
+                    used = GuardNull(code, used, receiver);
+                    used = RuntimeReflectionWasm.Read(code, used, frameShape[7], operand, receiver,
+                        Spill(spills, maximum, target, top), pcLocal, reflection);
+                }
                 else if (kind == LoadString)
                 {
                     int characters = records[slot + 3];

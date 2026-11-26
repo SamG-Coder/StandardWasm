@@ -20,6 +20,7 @@ namespace BootstrapLibrary
             PortableCompiler.MethodCompiler.CompileModuleDetailed(image, entries, output, location);
         public static int CompileBundleDetailed(byte[] bundle, byte[] entries, byte[] output, int[] location) =>
             PortableCompiler.MethodCompiler.CompileBundleDetailed(bundle, entries, output, location);
+        public static int BundleModuleOrigins() => 1;
         public static int ReadWebcilEntryToken(byte[] image)
         {
             int token = PeLibrary.WebcilLocator.ReadEntryToken(image);

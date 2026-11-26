@@ -40,11 +40,12 @@ export async function runConsoleEntry(compilerBytes, selection) {
     // Detailed compilation reports assembly, MethodDef row and IL offset,
     // for example for a Console member outside the host contract.
     const location = compiler.CreateDiagnostic();
+    const origins = compiler.BundleModuleOrigins?.() === 1;
     let length;
-    if (companions.length === 0)
+    if (companions.length === 0 && !origins)
         length = compiler.CompileDetailed(upload(selection.entry.bytes), row, output, location);
     else {
-        const [bundle, entries] = packEntry(selection.entry, companions, row);
+        const [bundle, entries] = packEntry(selection.entry, companions, row, origins);
         length = compiler.CompileBundleDetailed(upload(bundle), upload(entries), output, location);
     }
     if (length < 0) return {

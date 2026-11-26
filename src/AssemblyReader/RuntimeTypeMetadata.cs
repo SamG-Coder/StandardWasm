@@ -4,21 +4,25 @@ namespace PeLibrary
 {
     internal static class RuntimeTypeMetadata
     {
-        internal const int Type = NativeStorage.Vector + 1, Handle = Type + 1;
+        internal const int Type = NativeStorage.Vector + 1, Handle = Type + 1, Module = Handle + 1, Assembly = Module + 1;
 
-        internal static bool IsStorage(int type) => type == Type || type == Handle;
+        internal static bool IsStorage(int type) => type == Handle || IsReference(type);
+        internal static bool IsReference(int type) => type == Type || type == Module || type == Assembly;
 
         internal static int Storage(byte[] image, int[] heaps, int[] layout, int coded, bool valueType)
         {
             int kind = Kind(image, heaps, layout, coded);
-            return valueType ? (kind == PlatformTypeReferences.TypeHandle ? Handle : 0) :
-                (kind == PlatformTypeReferences.Type ? Type : 0);
+            if (valueType) return kind == PlatformTypeReferences.TypeHandle ? Handle : 0;
+            if (kind == PlatformTypeReferences.Type) return Type;
+            if (kind == PlatformTypeReferences.Module) return Module;
+            return kind == PlatformTypeReferences.Assembly ? Assembly : 0;
         }
 
         internal static bool RequiresReflectionCast(byte[] image, int[] heaps, int[] layout, int coded)
         {
             int kind = Kind(image, heaps, layout, coded);
-            return kind == PlatformTypeReferences.Type || kind == PlatformTypeReferences.TypeBase;
+            return kind == PlatformTypeReferences.Type || kind == PlatformTypeReferences.TypeBase ||
+                kind == PlatformTypeReferences.Module || kind == PlatformTypeReferences.Assembly;
         }
 
         private static int Kind(byte[] image, int[] heaps, int[] layout, int coded)

@@ -31,10 +31,11 @@ export async function runManagedEntry(compilerBytes, selection) {
     // The PE reader verified the MethodDef token. The compiler takes its row.
     const row = entryToken & 0xffffff;
     const result = { entry: selection.entry.path, entryToken, target, runtimeTarget };
+    const origins = compiler.BundleModuleOrigins?.() === 1;
     let length;
-    if (companions.length === 0) length = compiler.Compile(upload(selection.entry.bytes), row, output);
+    if (companions.length === 0 && !origins) length = compiler.Compile(upload(selection.entry.bytes), row, output);
     else {
-        const [bundle, entries] = packEntry(selection.entry, companions, row);
+        const [bundle, entries] = packEntry(selection.entry, companions, row, origins);
         const source = upload(bundle), manifest = upload(entries);
         if (typeof compiler.CompileBundleDetailed === "function") {
             const location = compiler.CreateDiagnostic();

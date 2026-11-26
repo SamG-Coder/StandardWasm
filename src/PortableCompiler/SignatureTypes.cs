@@ -32,7 +32,7 @@ namespace PortableCompiler
         // Widen supported class references without allocating or losing sender identity.
         // Boxing and other CLR reference conversions use separate IL operations.
         internal static bool IsObjectReference(int type) =>
-            type == RuntimeTypeMetadata.Type || type >= ObjectLayouts.FirstClass ||
+            RuntimeTypeMetadata.IsReference(type) || type >= ObjectLayouts.FirstClass ||
             type >= ObjectLayouts.ObjectReference && type <= ObjectLayouts.EventHandlerReference;
 
         // Zero denotes the CLI null literal in a live stack slot and void in a method signature.

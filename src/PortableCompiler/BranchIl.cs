@@ -23,7 +23,7 @@ namespace PortableCompiler
         // constructor's receiver: [S, arguments] -> []. The operand is the
         // function and the auxiliary field is the addressed frame index.
         internal const int ConstructValue = 66;
-        internal const int LoadTypeToken = 67, TypeFromHandle = 68;
+        internal const int LoadTypeToken = 67, TypeFromHandle = 68, ReadReflection = 70;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;

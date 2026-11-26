@@ -44,6 +44,6 @@ embedded in its declaring assembly. Linked resource files and forwarded
 resources remain explicit diagnostics. The reader exposes the validated
 bytes for the runtime stream to consume.
 
-The loader envelope and embedded reader are implemented. Runtime descriptor
-dispatch, stream behavior, and the unchanged WinForms startup replay are
-still required for Stage 131.
+The loader envelope and embedded reader are implemented. Type.Module, Type.Assembly,
+Module.Assembly and Module.Name lower against the canonical descriptors. Resource
+stream behavior and full-stage verification are still required.
