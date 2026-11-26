@@ -18,11 +18,11 @@ internal static class InterfaceReferenceCases
         byte[] output = new byte[capacity];
         int[] location = CompilerExports.CreateDiagnostic();
 
-        Check(nameof(Kernels.Run), Kernels.Run);
-        Check(nameof(Kernels.Widen), Kernels.Widen);
+        int[][] values = [[int.MinValue], [-5], [0], [5], [int.MaxValue]];
+        Check(nameof(Kernels.Run), values, arguments => Kernels.Run(arguments[0]));
+        Check(nameof(Kernels.Widen), values, arguments => Kernels.Widen(arguments[0]));
+        Check(nameof(Kernels.RejectDispatch), [[]], _ => Kernels.RejectDispatch());
         Reject(bundle, nameof(Kernels.Dispatch), nameof(Kernels.Dispatch), -1, -2);
-        Reject(bundle, nameof(Kernels.RejectDispatch), nameof(Kernels.Dispatch),
-            Opcode(nameof(Kernels.Dispatch), OpCodes.Callvirt), -2);
         if (Kernels.RejectCast(5) != 0) throw new InvalidOperationException("The CLR accepted an unrelated type.");
         Reject(bundle, nameof(Kernels.RejectCast), nameof(Kernels.RejectCast),
             Opcode(nameof(Kernels.RejectCast), OpCodes.Isinst), -2);
@@ -42,7 +42,7 @@ internal static class InterfaceReferenceCases
         Reject(BundleCases.Pack(mutated, dependency), nameof(Kernels.Store), nameof(Kernels.Store),
             Opcode(nameof(Kernels.Store), OpCodes.Stfld), -1);
 
-        void Check(string name, Func<int, int> clr)
+        void Check(string name, int[][] inputCases, Func<int[], int> clr)
         {
             byte[] entries = Manifest(name);
             int size = CompilerExports.CompileBundleDetailed(bundle, entries, output, location);
@@ -50,13 +50,19 @@ internal static class InterfaceReferenceCases
                 throw new InvalidOperationException($"{name} returned {size} at [{string.Join(", ", location)}].");
             string hex = Convert.ToHexString(output.AsSpan(0, size)).ToLowerInvariant();
             var inputs = new[] { Encode(bundle), Encode(entries) };
-            foreach (int value in new[] { int.MinValue, -5, 0, 5, int.MaxValue })
+            foreach (int[] arguments in inputCases)
+            {
+                int? expected = null;
+                string exception = null;
+                try { expected = clr(arguments); }
+                catch (NullReferenceException error) { exception = error.GetType().FullName; }
                 cases.Add(new
                 {
                     module = "BootstrapLibrary", method = "CompileBundle", fixture = name, inputs,
-                    generated = new { capacity, bundle = true, arguments = new[] { value }, hex },
-                    expected = clr(value)
+                    generated = new { capacity, bundle = true, arguments, hex, exceptionType = exception },
+                    expected, exception
                 });
+            }
         }
 
         void Reject(byte[] input, string entry, string failingMethod, int offset, int expected)

@@ -26,11 +26,10 @@ namespace PeLibrary
             return 0;
         }
 
-        // An explicit override can bind the referenced slot to a differently
-        // named body. Reject any MethodImpl declaration with this slot name.
-        // Unrelated declarations cannot map the named class slot.
-        internal static int HasNamedMethodImpl(byte[] image, int[] heaps, int[] layout, int type,
-            byte[] declaration, int[] declarationHeaps, int slotName)
+        // Return the TypeDefOrRef of the next MethodImpl declaration with
+        // this name. Zero ends the scan; an unmodeled parent returns -2.
+        internal static int NextNamedMethodImplParent(byte[] image, int[] heaps, int[] layout, int type,
+            byte[] declaration, int[] declarationHeaps, int slotName, int[] cursor)
         {
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;
@@ -43,14 +42,14 @@ namespace PeLibrary
             int memberTable = counts[10] == 0 ? 0 : MetadataTableRows.TableStart(heaps, layout, counts, 10);
             int strings = layout[2], blobs = layout[3];
             int memberWidth = StandaloneSignatures.Width(counts, 10, strings, blobs);
-            for (int i = 0; i < counts[25]; i++)
+            for (int i = cursor[0]; i < counts[25]; i++)
             {
                 uint at = (uint)(table + i * width);
                 if (Index(image, at, classWidth) != type) continue;
                 int token = Index(image, at + (uint)(classWidth + methodWidth), methodWidth);
                 int row = token >> 1;
                 if (row < 1) return -1;
-                int name;
+                int name, parent = 0;
                 if ((token & 1) == 0)
                 {
                     if (row > counts[6]) return -1;
@@ -59,11 +58,28 @@ namespace PeLibrary
                 else
                 {
                     if (row > counts[10] || memberTable < 0) return -1;
-                    uint nameAt = (uint)(memberTable + row * memberWidth - strings - blobs);
-                    name = Index(image, nameAt, strings);
+                    int parentWidth = memberWidth - strings - blobs;
+                    uint member = (uint)(memberTable + (row - 1) * memberWidth);
+                    parent = Index(image, member, parentWidth);
+                    name = Index(image, member + (uint)parentWidth, strings);
                 }
-                if (AssemblyReferences.SameString(declaration, declarationHeaps, slotName, image, heaps, name))
-                    return 1;
+                if (!AssemblyReferences.SameString(declaration, declarationHeaps, slotName, image, heaps, name))
+                    continue;
+
+                cursor[0] = i + 1;
+                if ((token & 1) == 0)
+                {
+                    int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+                    return owner > 0 ? owner << 2 : -1;
+                }
+
+                // TypeDef and TypeRef use the same first two tags in
+                // MemberRefParent and TypeDefOrRef, with different widths.
+                int parentTag = parent & 7;
+                if (parentTag > 1) return -2;
+                int parentRow = parent >> 3;
+                if (parentRow < 1 || parentRow > counts[parentTag == 0 ? 2 : 1]) return -1;
+                return (parentRow << 2) | parentTag;
             }
             return 0;
         }
