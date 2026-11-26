@@ -15,11 +15,13 @@ Windows, Edge 158.0.4370.33, NVIDIA Blackwell hardware adapter. The machine repo
 
 | Controls | Changed | WebGPU submission p95 | Canvas 2D submission p95 |
 | ---: | ---: | ---: | ---: |
-| 2 | 0% / 100% | 0.10 / 0.20 ms | 0.10 / 0.10 ms |
-| 128 | 0% / 10% / 100% | 0.10 / 0.20 / 0.10 ms | 0.10 / 0.10 / 0.10 ms |
-| 512 | 0% / 10% / 100% | 0.10 / 0.20 / 0.10 ms | 0.10 / 0.20 / 0.20 ms |
-| 2,048 | 0% / 10% / 100% | 0.10 / 0.20 / 0.10 ms | 0.50 / 0.40 / 0.40 ms |
+| 2 | 0% / 10% / 100% | 0.20 / 0.10 / 0.20 ms | 0.10 / 0.10 / 0.10 ms |
+| 128 | 0% / 10% / 100% | 0.20 / 0.10 / 0.10 ms | 0.10 / 0.10 / 0.10 ms |
+| 512 | 0% / 10% / 100% | 0.10 / 0.20 / 0.10 ms | 0.20 / 0.20 / 0.10 ms |
+| 2,048 | 0% / 10% / 100% | 0.10 / 0.20 / 0.20 ms | 0.30 / 0.30 / 0.30 ms |
 
-The 2,048-control submissions were 2–5× shorter in this run. At smaller sizes the differences were close to timer resolution. The 2,048-control frame-interval p95s ranged from 7.8–9.6 ms for WebGPU and 7.8–8.1 ms for Canvas 2D. These frame intervals show no consistent improvement. Submission measures main-thread update and draw calls, with GPU completion awaited outside the timed WebGPU loop. Browser composition, text rerasterization and other input-driven work can change the result.
+At two controls the 10% update rounded to zero controls. With 2,048 controls, the WebGPU submissions took one-third to two-thirds as long as Canvas 2D in this run. Both renderers recorded a 20.6 ms p95 frame interval across the dense cases. Smaller submission differences were close to the timer resolution.
 
-At each control count, screenshots with an active range matched within one level per RGB channel. The benchmark saves both 2,048-control screenshots beside the timing JSON.
+The submission timer covers main-thread updates and draw calls. The timing JSON also records the elapsed wait for WebGPU's submitted work after each repetition. Those waits ranged from 0.30 to 4.70 ms across the dense cases. They include the time to resolve the completion promise. The benchmark measures frame pacing independently because composition, text rerasterization and input handling can affect end-to-end performance.
+
+The verifier compares all 576,000 pixels at each control count and requires every RGB channel to agree within one level. It saves both 2,048-control screenshots beside the timing JSON.
