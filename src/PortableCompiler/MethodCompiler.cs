@@ -176,6 +176,9 @@ namespace PortableCompiler
             var noCatch = new int[0];
             var sizingBuffer = new byte[0];
 
+            // Width evidence is read lazily, so metadata-only use of an
+            // incompatible CoreLib stays available until one of its bodies is lowered.
+            var coreLibWidths = new int[modules];
             int activeOwner = 0;
             for (int current = 0; current < functions; current++)
             {
@@ -190,6 +193,8 @@ namespace PortableCompiler
                     if (count < 0) return -1;
                     activeOwner = owner;
                 }
+                int compatibility = FrameworkPacks.CheckBodyOwner(image, layout, heaps, coreLibWidths, owner);
+                if (compatibility < 0) return compatibility;
                 uint rva = unchecked((uint)MethodDefinitions.ReadColumn(image, layout, source, 0));
                 int status = MethodBodies.Read(image, rva, body);
                 if (status != 0)

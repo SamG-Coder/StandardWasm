@@ -9,7 +9,7 @@ using BootstrapLibrary;
 
 internal static class CoreRootGuardCases
 {
-    private const int ChildConstructorRow = 2, EntryRow = 3;
+    private const int ChildConstructorRow = 2, EntryRow = 3, SizeRow = 4, IncompatibleNativeWidth = -7;
 
     internal static void Add(List<object> cases)
     {
@@ -28,6 +28,12 @@ internal static class CoreRootGuardCases
         Reject("CoreLib root without a public key", Image(coreLibName, []), [0, EntryRow, 0]);
         Reject("CoreLib Object constructor with a nonempty body",
             Image(coreLibName, publicKey, nonemptyConstructor: true), [0, ChildConstructorRow, 1]);
+        // Decision 0044: CoreLib bodies are lowered only from a CoreLib whose
+        // own IntPtr.get_Size returns the wasm32 native width.
+        Reject("CoreLib without IntPtr.Size evidence", Image(coreLibName, publicKey, nativeWidth: null),
+            [0, EntryRow, -1], IncompatibleNativeWidth);
+        Reject("CoreLib built for an 8-byte native width", Image(coreLibName, publicKey, nativeWidth: 8),
+            [0, EntryRow, -1], IncompatibleNativeWidth);
 
         byte[] control = BundleCases.Pack(Image(coreLibName, publicKey));
         byte[] output = new byte[capacity];
@@ -40,13 +46,13 @@ internal static class CoreRootGuardCases
                 hex = Convert.ToHexString(output.AsSpan(0, length)).ToLowerInvariant() }, expected = 5
         });
 
-        void Reject(string fixture, byte[] image, int[] diagnostic)
+        void Reject(string fixture, byte[] image, int[] diagnostic, int expectedStatus = -2)
         {
             byte[] bundle = BundleCases.Pack(image);
             byte[] rejected = Enumerable.Repeat((byte)0xa5, capacity).ToArray();
             var actual = new int[3];
             int status = CompilerExports.CompileBundleDetailed(bundle, manifest, rejected, actual);
-            if (status != -2 || !actual.SequenceEqual(diagnostic) || rejected.Any(value => value != 0xa5))
+            if (status != expectedStatus || !actual.SequenceEqual(diagnostic) || rejected.Any(value => value != 0xa5))
                 throw new InvalidOperationException($"{fixture} returned {status} at [{string.Join(",", actual)}].");
             cases.Add(new
             {
@@ -58,7 +64,7 @@ internal static class CoreRootGuardCases
         }
     }
 
-    private static byte[] Image(string name, byte[] key, bool nonemptyConstructor = false)
+    private static byte[] Image(string name, byte[] key, bool nonemptyConstructor = false, int? nativeWidth = 4)
     {
         // Emit only the metadata seen by the compiler. The regular Stage 81
         // oracle separately exercises the installed CoreLib on the CLR.
@@ -79,6 +85,9 @@ internal static class CoreRootGuardCases
             root, fields, childConstructor);
         metadata.AddTypeDefinition(TypeAttributes.Public, default, metadata.GetOrAddString("Entry"),
             root, fields, MetadataTokens.MethodDefinitionHandle(EntryRow));
+        if (nativeWidth != null)
+            metadata.AddTypeDefinition(TypeAttributes.Public | TypeAttributes.Sealed, metadata.GetOrAddString("System"),
+                metadata.GetOrAddString("IntPtr"), root, fields, MetadataTokens.MethodDefinitionHandle(SizeRow));
 
         var bodies = new BlobBuilder();
         var bodyStream = new MethodBodyStreamEncoder(bodies);
@@ -113,6 +122,19 @@ internal static class CoreRootGuardCases
         metadata.AddMethodDefinition(ctor, MethodImplAttributes.IL, ctorName, ctorSignature, childBody, parameters);
         metadata.AddMethodDefinition(MethodAttributes.Public | MethodAttributes.Static, MethodImplAttributes.IL,
             metadata.GetOrAddString("Run"), metadata.GetOrAddBlob(new byte[] { 0, 1, 8, 8 }), entryBody, parameters);
+        if (nativeWidth is int width)
+        {
+            // The shape of the original CoreLib body: ldc.i4 N; ret.
+            int sizeBody = Body(il =>
+            {
+                il.OpCode(ILOpCode.Ldc_i4);
+                il.CodeBuilder.WriteInt32(width);
+                il.OpCode(ILOpCode.Ret);
+            });
+            metadata.AddMethodDefinition(MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.SpecialName,
+                MethodImplAttributes.IL, metadata.GetOrAddString("get_Size"), metadata.GetOrAddBlob(new byte[] { 0, 0, 8 }),
+                sizeBody, parameters);
+        }
 
         var result = new BlobBuilder();
         new ManagedPEBuilder(new PEHeaderBuilder(imageCharacteristics: Characteristics.Dll),
