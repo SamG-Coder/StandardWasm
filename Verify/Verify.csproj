@@ -18,6 +18,8 @@
     <ProjectReference Include="../demos/stage-11-portable-linking/LinkLibrary.csproj" />
     <ProjectReference Include="../demos/stage-12-portable-arrays/TypedArrayLibrary.csproj" />
     <ProjectReference Include="../demos/stage-13-complete-bootstrap/BootstrapLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-15-managed-instances/ObjectLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-15-managed-instances/identity/ObjectIdentityProbe/ObjectIdentityProbe.csproj" />
     <ProjectReference Include="../demos/stage-18-long-integers/LongIntegers.csproj" />
     <ProjectReference Include="../demos/stage-20-floating-point/FloatingPoint.csproj" />
     <ProjectReference Include="../demos/stage-25-switch-dispatch/SwitchDispatch.csproj" />

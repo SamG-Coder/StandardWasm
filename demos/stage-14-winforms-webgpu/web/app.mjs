@@ -5,7 +5,8 @@ async function start() {
         fetch("./form.json").then(response => response.json()),
         WebAssembly.instantiateStreaming(fetch("./Handlers.wasm"))
     ]);
-    const click = compiled.instance.exports[model.binding.export];
+    const exports = compiled.instance.exports;
+    const click = exports[model.binding.export];
     if (typeof click !== "function") throw Error("The form's C# click handler was not exported.");
 
     const form = document.querySelector("#form");
@@ -28,9 +29,9 @@ async function start() {
     result.className = "sr-only";
     result.setAttribute("aria-live", "polite");
     form.append(result);
-    let count = 0;
+    const state = exports.Create(0);
     function repaint() {
-        result.value = model.binding.prefix + count;
+        result.value = model.binding.prefix + exports.Read(state);
         texts.set(model.binding.label, result.value);
         text.update(texts);
         gpu.upload();
@@ -47,7 +48,7 @@ async function start() {
         button.style.width = 100 * c.width / model.width + "%";
         button.style.height = 100 * c.height / model.height + "%";
         if (c.name === model.binding.button)
-            button.addEventListener("click", () => { count = click(count); repaint(); });
+            button.addEventListener("click", () => { click(state); repaint(); });
         buttons.set(c.name, button);
         form.append(button);
     }

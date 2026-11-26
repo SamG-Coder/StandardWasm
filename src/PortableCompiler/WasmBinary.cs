@@ -1,4 +1,5 @@
 using PeLibrary;
+using static PeLibrary.ObjectLayouts;
 using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
@@ -6,9 +7,17 @@ namespace PortableCompiler
     internal static class WasmBinary
     {
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies,
-            byte[] names, int[] entryOffsets, int[] exports)
+            byte[] names, int[] entryOffsets, int[] exports, int[] objects)
         {
-            int typeSize = UnsignedSize(functions + 2) + 6;
+            int typeOffset = objects[0] + 2;
+            int typeSize = UnsignedSize(functions + typeOffset) + 6;
+            for (int i = 0; i < objects[0]; i++)
+            {
+                int fields = objects[1 + i * Width + 2];
+                int size = 1 + UnsignedSize(fields) + fields * 2;
+                if (size > output.Length - typeSize) return -3;
+                typeSize += size;
+            }
             int functionSize = UnsignedSize(functions);
             int codeSize = UnsignedSize(functions);
             // Use one type per function in discovery order. Accumulate against
@@ -21,7 +30,7 @@ namespace PortableCompiler
                 for (int parameter = 0; parameter < arities[i]; parameter++)
                     type += ValueWidth(types[shape + 1 + parameter]);
                 int code = UnsignedSize(sizes[i]) + sizes[i];
-                int index = UnsignedSize(i + 2);
+                int index = UnsignedSize(i + typeOffset);
                 if (type > output.Length - typeSize || code > output.Length - codeSize ||
                     index > output.Length - functionSize)
                     return -3;
@@ -57,13 +66,24 @@ namespace PortableCompiler
             output[6] = 0;
             output[7] = 0;
             int cursor = Section(output, 8, 1, typeSize);
-            cursor = Unsigned(output, cursor, functions + 2);
+            cursor = Unsigned(output, cursor, functions + typeOffset);
             output[cursor++] = 0x5e; // array of packed i8
             output[cursor++] = 0x78;
             output[cursor++] = 1;
             output[cursor++] = 0x5e; // array of i32
             output[cursor++] = 0x7f;
             output[cursor++] = 1;
+            for (int i = 0; i < objects[0]; i++)
+            {
+                int fields = objects[1 + i * Width + 2];
+                output[cursor++] = 0x5f; // struct
+                cursor = Unsigned(output, cursor, fields);
+                for (int field = 0; field < fields; field++)
+                {
+                    output[cursor++] = 0x7f;
+                    output[cursor++] = 1;
+                }
+            }
             for (int type = 0; type < functions; type++)
             {
                 int shape = offsets[type];
@@ -80,7 +100,7 @@ namespace PortableCompiler
             cursor = Section(output, cursor, 3, functionSize);
             cursor = Unsigned(output, cursor, functions);
             for (int i = 0; i < functions; i++)
-                cursor = Unsigned(output, cursor, i + 2);
+                cursor = Unsigned(output, cursor, i + typeOffset);
 
             cursor = Section(output, cursor, 7, exportSize);
             cursor = Unsigned(output, cursor, exports.Length);
@@ -110,7 +130,7 @@ namespace PortableCompiler
         }
 
         private static int ValueWidth(byte type) =>
-            type == Void ? 0 : type == I32 ? 1 : 2;
+            type == Void ? 0 : type == I32 ? 1 : type - Bytes <= 63 ? 2 : 3;
 
         internal static int ValueType(byte[] output, int cursor, byte type)
         {
@@ -119,7 +139,7 @@ namespace PortableCompiler
             else
             {
                 output[cursor++] = 0x63; // ref null
-                output[cursor++] = (byte)(type - Bytes);
+                cursor = Signed(output, cursor, type - Bytes);
             }
             return cursor;
         }
