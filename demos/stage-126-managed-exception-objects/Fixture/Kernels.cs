@@ -142,5 +142,19 @@ namespace ExceptionFixture
             Throw(new FixtureException());
             return 0;
         }
+
+        private static FixtureException saved;
+
+        // throw; must re-raise the original object, not an equal-looking copy. The host
+        // compares the uncaught payload with the reference Saved() exposes.
+        public static int UncaughtRethrow()
+        {
+            saved = new FixtureException();
+            try { Throw(saved); }
+            catch (FixtureException) { throw; }
+            return 0;
+        }
+
+        public static FixtureException Saved() => saved;
     }
 }

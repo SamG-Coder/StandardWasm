@@ -227,7 +227,7 @@ namespace PortableCompiler
                         if (catchRegion[clause] != 0) return -2;
                         // Fixed-tag bits, plus the object tag and caught class when the
                         // clause type is a linked class (decision 0054).
-                        int mask = ManagedExceptionClauses.Classify(bundle, image, layout, heaps, owner,
+                        int mask = ManagedExceptionClauses.ClauseMask(bundle, image, layout, heaps, owner,
                             catchRegion[clause + 5], objects);
                         if (mask < 0) return mask;
                         if (mask == 0) return -2;

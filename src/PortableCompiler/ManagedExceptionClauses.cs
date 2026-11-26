@@ -15,7 +15,7 @@ namespace PortableCompiler
         internal static int FixedBits(int mask) => mask & ExceptionTypes.Supported;
 
         // Returns the clause mask, 0 when the clause stays unsupported, or a negative status.
-        internal static int Classify(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
+        internal static int ClauseMask(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
             int token, int[] objects)
         {
             int fixedBits = ExceptionTypes.CatchMask(image, heaps, layout, token);

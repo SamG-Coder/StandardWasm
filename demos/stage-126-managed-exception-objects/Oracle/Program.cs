@@ -46,6 +46,19 @@ if (thrown != "ExceptionFixture.FixtureException")
     throw new InvalidOperationException("The CLR did not throw the fixture exception: " + thrown);
 cases.Add(new { name = "Uncaught", row = Row(uncaught), images, clr = thrown, uncaught = true });
 
+// throw; preserves the original object: the uncaught payload must be the very reference Saved() returns.
+MethodInfo rethrow = kernels.GetMethod("UncaughtRethrow")!, saved = kernels.GetMethod("Saved")!;
+object? original = null;
+try { rethrow.Invoke(null, null); }
+catch (TargetInvocationException error) { original = error.InnerException; }
+if (original == null || !ReferenceEquals(original, saved.Invoke(null, null)))
+    throw new InvalidOperationException("The CLR rethrow did not preserve the original exception object.");
+cases.Add(new
+{
+    name = "UncaughtRethrow", row = Row(rethrow), images, clr = "same object", uncaught = true,
+    identity = new { name = "saved", row = Row(saved) }
+});
+
 File.WriteAllText(Path.Combine(evidence, "oracle.json"), JsonSerializer.Serialize(new
 {
     files, cases, runtime = Environment.Version.ToString(), process = RuntimeInformation.ProcessArchitecture.ToString()

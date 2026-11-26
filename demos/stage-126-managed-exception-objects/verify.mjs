@@ -55,9 +55,17 @@ async function runCases(compiler, images, cases) {
 
     const results = [];
     for (const test of cases) {
-        const entries = new Uint8Array(11);
-        new DataView(entries.buffer).setUint32(0, test.row, true);
-        entries.set([3, 0, 0, 0, 114, 117, 110], 4);
+        // One manifest record per export: [MethodDef row][name length][name].
+        const exports = [[test.row, "run"], ...(test.identity ? [[test.identity.row, test.identity.name]] : [])];
+        const entries = new Uint8Array(exports.reduce((size, [, name]) => size + 8 + name.length, 0));
+        let cursor = 0;
+        for (const [row, name] of exports) {
+            const view = new DataView(entries.buffer);
+            view.setUint32(cursor, row, true);
+            view.setUint32(cursor + 4, name.length, true);
+            for (let i = 0; i < name.length; i++) entries[cursor + 8 + i] = name.charCodeAt(i);
+            cursor += 8 + name.length;
+        }
         if (test.status !== undefined)
             for (let i = 0; i < 4096; i++) build.SetByte(output, i, 0xa5);
         const status = build.CompileBundleDetailed(bundle(test.images), upload(entries), output, location);
@@ -86,6 +94,14 @@ async function runCases(compiler, images, cases) {
             try { instance.exports.run(); } catch (error) { caught = error; }
             if (!(caught instanceof WebAssembly.Exception) || !caught.is(tag))
                 throw Error(test.name + " did not raise the object tag: " + caught);
+            if (test.identity) {
+                // getArg returns the exact GC reference thrown; a fresh copy would compare unequal.
+                const payload = caught.getArg(tag, 0), original = instance.exports[test.identity.name]();
+                if (payload === null || payload !== original)
+                    throw Error(test.name + " rethrew a different object than the one it caught");
+                results.push({ name: test.name, uncaught: "object tag", identity: "same reference" });
+                continue;
+            }
             results.push({ name: test.name, uncaught: "object tag" });
             continue;
         }
