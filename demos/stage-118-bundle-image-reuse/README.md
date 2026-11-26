@@ -7,8 +7,10 @@ Windows Desktop runtime, Node and Microsoft Edge.
 The runner uses the original [Stage 72 WinForms application](../stage-72-winforms-windows-reference/README.md)
 and the [Stage 95 browser drop and console comparisons](../stage-95-managed-companions/README.md).
 It checks that Node and Edge agree on the original WinForms compilation
-diagnostic under the existing browser deadline. On this milestone it reaches
-the `EventHandler` closure after constructing `System.Drawing.Size`.
+diagnostic under the existing browser deadline. The current fixture reaches
+`Application.Run` at the `ThreadContext.FromCurrent` call and reports a
+missing framework reference. The original Stage 118 compiler stopped at the
+`EventHandler` closure.
 The WinForms window opens only in the native Windows reference run.
 
 Results under `artifacts/bundle-image-reuse/` include the compiler and bundle
@@ -34,8 +36,10 @@ results. For the historical compiler only, set
 `STANDARDWASM_BASELINE_DEADLINE=1` to measure completion when the old build
 exceeds the production deadline. Clear it for the candidate. Run the same
 Stage 118 command for each compiler and compare the bundle hashes, compiler
-diagnostics and timings in the two result files. Both launchers must return
-without an exit code or a published module for this rejection.
+diagnostics and timings in the two result files. Set
+`STANDARDWASM_STAGE118_DIAGNOSTIC=1` for a compiler expecting the historical
+EventHandler diagnostic, including the output-buffer check below. Both
+launchers must return without an exit code or a published module.
 
 To check the output buffer directly, run the following with each compiler's
 corresponding managed bootstrap DLL and the same saved inputs.
