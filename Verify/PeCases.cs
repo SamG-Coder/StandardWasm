@@ -50,6 +50,10 @@ internal static class PeCases
         Expect("oversize metadata", Change((cli + 12, uint.MaxValue)), 1);
         Expect("wrong metadata signature", Change((metadata, 0)), 1);
         Expect("raw section beyond EOF", Change((cliSection + 20, (uint)bytes.Length - 1)), 1);
+        Expect("raw alignment padding cannot supply the CLI header",
+            Change((cliSection + 8, (uint)cliRva - va)), 1);
+        Expect("CLI directory truncated by loaded extent",
+            Change((cliSection + 8, (uint)cliRva - va + 71)), 1);
         Expect("unbacked virtual section", Change((cliSection + 16, 0)), 1);
         Expect("ambiguous CLI RVA", Change((otherSection + 12, va), (otherSection + 8, uint.MaxValue)), 1);
 

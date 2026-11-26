@@ -12,6 +12,7 @@
     <ProjectReference Include="../demos/stage-05-metadata-streams/StreamLibrary.csproj" />
     <ProjectReference Include="../demos/stage-06-method-definitions/MethodLibrary.csproj" />
     <ProjectReference Include="../demos/stage-07-method-bodies/BodyLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-08-integer-division/IntegerDivision.csproj" />
     <ProjectReference Include="../demos/stage-09-portable-emitter/EmitterLibrary.csproj" />
     <ProjectReference Include="../demos/stage-10-portable-control-flow/FlowLibrary.csproj" />
     <ProjectReference Include="../demos/stage-11-portable-linking/LinkLibrary.csproj" />
@@ -19,5 +20,12 @@
     <ProjectReference Include="../demos/stage-13-complete-bootstrap/BootstrapLibrary.csproj" />
     <ProjectReference Include="../demos/stage-15-managed-instances/ObjectLibrary.csproj" />
     <ProjectReference Include="../demos/stage-16-managed-delegates/DelegateLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-15-managed-instances/identity/ObjectIdentityProbe/ObjectIdentityProbe.csproj" />
+    <ProjectReference Include="../demos/stage-18-long-integers/LongIntegers.csproj" />
+    <ProjectReference Include="../demos/stage-20-floating-point/FloatingPoint.csproj" />
+    <ProjectReference Include="../demos/stage-25-switch-dispatch/SwitchDispatch.csproj" />
+    <ProjectReference Include="../demos/stage-33-float-remainder/FloatRemainder.csproj" />
+    <ProjectReference Include="../demos/stage-29-math-intrinsics/MathIntrinsics.csproj" />
+    <ProjectReference Include="../demos/stage-37-primitive-arrays/PrimitiveArrays.csproj" />
   </ItemGroup>
 </Project>
