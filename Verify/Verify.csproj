@@ -66,9 +66,25 @@
     <ProjectReference Include="../demos/stage-66-base-exception-catches/BaseExceptionHandlers.csproj" />
     <ProjectReference Include="../demos/stage-67-null-throw/NullThrow.csproj" />
     <ProjectReference Include="../demos/stage-68-bare-catch/BareCatch.csproj" />
+    <ProjectReference Include="../demos/stage-75-inherited-layouts/HierarchyDemo.csproj" />
+    <ProjectReference Include="../demos/stage-76-initializer-reachability/InitializerReachability.csproj" />
+    <ProjectReference Include="../demos/stage-76-initializer-reachability/Module/ModuleInitFixture.csproj" />
+    <ProjectReference Include="../demos/stage-78-strong-names/StrongNameDemo.csproj" />
+    <ProjectReference Include="../demos/stage-80-type-forwarding/ForwardingDemo.csproj" />
+    <ProjectReference Include="../demos/stage-78-strong-names/Alternate/Alternate.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />
     <Compile Remove="Fixtures/**/*.cs" />
     <ProjectReference Include="Fixtures/PlatformIdentity/ThirdPartyTypes/ThirdPartyTypes.csproj" Aliases="ThirdParty" />
     <ProjectReference Include="Fixtures/PlatformIdentity/PlatformIdentityProbe/PlatformIdentityProbe.csproj" />
   </ItemGroup>
+  <Target Name="CopyStrongNameAlternate" AfterTargets="Build">
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)../demos/stage-78-strong-names/Alternate/bin/$(Configuration)/netstandard2.0/SignedDependency.dll"
+          DestinationFiles="$(OutDir)StrongNameAlternate.dll" />
+  </Target>
+  <Target Name="CopyForwardingVerification" AfterTargets="Build">
+    <ItemGroup>
+      <ForwardingFixture Include="$(MSBuildThisFileDirectory)../demos/stage-80-type-forwarding/bin/$(Configuration)/netstandard2.0/forwarded/*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ForwardingFixture)" DestinationFolder="$(OutDir)forwarding" />
+  </Target>
 </Project>

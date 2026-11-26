@@ -97,4 +97,8 @@ NominalCastCases.Add(cases);
 BaseExceptionCases.Add(cases);
 NullThrowCases.Add(cases);
 BareCatchCases.Add(cases);
+InheritedLayoutCases.Add(cases);
+InitializerReachabilityCases.Add(cases);
+StrongNameCases.Add(cases);
+ForwardingCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);
