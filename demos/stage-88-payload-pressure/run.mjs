@@ -14,8 +14,11 @@ const wasm = join(out, "pressure.wasm"), wasmB = join(out, "pressure-b.wasm");
 run(process.execPath, ["node_modules/binaryen/bin/wasm-as", join(stage, "pressure.wat"), "--enable-gc",
     "--enable-reference-types", "--enable-bulk-memory", "-o", wasm]);
 run(process.execPath, ["node_modules/binaryen/bin/wasm-as", join(stage, "pressure-b.wat"), "--enable-bulk-memory", "-o", wasmB]);
+const wasmSpill = join(out, "spill.wasm");
+run(process.execPath, ["node_modules/binaryen/bin/wasm-as", join(stage, "spill.wat"), "--enable-gc",
+    "--enable-reference-types", "-o", wasmSpill]);
 
-const nodeRun = spawnSync(process.execPath, ["--experimental-wasm-jspi", join(stage, "node-run.mjs"), wasm, wasmB],
+const nodeRun = spawnSync(process.execPath, ["--experimental-wasm-jspi", join(stage, "node-run.mjs"), wasm, wasmB, wasmSpill],
     { encoding: "utf8", maxBuffer: 1 << 24 });
 if (nodeRun.status !== 0) throw Error(nodeRun.stderr);
 const node = JSON.parse(nodeRun.stdout);
@@ -31,10 +34,11 @@ try {
             ? { contentType: "text/javascript", body: readFileSync(join(stage, "pressure-core.mjs")) }
             : { contentType: "text/html", body: "<title>Payload pressure</title>" }));
     await page.goto("http://payload-pressure.test/");
-    edge = await page.evaluate(async ({ c, b }) => {
+    edge = await page.evaluate(async ({ c, b, sp }) => {
         const core = await import("/pressure-core.mjs");
-        return { c: await core.measurePressure(new Uint8Array(c)), b: await core.measureModelB(new Uint8Array(b)) };
-    }, { c: Array.from(readFileSync(wasm)), b: Array.from(readFileSync(wasmB)) });
+        return { c: await core.measurePressure(new Uint8Array(c)), b: await core.measureModelB(new Uint8Array(b)),
+            spill: await core.measureSpill(new Uint8Array(sp)) };
+    }, { c: Array.from(readFileSync(wasm)), b: Array.from(readFileSync(wasmB)), sp: Array.from(readFileSync(wasmSpill)) });
 } finally {
     await browser.close();
 }
@@ -55,3 +59,6 @@ for (const [label, all] of [["Node " + process.version, node], ["Edge " + engine
             `${r.allocatedMiB} MiB, ${r.ms} ms, ${r.collections} collections, max pause ${r.maxPauseMs} ms, ` +
             `total pause ${r.totalPauseMs} ms, live list ${r.liveIntact ? "intact" : "CORRUPTED"}` + (r.exhausted ? ", EXHAUSTED" : ""));
 }
+for (const [label, all] of [["Node " + process.version, node], ["Edge " + engine, edge]])
+    console.log(`${label} frame cost, median ms for 20 sums over 262,143 nodes: Wasm GC (C) ${all.spill.gcSum}, ` +
+        `linear unrooted ${all.spill.linearSum}, linear with shadow-stack spills (B) ${all.spill.spillSum}`);

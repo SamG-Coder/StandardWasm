@@ -95,7 +95,23 @@ B remains the fallback if no strategy works. It is correct and as fast on these 
   - **Live heap.** With 1,000,000 live list nodes, the bound still held (63 MiB) and the worst pause was 1.6–4.9 ms. That's about 2–5 ns per live object for mark plus sweep, on a simple singly linked graph. Real object graphs, with more pointers per object and less locality, will cost more per object. This is evidence that pauses scale acceptably, not a final figure.
   - Every reference held by JavaScript (DOM handles, callbacks, WebGPU objects) must become an explicit root or handle table under B. Under C, Wasm GC handles cycles through JS for free.
 
-  B also needs precise stack maps for every compiled frame (shadow-stack spilling of references at every call), and that costs code size and speed in all compiled code, not just allocation. Next experiment: the cost of shadow-stack reference spilling and stack maps across compiled code (on the stage 77 access probes and a call-heavy probe), and JS-held-reference handling. Then C vs B is decided with Codex.
+  B also needs precise stack maps for every compiled frame (shadow-stack spilling of references at every call), and that costs code size and speed in all compiled code, not just allocation. **Frame cost of B's roots** (`spill.wat`). This is a call-heavy probe: a recursive sum over a 262,143-node binary tree, 20 traversals, median of 7, in three forms:
+- C: Wasm GC structs, with references in Wasm locals
+- unrooted: linear nodes with no rooting, a lower bound that is unsafe under a collector
+- B: linear nodes with every reference that is live across a call stored to a shadow-stack slot and cleared on return
+
+| | C (Wasm GC) | linear, unrooted | B (spilled roots) |
+| --- | --- | --- | --- |
+| Node | 12.0 ms | 8.7 ms | 11.1 ms |
+| Edge | 8.2 ms | 6.2 ms | 10.3 ms |
+
+Rooting costs B 28% (Node) to 66% (Edge) over unrooted code, which puts B within −7% to +26% of C. Frame cost is therefore not what decides C versus B. One microbenchmark can't establish more than that.
+
+**Where this leaves the choice.**
+- **B** gives a hard memory bound and synchronous collection, at the cost of its own collector, stack-slot rooting in every frame, and explicit handle tables for every JS-held reference.
+- **C** keeps engine-managed references and free cycles through JS, but only a soft bound that depends on the engine's GC schedule (the best mitigation, ballast plus a JSPI-budgeted yield, reached 85–157 MiB here).
+
+Both are viable, and this decision now needs Codex's judgment on which property matters more for unmodified WinForms applications, rather than another probe. Then C vs B is decided with Codex.
 
 - **Allocator.** A size-class free-list allocator with zero-initialization (the CLR guarantees zeroed arrays) and growth via `memory.grow`. The prototypes use bump and single-size LIFO allocators.
 - **Interior pointers into class fields.** Pinning a field of a class instance (`fixed (int* p = &obj.Field)`) isn't covered, because class instances stay in Wasm GC. Whole-program compilation could find every type whose fields are ever pinned and give those types C-style storage. That needs its own fixture.

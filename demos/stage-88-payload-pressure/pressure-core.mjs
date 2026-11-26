@@ -80,3 +80,25 @@ export async function measureModelB(bytes) {
         }
     return results;
 }
+
+// Frame cost of model B's rooting (spill.wat): the same recursive tree sum as Wasm GC structs (C), as unrooted linear
+// nodes (lower bound) and as linear nodes with every live reference spilled to a shadow-stack slot around calls (B).
+export async function measureSpill(bytes) {
+    const { instance: { exports: x } } = await WebAssembly.instantiate(bytes);
+    x.build(18); // 262,143 nodes
+    const expected = x.gcSum(1);
+    const results = {};
+    for (const name of ["gcSum", "linearSum", "spillSum"]) {
+        if (x[name](1) !== expected) throw Error(name + " disagrees with gcSum");
+        x[name](5); // warm-up
+        const samples = [];
+        for (let i = 0; i < 7; i++) {
+            const start = performance.now();
+            x[name](20);
+            samples.push(performance.now() - start);
+        }
+        samples.sort((a, b) => a - b);
+        results[name] = +samples[3].toFixed(2); // median ms for 20 traversals of 262,143 nodes
+    }
+    return results;
+}
