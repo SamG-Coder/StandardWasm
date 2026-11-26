@@ -1,4 +1,4 @@
-import { decode, invoke, invokeGenerated } from "./invoke.mjs";
+import { decode, invoke, invokeGenerated, managedExceptionType } from "./invoke.mjs";
 import { verifyBootstrap } from "./bootstrap.mjs";
 
 // Failure reports spell out values JSON would hide: BigInt, -0 (JSON prints 0) and non-finite Numbers.
@@ -12,10 +12,10 @@ export async function verify(load, cases, saveCompiler) {
         if (WebAssembly.Module.imports(module).length) throw Error(name + " has runtime imports");
         modules[name] = (await WebAssembly.instantiate(module)).exports;
     }
-    // CLR exception type -> engine trap message -> count. Wasm has no typed exceptions yet, so a CLR
-    // ArithmeticException (expected === null) must surface as a RuntimeError trap. The pairing is
-    // reported, not asserted, because trap messages are engine-specific.
+    // Managed exceptions carry an exact type. Keep legacy engine traps
+    // visible for fixtures that still expect an exception on the CLR.
     const traps = new Map();
+    let managed = 0;
     const bootstrap = cases.find(c => c.bootstrap);
     for (const c of cases) {
         if (c.bootstrap) continue;
@@ -26,10 +26,17 @@ export async function verify(load, cases, saveCompiler) {
                 : invoke(modules[c.module], c.method, c.inputs);
         }
         catch (error) {
-            if (c.generated || !(error instanceof WebAssembly.RuntimeError)) throw error;
+            if (c.generated || c.expected !== null || !c.exception) throw error;
+            const type = managedExceptionType(modules[c.module], error);
+            if (type === c.exception) {
+                managed++;
+            } else if (error instanceof WebAssembly.RuntimeError) {
+                const key = c.exception + " -> trap '" + error.message + "'";
+                traps.set(key, (traps.get(key) ?? 0) + 1);
+            } else {
+                throw error;
+            }
             actual = null;
-            const key = (c.exception ?? "no CLR exception") + " -> trap '" + error.message + "'";
-            traps.set(key, (traps.get(key) ?? 0) + 1);
         }
         // SameValue (Object.is) treats NaN as equal to NaN and +0 as different from -0, so floating-point results
         // compare bit-exactly up to NaN payload. It also rejects a Number where the CLR produced a 64-bit BigInt.
@@ -41,7 +48,8 @@ export async function verify(load, cases, saveCompiler) {
         throw Error("Deep i64 tail call failed");
     const trapSummary = [...traps].sort().map(([key, count]) => "\n  " + count + " x " + key).join("");
     const summary = (cases.length - (bootstrap ? 1 : 0)) +
-        " CLR comparisons and 1,000,000 tail calls passed" + trapSummary;
+        " CLR comparisons and 1,000,000 tail calls passed" +
+        (managed ? `\n  ${managed} typed managed exceptions matched` : "") + trapSummary;
     return bootstrap ? summary + "\n  Self-recompiled: " +
         await verifyBootstrap(modules[bootstrap.module], bootstrap, cases, saveCompiler) : summary;
 }

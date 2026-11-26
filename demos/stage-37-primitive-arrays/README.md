@@ -2,7 +2,7 @@
 
 Run `npm run demo -- stage-37-primitive-arrays` from the root after `npm ci`. Expected output is `CountPrimes(100) = 25`, from a sieve over a `bool[]`.
 
-Buffers.cs is ordinary array code over every primitive element width: a `bool[]` sieve, `long[]` prefix sums, `double[]` mean and variance, a single-precision `float[]` dot product, a `char[]` Caesar cipher, `uint[]` unsigned maxima, and packed-cell wraparound through `short[]`, `ushort[]`, `char[]` and `sbyte[]`. Each element type maps to a Wasm GC array (`Compiler/ArrayKinds.cs`):
+Buffers.cs is ordinary array code over every primitive element width: a `bool[]` sieve, `long[]` prefix sums, `double[]` mean and variance, a single-precision `float[]` dot product, a `char[]` Caesar cipher, `uint[]` unsigned maxima, and packed-cell wraparound through `short[]`, `ushort[]`, `char[]` and `sbyte[]`. Each element type maps to a Wasm GC array (`src/PortableCompiler/SignatureTypes.cs`):
 
 | CLR element | Wasm storage | Loads |
 | --- | --- | --- |
@@ -16,6 +16,6 @@ Packed stores keep the low bits, as a CLR store into a narrow cell does. Small s
 
 `npm test` compares every export with the same DLL on the CLR: empty, negative and huge lengths, out-of-range indexes (traps vs. IndexOutOfRangeException and OverflowException), wraparound values, NaN/∞ conversions, and 300 seeded random values. It also checks the JS host boundary directly: `ShortParameter(40000)` is -25536, which the CLR cannot express. `CompoundElement.Increment` (`counts[i] += 1`) must be rejected at its `ldelema` with the method and IL offset.
 
-Element types are classified by CLI identity: a primitive must come from a platform BCL assembly (`Compiler/PlatformTypes.cs`), not just carry its name. `identity/` keeps Codex's two-DLL reproduction from the #75 review, where a third-party class named `System.Int16` reached through an extern alias must be rejected rather than lowered as `short[]`.
+Element types are classified by CLI identity: a primitive must come from a platform BCL assembly (`src/AssemblyReader/PlatformAssemblyIdentity.cs`), not just carry its name. `identity/` keeps Codex's two-DLL reproduction from the #75 review, where a third-party class named `System.Int16` reached through an extern alias must be rejected rather than lowered as `short[]`.
 
 Limitations: `ldelema` (element references, so `a[i] += x` and `ref` element arguments), constant array initializers (`ldtoken` + `RuntimeHelpers.InitializeArray`), `ldelem`/`stelem` with a type token, and arrays of references or multi-dimensional arrays are not lowered yet.

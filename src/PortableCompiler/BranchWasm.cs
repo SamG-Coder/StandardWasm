@@ -403,9 +403,19 @@ namespace PortableCompiler
                         int source = states[state + argument];
                         used = LoadOperand(code, used, Spill(spills, maximum, source, argument), source, signatures[shape + 1 + i]);
                     }
+                    int returned = signatures[shape];
+                    // Preserve the current frame whenever it can handle an exception.
+                    // With the same result type, the callee already normalizes its return value.
+                    if (kind == Call && catchRegion.Length == 0 && first == 0 && returned == result &&
+                        next < depths.Length && records[next * Width] == Return)
+                    {
+                        code[used++] = 0x12; // return_call
+                        used = WasmBinary.Unsigned(code, used, hostImports + operand);
+                        code[used++] = 0x0b; // end the dispatch block
+                        continue;
+                    }
                     code[used++] = 0x10;
                     used = WasmBinary.Unsigned(code, used, hostImports + operand);
-                    int returned = signatures[shape];
                     if (kind == NewObject)
                     {
                         returned = signatures[shape + 1];
