@@ -14,7 +14,8 @@ namespace PortableCompiler
         internal const int RootObjectHeap = NativeArrayHeap + 1;
         internal const int ValueLocationHeap = RootObjectHeap + 1;
         private const int ObjectLocationHeap = ValueLocationHeap + 1;
-        private const int FirstClassHeap = ObjectLocationHeap + 1;
+        private const int ObjectSpanHeap = ObjectLocationHeap + 1;
+        private const int FirstClassHeap = ObjectSpanHeap + 1;
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
@@ -84,9 +85,9 @@ namespace PortableCompiler
             }
             // A recursive group is one type-section entry but its member
             // types retain individual indices for fields and function signatures.
-            // The fixed recursive groups combine six types into two entries.
+            // The fixed recursive groups combine seven types into two entries.
             bool hasDescriptors = RuntimeTypeWasm.HasDescriptors(globals);
-            int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 4;
+            int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 5;
             if (hasRemainder) typeEntries++;
             if (tagCount != 0) typeEntries++;
             if (objectTag) typeEntries++;
@@ -94,7 +95,7 @@ namespace PortableCompiler
             if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
             if (hasDescriptors) typeEntries++;
             int prefix = UnsignedSize(typeEntries) + 70 + ManagedValueLocationWasm.TypeBytes +
-                ManagedObjectLocationWasm.TypeBytes + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+                ManagedObjectLocationWasm.TypeBytes + ObjectSpanWasm.TypeBytes + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (tagCount != 0) prefix += 3; // () -> () exception payload
             if (objectTag) prefix += ExceptionTagsWasm.ObjectTagTypeBytes; // (eqref) -> () managed object payload
@@ -279,10 +280,10 @@ namespace PortableCompiler
             output[cursor++] = 0x5e; // f64 array
             output[cursor++] = 0x7c;
             output[cursor++] = 1;
-            // Keep native vectors nominally distinct from the fixed-width i32 heap.
-            // Put the native vector, root object and both managed locations in a separate recursive group.
+            // Give the native vector, root object and managed views private
+            // type identities by placing them in their own recursive group.
             output[cursor++] = 0x4e;
-            output[cursor++] = 4;
+            output[cursor++] = 5;
             output[cursor++] = 0x5e;
             output[cursor++] = 0x7f;
             output[cursor++] = 1;
@@ -290,6 +291,7 @@ namespace PortableCompiler
             output[cursor++] = 0;
             cursor = ManagedValueLocationWasm.WriteType(output, cursor);
             cursor = ManagedObjectLocationWasm.WriteType(output, cursor);
+            cursor = ObjectSpanWasm.WriteType(output, cursor);
             if (recursive)
             {
                 output[cursor++] = 0x4e;
@@ -523,7 +525,7 @@ namespace PortableCompiler
                 type == EventArgsReference ? EventArgsHeap :
                 type == EventHandlerReference ? EventHandlerHeap :
                 type == Singles ? SingleArrayHeap : type == Doubles ? DoubleArrayHeap :
-                type == NativeVector ? NativeArrayHeap : type == ObjectLocation ? ObjectLocationHeap :
+                type == NativeVector ? NativeArrayHeap : type == ObjectLocation ? ObjectLocationHeap : type == ObjectSpan ? ObjectSpanHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;
 
         // Positive heap indices are encoded as signed LEB values. The sign

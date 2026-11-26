@@ -144,6 +144,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [138 · Inline-array layouts](stage-138-inline-array-layouts/README.md) | `npm run demo -- stage-138-inline-array-layouts` | Preserve the declared element and value copies of managed inline arrays |
 | [139 · Managed object byrefs](stage-139-managed-object-byrefs/README.md) | `npm run demo -- stage-139-managed-object-byrefs` | A traced vector element alias survives calls and exceptional unwinding |
 | [140 · Inline object addresses](stage-140-inline-object-addresses/README.md) | `npm run demo -- stage-140-inline-object-addresses` | A managed alias sees whole-value writes to its inline-array local |
+| [141 · Read-only object spans](stage-141-object-readonly-spans/README.md) | `npm run demo -- stage-141-object-readonly-spans` | Retain the live inline storage owner and match CLR bounds checks |
 | [146 · Class value-field receivers](stage-146-class-value-receivers/README.md) | `npm run demo -- stage-146-class-value-receivers` | Call original managed methods through stable class-field addresses |
 | [147 · Constructor receiver aliases](stage-147-constructor-receiver-aliases/README.md) | `npm run demo -- stage-147-constructor-receiver-aliases` | Preserve chained receiver writes in the original Windows Forms Padding constructor |
 | [148 · Executing assembly identity](stage-148-executing-assembly/README.md) | `npm run demo -- stage-148-executing-assembly` | Resolve the defining assembly of the executing method across linked DLLs |

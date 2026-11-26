@@ -162,6 +162,14 @@ namespace PortableCompiler
             }
             if (kind == LoadInlineStorage)
                 return Push(stack, allocated, depth, extra);
+            if (kind == NewObjectSpan)
+                return depth >= 2 && stack[depth - 2] == operand && stack[depth - 1] == I32
+                    ? Push(stack, allocated, depth - 2, ObjectSpan) : -2;
+            if (kind == ObjectSpanLength)
+                return Match(stack, depth, ObjectSpan) ? Push(stack, allocated, depth - 1, I32) : -2;
+            if (kind == ObjectSpanRead)
+                return Match(stack, depth - 1, ObjectSpan) && Match(stack, depth, I32)
+                    ? Push(stack, allocated, depth - 2, ObjectReference) : -2;
             if (kind == ObjectElementAddress)
             {
                 if (depth < 2 || !ArrayIndex(stack, depth)) return -1;

@@ -67,6 +67,7 @@ namespace PortableCompiler
             {
                 int item = Read(bundle, image, layout, heaps, owner, next, end, context, objects, depth + 1, substitutions, methodArguments);
                 if (item < 0) return item;
+                if (item == ObjectSpan) return -2; // Byref-like values cannot be array elements.
                 // An enum vector needs separate nominal identity and array lowering.
                 if (ObjectLayouts.IsEnumKey(item)) return -2;
                 return GenericScalar.IsScalar(item) ? GenericScalar.VectorKey(item) : ObjectLayouts.RegisterArray(objects, item);
@@ -79,6 +80,8 @@ namespace PortableCompiler
             int status = ReadArguments(bundle, image, layout, heaps, owner, next, end, context, objects,
                 depth + 1, substitutions, arguments, methodArguments);
             if (status < 0) return status;
+            if (head[1] == 0x11 && count == 1 && arguments[0] == ObjectLayouts.ObjectReference &&
+                ObjectSpanMetadata.IsDefinition(image, layout, heaps, head[0])) return ObjectSpan;
             return BundleLayouts.RegisterInstantiation(bundle, image, layout, heaps, owner, head[0], objects, arguments, head[1] == 0x11);
         }
 

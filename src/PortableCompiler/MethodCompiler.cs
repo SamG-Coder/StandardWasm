@@ -158,14 +158,14 @@ namespace PortableCompiler
                 {
                     int type = signatures[offsets[index] + parameter];
                     if (CanExchangeClass(objects, type)) externalObjects = true;
-                    if (type == NullPointer || type == ObjectLocation || RuntimeTypeMetadata.IsStorage(type) || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
+                    if (type == NullPointer || type == ObjectLocation || type == ObjectSpan || RuntimeTypeMetadata.IsStorage(type) || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
                         return -2;
                 }
                 int result = signatures[offsets[index]];
                 // A foreign Wasm caller can mutate an escaped class or array
                 // that still has an alias inside the linked application.
                 if (CanExchangeClass(objects, result)) externalObjects = true;
-                if (result == NullPointer || RuntimeTypeMetadata.IsStorage(result) || ObjectLayouts.IsValueType(objects, result)) return -2;
+                if (result == NullPointer || result == ObjectSpan || RuntimeTypeMetadata.IsStorage(result) || ObjectLayouts.IsValueType(objects, result)) return -2;
                 exports[export] = index;
             }
             var body = new int[6];
@@ -505,6 +505,8 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.InvalidCast | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.CastClass)
                                 tags = ExceptionTypes.InvalidCast;
+                            else if (kind == BranchIl.ObjectSpanRead)
+                                tags = ExceptionTypes.IndexOutOfRange;
                             else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet || kind == BranchIl.StringCharacter ||
                                 kind == BranchIl.ObjectElementAddress)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
@@ -720,6 +722,13 @@ namespace PortableCompiler
                     // The value-type this argument is already a managed address.
                     // ldarga.0 would instead take the address of that argument slot.
                     if (valueReceiver && records[slot + 1] == 0) return -2;
+                    if (frame[records[slot + 1]] == ObjectSpan)
+                    {
+                        int span = ObjectSpanOperands.Bind(bundle, image, layout, heaps, owner, context, methodArguments,
+                            records, slot, objects, clauses);
+                        if (span < 0) return span;
+                        if (span != 0) continue;
+                    }
                     if (records[slot + 1] >= parameterCount)
                     {
                         int stable = InlineObjectAddresses.Bind(bundle, image, layout, heaps, owner, context,

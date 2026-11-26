@@ -11,7 +11,7 @@ namespace PortableCompiler
             NativeVector = NativeStorage.Vector;
         // A location is a traced alias with invariant element type, outside
         // the ordinary Object/reference conversion lattice.
-        internal const int ObjectLocation = 0x80;
+        internal const int ObjectLocation = 0x80, ObjectSpan = 0x81;
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
         // Keep the located CLI type in the verifier even though all cells share a Wasm heap.
         private const int ValueLocationBase = 65536;
