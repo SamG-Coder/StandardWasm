@@ -32,7 +32,7 @@ namespace PortableCompiler
         // localloc: [size] -> [address] on the shadow stack in memory 0.
         internal const int LocalAllocate = 72;
         // sizeof <type>: lowered to an int32 Constant once the layout is measured.
-        internal const int SizeOf = 73;
+        internal const int SizeOf = 112; // clear of the reflection kinds 73–75 (Stage 131)
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
