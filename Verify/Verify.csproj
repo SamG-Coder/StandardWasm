@@ -12,6 +12,7 @@
     <ProjectReference Include="../demos/stage-05-metadata-streams/StreamLibrary.csproj" />
     <ProjectReference Include="../demos/stage-06-method-definitions/MethodLibrary.csproj" />
     <ProjectReference Include="../demos/stage-07-method-bodies/BodyLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-08-integer-division/IntegerDivision.csproj" />
     <ProjectReference Include="../demos/stage-09-portable-emitter/EmitterLibrary.csproj" />
     <ProjectReference Include="../demos/stage-10-portable-control-flow/FlowLibrary.csproj" />
     <ProjectReference Include="../demos/stage-11-portable-linking/LinkLibrary.csproj" />
@@ -37,5 +38,46 @@
     <ProjectReference Include="../demos/stage-34-shared-winforms-source/ProfileBrowser.csproj" Aliases="BrowserForms" />
     <ProjectReference Include="../demos/stage-35-managed-control-tree/ReferenceLibrary.csproj" />
     <ProjectReference Include="../demos/stage-36-managed-events/EventLibrary.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../demos/stage-39-portable-primitive-arrays/PrimitiveStorage.csproj" />
+    <ProjectReference Include="../demos/stage-41-portable-narrow-scalars/NarrowScalars.csproj" />
+    <ProjectReference Include="../demos/stage-43-array-literals/ArrayLiterals.csproj" />
+    <ProjectReference Include="../demos/stage-44-checked-integers/CheckedIntegers.csproj" />
+    <ProjectReference Include="../demos/stage-45-checked-casts/CheckedCasts.csproj" />
+    <ProjectReference Include="../demos/stage-46-typed-overflow/TypedOverflow.csproj" />
+    <ProjectReference Include="../demos/stage-47-exception-tables/ExceptionTables.csproj" />
+    <ProjectReference Include="../demos/stage-48-overflow-catch/OverflowHandlers.csproj" />
+    <ProjectReference Include="../demos/stage-49-arithmetic-catches/ArithmeticHandlers.csproj" />
+    <ProjectReference Include="../demos/stage-50-nested-catches/NestedHandlers.csproj" />
+    <ProjectReference Include="../demos/stage-51-arithmetic-rethrow/RethrowHandlers.csproj" />
+    <ProjectReference Include="../demos/stage-52-array-bounds-exceptions/ArrayBounds.csproj" />
+    <ProjectReference Include="../demos/stage-53-typed-null-access/NullAccess.csproj" />
+    <ProjectReference Include="../demos/stage-54-finally/FinallyLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-55-allocation-delegates/AllocationDelegates.csproj" />
+    <ProjectReference Include="../demos/stage-56-instance-null/InstanceNull.csproj" />
+    <ProjectReference Include="../demos/stage-57-linked-exceptions/LinkedExceptions.csproj" />
+    <ProjectReference Include="../demos/stage-58-linked-references/LinkedReferences.csproj" />
+    <ProjectReference Include="../demos/stage-59-linked-objects/LinkedObjects.csproj" />
+    <ProjectReference Include="../demos/stage-60-nominal-linking/LinkedNominal.csproj" />
+    <ProjectReference Include="../demos/stage-61-linked-instances/LinkedInstances.csproj" />
+    <ProjectReference Include="../demos/stage-62-null-stack/NullStack.csproj" />
+    <ProjectReference Include="../demos/stage-63-linked-fields/LinkedFields.csproj" />
+    <ProjectReference Include="../demos/stage-64-foreign-field-types/ForeignFieldTypes.csproj" />
+    <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />
+    <Compile Remove="Fixtures/**/*.cs" />
+    <ProjectReference Include="Fixtures/PlatformIdentity/ThirdPartyTypes/ThirdPartyTypes.csproj" Aliases="PlatformIdentityThirdParty" />
+    <ProjectReference Include="Fixtures/PlatformIdentity/PlatformIdentityProbe/PlatformIdentityProbe.csproj" />
+    <ProjectReference Include="../demos/stage-21-managed-formatting/identity/ThirdPartyText/ThirdPartyText.csproj" Aliases="ThirdParty" />
+    <ProjectReference Include="../demos/stage-21-managed-formatting/identity/TextIdentityProbe/TextIdentityProbe.csproj" />
+    <ProjectReference Include="../demos/stage-15-managed-instances/identity/ObjectIdentityProbe/ObjectIdentityProbe.csproj" />
+    <ProjectReference Include="../demos/stage-18-long-integers/LongIntegers.csproj" />
+    <ProjectReference Include="../demos/stage-20-floating-point/FloatingPoint.csproj" />
+    <ProjectReference Include="../demos/stage-25-switch-dispatch/SwitchDispatch.csproj" />
+    <ProjectReference Include="../demos/stage-33-float-remainder/FloatRemainder.csproj" />
+    <ProjectReference Include="../demos/stage-29-math-intrinsics/MathIntrinsics.csproj" />
+    <ProjectReference Include="../demos/stage-37-primitive-arrays/PrimitiveArrays.csproj" />
+    <ProjectReference Include="../demos/stage-16-managed-delegates/identity/ThirdPartyFunc/ThirdPartyFunc.csproj" Aliases="ThirdParty" />
+    <ProjectReference Include="../demos/stage-16-managed-delegates/identity/FuncIdentityProbe/FuncIdentityProbe.csproj" />
   </ItemGroup>
 </Project>

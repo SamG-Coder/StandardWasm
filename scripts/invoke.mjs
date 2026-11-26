@@ -1,6 +1,26 @@
-// Represent signed i64 bit patterns as decimal strings to keep the JS boundary exact.
-export const decode = value => value?.i64 !== undefined ? BigInt(value.i64)
-    : value?.f64 !== undefined ? Number(value.f64) : value;
+// JSON carries a 64-bit integer as {"i64": "<signed decimal>"} because a JSON number is exact only to 2^53.
+// The Wasm JS API passes i64 parameters and results as BigInt, so decode those values before calling or comparing.
+// A floating-point value is {"f64": "<17 significant digits>"}, which also covers "NaN", "Infinity", "-Infinity" and
+// "-0". JSON cannot carry those. f32 values are encoded through their exact double value.
+export const decode = value =>
+    value?.i64 !== undefined ? BigInt(value.i64) : value?.f64 !== undefined ? Number(value.f64) : value;
+
+const managedTags = [
+    ["\0overflow", "System.OverflowException"],
+    ["\0divideByZero", "System.DivideByZeroException"],
+    ["\0indexOutOfRange", "System.IndexOutOfRangeException"],
+    ["\0nullReference", "System.NullReferenceException"],
+    ["\0invalidCast", "System.InvalidCastException"]
+];
+
+export function managedExceptionType(exports, error) {
+    if (!(error instanceof WebAssembly.Exception)) return null;
+    for (const [name, type] of managedTags) {
+        const tag = exports[name];
+        if (tag instanceof WebAssembly.Tag && error.is(tag)) return type;
+    }
+    return null;
+}
 
 export function invoke(exports, method, inputs) {
     const args = inputs.map(input => {
@@ -80,6 +100,12 @@ export async function invokeGenerated(exports, inputs, generated, reportDiagnost
             units[index] = String.fromCharCode(exports.TextCodeUnit(value, index));
         return units.join("");
     } catch (error) {
+        if (generated.exceptionType != null) {
+            const actual = managedExceptionType(instance.exports, error);
+            if (actual !== generated.exceptionType)
+                throw Error("Expected " + generated.exceptionType + ", got " + (actual ?? String(error)), { cause: error });
+            return null;
+        }
         if (!(error instanceof WebAssembly.RuntimeError)) throw error;
         return null;
     }

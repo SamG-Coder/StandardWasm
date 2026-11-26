@@ -12,7 +12,15 @@ internal static class BootstrapCases
             "CreateDiagnostic", "ReadDiagnostic", "CompileDetailed", "CompileModuleDetailed", "CompileBundleDetailed"];
         byte[] manifest = Manifest(exports.Select(name => (name, Row(name))));
         var image = Encode(dll);
-        cases.Add(new { module = "BootstrapLibrary", bootstrap = true, inputs = new[] { image, Encode(manifest) }, exports });
+        var compiler = new byte[capacity];
+        int compilerSize = CompilerExports.CompileModule(dll, manifest, compiler);
+        if (compilerSize <= 0)
+            throw new InvalidOperationException($"CLR self-compilation returned {compilerSize}");
+        cases.Add(new
+        {
+            module = "BootstrapLibrary", bootstrap = true, inputs = new[] { image, Encode(manifest) }, exports,
+            expectedHex = Convert.ToHexString(compiler.AsSpan(0, compilerSize)).ToLowerInvariant()
+        });
 
         int kernel = Row(nameof(CompilerExports.BootstrapKernel));
         byte[] aliases = Manifest([("first", kernel), ("second", kernel)]);
@@ -36,6 +44,7 @@ internal static class BootstrapCases
         Reject("truncated export name", aliases[..^1], -1);
         Reject("missing method definition", Manifest([("missing", 0)]), -1);
         Reject("unsupported name bytes", Manifest([("line\nbreak", kernel)]), -2);
+        Reject("reserved overflow export", Manifest([("\0overflow", kernel)]), -2);
 
         int Row(string name) => type.GetMethod(name)!.MetadataToken & 0xffffff;
 

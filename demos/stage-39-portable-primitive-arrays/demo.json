@@ -1,0 +1,1 @@
+{"assembly":"PrimitiveStorage","exportType":"PrimitiveStorage.StorageDemo","method":"Compile","inputs":[{"file":"self"},{"name":"ReadSigned"}],"generated":{"capacity":8192,"arguments":[-32769]},"expected":32767}

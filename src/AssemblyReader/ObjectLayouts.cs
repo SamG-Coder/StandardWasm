@@ -5,14 +5,25 @@ namespace PeLibrary
     internal static class ObjectLayouts
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
-        internal const int FirstClass = EventHandlerReference + 1, MaxClasses = 256 - FirstClass, Width = 3;
-        internal const int FieldMapStart = 1 + MaxClasses * Width;
+        internal const int FirstClass = ArrayTypeRefs.Doubles + 1, MaxClasses = 256 - FirstClass;
+        private const int Header = 2, Width = 5, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
+        internal const int FieldMapStart = Header + MaxClasses * Width;
 
-        // Registry: count, fixed triples of TypeDef row, first Field row and field count, then field kinds by row.
-        internal static int Register(byte[] image, int[] streams, int[] methods, int[] registry, int row)
+        // The header stores class count and occupied field slots. Each class
+        // maps an assembly-local TypeDef and Field range to its own field storage.
+        internal static int Find(int[] registry, int assembly, int row)
         {
             for (int i = 0; i < registry[0]; i++)
-                if (registry[1 + i * Width] == row) return FirstClass + i;
+            {
+                int candidate = Slot(FirstClass + i);
+                if (registry[candidate + Assembly] == assembly && registry[candidate + TypeRow] == row)
+                    return FirstClass + i;
+            }
+            return 0;
+        }
+
+        internal static int Reserve(byte[] image, int[] streams, int[] methods, int[] registry, int assembly, int row, int[] shape)
+        {
             if (registry[0] >= MaxClasses) return -2;
 
             var counts = new int[45];
@@ -30,72 +41,64 @@ namespace PeLibrary
             uint flags = U32(image, def);
             if ((flags & 0x120) != 0x100) return -2; // Sealed class, no interface.
             uint baseType = ReadIndex(image, def + (uint)(4 + 2 * strings), extends);
-            if ((baseType & 3) != 1 || !IsObjectRef(image, streams, counts, refs, strings, (int)(baseType >> 2)))
+            if ((baseType & 3) != 1 || !IsObjectRef(image, streams, methods, counts, refs, (int)(baseType >> 2)))
                 return -2;
 
             uint first = ReadIndex(image, def + (uint)fieldColumn, fieldIndex);
             uint end = row == counts[2] ? (uint)(counts[4] + 1) :
                 ReadIndex(image, def + (uint)(defWidth + fieldColumn), fieldIndex);
             if (first < 1 || end < first || end > (uint)(counts[4] + 1)) return -1;
-            // Reserve the class ID before resolving fields. Self and mutual
-            // references then resolve to this same ID during recursive discovery.
+            int count = (int)(end - first), storage = FieldMapStart + registry[1];
+            if (count > registry.Length - storage) return -3;
+            // Reserve the class and its whole field slice before following
+            // recursive references. Their registration may append other slices.
             int index = registry[0];
             registry[0] = index + 1;
-            int slot = 1 + index * Width;
-            registry[slot] = row;
-            registry[slot + 1] = (int)first;
-            registry[slot + 2] = (int)(end - first);
-            int fields = defs + counts[2] * defWidth;
-            int blobs = methods[3];
-            for (uint field = first; field < end; field++)
-            {
-                uint at = (uint)fields + (field - 1) * (uint)(2 + strings + blobs);
-                uint fieldFlags = U16(image, at);
-                if ((fieldFlags & 0x50) == 0x50)
-                    continue; // A literal is in metadata and has no instance storage.
-                if ((fieldFlags & 0x10) != 0) return -2;
-                uint sig = ReadIndex(image, at + (uint)(2 + strings), blobs);
-                if (!Fits(sig, 3, (uint)streams[1])) return -1;
-                uint blob = (uint)streams[0] + sig;
-                int size = image[blob];
-                if (size < 2 || !Fits(sig, (uint)(size + 1), (uint)streams[1])) return -1;
-                if (image[blob + 1] != 6) return -2;
-                int type;
-                if (image[blob] == 2 && image[blob + 2] == 8)
-                    type = 1;
-                else if (image[blob] == 2 && image[blob + 2] == 0x0e)
-                    type = 6; // String. The Wasm slot defaults to a null reference.
-                else if (image[blob] == 2 && image[blob + 2] == 0x1c)
-                    type = ObjectReference;
-                else if (image[blob] == 2 && WideStorage.IsIntegerElement(image[blob + 2]))
-                    type = WideStorage.Scalar;
-                else if (image[blob] == 3 && Fits(sig, 4, (uint)streams[1]) && image[blob + 2] == 0x1d)
-                {
-                    int element = image[blob + 3];
-                    if (element == 5) type = 2;
-                    else if (element == 8) type = 3;
-                    else if (WideStorage.IsIntegerElement(element)) type = WideStorage.Array;
-                    else return -2;
-                }
-                else if (image[blob + 2] == 0x12)
-                {
-                    int endSignature = (int)blob + 1 + size;
-                    var next = new int[1];
-                    int coded = CompressedUnsigned(image, (int)blob + 3, endSignature, next);
-                    if (coded <= 0 || next[0] != endSignature) return -2;
-                    if ((coded & 3) == 0)
-                        type = Register(image, streams, methods, registry, coded >> 2);
-                    else
-                    {
-                        type = EventMetadata.Reference(image, streams, methods, coded);
-                        if (type == 0) return -2;
-                    }
-                    if (type < 0) return type;
-                }
-                else return -2;
-                registry[FieldMapStart + (int)field] = type;
-            }
+            registry[1] = registry[1] + count;
+            int slot = Slot(FirstClass + index);
+            registry[slot + Assembly] = assembly;
+            registry[slot + TypeRow] = row;
+            registry[slot + FirstField] = (int)first;
+            registry[slot + Fields] = count;
+            registry[slot + Storage] = storage;
+            shape[0] = defs + counts[2] * defWidth;
+            shape[1] = (int)first;
+            shape[2] = count;
             return FirstClass + index;
+        }
+
+        // Return storage directly for known types. A class signature yields
+        // its image-local TypeDefOrRef code for the linker to resolve.
+        internal static int ReadStorage(byte[] image, int[] streams, int[] methods, int table, int row, int[] reference)
+        {
+            reference[0] = 0;
+            int strings = methods[2], blobs = methods[3];
+            uint at = (uint)(table + (row - 1) * (2 + strings + blobs));
+            uint flags = U16(image, at);
+            if ((flags & 0x50) == 0x50) return 0; // A literal has no instance storage.
+            if ((flags & 0x10) != 0) return -2;
+            uint sig = ReadIndex(image, at + (uint)(2 + strings), blobs);
+            if (!Fits(sig, 3, (uint)streams[1])) return -1;
+            uint blob = (uint)streams[0] + sig;
+            int size = image[blob];
+            if (size < 2 || !Fits(sig, (uint)(size + 1), (uint)streams[1])) return -1;
+            if (image[blob + 1] != 6) return -2;
+            byte element = image[blob + 2];
+            if (size == 2 && element == 8) return 1;
+            if (size == 2 && element == 0x0e) return 6;
+            if (size == 2 && element == 0x1c) return ObjectReference;
+            if (size == 2 && WideStorage.IsIntegerElement(element)) return WideStorage.Scalar;
+            if (size == 3 && element == 0x1d)
+            {
+                byte type = ArrayTypeRefs.Storage(image[blob + 3]);
+                return type == 0 ? -2 : type;
+            }
+            if (element != 0x12) return -2;
+            int end = (int)blob + 1 + size;
+            int coded = CompressedUnsigned(image, (int)blob + 3, end, reference);
+            if (coded <= 0 || reference[0] != end) return -2;
+            reference[0] = coded;
+            return 0;
         }
 
         internal static int Owner(byte[] image, int[] streams, int[] methods, int member, bool field)
@@ -125,17 +128,28 @@ namespace PeLibrary
             return owner;
         }
 
-        internal static int FieldType(int[] registry, int field) => registry[FieldMapStart + field];
+        private static int Slot(int type) => Header + (type - FirstClass) * Width;
+
+        internal static int FieldCount(int[] registry, int type) => registry[Slot(type) + Fields];
+
+        internal static int FieldTypeAt(int[] registry, int type, int offset) =>
+            registry[registry[Slot(type) + Storage] + offset];
+
+        internal static void SetFieldType(int[] registry, int type, int offset, int fieldType) =>
+            registry[registry[Slot(type) + Storage] + offset] = fieldType;
+
+        internal static int FieldType(int[] registry, int type, int row) =>
+            FieldTypeAt(registry, type, row - registry[Slot(type) + FirstField]);
 
         internal static int FieldOrdinal(int[] registry, int type, int field)
         {
-            int slot = 1 + (type - FirstClass) * Width;
-            int index = field - registry[slot + 1];
-            if (index < 0 || index >= registry[slot + 2] || FieldType(registry, field) == 0)
+            int slot = Slot(type);
+            int index = field - registry[slot + FirstField], storage = registry[slot + Storage];
+            if (index < 0 || index >= registry[slot + Fields] || registry[storage + index] == 0)
                 return -1;
             int ordinal = 0;
-            for (int i = registry[slot + 1]; i < field; i++)
-                if (FieldType(registry, i) != 0) ordinal++;
+            for (int i = 0; i < index; i++)
+                if (registry[storage + i] != 0) ordinal++;
             return ordinal;
         }
 
@@ -168,8 +182,7 @@ namespace PeLibrary
             int parentWidth = memberWidth - strings - blobs;
             uint parent = ReadIndex(image, at, parentWidth);
             if ((parent & 7) != 1 ||
-                !IsObjectRef(image, streams, counts, TypeRefStart(image, streams, counts, start, strings),
-                    strings, (int)(parent >> 3)))
+                !IsObjectRef(image, streams, methods, counts, TypeRefStart(image, streams, counts, start, strings), (int)(parent >> 3)))
                 return false;
 
             uint name = ReadIndex(image, at + (uint)parentWidth, strings);
@@ -180,19 +193,21 @@ namespace PeLibrary
                 U32(image, blob) == 0x01002003; // .ctor, HASTHIS, zero args, void
         }
 
-        private static bool IsObjectRef(byte[] image, int[] streams, int[] counts, int refs, int strings, int row)
+        private static bool IsObjectRef(byte[] image, int[] streams, int[] methods, int[] counts, int refs, int row)
         {
             if (row < 1 || row > counts[1]) return false;
+            int strings = methods[2];
             int scopeWidth = ResolutionWidth(counts);
             uint start = (uint)(refs + (row - 1) * (scopeWidth + 2 * strings));
             uint scope = ReadIndex(image, start, scopeWidth);
-            if ((scope & 3) != 2 || scope >> 2 == 0 || scope >> 2 > (uint)counts[35]) return false;
+            if ((scope & 3) != 2) return false;
             uint name = ReadIndex(image, start + (uint)scopeWidth, strings);
             uint ns = ReadIndex(image, start + (uint)(scopeWidth + strings), strings);
             if (!Fits(name, 7, (uint)streams[3]) || !Fits(ns, 7, (uint)streams[3])) return false;
             uint n = (uint)streams[2] + name, s = (uint)streams[2] + ns;
             return U32(image, n) == 0x656a624f && U16(image, n + 4) == 0x7463 && image[n + 6] == 0 &&
-                U32(image, s) == 0x74737953 && U16(image, s + 4) == 0x6d65 && image[s + 6] == 0;
+                U32(image, s) == 0x74737953 && U16(image, s + 4) == 0x6d65 && image[s + 6] == 0 &&
+                PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, (int)(scope >> 2));
         }
 
         private static int TypeRefStart(byte[] image, int[] streams, int[] counts, int first, int strings) =>

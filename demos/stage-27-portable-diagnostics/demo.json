@@ -1,1 +1,1 @@
-{"assembly":"DiagnosticLibrary","exportType":"DiagnosticLibrary.DiagnosticDemo","method":"Compile","inputs":[{"file":"self"},{"name":"CheckedIncrement"}],"generated":{"capacity":512,"arguments":[],"reject":true,"diagnostic":[0,"entry",2]},"expected":-2}
+{"assembly":"DiagnosticLibrary","exportType":"DiagnosticLibrary.DiagnosticDemo","method":"Compile","inputs":[{"file":"self"},{"name":"BoxedValue"}],"generated":{"capacity":512,"arguments":[],"reject":true,"diagnostic":[0,"entry",1]},"expected":-2}
