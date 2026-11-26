@@ -10,7 +10,7 @@ StandardWasm is an experimental ahead-of-time compiler for .NET Standard assembl
 - [Shared agent workflow](AGENTS.md) and [Claude entry point](CLAUDE.md)
 - Architecture decisions: [0001 staged demos](docs/decisions/0001-staged-demos.md), [0002 assembly reader boundary](docs/decisions/0002-assembly-reader-boundary.md), [0003 BCL intrinsics](docs/decisions/0003-bcl-intrinsics.md)
 
-.NET Standard specifies an API contract. Each supported API needs either a compatible implementation compiled into the module or an explicitly documented host import. Windows services and UI controls require additional browser implementations. Blazor is outside this project's architecture.
+.NET Standard specifies an API contract. Each supported API needs either a compatible implementation compiled into the module or an explicitly documented host import. The desktop compatibility track runs existing application binaries on an upstream-based .NET and WinForms framework. It adapts Windows platform services and uses WebGPU for drawing. Console and Blazor are additional application inputs. The launcher and WinForms host do not require Blazor. See the [upstream framework decision](docs/decisions/0024-upstream-winforms-binary-compatibility.md) and [dependency roadmap](docs/upstream-winforms-roadmap.md).
 
 ## Engineering approach
 
