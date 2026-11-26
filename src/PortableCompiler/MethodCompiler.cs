@@ -257,7 +257,7 @@ namespace PortableCompiler
                     if (maximum > 0 && body[1] > int.MaxValue / maximum)
                         return -2;
                     var depths = new int[body[1]];
-                    var states = new byte[body[1] * maximum];
+                    var states = new int[body[1] * maximum];
                     bool hasNull = false;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                         if (records[slot] == BranchIl.NullLiteral || records[slot] == BranchIl.ConvertInteger &&
@@ -336,7 +336,7 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.NullReference;
                             else if (kind == BranchIl.Binary)
                             {
-                                byte type = states[pc * maximum + depths[pc] - 2];
+                                int type = states[pc * maximum + depths[pc] - 2];
                                 if (BranchIl.IsIntegerDivision(operation, type))
                                     tags = BranchIl.IsSignedIntegerDivision(operation, type)
                                         ? ExceptionTypes.Arithmetic : ExceptionTypes.DivideByZero;
@@ -727,7 +727,7 @@ namespace PortableCompiler
         // Class slots have already resolved to an assembly-qualified layout.
         private static bool IsSharedBundleType(int type) =>
             IsScalar(type) || type == String || type == ObjectReference || type == NullPointer || IsArray(StackType(type)) ||
-            (type >= ObjectLayouts.FirstClass && type < Signed8);
+            (type >= ObjectLayouts.FirstClass && type - ObjectLayouts.FirstClass < ObjectLayouts.MaxClasses);
 
         private static bool IsSharedBundleSignature(int[] types, int offset, int arity)
         {

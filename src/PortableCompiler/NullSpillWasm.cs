@@ -8,7 +8,7 @@ namespace PortableCompiler
         internal const byte NullRef = 0x71;
 
         internal static int Transfer(byte[] code, int used, int[] records, int pc, int[] depths,
-            byte[] states, byte[] outgoingNulls, int maximum, int spills)
+            int[] states, byte[] outgoingNulls, int maximum, int spills)
         {
             int slot = pc * BranchIl.Width;
             int kind = records[slot];
@@ -27,13 +27,13 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int Edge(byte[] code, int used, int[] depths, byte[] states, byte[] outgoingNulls,
+        private static int Edge(byte[] code, int used, int[] depths, int[] states, byte[] outgoingNulls,
             int maximum, int spills, int pc, int successor)
         {
             int count = depths[successor] - 1;
             for (int i = 0; i < count; i++)
             {
-                byte target = states[successor * maximum + i];
+                int target = states[successor * maximum + i];
                 int source = outgoingNulls[pc * maximum + i];
                 if (source == 0 || source == 1 && target == NullValue ||
                     source == 2 && target != NullPointer) continue;

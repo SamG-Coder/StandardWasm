@@ -44,7 +44,7 @@ namespace PortableCompiler
                     continue;
                 }
                 int size = 1, stored = 0, parent = Parent(objects, classType);
-                if (parent != 0) size += 2 + UnsignedSize(HeapType((byte)parent));
+                if (parent != 0) size += 2 + UnsignedSize(HeapType(parent));
                 else if (!IsSealed(objects, classType) && !IsInterface(objects, classType)) size += 2;
                 for (int field = 0; field < fields; field++)
                 {
@@ -246,7 +246,7 @@ namespace PortableCompiler
                 {
                     output[cursor++] = final ? (byte)0x4f : (byte)0x50;
                     output[cursor++] = parent == 0 ? (byte)0 : (byte)1;
-                    if (parent != 0) cursor = Unsigned(output, cursor, HeapType((byte)parent));
+                    if (parent != 0) cursor = Unsigned(output, cursor, HeapType(parent));
                 }
                 output[cursor++] = 0x5f; // struct
                 int stored = 0;
@@ -380,7 +380,7 @@ namespace PortableCompiler
                 output[cursor++] = 0;
                 output[cursor++] = 0xfb;
                 output[cursor++] = 22; // ref.cast to the target's concrete receiver
-                cursor = Signed(output, cursor, HeapType((byte)receiver));
+                cursor = Signed(output, cursor, HeapType(receiver));
                 for (int argument = 1; argument < arity; argument++)
                 {
                     output[cursor++] = 0x20;
@@ -409,11 +409,11 @@ namespace PortableCompiler
 
         private static int ValueWidth(int type) =>
             type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference || type == NullPointer ? 1 :
-                HeapType(StackType(type)) <= 63 ? 2 : 3;
+                1 + HeapTypeSize(HeapType(StackType(type)));
 
         internal static int ValueType(byte[] output, int cursor, int slot)
         {
-            byte type = StackType(slot);
+            int type = StackType(slot);
             if (type == I32 || type == MethodPointer || IsNativeInteger(type))
                 output[cursor++] = 0x7f;
             else if (type == NullPointer)
@@ -432,15 +432,19 @@ namespace PortableCompiler
             return cursor;
         }
 
-        internal static int HeapType(byte type) =>
+        internal static int HeapType(int type) =>
             type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
                 type == EventArgsReference ? EventArgsHeap :
                 type == EventHandlerReference ? EventHandlerHeap :
                 type == Singles ? SingleArrayHeap : type == Doubles ? DoubleArrayHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;
 
+        // Positive heap indices are encoded as signed LEB values. The sign
+        // bit reserves one additional bit compared with an unsigned index.
+        private static int HeapTypeSize(int index) => UnsignedSize(index * 2);
+
         private static int ThunkSize(int receiver, int function, int arity) =>
-            7 + (HeapType((byte)receiver) <= 63 ? 1 : 2) + 2 * (arity - 1) + UnsignedSize(function);
+            7 + HeapTypeSize(HeapType(receiver)) + 2 * (arity - 1) + UnsignedSize(function);
 
         private static int Reserve(int remaining, int size)
         {

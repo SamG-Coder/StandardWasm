@@ -8,7 +8,7 @@ namespace PortableCompiler
         internal static byte Target(int instruction) =>
             instruction == 0x6b || instruction == UnsignedSingle ? F32 : F64;
 
-        internal static int Literal(byte[] code, int used, byte type, int low, int high)
+        internal static int Literal(byte[] code, int used, int type, int low, int high)
         {
             // Wasm literals use the same little-endian IEEE bits as CLI literals.
             code[used++] = type == F32 ? (byte)0x43 : (byte)0x44;
@@ -18,7 +18,7 @@ namespace PortableCompiler
             return used;
         }
 
-        internal static int Convert(byte[] code, int used, int instruction, byte source, byte target)
+        internal static int Convert(byte[] code, int used, int instruction, int source, int target)
         {
             if (source == target) return used;
             if (IsFloat(source) && IsFloat(target))
@@ -39,7 +39,7 @@ namespace PortableCompiler
             return used;
         }
 
-        internal static int Binary(byte[] code, int used, int instruction, byte type)
+        internal static int Binary(byte[] code, int used, int instruction, int type)
         {
             if (!IsComparison(instruction))
             {

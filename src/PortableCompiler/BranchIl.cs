@@ -406,10 +406,10 @@ namespace PortableCompiler
 
         internal static bool IsComparison(int instruction) => instruction >= 0x46 && instruction <= 0x4f;
 
-        internal static bool IsIntegerDivision(int instruction, byte type) =>
+        internal static bool IsIntegerDivision(int instruction, int type) =>
             instruction >= 0x6d && instruction <= 0x70 && SignatureTypes.IsInteger(type);
 
-        internal static bool IsSignedIntegerDivision(int instruction, byte type) =>
+        internal static bool IsSignedIntegerDivision(int instruction, int type) =>
             (instruction == 0x6d || instruction == 0x6f) && SignatureTypes.IsInteger(type);
 
 

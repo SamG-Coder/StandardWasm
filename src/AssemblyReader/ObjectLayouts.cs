@@ -5,13 +5,14 @@ namespace PeLibrary
     internal static class ObjectLayouts
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
-        internal const int FirstClass = PointerStorage.NativeZero + 1, MaxClasses = 256 - FirstClass;
+        // Keep layout IDs above primitive, packed storage and generic scalar keys.
+        internal const int FirstClass = 0x400, MaxClasses = 4096, MaxTypeDepth = 236;
         private const int Header = 4, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         private const int Arguments = 10, Arity = 11, Element = 12;
         private const int ValueShape = 0x40000000, NullableShape = 0x20000000;
-        private const int FieldStorageBits = 9, FieldStorageMask = (1 << FieldStorageBits) - 1;
-        private const int EnumHead = 3, EnumKeyBase = 0x300;
+        private const int FieldStorageBits = 16, FieldStorageMask = (1 << FieldStorageBits) - 1;
+        private const int EnumHead = 3, EnumKeyBase = 0x100000;
         internal const int FieldMapStart = Header + MaxClasses * Width;
 
         // The header stores the type count, occupied field and auxiliary slots,

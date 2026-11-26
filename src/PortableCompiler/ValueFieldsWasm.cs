@@ -30,7 +30,7 @@ namespace PortableCompiler
         internal static int Clear(byte[] code, int used, int type, int local)
         {
             code[used++] = 0xd0;
-            used = WasmBinary.Signed(code, used, WasmBinary.HeapType((byte)type));
+            used = WasmBinary.Signed(code, used, WasmBinary.HeapType(type));
             return Local(code, used, 0x21, local);
         }
 
@@ -50,7 +50,7 @@ namespace PortableCompiler
         }
 
         internal static int Update(byte[] code, int used, int[] objects, int type, int local, int temporary,
-            int field, int replacement, byte replacementType)
+            int field, int replacement, int replacementType)
         {
             used = Materialize(code, used, type, local);
             used = Local(code, used, 0x21, temporary);

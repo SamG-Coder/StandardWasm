@@ -24,7 +24,7 @@ namespace PortableCompiler
         {
             int known = ObjectLayouts.Find(objects, owner, row, arguments);
             if (known != 0) return ObjectLayouts.IsValueType(objects, known) == valueType ? known : -2;
-            if (depth >= ObjectLayouts.MaxClasses) return -2;
+            if (depth >= ObjectLayouts.MaxTypeDepth) return -2;
             var shape = new int[5];
             var deferred = new int[8];
             int status = GenericParameters.Check(image, heaps, layout, row, arguments, objects, deferred);

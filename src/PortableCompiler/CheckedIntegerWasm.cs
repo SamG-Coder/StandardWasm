@@ -5,7 +5,7 @@ namespace PortableCompiler
 {
     internal static class CheckedIntegerWasm
     {
-        internal static int Emit(byte[] code, int used, int opcode, byte type, int left, int right)
+        internal static int Emit(byte[] code, int used, int opcode, int type, int left, int right)
         {
             bool unsigned = (opcode & 1) != 0;
             int operation = opcode <= 0xd7 ? 0x6a : opcode <= 0xd9 ? 0x6c : 0x6b; // add, mul, sub
@@ -66,7 +66,7 @@ namespace PortableCompiler
             return Operation(code, used, operation, type, left, right);
         }
 
-        private static int Operation(byte[] code, int used, int opcode, byte type, int left, int right)
+        private static int Operation(byte[] code, int used, int opcode, int type, int left, int right)
         {
             used = Local(code, used, 0x20, left);
             used = Local(code, used, 0x20, right);

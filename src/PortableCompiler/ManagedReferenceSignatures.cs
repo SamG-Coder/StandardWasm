@@ -29,7 +29,7 @@ namespace PortableCompiler
         {
             int at = next[0];
             if (at >= end) return -1;
-            if (depth >= ObjectLayouts.MaxClasses) return -2;
+            if (depth >= ObjectLayouts.MaxTypeDepth) return -2;
             int element = image[at];
             next[0] = at + 1;
             int scalar = GenericScalar.Key(element);
