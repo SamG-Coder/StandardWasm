@@ -41,8 +41,29 @@ internal static class TypedPointerCases
         Reject("distinct primitive pointee", BundleCases.Pack(primitiveMismatch, dependency), readPrimitive, call, -6);
         Reject("nonzero native address", bundle, nameof(Kernels.RejectAddress),
             Offset(nameof(Kernels.RejectAddress), OpCodes.Stfld), -1);
-        Reject("indirect load", bundle, nameof(Kernels.RejectDereference),
-            Offset(nameof(Kernels.RejectDereference), OpCodes.Ldind_I4), -2);
+        // Stage 132 (decision 0060): reading through the null int* field raises the
+        // typed NullReferenceException on both runtimes. The module imports memory 0.
+        string dereference = nameof(Kernels.DereferenceNullField);
+        try
+        {
+            Kernels.DereferenceNullField();
+            throw new InvalidOperationException("The CLR read through a null int* field.");
+        }
+        catch (NullReferenceException)
+        {
+            byte[] dereferenceEntries = Manifest(dereference);
+            cases.Add(new
+            {
+                module = "BootstrapLibrary", method = "CompileBundle", fixture = "typed pointer null field dereference",
+                inputs = new[] { Encode(bundle), Encode(dereferenceEntries) },
+                generated = new
+                {
+                    capacity, bundle = true, arguments = Array.Empty<int>(), hex = Compile(dereference, dereferenceEntries),
+                    memory = true, exceptionType = typeof(NullReferenceException).FullName
+                },
+                expected = (int?)null, exception = typeof(NullReferenceException).FullName
+            });
+        }
         Reject("exported pointer", bundle, nameof(Kernels.RejectExport), -1, -2);
 
         string Compile(string name, byte[] entries)
