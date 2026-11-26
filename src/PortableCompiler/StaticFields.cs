@@ -27,7 +27,7 @@ namespace PortableCompiler
             return count;
         }
 
-        internal static int Bind(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
+        internal static int Bind(BundleImages bundle, byte[] image, int[] layout,
             int[] heaps, int owner, int declaringType, int field, int table, int flags, bool write,
             int[] objects, int[] globals, int[] result)
         {
@@ -38,7 +38,7 @@ namespace PortableCompiler
             // A constructed generic needs separate static data for each instantiation.
             status = GenericParameters.Check(image, heaps, layout, declaringType, new int[0], objects, new int[0]);
             if (status < 0) return status;
-            int storage = BundleLayouts.ReadFieldStorage(main, bundle, ranges, image, layout, heaps, owner,
+            int storage = BundleLayouts.ReadFieldStorage(bundle, image, layout, heaps, owner,
                 table, field, 0, objects, new int[2], true);
             if (storage < 0) return storage;
             if ((!IsScalar(storage) && !IsReference(storage)) || ObjectLayouts.IsValueType(objects, storage)) return -2;
@@ -50,7 +50,7 @@ namespace PortableCompiler
             return 0;
         }
 
-        internal static int ResolveLocal(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
+        internal static int ResolveLocal(BundleImages bundle, byte[] image, int[] layout,
             int[] heaps, int owner, int row, bool write, int[] objects, int[] globals, int[] result)
         {
             int declaring = ObjectLayouts.Owner(image, heaps, layout, row, true);
@@ -59,7 +59,7 @@ namespace PortableCompiler
             if (table < 0) return table;
             var definition = new int[3];
             AssemblyReferences.ReadField(image, layout, table, row, definition);
-            return Bind(main, bundle, ranges, image, layout, heaps, owner, declaring, row, table, definition[0],
+            return Bind(bundle, image, layout, heaps, owner, declaring, row, table, definition[0],
                 write, objects, globals, result);
         }
     }

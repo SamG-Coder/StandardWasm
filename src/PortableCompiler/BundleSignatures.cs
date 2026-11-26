@@ -5,7 +5,7 @@ namespace PortableCompiler
 {
     internal static class BundleSignatures
     {
-        internal static int Match(byte[] main, byte[] bundle, int[] ranges,
+        internal static int Match(BundleImages bundle,
             byte[] caller, int[] callerLayout, int[] callerHeaps, int callerOwner, int callerSignature,
             byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner, int targetSignature, bool field, int[] objects, int context = 0)
         {
@@ -54,7 +54,7 @@ namespace PortableCompiler
                     {
                         int token = CompressedUnsigned(caller, left, leftEnd, next);
                         left = next[0];
-                        int status = ObjectIdentity(main, bundle, ranges, caller, callerLayout, callerHeaps,
+                        int status = ObjectIdentity(bundle, caller, callerLayout, callerHeaps,
                             callerOwner, token, leftClass);
                         if (status <= 0) return status;
                     }
@@ -62,7 +62,7 @@ namespace PortableCompiler
                     {
                         int token = CompressedUnsigned(target, right, rightEnd, next);
                         right = next[0];
-                        int status = ObjectIdentity(main, bundle, ranges, target, targetLayout, targetHeaps,
+                        int status = ObjectIdentity(bundle, target, targetLayout, targetHeaps,
                             targetOwner, token, rightClass);
                         if (status <= 0) return status;
                     }
@@ -89,10 +89,10 @@ namespace PortableCompiler
 
                     // Local coded indices can differ even when the classes are
                     // identical. Match the resolved assembly and TypeDef row.
-                    int status = AssemblyBundle.ClassIdentity(main, bundle, ranges, caller, callerLayout,
+                    int status = AssemblyBundle.ClassIdentity(bundle, caller, callerLayout,
                         callerHeaps, callerOwner, leftToken, leftClass);
                     if (status < 0) return status;
-                    status = AssemblyBundle.ClassIdentity(main, bundle, ranges, target, targetLayout,
+                    status = AssemblyBundle.ClassIdentity(bundle, target, targetLayout,
                         targetHeaps, targetOwner, rightToken, rightClass);
                     if (status < 0 || leftClass[0] != rightClass[0] || leftClass[1] != rightClass[1])
                         return 0;
@@ -106,7 +106,7 @@ namespace PortableCompiler
                         if (caller[left++] != target[right++]) return 0;
                         continue;
                     }
-                    int match = MatchReference(main, bundle, ranges, caller, callerLayout, callerHeaps, callerOwner,
+                    int match = MatchReference(bundle, caller, callerLayout, callerHeaps, callerOwner,
                         target, targetLayout, targetHeaps, targetOwner, left - 1, leftEnd, right - 1, rightEnd, objects, next, context);
                     if (match <= 0) return match;
                     left = next[0];
@@ -114,7 +114,7 @@ namespace PortableCompiler
                 }
                 else if (element == 0x15 || element == 0x13 && context != 0)
                 {
-                    int match = MatchReference(main, bundle, ranges, caller, callerLayout, callerHeaps, callerOwner,
+                    int match = MatchReference(bundle, caller, callerLayout, callerHeaps, callerOwner,
                         target, targetLayout, targetHeaps, targetOwner, left - 1, leftEnd, right - 1, rightEnd, objects, next, context);
                     if (match <= 0) return match;
                     left = next[0];
@@ -122,7 +122,7 @@ namespace PortableCompiler
                 }
                 else if (element == PointerStorage.Element)
                 {
-                    int match = PointerSignatures.Match(main, bundle, ranges, caller, callerLayout, callerHeaps,
+                    int match = PointerSignatures.Match(bundle, caller, callerLayout, callerHeaps,
                         callerOwner, target, targetLayout, targetHeaps, targetOwner, left, leftEnd, right, rightEnd,
                         leftClass, rightClass, next);
                     if (match <= 0) return match;
@@ -135,18 +135,18 @@ namespace PortableCompiler
             return left == leftEnd && right == rightEnd ? 1 : 0;
         }
 
-        private static int MatchReference(byte[] main, byte[] bundle, int[] ranges, byte[] caller, int[] callerLayout,
+        private static int MatchReference(BundleImages bundle, byte[] caller, int[] callerLayout,
             int[] callerHeaps, int callerOwner, byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner,
             int left, int leftEnd, int right, int rightEnd, int[] objects, int[] next, int context)
         {
             int leftStart = left, rightStart = right;
             next[0] = left;
-            int leftType = ManagedReferenceSignatures.Read(main, bundle, ranges, caller, callerLayout, callerHeaps,
+            int leftType = ManagedReferenceSignatures.Read(bundle, caller, callerLayout, callerHeaps,
                 callerOwner, next, leftEnd, context, objects, 0);
             if (leftType < 0) return leftType;
             left = next[0];
             next[0] = right;
-            int rightType = ManagedReferenceSignatures.Read(main, bundle, ranges, target, targetLayout, targetHeaps,
+            int rightType = ManagedReferenceSignatures.Read(bundle, target, targetLayout, targetHeaps,
                 targetOwner, next, rightEnd, context, objects, 0);
             right = next[0];
             next[0] = left;
@@ -189,10 +189,10 @@ namespace PortableCompiler
             return at;
         }
 
-        private static int ObjectIdentity(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+        private static int ObjectIdentity(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int coded, int[] symbol)
         {
-            int status = AssemblyBundle.ClassIdentity(main, bundle, ranges, image, layout, heaps, owner, coded, symbol);
+            int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, coded, symbol);
             if (status < 0) return status;
             return symbol[0] == AssemblyBundle.ObjectOwner ? 1 : 0;
         }
