@@ -11,3 +11,5 @@ The portable compiler reads DelegateLibrary.dll and emits a module that creates 
 The supported shape is a closed Func<int> method group over a supported same-module receiver class. The compiler checks the CLI delegate metadata and maps the binding to a Wasm GC struct containing the receiver and a function reference. Generated wrappers cast the receiver back to its concrete class. Delegate execution uses typed call_ref. Multicast delegates, open delegates, arbitrary delegate signatures and the standard delegate combination APIs remain open.
 
 The WinForms demo uses the same C# binding factory on Windows and in Wasm. The native host attaches it to the WinForms button event. The browser captures layout at build time, creates the managed delegate at runtime, and dispatches that delegate for pointer and keyboard input. JavaScript holds opaque references and updates the presentation from the managed result.
+
+An extern-alias fixture uses a third-party delegate also named System.Func<T>. The CLR invokes it normally. The portable compiler requires platform assembly identity for its built-in Func<int> lowering and rejects the aliased signature before writing output.
