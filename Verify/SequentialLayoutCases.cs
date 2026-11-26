@@ -40,6 +40,16 @@ internal static class SequentialLayoutCases
         catch (TypeLoadException)
         {
         }
+        try
+        {
+            _ = typeof(Shape).Assembly.GetType("SequentialLayoutDependency.ImportedSequential", throwOnError: true);
+            throw new InvalidOperationException("CLR loaded the COM-imported sequential class.");
+        }
+        catch (TypeLoadException)
+        {
+        }
+        Reject(nameof(Kernels.ReadImported), -1);
+
         if (Kernels.RejectInitialized(1) != 43 || Kernels.RejectPacked(2) != 2 || Kernels.RejectSized(3) != 3 ||
             Kernels.RejectOverlaid(4) != 4)
             throw new InvalidOperationException("CLR did not accept the rejected layout fixture types.");
@@ -66,12 +76,12 @@ internal static class SequentialLayoutCases
             });
         }
 
-        // Each rejection is located at the newobj that first reaches the type.
-        void Reject(string name)
+        // Rejections identify the newobj or the method signature that reaches the type.
+        void Reject(string name, int ilOffset = 0)
         {
             MethodInfo method = Method(name);
             byte[] entries = Manifest(method);
-            int[] diagnostic = [0, Row(method), 0];
+            int[] diagnostic = [0, Row(method), ilOffset];
             Array.Fill(output, (byte)0xa5);
             int status = CompilerExports.CompileBundleDetailed(bundle, entries, output, location);
             if (status != -2 || !location.SequenceEqual(diagnostic) || output.Any(value => value != 0xa5))

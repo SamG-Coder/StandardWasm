@@ -92,6 +92,12 @@ namespace SequentialLayoutDependency
         public int Value;
     }
 
+    [ComImport, Guid("00000000-0000-0000-0000-000000000115"), StructLayout(LayoutKind.Sequential)]
+    public class ImportedSequential
+    {
+        public int Value;
+    }
+
     [StructLayout(LayoutKind.Explicit)]
     public class Overlaid
     {

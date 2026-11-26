@@ -96,6 +96,8 @@ namespace PeLibrary
             if (layout == 0x18 || !valueType && layout == 0x10) return -2;
             if (!valueType && layout == 0x08)
             {
+                // The CLR rejects COM-imported classes that declare managed layout.
+                if ((flags & 0x1000) != 0) return -2;
                 // Pack and ClassSize change the CLR object's byte extent. Keep
                 // them diagnosed rather than silently dropping them.
                 int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]));

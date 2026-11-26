@@ -57,6 +57,8 @@ namespace SequentialLayoutDemo
             return ledger.Last.Right * 3 - account.Extra + ledger.Owner.Id;
         }
 
+        public static int ReadImported(ImportedSequential value) => value.Value;
+
         public static int RejectFromAuto(int value) => new SequentialFromAuto { Extra = value }.Extra;
         public static int RejectInitialized(int value) => new Initialized { Value = value }.Value + Initialized.Base;
         public static int RejectPacked(int value) => new Packed { Value = value }.Value;
