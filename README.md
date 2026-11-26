@@ -6,6 +6,7 @@ StandardWasm is an experimental ahead-of-time compiler for .NET Standard assembl
 
 - [Project goal, milestones and acceptance criteria](GOAL.md)
 - [Runnable demos by stage](demos/README.md)
+- [WinForms and WebGPU counter demo](demos/stage-14-winforms-webgpu/README.md)
 - [Shared agent workflow](AGENTS.md) and [Claude entry point](CLAUDE.md)
 - Architecture decisions: [0001 staged demos](docs/decisions/0001-staged-demos.md), [0002 assembly reader boundary](docs/decisions/0002-assembly-reader-boundary.md), [0003 BCL intrinsics](docs/decisions/0003-bcl-intrinsics.md)
 
