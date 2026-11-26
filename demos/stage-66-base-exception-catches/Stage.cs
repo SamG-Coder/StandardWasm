@@ -2,6 +2,12 @@ using System;
 
 namespace BaseExceptionHandlers
 {
+    public sealed class Receiver
+    {
+        public int Value;
+        public int Get() => Value;
+    }
+
     public static class Handlers
     {
         public static int Ordered(int numerator, int denominator)
@@ -20,6 +26,25 @@ namespace BaseExceptionHandlers
             }
             catch (NullReferenceException) { return -201; }
             catch (SystemException) { return -202; }
+        }
+
+        public static int CatchBindingFailure(int value, int present)
+        {
+            try { return BindReceiver(value, present); }
+            catch (Exception) { return -301; }
+        }
+
+        public static int CatchArgumentFailure(int value, int present)
+        {
+            try { return BindReceiver(value, present); }
+            catch (ArgumentException) { return -302; }
+        }
+
+        private static int BindReceiver(int value, int present)
+        {
+            Receiver receiver = present == 0 ? null : new Receiver { Value = value };
+            Func<int> callback = receiver.Get;
+            return callback();
         }
 
         public static int Rethrow(int numerator, int denominator)
