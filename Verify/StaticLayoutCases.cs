@@ -33,7 +33,8 @@ internal static class StaticLayoutCases
         CheckStatic(nameof(Kernels.ReadForeignStatic), [], Kernels.ReadForeignStatic());
         if (Kernels.ConstructInitialized(5) != 5 || Initialized.Marker != 41)
             throw new InvalidOperationException("The CLR initializer fixture did not execute.");
-        Reject(nameof(Kernels.ConstructInitialized), OpCodes.Newobj);
+        // Stage 129 (decision 0057): the precise initializer runs from the constructor.
+        CheckStatic(nameof(Kernels.ConstructInitialized), [5], 5);
 
         void CheckStatic(string name, int[] arguments, int expected)
         {

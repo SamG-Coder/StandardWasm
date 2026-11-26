@@ -8,4 +8,5 @@ The generated code agrees with the CLR for individual field reads and writes
 through the base and derived types.
 
 The tests also cover linked static storage from [Stage 106](../stage-106-static-field-storage/README.md)
-and require a diagnostic for a reached type initializer.
+and construct a class whose precise type initializer runs first
+([Stage 129](../stage-129-type-initializers/README.md)).

@@ -53,7 +53,9 @@ internal static class SequentialLayoutCases
         if (Kernels.RejectInitialized(1) != 43 || Kernels.RejectPacked(2) != 2 || Kernels.RejectSized(3) != 3 ||
             Kernels.RejectOverlaid(4) != 4)
             throw new InvalidOperationException("CLR did not accept the rejected layout fixture types.");
-        foreach (string name in new[] { nameof(Kernels.RejectFromAuto), nameof(Kernels.RejectInitialized),
+        // Stage 129 (decision 0057): the precise initializer runs at construction.
+        Check(nameof(Kernels.RejectInitialized), [1], Kernels.RejectInitialized(1));
+        foreach (string name in new[] { nameof(Kernels.RejectFromAuto),
             nameof(Kernels.RejectPacked), nameof(Kernels.RejectSized), nameof(Kernels.RejectOverlaid) })
             Reject(name);
 

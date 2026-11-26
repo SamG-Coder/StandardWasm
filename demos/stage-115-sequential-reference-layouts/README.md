@@ -19,7 +19,9 @@ The compiler reports `-2` at the `newobj` for these shapes:
 - a sequential class with `Pack` or `Size`
 - a sequential class derived from an auto class other than `Object`. CoreCLR
   throws `TypeLoadException` for this shape outside the platform CoreLib.
-- a sequential class with a precise static constructor
+
+A sequential class with a precise static constructor now compiles. Its
+initializer runs at construction ([Stage 129](../stage-129-type-initializers/README.md)).
 
 See [decision 0045](../../docs/decisions/0045-sequential-reference-layouts.md).
 

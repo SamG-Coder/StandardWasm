@@ -1,4 +1,4 @@
-namespace InitializerDependency
+namespace TypeInitializerDependency
 {
     // A precise (explicit static constructor) type in a bundled dependency. Both a
     // cross-assembly field read and a cross-assembly static call must trigger it.

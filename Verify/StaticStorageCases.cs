@@ -21,7 +21,8 @@ internal static class StaticStorageCases
         foreach (int input in new[] { int.MinValue, -1, 0, 5, short.MaxValue, int.MaxValue })
             Check(nameof(Kernels.Run), [input], Kernels.Run(input), []);
         Check(nameof(Kernels.WithEventArgs), [9], Kernels.WithEventArgs(9), []);
-        Reject(nameof(Kernels.RejectInitialized), Kernels.RejectInitialized(), 42);
+        // Stage 129 (decision 0057): the field read runs the declaring type's initializer.
+        Check(nameof(Kernels.RejectInitialized), [], Kernels.RejectInitialized(), []);
         Reject(nameof(Kernels.RejectThreadStatic), Kernels.RejectThreadStatic(), 0);
 
         void Check(string name, int[] arguments, int expected, int[][] priorArguments)

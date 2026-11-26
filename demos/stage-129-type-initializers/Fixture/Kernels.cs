@@ -1,7 +1,7 @@
 using System;
-using InitializerDependency;
+using TypeInitializerDependency;
 
-namespace InitializerFixture
+namespace TypeInitializerFixture
 {
     // Trace has no initializer. Each initializer appends one digit, so a kernel's
     // result shows which initializers ran and in what order. The CLR oracle loads

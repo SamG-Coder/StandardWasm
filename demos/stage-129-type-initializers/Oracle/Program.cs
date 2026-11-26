@@ -108,8 +108,8 @@ void Failure(string name, (string export, string method)[] calls)
 (Type, AssemblyLoadContext) Load(string label)
 {
     var context = new AssemblyLoadContext(label, isCollectible: true);
-    context.Resolving += (_, assembly) => assembly.Name == "InitializerDependency" ? context.LoadFromAssemblyPath(dependency) : null;
-    return (context.LoadFromAssemblyPath(fixture).GetType("InitializerFixture.Kernels", throwOnError: true)!, context);
+    context.Resolving += (_, assembly) => assembly.Name == "TypeInitializerDependency" ? context.LoadFromAssemblyPath(dependency) : null;
+    return (context.LoadFromAssemblyPath(fixture).GetType("TypeInitializerFixture.Kernels", throwOnError: true)!, context);
 }
 
 static int Row(MethodInfo method) => method.MetadataToken & 0xffffff;

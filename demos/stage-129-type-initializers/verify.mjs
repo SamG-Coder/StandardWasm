@@ -18,7 +18,7 @@ const evidence = mkdtempSync(join(output, "run-"));
 run("dotnet", ["build", "-c", "Release", join(stage, "Fixture")]);
 const bin = join(stage, "Fixture", "bin", "Release", "netstandard2.0");
 runOn32BitClr(wasm32Runtime(), join(stage, "Oracle"), join(stage, "Oracle", "bin", "Release", "net10.0", "Oracle.dll"),
-    [evidence, join(bin, "InitializerFixture.dll"), join(bin, "InitializerDependency.dll")]);
+    [evidence, join(bin, "TypeInitializerFixture.dll"), join(bin, "TypeInitializerDependency.dll")]);
 const oracle = JSON.parse(readFileSync(join(evidence, "oracle.json"), "utf8"));
 assert.equal(oracle.process, "X86");
 const files = [compiler, ...oracle.files].map(path => readFileSync(path));
