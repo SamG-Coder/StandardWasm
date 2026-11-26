@@ -20,4 +20,4 @@ The WinForms and console paths require no Blazor. The acceptance paths require n
 | Console launch | Drop an ordinary .NET console publish into the browser and compare entry arguments, input/output, errors and exit status with the same program on the CLR. |
 | Blazor launch | Drop an existing compiled Blazor app and its published assets. Start with a standalone client app and compare rendering and interaction with its stock host. Track server-dependent render modes as separate hosting work. |
 
-Read the [architecture decision](docs/decisions/0005-upstream-winforms-binary-compatibility.md), the [dependency audit and roadmap](docs/upstream-winforms-roadmap.md), and the [demo index](demos/README.md). Use the existing [independent review process](AGENTS.md).
+Read the [architecture decision](docs/decisions/0024-upstream-winforms-binary-compatibility.md), the [dependency audit and roadmap](docs/upstream-winforms-roadmap.md), and the [demo index](demos/README.md). Use the existing [independent review process](AGENTS.md).

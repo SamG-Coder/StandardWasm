@@ -1,6 +1,6 @@
 # Upstream WinForms dependency audit and roadmap
 
-This is a source audit and implementation sequence. It does not report a successful build of upstream WinForms for the browser. The acceptance target is [unchanged WinForms application binaries](../GOAL.md), under [decision 0005](decisions/0005-upstream-winforms-binary-compatibility.md).
+This is a source audit and implementation sequence. It does not report a successful build of upstream WinForms for the browser. The acceptance target is [unchanged WinForms application binaries](../GOAL.md), under [decision 0024](decisions/0024-upstream-winforms-binary-compatibility.md).
 
 ## Source baseline
 

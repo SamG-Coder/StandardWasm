@@ -1,4 +1,4 @@
-# 0005 · Upstream WinForms binary compatibility
+# 0024 · Upstream WinForms binary compatibility
 
 **Status:** Accepted direction. Implementation and compatibility evidence are pending.
 
