@@ -124,7 +124,7 @@ namespace PortableCompiler
             if (index < 0) return index;
             field[0] = index;
             // The receiver layout and value type come from the same owning DLL.
-            field[1] = (type << 8) | ObjectLayouts.FieldType(objects, type, row);
+            field[1] = FieldAccess.Encode(type, ObjectLayouts.FieldType(objects, type, row));
             return 0;
         }
 

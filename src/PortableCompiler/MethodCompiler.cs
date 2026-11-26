@@ -439,7 +439,7 @@ namespace PortableCompiler
                     int fieldIndex = ObjectLayouts.FieldOrdinal(objects, type, field);
                     if (fieldIndex < 0) return -1;
                     records[slot + 1] = fieldIndex;
-                    records[slot + 3] = (type << 8) | ObjectLayouts.FieldType(objects, type, field);
+                    records[slot + 3] = FieldAccess.Encode(type, ObjectLayouts.FieldType(objects, type, field));
                     if (kind == BranchIl.FieldAddress && !LinkExchange(image, heaps, layout, records, slot))
                         return -2;
                     continue;
@@ -641,7 +641,7 @@ namespace PortableCompiler
         {
             // Keep the interior reference confined to this fused operation.
             // Only local/argument loads can occur between ldflda and the call.
-            if (unchecked((byte)records[slot + 3]) != EventHandlerReference) return false;
+            if (FieldAccess.Storage(records[slot + 3]) != EventHandlerReference) return false;
             int replacement = records[slot + 2] * BranchIl.Width;
             if (replacement >= records.Length || records[replacement] != BranchIl.Load || records[replacement + 3] != 0)
                 return false;

@@ -381,7 +381,7 @@ namespace PortableCompiler
                 }
                 else if (kind == ExchangeHandlerField)
                 {
-                    byte owner = (byte)(records[slot + 3] >> 8);
+                    byte owner = FieldAccess.Owner(records[slot + 3]);
                     int receiver = Spill(spills, maximum, states[state + top], top);
                     int oldValue = Spill(spills, maximum, EventHandlerReference, top);
                     // The fused ldflda permits only side-effect-free loads after this check.
@@ -405,16 +405,22 @@ namespace PortableCompiler
                 else if (kind == GetField || kind == SetField)
                 {
                     int descriptor = records[slot + 3];
-                    byte type = (byte)(descriptor >> 8), value = unchecked((byte)descriptor);
+                    byte type = FieldAccess.Owner(descriptor);
+                    int storage = FieldAccess.Storage(descriptor);
                     int address = kind == GetField ? top : top - 1;
                     int reference = Spill(spills, maximum, states[state + address], address);
                     used = GuardNull(code, used, reference);
                     used = Local(code, used, 0x20, reference);
                     if (kind == SetField)
                         used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
-                    used = Gc(code, used, kind == GetField ? 2 : 5, type);
+                    // struct.set truncates packed cells to their storage
+                    // width. The load selects the CLI extension to int32.
+                    int instruction = 5;
+                    if (kind == GetField)
+                        instruction = storage == Signed8 || storage == Signed16 ? 3 : IsNarrow(storage) ? 4 : 2;
+                    used = Gc(code, used, instruction, type);
                     used = WasmBinary.Unsigned(code, used, operand);
-                    if (kind == GetField) used = Local(code, used, 0x21, Spill(spills, maximum, value, top));
+                    if (kind == GetField) used = Local(code, used, 0x21, Spill(spills, maximum, StackType(storage), top));
                 }
                 else if (kind == NewArray || kind == InitializedArray)
                 {

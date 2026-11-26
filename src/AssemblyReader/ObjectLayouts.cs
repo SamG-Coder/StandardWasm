@@ -129,7 +129,8 @@ namespace PeLibrary
             if (size < 2 || size > limit - blob) return -1;
             if (image[blob] != 6) return -2;
             byte element = image[blob + 1];
-            if (size == 2 && element == 8) return 1;
+            if (size == 2 && (element == 8 || element == 9)) return 1;
+            if (size == 2 && element >= 2 && element <= 7) return NarrowStorage.FromElement(element);
             if (size == 2 && element == 0x0e) return 6;
             if (size == 2 && element == 0x1c) return ObjectReference;
             if (size == 2 && WideStorage.IsIntegerElement(element)) return WideStorage.Scalar;

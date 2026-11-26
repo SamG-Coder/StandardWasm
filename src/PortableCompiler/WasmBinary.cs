@@ -256,7 +256,10 @@ namespace PortableCompiler
                 {
                     int fieldType = LayoutFieldType(objects, classType, field);
                     if (fieldType == 0) continue;
-                    cursor = ValueType(output, cursor, Representation(objects, fieldType));
+                    if (IsNarrow(fieldType))
+                        output[cursor++] = fieldType == Signed8 || fieldType == Unsigned8 ? (byte)0x78 : (byte)0x77;
+                    else
+                        cursor = ValueType(output, cursor, Representation(objects, fieldType));
                     output[cursor++] = 1;
                 }
             }

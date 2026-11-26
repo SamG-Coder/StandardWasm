@@ -11,7 +11,8 @@ namespace PortableCompiler
 
         // Signature and frame tags keep the CLI storage width. Narrow types
         // live above the byte range reserved for evaluation stack types.
-        internal const int Signed8 = 256, Unsigned8 = 257, Signed16 = 258, Unsigned16 = 259, Character = 260;
+        internal const int Signed8 = NarrowStorage.Signed8, Unsigned8 = NarrowStorage.Unsigned8,
+            Signed16 = NarrowStorage.Signed16, Unsigned16 = NarrowStorage.Unsigned16, Character = NarrowStorage.Character;
 
         internal static bool IsNarrow(int type) => type >= Signed8 && type <= Character;
         internal static byte StackType(int type) => IsNarrow(type) ? I32 : unchecked((byte)type);
@@ -106,10 +107,8 @@ namespace PortableCompiler
                     types[target] = Void;
                 else if (element == 2 || element == 8 || element == 9)
                     types[target] = I32;
-                else if (element == 3)
-                    types[target] = Character;
-                else if (element >= 4 && element <= 7)
-                    types[target] = Signed8 + element - 4;
+                else if (element >= 3 && element <= 7)
+                    types[target] = NarrowStorage.FromElement(element);
                 else if (WideStorage.IsIntegerElement(element))
                     types[target] = I64;
                 else if (NativeStorage.IsIntegerElement(element))

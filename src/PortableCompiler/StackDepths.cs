@@ -66,7 +66,7 @@ namespace PortableCompiler
                 }
                 else if (kind == ExchangeHandlerField)
                 {
-                    if ((depth == 0 || !Assignable(stack[depth - 1], (byte)(records[slot + 3] >> 8), objects)) ||
+                    if ((depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(records[slot + 3]), objects)) ||
                         frame[records[slot + BranchIl.Width + 1]] != EventHandlerReference ||
                         frame[records[slot + 2 * BranchIl.Width + 1]] != EventHandlerReference)
                         return -1;
@@ -241,13 +241,13 @@ namespace PortableCompiler
                 return depth > 0 && stack[depth - 1] >= FirstClass && !IsInterface(objects, stack[depth - 1]) ? depth - 1 : -1;
             if (kind == GetField)
             {
-                if (depth == 0 || !Assignable(stack[depth - 1], (byte)(extra >> 8), objects)) return -1;
-                stack[depth - 1] = unchecked((byte)extra);
+                if (depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(extra), objects)) return -1;
+                stack[depth - 1] = StackType(FieldAccess.Storage(extra));
                 return depth;
             }
             if (kind == SetField)
-                return depth >= 2 && Assignable(stack[depth - 2], (byte)(extra >> 8), objects) &&
-                    Assignable(stack[depth - 1], unchecked((byte)extra), objects) ? depth - 2 : -1;
+                return depth >= 2 && Assignable(stack[depth - 2], FieldAccess.Owner(extra), objects) &&
+                    Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 2 : -1;
             if (kind == NewArray || kind == InitializedArray)
             {
                 if (!ArrayIndex(stack, depth)) return -1;
