@@ -1,3 +1,5 @@
+extern alias ThirdParty;
+
 using System.Buffers.Binary;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
@@ -12,11 +14,7 @@ internal static class BundleCases
         byte[] entry = File.ReadAllBytes(typeof(Kernels).Assembly.Location);
         byte[] library = File.ReadAllBytes(typeof(SharedMath.MathLibrary).Assembly.Location);
         byte[] leaf = File.ReadAllBytes(typeof(LeafMath.Leaf).Assembly.Location);
-        byte[] manifest = new byte[11];
-        BinaryPrimitives.WriteInt32LittleEndian(manifest,
-            typeof(Kernels).GetMethod(nameof(Kernels.Calculate))!.MetadataToken & 0xffffff);
-        manifest[4] = 3;
-        "run"u8.CopyTo(manifest.AsSpan(8));
+        byte[] manifest = Manifest(typeof(Kernels), nameof(Kernels.Calculate));
 
         byte[] joined = Pack(entry, library, leaf);
         byte[] reordered = Pack(entry, leaf, library);
@@ -30,8 +28,8 @@ internal static class BundleCases
 
         var inputs = new[] { Encode(joined), Encode(manifest) };
         foreach (int value in new[] { int.MinValue, -101, -1, 0, 1, 9, 100, int.MaxValue })
-            AddCase("overloaded and transitive call", inputs, new[] { value }, Kernels.Calculate(value), false);
-        AddCase("reordered dependencies", new[] { Encode(reordered), Encode(manifest) }, [9], 89, false);
+            AddCase("overloaded and transitive call", inputs, new[] { value }, Kernels.Calculate(value), hex);
+        AddCase("reordered dependencies", new[] { Encode(reordered), Encode(manifest) }, [9], 89, hex);
 
         Reject("missing direct dependency", Pack(entry, leaf), -4);
         Reject("missing transitive dependency", Pack(entry, library), -4);
@@ -54,23 +52,52 @@ internal static class BundleCases
         missingMethod[methodName] = (byte)'Z';
         Reject("missing matching method", Pack(entry, missingMethod, leaf), -6);
 
-        void Reject(string name, byte[] bundle, int expected)
+        var aliasedType = typeof(TextIdentityProbe.Kernels);
+        byte[] text = File.ReadAllBytes(aliasedType.Assembly.Location);
+        byte[] dependency = File.ReadAllBytes(typeof(ThirdParty::System.String).Assembly.Location);
+        byte[] aliased = Pack(text, dependency);
+        byte[] scalar = Manifest(aliasedType, nameof(TextIdentityProbe.Kernels.ConcatScalar));
+        int linked = BundleDemo.CompileBundle(aliased, scalar, output);
+        if (linked <= 0) throw new InvalidOperationException($"Aliased scalar overload returned {linked}.");
+        string linkedHex = Convert.ToHexString(output.AsSpan(0, linked)).ToLowerInvariant();
+        var aliasedInputs = new[] { Encode(aliased), Encode(scalar) };
+        foreach (int value in new[] { int.MinValue, 9, int.MaxValue })
+            AddCase("aliased String scalar overload", aliasedInputs, [value],
+                TextIdentityProbe.Kernels.ConcatScalar(value), linkedHex);
+
+        byte[] concat = Manifest(aliasedType, nameof(TextIdentityProbe.Kernels.ConcatLength));
+        Reject("aliased String with missing dependency", Pack(text), -4, concat);
+        Reject("aliased String with unsupported return type", aliased, -2, concat);
+        Reject("aliased String constructor", aliased, -2,
+            Manifest(aliasedType, nameof(TextIdentityProbe.Kernels.Construct)));
+
+        void Reject(string name, byte[] bundle, int expected, byte[] selection = null)
         {
+            selection ??= manifest;
             Array.Fill(output, (byte)0xa5);
-            int status = BundleDemo.CompileBundle(bundle, manifest, output);
+            int status = BundleDemo.CompileBundle(bundle, selection, output);
             if (status != expected || output.Any(value => value != 0xa5))
                 throw new InvalidOperationException($"{name} returned {status}, expected {expected}.");
-            AddCase(name, new[] { Encode(bundle), Encode(manifest) }, [], expected, true);
+            AddCase(name, new[] { Encode(bundle), Encode(selection) }, [], expected, null);
         }
 
-        void AddCase(string name, object[] args, int[] arguments, int expected, bool reject)
+        void AddCase(string name, object[] args, int[] arguments, int expected, string moduleHex)
         {
             cases.Add(new
             {
                 module = "BundleLibrary", method = "CompileBundle", fixture = name, inputs = args,
-                generated = new { capacity, arguments, bundle = true, hex = reject ? null : hex, reject }, expected
+                generated = new { capacity, arguments, bundle = true, hex = moduleHex, reject = moduleHex is null }, expected
             });
         }
+    }
+
+    private static byte[] Manifest(Type type, string name)
+    {
+        var manifest = new byte[11];
+        BinaryPrimitives.WriteInt32LittleEndian(manifest, type.GetMethod(name)!.MetadataToken & 0xffffff);
+        manifest[4] = 3;
+        "run"u8.CopyTo(manifest.AsSpan(8));
+        return manifest;
     }
 
     internal static byte[] Pack(params byte[][] assemblies)

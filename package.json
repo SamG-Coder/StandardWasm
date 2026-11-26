@@ -8,7 +8,8 @@
     "demo": "node scripts/demo.mjs",
     "winforms": "node scripts/winforms.mjs",
     "test:winforms": "node scripts/winforms.mjs --verify",
-    "bench:webgpu": "node scripts/dense-webgpu.mjs --verify"
+    "bench:webgpu": "node scripts/dense-webgpu.mjs --verify",
+    "audit:portable": "node scripts/portable-audit.mjs"
   },
   "type": "commonjs",
   "dependencies": {
