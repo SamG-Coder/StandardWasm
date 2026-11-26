@@ -23,6 +23,11 @@ internal static class StaticStorageCases
         Check(nameof(Kernels.WithEventArgs), [9], Kernels.WithEventArgs(9), []);
         // Stage 129 (decision 0057): the field read runs the declaring type's initializer.
         Check(nameof(Kernels.RejectInitialized), [], Kernels.RejectInitialized(), []);
+        FieldInfo key = typeof(AnnotatedKeys).GetField("Key", BindingFlags.NonPublic | BindingFlags.Static)!;
+        if (!key.GetCustomAttributesData().Any(attribute =>
+            attribute.AttributeType.FullName == "System.Runtime.CompilerServices.NullableAttribute"))
+            throw new InvalidOperationException("The static key fixture must carry a field-level nullable annotation.");
+        Check(nameof(Kernels.ReadAnnotatedKey), [], Kernels.ReadAnnotatedKey(), []);
         Reject(nameof(Kernels.RejectThreadStatic), Kernels.RejectThreadStatic(), 0);
 
         void Check(string name, int[] arguments, int expected, int[][] priorArguments)

@@ -10,5 +10,7 @@ DLL share a slot identified by the assembly and FieldDef. The fixture covers
 zero and null defaults, state across calls, narrow integer storage, scalar
 widths, managed object identity and isolation of distinct declaring fields.
 
-Attributed statics, static fields of generic declaring
+Field-level nullable annotations leave static storage and initializer semantics intact.
+The fixture checks the annotation is present and compares the identity of repeated loads.
+Other attributed statics, including `ThreadStatic`, and static fields of generic declaring
 types, value aggregates, and static addresses still require runtime support.

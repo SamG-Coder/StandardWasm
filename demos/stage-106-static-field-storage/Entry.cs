@@ -43,8 +43,24 @@ namespace StaticStorageDemo
             return first == second ? Counter : -1;
         }
 
+        public static int ReadAnnotatedKey() => AnnotatedKeys.Read();
+
         public static int RejectInitialized() => Initialized.Counter;
         public static int RejectThreadStatic() => Storage.ThreadCounter;
+    }
+
+    public static class AnnotatedKeys
+    {
+#nullable enable annotations
+        private static readonly object? Key = new object();
+#nullable disable annotations
+        private static readonly object Other = new object();
+
+        public static int Read()
+        {
+            var first = Key;
+            return first != null && first == Key && first != Other ? 1 : 0;
+        }
     }
 
     public static class Demo
