@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>StandardWasm executable intake</title></head>
+<body>
+<main>
+<h1>Open a compiled .NET app</h1>
+<p id="drop">Drop the executable and any original companion files here.</p>
+<label>Choose files <input id="files" type="file" multiple></label>
+<label>Choose publish folder <input id="folder" type="file" webkitdirectory></label>
+<label id="framework-option" hidden>Choose framework DLLs <input id="framework" type="file" accept=".dll" multiple></label>
+<button id="run" type="button" hidden disabled>Run managed entry</button>
+<pre id="status" role="status" aria-live="polite"></pre>
+</main>
+<script type="module" src="/web/intake-ui.mjs"></script>
+</body>
+</html>
