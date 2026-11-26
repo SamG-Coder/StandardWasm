@@ -51,10 +51,13 @@ export function prepareProfileTiming({
                 throw Error("Profile timings require a cross-origin isolated page");
             const clock = { crossOriginIsolated: globalThis.crossOriginIsolated, observedStepMs: observedClockStep() };
             const totals = {
-                webgpu: { updateMs: [], submitMs: [], queueDrainMs: [] },
+                webgpu: { updateMs: [], submitMs: [] },
                 canvas2d: { updateMs: [], submitMs: [] }
             };
-            if (previewRegion) totals.webgpuRegion = { updateMs: [], submitMs: [], queueDrainMs: [] };
+            if (previewRegion) {
+                totals.webgpu.queueDrainMs = [];
+                totals.webgpuRegion = { updateMs: [], submitMs: [], queueDrainMs: [] };
+            }
             if (previewControl) totals.webgpuRedraw = { updateMs: [], submitMs: [], queueDrainMs: [] };
             if (previewControl) for (const result of Object.values(totals)) result.paintMs = [];
             const renderers = Object.keys(totals);
@@ -80,9 +83,10 @@ export function prepareProfileTiming({
                         }
                     }
                     if (key !== "canvas2d") {
-                        const start = performance.now();
+                        const drain = totals[key].queueDrainMs;
+                        const start = drain ? performance.now() : 0;
                         await gpu.finished();
-                        totals[key].queueDrainMs.push(performance.now() - start);
+                        drain?.push(performance.now() - start);
                     }
                 }
             }
