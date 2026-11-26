@@ -17,6 +17,7 @@ if (!existsSync(compiler)) throw Error("Build the self-hosted compiler with npm 
 const profile = process.argv.includes("--profile-bundle-images");
 const baseline = profile && process.env.STANDARDWASM_BASELINE_DEADLINE === "1";
 const dropDeadlineMs = baseline ? 1_500_000 : 600_000;
+const historical = baseline || process.env.STANDARDWASM_STAGE118_DIAGNOSTIC === "1";
 const evidenceRoot = join(root, "artifacts", profile ? "bundle-image-reuse" : "managed-companions");
 mkdirSync(evidenceRoot, { recursive: true });
 const evidence = mkdtempSync(join(evidenceRoot, "run-"));
@@ -79,9 +80,9 @@ assert.match(node.notManaged.error, /not a managed .NET assembly/);
 assert.equal(node.wrongIdentity.compilerStatus, -4);
 assert.equal(node.duplicateIdentity.compilerStatus, -5);
 assert.equal(node.winforms.state, "unsupported");
-assert.equal(node.winforms.compilerStatus, -2);
+assert.equal(node.winforms.compilerStatus, historical ? -2 : -4);
 if (profile) {
-    assert.deepEqual(node.winforms.diagnostic, [0, 3, 361]);
+    assert.deepEqual(node.winforms.diagnostic, historical ? [0, 3, 361] : [1, 4340, 0]);
     for (const field of ["exitCode", "moduleBytes", "moduleSha256"])
         assert.equal(Object.hasOwn(node.winforms, field), false, field);
 }
