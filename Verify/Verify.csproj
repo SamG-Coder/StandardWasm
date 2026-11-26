@@ -47,5 +47,6 @@
     <ProjectReference Include="../demos/stage-49-arithmetic-catches/ArithmeticHandlers.csproj" />
     <ProjectReference Include="../demos/stage-50-nested-catches/NestedHandlers.csproj" />
     <ProjectReference Include="../demos/stage-51-arithmetic-rethrow/RethrowHandlers.csproj" />
+    <ProjectReference Include="../demos/stage-52-array-bounds-exceptions/ArrayBounds.csproj" />
   </ItemGroup>
 </Project>

@@ -3,7 +3,7 @@ using static PortableCompiler.BranchIl;
 
 namespace PortableCompiler
 {
-    internal static class ArithmeticCatch
+    internal static class ExceptionClauses
     {
         // Once validated, a clause carries the resume offset in the flags slot
         // and the supported tag mask in the metadata token slot.

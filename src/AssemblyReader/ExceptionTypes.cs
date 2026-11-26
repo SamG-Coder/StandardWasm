@@ -6,7 +6,9 @@ namespace PeLibrary
     {
         internal const int Overflow = 1, DivideByZero = 2, Arithmetic = Overflow | DivideByZero;
 
-        internal static int ArithmeticMask(byte[] image, int[] heaps, int[] methods, int token)
+        internal const int IndexOutOfRange = 4, Supported = Arithmetic | IndexOutOfRange;
+
+        internal static int CatchMask(byte[] image, int[] heaps, int[] methods, int token)
         {
             if ((uint)token >> 24 != 1) return 0;
             int row = token & 0xffffff;
@@ -38,6 +40,10 @@ namespace PeLibrary
             if (Fits(name, 20, limit) && U32(image, n) == 0x74697241 && U32(image, n + 4) == 0x74656d68 &&
                 U32(image, n + 8) == 0x78456369 && U32(image, n + 12) == 0x74706563 && U32(image, n + 16) == 0x006e6f69)
                 return Arithmetic;
+            if (Fits(name, 25, limit) && U32(image, n) == 0x65646e49 && U32(image, n + 4) == 0x74754f78 &&
+                U32(image, n + 8) == 0x6152664f && U32(image, n + 12) == 0x4565676e &&
+                U32(image, n + 16) == 0x70656378 && U32(image, n + 20) == 0x6e6f6974 && image[n + 24] == 0)
+                return IndexOutOfRange;
             return 0;
         }
 

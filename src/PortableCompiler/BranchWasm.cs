@@ -61,7 +61,7 @@ namespace PortableCompiler
             if (exceptionLocals != 0)
             {
                 used = WasmBinary.Unsigned(code, used, exceptionLocals);
-                code[used++] = ArithmeticCatchWasm.ExceptionReference;
+                code[used++] = ExceptionDispatchWasm.ExceptionReference;
             }
             // Raw Wasm callers supply i32. Enforce the CLI argument width before
             // the first instruction, including on entry from a managed call.
@@ -74,7 +74,7 @@ namespace PortableCompiler
             }
             code[used++] = 0x03;
             code[used++] = 0x40;
-            if (catchRegion.Length != 0) used = ArithmeticCatchWasm.Begin(code, used);
+            if (catchRegion.Length != 0) used = ExceptionDispatchWasm.Begin(code, used);
             for (int pc = 0; pc < depths.Length; pc++)
             {
                 if (depths[pc] == 0) continue;
@@ -288,10 +288,10 @@ namespace PortableCompiler
                         {
                             used = NumericLocal(code, used, right, rightType, width);
                             code[used++] = type == I64 ? (byte)0x50 : (byte)0x45; // eqz
-                            used = ArithmeticExceptionWasm.ThrowIf(code, used, ArithmeticExceptionWasm.DivideTag);
+                            used = ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.DivideTag);
                         }
                         if (IsSignedIntegerDivision(operand, type))
-                            used = ArithmeticExceptionWasm.ThrowIf(code, IsMinAndMinusOne(code, used, type, left, right));
+                            used = ExceptionTagsWasm.ThrowIf(code, IsMinAndMinusOne(code, used, type, left, right));
                         used = NumericLocal(code, used, left, type, width);
                         used = NumericLocal(code, used, right, rightType, width);
                         if (type == I64 && IsShift(operand)) code[used++] = 0xad;
@@ -399,8 +399,10 @@ namespace PortableCompiler
                 else if (kind == ArrayGet)
                 {
                     byte array = states[state + top - 1];
-                    used = Local(code, used, 0x20, Spill(spills, maximum, array, top - 1));
-                    used = Local(code, used, 0x20, spills + top);
+                    int reference = Spill(spills, maximum, array, top - 1), index = spills + top;
+                    used = GuardArrayIndex(code, used, reference, index);
+                    used = Local(code, used, 0x20, reference);
+                    used = Local(code, used, 0x20, index);
                     // The opcode selects the extension of packed cells. Full-
                     // width integer and floating arrays use plain array.get.
                     int instruction = array != Bytes && array != Chars ? 0x0b :
@@ -411,8 +413,10 @@ namespace PortableCompiler
                 else if (kind == ArraySet)
                 {
                     byte array = states[state + top - 2];
-                    used = Local(code, used, 0x20, Spill(spills, maximum, array, top - 2));
-                    used = Local(code, used, 0x20, spills + top - 1);
+                    int reference = Spill(spills, maximum, array, top - 2), index = spills + top - 1;
+                    used = GuardArrayIndex(code, used, reference, index);
+                    used = Local(code, used, 0x20, reference);
+                    used = Local(code, used, 0x20, index);
                     used = Local(code, used, 0x20, Spill(spills, maximum, ArrayValueType(array), top));
                     used = Gc(code, used, 0x0e, array);
                 }
@@ -427,7 +431,7 @@ namespace PortableCompiler
                     code[used++] = 0x0f;
                 }
                 else if (kind == Rethrow)
-                    used = ArithmeticCatchWasm.ThrowReference(code, used, pcLocal + 2 + operand);
+                    used = ExceptionDispatchWasm.ThrowReference(code, used, pcLocal + 2 + operand);
                 else
                 {
                     if (kind == Conditional)
@@ -464,17 +468,28 @@ namespace PortableCompiler
                     else used = Const(code, used, kind == Branch || kind == Leave ? operand : next);
                     used = Local(code, used, 0x21, pcLocal);
                     code[used++] = 0x0c;
-                    // Catch dispatch adds try_table and two destination blocks around the instruction if.
-                    code[used++] = catchRegion.Length == 0 ? (byte)1 : (byte)4;
+                    // Catch dispatch adds try_table and one block per tag around the instruction if.
+                    code[used++] = catchRegion.Length == 0 ? (byte)1 : (byte)(2 + ExceptionTagsWasm.Count);
                 }
                 code[used++] = 0x0b;
             }
             code[used++] = 0;
-            if (catchRegion.Length != 0) used = ArithmeticCatchWasm.End(code, used, pcLocal, catchRegion, exceptionLocals > 1);
+            if (catchRegion.Length != 0) used = ExceptionDispatchWasm.End(code, used, pcLocal, catchRegion, exceptionLocals > 1);
             code[used++] = 0x0b;
             code[used++] = 0;
             code[used++] = 0x0b;
             return used;
+        }
+
+        private static int GuardArrayIndex(byte[] code, int used, int reference, int index)
+        {
+            used = Local(code, used, 0x20, index);
+            used = Local(code, used, 0x20, reference);
+            code[used++] = 0xfb;
+            code[used++] = 0x0f; // array.len, which still traps on null
+            // An unsigned comparison rejects negative indices and indices at or above length.
+            code[used++] = 0x4f;
+            return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.IndexTag);
         }
 
         private static int SwitchDispatch(byte[] code, int used, int[] records, int table, int count,

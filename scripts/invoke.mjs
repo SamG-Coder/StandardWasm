@@ -7,7 +7,9 @@ export function managedExceptionType(exports, error) {
     const overflow = exports["\0overflow"];
     if (overflow instanceof WebAssembly.Tag && error.is(overflow)) return "System.OverflowException";
     const divide = exports["\0divideByZero"];
-    return divide instanceof WebAssembly.Tag && error.is(divide) ? "System.DivideByZeroException" : null;
+    if (divide instanceof WebAssembly.Tag && error.is(divide)) return "System.DivideByZeroException";
+    const index = exports["\0indexOutOfRange"];
+    return index instanceof WebAssembly.Tag && error.is(index) ? "System.IndexOutOfRangeException" : null;
 }
 
 export function invoke(exports, method, inputs) {

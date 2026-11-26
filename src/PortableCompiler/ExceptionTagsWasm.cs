@@ -1,9 +1,10 @@
 namespace PortableCompiler
 {
-    internal static class ArithmeticExceptionWasm
+    internal static class ExceptionTagsWasm
     {
         internal const int OverflowExportSize = 12, DivideExportSize = 16;
-        internal const int OverflowTag = 0, DivideTag = 1;
+        internal const int IndexExportSize = 19;
+        internal const int OverflowTag = 0, DivideTag = 1, IndexTag = 2, Count = 3;
 
         internal static int WriteOverflowExport(byte[] code, int used)
         {
@@ -42,6 +43,30 @@ namespace PortableCompiler
             code[used++] = (byte)'o';
             code[used++] = 4; // exported tag
             code[used++] = DivideTag;
+            return used;
+        }
+
+        internal static int WriteIndexExport(byte[] code, int used)
+        {
+            code[used++] = 16;
+            code[used++] = 0;
+            code[used++] = (byte)'i';
+            code[used++] = (byte)'n';
+            code[used++] = (byte)'d';
+            code[used++] = (byte)'e';
+            code[used++] = (byte)'x';
+            code[used++] = (byte)'O';
+            code[used++] = (byte)'u';
+            code[used++] = (byte)'t';
+            code[used++] = (byte)'O';
+            code[used++] = (byte)'f';
+            code[used++] = (byte)'R';
+            code[used++] = (byte)'a';
+            code[used++] = (byte)'n';
+            code[used++] = (byte)'g';
+            code[used++] = (byte)'e';
+            code[used++] = 4; // exported tag
+            code[used++] = IndexTag;
             return used;
         }
 

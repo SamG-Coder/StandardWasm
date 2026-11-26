@@ -79,4 +79,5 @@ OverflowHandlerCases.Add(cases);
 ArithmeticHandlerCases.Add(cases);
 NestedHandlerCases.Add(cases);
 RethrowCases.Add(cases);
+ArrayBoundsCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

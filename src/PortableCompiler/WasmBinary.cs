@@ -18,8 +18,9 @@ namespace PortableCompiler
             bool hasRemainder = remainderFixup != 0;
             bool overflow = (exceptionTags & ExceptionTypes.Overflow) != 0;
             bool divide = (exceptionTags & ExceptionTypes.DivideByZero) != 0;
-            // Keep the divide-by-zero index stable even in modules that never throw overflow.
-            int tagCount = divide ? 2 : overflow ? 1 : 0;
+            bool bounds = (exceptionTags & ExceptionTypes.IndexOutOfRange) != 0;
+            // Tag indices stay stable even when lower tags are unused.
+            int tagCount = bounds ? ExceptionTagsWasm.Count : divide ? 2 : overflow ? 1 : 0;
             int remainderIndex = functions + thunks[0];
             int totalFunctions = remainderIndex + (hasRemainder ? 1 : 0);
             var remainderBody = new byte[hasRemainder ? FloatRemainderWasm.BodyCapacity : 0];
@@ -79,9 +80,9 @@ namespace PortableCompiler
                 codeSize += code;
                 functionSize += index;
             }
-            int exportCount = exports.Length + (overflow ? 1 : 0) + (divide ? 1 : 0);
-            int exportSize = UnsignedSize(exportCount) + (overflow ? ArithmeticExceptionWasm.OverflowExportSize : 0) +
-                (divide ? ArithmeticExceptionWasm.DivideExportSize : 0);
+            int exportCount = exports.Length + (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0);
+            int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
+                (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0);
             int tagType = typeOffset + functions + (hasRemainder ? 1 : 0);
             int tagSize = 1 + tagCount * (1 + UnsignedSize(tagType));
             for (int i = 0; i < exports.Length; i++)
@@ -297,8 +298,9 @@ namespace PortableCompiler
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, exports[i]);
             }
-            if (overflow) cursor = ArithmeticExceptionWasm.WriteOverflowExport(output, cursor);
-            if (divide) cursor = ArithmeticExceptionWasm.WriteDivideExport(output, cursor);
+            if (overflow) cursor = ExceptionTagsWasm.WriteOverflowExport(output, cursor);
+            if (divide) cursor = ExceptionTagsWasm.WriteDivideExport(output, cursor);
+            if (bounds) cursor = ExceptionTagsWasm.WriteIndexExport(output, cursor);
 
             if (thunks[0] != 0)
             {

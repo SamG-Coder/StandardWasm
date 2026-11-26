@@ -24,13 +24,14 @@ internal static class TypedArrayCases
         foreach (int count in new[] { -1, 0, 1, 3 })
         {
             int? expected;
+            string exceptionType = null;
             try { expected = ArrayKernels.Route(value, count); }
             catch (ArithmeticException) { expected = null; }
-            catch (IndexOutOfRangeException) { expected = null; }
+            catch (IndexOutOfRangeException error) { expected = null; exceptionType = error.GetType().FullName; }
             cases.Add(new
             {
                 module = "TypedArrayLibrary", method = "Compile", fixture = "Route", inputs,
-                generated = new { capacity, arguments = new[] { value, count }, hex }, expected
+                generated = new { capacity, arguments = new[] { value, count }, hex, exceptionType }, expected
             });
         }
 

@@ -73,7 +73,8 @@ internal static class WideStorageCases
             {
                 module = "BootstrapLibrary", method = "Compile", fixture = method,
                 inputs = new object[] { encoded, compiled.Row },
-                generated = new { capacity, arguments, hex = compiled.Hex },
+                generated = new { capacity, arguments, hex = compiled.Hex,
+                    exceptionType = exception == typeof(IndexOutOfRangeException).FullName ? exception : null },
                 expected, exception
             });
         }

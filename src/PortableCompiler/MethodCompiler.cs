@@ -164,19 +164,19 @@ namespace PortableCompiler
                     int regions = ExceptionRegions.Count(image, rva, body);
                     if (regions < 0) return regions;
                     if (regions == 0) return -2;
-                    catchRegion = new int[regions * ArithmeticCatch.Width];
+                    catchRegion = new int[regions * ExceptionClauses.Width];
                     int read = ExceptionRegions.Read(image, rva, body, catchRegion);
                     if (read < 0) return read;
                     for (int clause = 0; clause < catchRegion.Length; clause += ExceptionRegions.Width)
                     {
                         if (location.Length != 0) location[2] = catchRegion[clause + 3];
                         if (catchRegion[clause] != 0) return -2;
-                        int mask = ExceptionTypes.ArithmeticMask(image, heaps, layout, catchRegion[clause + 5]);
+                        int mask = ExceptionTypes.CatchMask(image, heaps, layout, catchRegion[clause + 5]);
                         if (mask == 0) return -2;
                         catchRegion[clause + 5] = mask;
                     }
                     if (location.Length != 0) location[2] = -1;
-                    exceptionTags |= ExceptionTypes.Arithmetic;
+                    exceptionTags |= ExceptionTypes.Supported;
                 }
 
                 int parameters = arities[current];
@@ -235,7 +235,7 @@ namespace PortableCompiler
                     int exceptionLocals = 0;
                     if (catchRegion.Length != 0)
                     {
-                        exceptionLocals = ArithmeticCatch.Validate(records, catchRegion, location);
+                        exceptionLocals = ExceptionClauses.Validate(records, catchRegion, location);
                         if (exceptionLocals < 0) return exceptionLocals;
                     }
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
@@ -246,7 +246,7 @@ namespace PortableCompiler
                     int capacity = body[1] * 64 + 32;
                     if (catchRegion.Length != 0)
                     {
-                        int handlerBytes = 32 + catchRegion.Length / ArithmeticCatch.Width * 96;
+                        int handlerBytes = 64 + catchRegion.Length / ExceptionClauses.Width * 120;
                         if (capacity > int.MaxValue - handlerBytes) return -3;
                         capacity += handlerBytes;
                     }
@@ -275,6 +275,8 @@ namespace PortableCompiler
                             int tags = 0;
                             if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion)
                                 tags = ExceptionTypes.Overflow;
+                            else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet)
+                                tags = ExceptionTypes.IndexOutOfRange;
                             else if (kind == BranchIl.Binary)
                             {
                                 byte type = states[pc * maximum + depths[pc] - 2];
