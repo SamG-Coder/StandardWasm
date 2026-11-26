@@ -31,6 +31,15 @@ namespace PeLibrary
                 return 0;
 
             // Match little-endian ASCII type names, including their terminators.
+            // All currently emitted managed tags represent subclasses of SystemException.
+            // Dispatch still catches only those tags, so engine traps stay outside this mask.
+            if (Fits(name, 10, limit) && U32(image, n) == 0x65637845 &&
+                U32(image, n + 4) == 0x6f697470 && U16(image, n + 8) == 0x006e)
+                return Supported;
+            if (Fits(name, 16, limit) && U32(image, n) == 0x74737953 &&
+                U32(image, n + 4) == 0x78456d65 && U32(image, n + 8) == 0x74706563 &&
+                U32(image, n + 12) == 0x006e6f69)
+                return Supported;
             if (Fits(name, 18, limit) && U32(image, n) == 0x7265764f && U32(image, n + 4) == 0x776f6c66 &&
                 U32(image, n + 8) == 0x65637845 && U32(image, n + 12) == 0x6f697470 && U16(image, n + 16) == 0x006e)
                 return Overflow;
