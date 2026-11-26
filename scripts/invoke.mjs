@@ -13,7 +13,9 @@ export function managedExceptionType(exports, error) {
     const nullReference = exports["\0nullReference"];
     if (nullReference instanceof WebAssembly.Tag && error.is(nullReference)) return "System.NullReferenceException";
     const invalidCast = exports["\0invalidCast"];
-    return invalidCast instanceof WebAssembly.Tag && error.is(invalidCast) ? "System.InvalidCastException" : null;
+    if (invalidCast instanceof WebAssembly.Tag && error.is(invalidCast)) return "System.InvalidCastException";
+    const argument = exports["\0argument"];
+    return argument instanceof WebAssembly.Tag && error.is(argument) ? "System.ArgumentException" : null;
 }
 
 export function invoke(exports, method, inputs) {

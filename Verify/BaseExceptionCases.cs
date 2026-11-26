@@ -12,6 +12,9 @@ internal static class BaseExceptionCases
         Check(nameof(Handlers.Ordered), Handlers.Ordered, division);
         Check(nameof(Handlers.ArrayAccess), Handlers.ArrayAccess, [(2, 0), (2, 2), (0, 0), (-1, 0)]);
         Check(nameof(Handlers.Rethrow), Handlers.Rethrow, division);
+        (int, int)[] receivers = [(7, 0), (9, 1), (int.MinValue, 2)];
+        Check(nameof(Handlers.CatchBindingFailure), Handlers.CatchBindingFailure, receivers);
+        Check(nameof(Handlers.CatchArgumentFailure), Handlers.CatchArgumentFailure, receivers);
 
         void Check(string method, Func<int, int, int> oracle, (int, int)[] inputs)
         {

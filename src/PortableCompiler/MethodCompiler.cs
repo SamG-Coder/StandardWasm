@@ -299,6 +299,8 @@ namespace PortableCompiler
                             int tags = 0;
                             if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion || kind == BranchIl.NewArray)
                                 tags = ExceptionTypes.Overflow;
+                            else if (kind == BranchIl.NewDelegate)
+                                tags = ExceptionTypes.Argument;
                             else if (kind == BranchIl.CastClass)
                                 tags = ExceptionTypes.InvalidCast;
                             else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet || kind == BranchIl.StringCharacter)
