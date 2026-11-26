@@ -57,7 +57,11 @@ for (int source = 0; source < 2; source++)
         if (source != 0) continue;
         if ((int)list.Invoke(null, null)! != 5)
             throw new InvalidOperationException("Unexpected CLR List result.");
-        Reject("List initializer", list, packIds, -2, 0);
+        byte[] listIl = list.GetMethodBody()!.GetILAsByteArray()!;
+        int add = Array.IndexOf(listIl, (byte)0x6f);
+        if (add < 0 || list.Module.ResolveMethod(BinaryPrimitives.ReadInt32LittleEndian(listIl.AsSpan(add + 1)))?.Name != nameof(List<int>.Add))
+            throw new InvalidOperationException("Expected a virtual List.Add call.");
+        Reject("List.Add after deferred initialization", list, packIds, -2, add);
         int call = Array.IndexOf(nan.GetMethodBody()!.GetILAsByteArray()!, (byte)0x28);
         if (call < 0) throw new InvalidOperationException("Expected a Double.IsNaN call.");
         Reject("missing facade", nan, [source], -4, call);
