@@ -46,10 +46,13 @@ export async function recordProfileTiming(page, engine, output) {
     assert.equal(native.warmup, warmup);
     const parity = [];
     const regional = browser.previewRegion !== undefined;
+    const redraw = browser.totals.webgpuRedraw !== undefined;
     const snapshotsToCompare = regional ? [...values, ""] : values;
+    if (redraw) snapshotsToCompare.push("W".repeat(40));
     for (const [index, value] of snapshotsToCompare.entries()) {
         const snapshots = {};
         const renderers = regional ? ["webgpu", "webgpuRegion", "canvas2d"] : ["webgpu", "canvas2d"];
+        if (redraw) renderers.push("webgpuRedraw");
         for (const renderer of renderers) {
             assert.equal(await page.evaluate(({ renderer, value }) => window.profileTiming.render(renderer, value),
                 { renderer, value }), "Hello, " + value);
@@ -60,7 +63,10 @@ export async function recordProfileTiming(page, engine, output) {
         assert.ok(comparison.changed / comparison.pixels <= .005, JSON.stringify(comparison));
         const regionComparison = regional ? await comparePixels(page, snapshots.webgpu, snapshots.webgpuRegion, 0) : null;
         if (regionComparison) assert.equal(regionComparison.changed, 0, "Partial and full WebGPU uploads must match.");
-        parity.push({ value, ...comparison, ...(regionComparison ? { regional: regionComparison } : {}) });
+        const redrawComparison = redraw ? await comparePixels(page, snapshots.webgpu, snapshots.webgpuRedraw, 0) : null;
+        if (redrawComparison) assert.equal(redrawComparison.changed, 0, "Partial and full WebGPU redraws must match.");
+        parity.push({ value, ...comparison, ...(regionComparison ? { regional: regionComparison } : {}),
+            ...(redrawComparison ? { redraw: redrawComparison } : {}) });
     }
     const metrics = browser.totals;
     const driverQuery = spawnSync("powershell.exe", ["-NoProfile", "-Command",
@@ -70,7 +76,8 @@ export async function recordProfileTiming(page, engine, output) {
     const webgpuTiming = renderer => ({
         updateMs: summarize(renderer.updateMs, count),
         submitMs: summarize(renderer.submitMs, count),
-        queueDrainMs: summarize(renderer.queueDrainMs, repeats)
+        queueDrainMs: summarize(renderer.queueDrainMs, repeats),
+        ...(redraw ? { paintMs: summarize(renderer.paintMs, count) } : {})
     });
     const fullPixels = browser.width * browser.height;
     const regionalPixels = regional ? browser.previewRegion[2] * browser.previewRegion[3] : 0;
@@ -84,9 +91,14 @@ export async function recordProfileTiming(page, engine, output) {
             webgpuRegion: webgpuTiming(metrics.webgpuRegion),
             upload: { fullPixels, regionalPixels, reduction: 1 - regionalPixels / fullPixels }
         } : {}),
+        ...(redraw ? {
+            webgpuRedraw: webgpuTiming(metrics.webgpuRedraw),
+            captionsPerEdit: { full: browser.captionCount, partial: 1 }
+        } : {}),
         canvas2d: {
             updateMs: summarize(metrics.canvas2d.updateMs, count),
-            submitMs: summarize(metrics.canvas2d.submitMs, count)
+            submitMs: summarize(metrics.canvas2d.submitMs, count),
+            ...(redraw ? { paintMs: summarize(metrics.canvas2d.paintMs, count) } : {})
         }
     };
     writeFileSync(output + "/results.json", JSON.stringify(evidence, null, 2) + "\n");

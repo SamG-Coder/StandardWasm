@@ -2,7 +2,9 @@ import { canvasBaseline } from "./render.mjs";
 
 const frame = () => new Promise(requestAnimationFrame);
 
-export function prepareProfileTiming({ canvas, model, text, gpu, captions, setManagedText, readPreview, previewRegion }) {
+export function prepareProfileTiming({
+    canvas, model, text, gpu, captions, setManagedText, readPreview, previewRegion, previewControl
+}) {
     const comparison = canvas.cloneNode(false);
     const canvas2d = canvasBaseline(model, text, comparison);
 
@@ -19,9 +21,12 @@ export function prepareProfileTiming({ canvas, model, text, gpu, captions, setMa
 
     function draw(key, renderer, preview) {
         captions.set("preview", preview);
-        text.update(captions);
-        if (key !== "canvas2d") renderer.upload(key === "webgpuRegion" ? previewRegion : undefined);
+        if (key === "webgpuRedraw") text.updateClippedCaption(previewControl, preview);
+        else text.update(captions);
+        const afterPaint = previewControl ? performance.now() : undefined;
+        if (key !== "canvas2d") renderer.upload(key === "webgpu" ? undefined : previewRegion);
         renderer.draw();
+        return afterPaint;
     }
 
     return {
@@ -31,6 +36,8 @@ export function prepareProfileTiming({ canvas, model, text, gpu, captions, setMa
                 canvas2d: { updateMs: [], submitMs: [] }
             };
             if (previewRegion) totals.webgpuRegion = { updateMs: [], submitMs: [], queueDrainMs: [] };
+            if (previewControl) totals.webgpuRedraw = { updateMs: [], submitMs: [], queueDrainMs: [] };
+            if (previewControl) for (const result of Object.values(totals)) result.paintMs = [];
             const renderers = Object.keys(totals);
             for (let repeat = 0; repeat < repeats; repeat++) {
                 const first = repeat % renderers.length;
@@ -43,13 +50,14 @@ export function prepareProfileTiming({ canvas, model, text, gpu, captions, setMa
                         const start = performance.now();
                         const preview = update(value);
                         const afterUpdate = performance.now();
-                        draw(key, renderer, preview);
+                        const afterPaint = draw(key, renderer, preview);
                         const afterDraw = performance.now();
                         if (preview !== "Hello, " + value)
                             throw Error("Managed TextChanged did not update the preview");
                         if (index >= warmup) {
                             totals[key].updateMs.push(afterUpdate - start);
                             totals[key].submitMs.push(afterDraw - afterUpdate);
+                            if (previewControl) totals[key].paintMs.push(afterPaint - afterUpdate);
                         }
                     }
                     if (key !== "canvas2d") {
@@ -59,7 +67,8 @@ export function prepareProfileTiming({ canvas, model, text, gpu, captions, setMa
                     }
                 }
             }
-            return { adapter: gpu.info, totals, width: model.width, height: model.height, previewRegion };
+            return { adapter: gpu.info, totals, width: model.width, height: model.height,
+                previewRegion, captionCount: model.controls.length };
         },
         async render(key, value) {
             const renderer = select(key);
