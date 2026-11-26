@@ -19,3 +19,14 @@ compiler currently rejects it. An independent metadata probe records the first
 form allocation in the entry and its upstream base class; the current compiler
 status does not include an IL offset. Evidence is under
 `artifacts/executable-entry/run-*/results.json`.
+
+The browser loader accepts the Win32 module lookup and last-error host imports
+for a single managed execution instance. Module lookup uses the original
+selected executable's virtual path and a stable process-local handle. Unknown
+modules return a failed lookup. The system error and cached P/Invoke error
+occupy separate slots, and lookup uses the same linear memory as other imports.
+
+Run `node demos/stage-74-executable-entry/verify-win32-host.mjs` on Windows to
+compare the host import contract in Node and Edge against native .NET calls.
+The probe invokes the imports through Wasm. Binding the compiler's native-call
+sites to this contract is a separate compiler step.

@@ -51,7 +51,8 @@ export async function runManagedEntry(compilerBytes, selection) {
 
     const code = Uint8Array.from({ length }, (_, i) => compiler.ReadByte(output, i));
     const module = await WebAssembly.compile(code);
-    const { exports } = await instantiateManagedModule(module, compiler, [selection.entry, ...companions]);
+    const { exports } = await instantiateManagedModule(module, compiler, [selection.entry, ...companions],
+        {}, selection.executablePath);
     if (typeof exports.run !== "function" || exports.run.length !== 0)
         throw Error("This entry host supports a parameterless managed entry point.");
     const exitCode = exports.run();

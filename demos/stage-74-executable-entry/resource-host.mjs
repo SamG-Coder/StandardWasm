@@ -1,3 +1,5 @@
+import { createWin32Host, win32ImportModule, win32ImportNames } from "./win32-host.mjs";
+
 export const resourceImportModule = "standardwasm:resources";
 
 const pageSize = 65536;
@@ -84,8 +86,9 @@ const resourceImportKinds = new Map([
     ["memory", "memory"], ["reserveName", "function"], ["locate", "function"]
 ]);
 
-export function instantiateManagedModule(module, compiler, assets, runtimeImports = {}) {
+export function instantiateManagedModule(module, compiler, assets, runtimeImports = {}, executablePath) {
     const requestedResources = new Set();
+    const requestedWin32 = new Set();
     for (const { module: owner, name, kind } of WebAssembly.Module.imports(module)) {
         if (owner === resourceImportModule) {
             if (resourceImportKinds.get(name) !== kind || requestedResources.has(name))
@@ -93,21 +96,33 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
             requestedResources.add(name);
             continue;
         }
+        if (owner === win32ImportModule) {
+            if (kind !== "function" || !win32ImportNames.has(name) || requestedWin32.has(name))
+                throw Error("The generated module requests an invalid Win32 import.");
+            requestedWin32.add(name);
+            continue;
+        }
         const group = Object.hasOwn(runtimeImports, owner) ? runtimeImports[owner] : undefined;
         if (!group || kind !== "function" || !Object.hasOwn(group, name) || typeof group[name] !== "function")
             throw Error("The generated module requests an unsupported runtime import.");
     }
-    if (!requestedResources.size) return WebAssembly.instantiate(module, runtimeImports);
-    // Native pointers and stackalloc need memory even without resource lookup.
+    if (requestedWin32.has("getModuleHandleW") && !requestedResources.has("memory"))
+        throw Error("Win32 module lookup requires the StandardWasm memory import.");
+
+    let memory;
+    let imports = { ...runtimeImports };
     if (requestedResources.size === 1 && requestedResources.has("memory")) {
-        const memory = new WebAssembly.Memory({ initial: 1 });
-        return WebAssembly.instantiate(module, { ...runtimeImports, [resourceImportModule]: { memory } });
+        memory = createMemory();
+        imports[resourceImportModule] = { memory };
+    } else if (requestedResources.size) {
+        if (requestedResources.size !== resourceImportKinds.size || typeof compiler.FindEmbeddedResource !== "function")
+            throw Error("The generated module requires the complete StandardWasm resource contract.");
+        // The bundle owner indices use this same image order, starting at zero.
+        const resource = createResourceHost(compiler, assets.map(asset => asset.bytes));
+        memory = resource.memory;
+        imports = { ...imports, ...resource.imports };
     }
-    if (requestedResources.size === 1 && requestedResources.has("memory"))
-        return WebAssembly.instantiate(module, { ...runtimeImports, [resourceImportModule]: { memory: createMemory() } });
-    if (requestedResources.size !== resourceImportKinds.size || typeof compiler.FindEmbeddedResource !== "function")
-        throw Error("The generated module requires the complete StandardWasm resource contract.");
-    // The bundle owner indices use this same image order, starting at zero.
-    const resource = createResourceHost(compiler, assets.map(asset => asset.bytes));
-    return WebAssembly.instantiate(module, { ...runtimeImports, ...resource.imports });
+    if (requestedWin32.size)
+        imports[win32ImportModule] = createWin32Host(memory, executablePath);
+    return WebAssembly.instantiate(module, imports);
 }
