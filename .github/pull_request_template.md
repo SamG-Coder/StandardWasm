@@ -1,11 +1,13 @@
-## Linked issue and scope
+## Milestone and linked issues
+
+State the completed stage or milestone and what is ready for independent verification.
 
 Closes #
 
-## Validation
+## Acceptance evidence
 
-List commands, results, engine versions and limitations.
+List the verification commands, results, engine versions and limitations. Link any remaining work to its issue.
 
-## Handoff and independent review
+## Independent review
 
-Identify shared interfaces and next actions. Post role-prefixed READY and independent APPROVE or REQUEST CHANGES comments with the full tested commit SHA as described in AGENTS.md.
+Keep review fixes on this PR's branch. Post role-prefixed READY and independent APPROVE or REQUEST CHANGES comments with the full tested commit SHA as described in AGENTS.md.

@@ -42,6 +42,33 @@ namespace PeLibrary
             return low == 0xd785ec7c && high == 0x8e79a7be && IsCoreLibName(image, n, name, size);
         }
 
+        // System.Console is a separate reference assembly in .NET Core. .NET
+        // Standard and .NET Framework libraries reach it through their facade.
+        internal static bool IsConsoleAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row)
+        {
+            if (IsPlatformAssembly(image, heaps, methods, counts, row, netstandardOnly: true)) return true;
+            int table = MetadataTableRows.TableStart(heaps, methods, counts, 35);
+            if (table < 0 || row < 1 || row > counts[35]) return false;
+            int strings = methods[2], blobs = methods[3];
+            uint at = (uint)(table + (row - 1) * (12 + 2 * strings + 2 * blobs));
+            if (U32(image, at + 8) != 0 || Index(image, at + (uint)(12 + blobs + strings), strings) != 0) return false;
+            uint key = Index(image, at + 12, blobs);
+            if (key == 0 || !Fits(key, 9, (uint)heaps[1])) return false;
+            uint blob = (uint)heaps[0] + key;
+            if (image[blob] != 8) return false;
+            uint low = U32(image, blob + 1), high = U32(image, blob + 5);
+            uint name = Index(image, at + (uint)(12 + blobs), strings);
+            uint n = (uint)heaps[2] + name, size = (uint)heaps[3];
+            if (name == 0) return false;
+            if (low == 0x565c7ab7 && high == 0x89e03419) // mscorlib
+                return Fits(name, 9, size) && U32(image, n) == 0x6f63736d &&
+                    U32(image, n + 4) == 0x62696c72 && image[n + 8] == 0;
+            // System.Console carries the same public key token as System.Runtime.
+            return low == 0x7f5f3fb0 && high == 0x3a0ad511 && Fits(name, 15, size) &&
+                U32(image, n) == 0x74737953 && U32(image, n + 4) == 0x432e6d65 &&
+                U32(image, n + 8) == 0x6f736e6f && U16(image, n + 12) == 0x656c && image[n + 14] == 0;
+        }
+
         internal static bool IsCoreLibDefinition(byte[] image, int[] heaps, int[] methods, int[] counts)
         {
             if (counts[32] != 1) return false;

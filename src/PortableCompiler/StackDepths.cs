@@ -120,6 +120,14 @@ namespace PortableCompiler
             int[] signatures, int[] offsets, int[] arities, int[] objects)
         {
             if (kind == LoadString) return Push(stack, depth, String);
+            // [] -> [writer]; [writer, string-or-null] -> []; [writer] -> [] for WriteLine().
+            if (kind == ConsoleWriter) return Push(stack, depth, PeLibrary.ConsoleStorage.Writer);
+            if (kind == ConsoleWrite)
+            {
+                int writer = operand == PeLibrary.ConsoleMetadata.WriteEmptyLine ? depth - 1 : depth - 2;
+                if (writer < 0 || stack[writer] != PeLibrary.ConsoleStorage.Writer) return -1;
+                return writer == depth - 1 || Match(stack, depth, String) ? writer : -1;
+            }
             if (kind == ClearValue) return depth;
             if (kind == NullLiteral) return Push(stack, depth, NullValue);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, depth, EventArgsReference);
@@ -250,6 +258,14 @@ namespace PortableCompiler
                     return -1;
                 int remaining = depth - needed;
                 return kind == Binary ? Push(stack, remaining, IsComparison(operand) ? I32 : type) : remaining;
+            }
+            if (kind == MathCall)
+            {
+                // Every mapped overload is T(T) or T(T, T) over one numeric stack type.
+                byte type = MathWasm.Type(operand);
+                int arity = MathWasm.Arity(operand);
+                if (!Match(stack, depth, type) || (arity == 2 && !Match(stack, depth - 1, type))) return -1;
+                return Push(stack, depth - arity, type);
             }
             if (kind == Call || kind == NewObject)
                 return CallShape(stack, depth, signatures, offsets[operand], arities[operand], kind == NewObject ? 1 : 0, objects);

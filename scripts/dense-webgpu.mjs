@@ -38,14 +38,21 @@ if (verify) {
         page.on("console", message => { if (message.type() === "warning") errors.push(message.text()); });
         await page.goto(url);
         await page.waitForFunction(() => typeof window.benchmark === "function");
+        const dimensions = await page.locator("#gpu").evaluate(canvas => [canvas.width, canvas.height]);
         const cases = [], parity = [];
         const output = "artifacts/dense-webgpu";
         mkdirSync(output, { recursive: true });
         for (const count of [2, 128, 512, 2048]) {
             await page.evaluate(value => window.renderParity(value), count);
             const images = {};
-            for (const name of ["gpu", "canvas2d"])
-                images[name] = await page.locator("#" + name).screenshot();
+            for (const name of ["gpu", "canvas2d"]) {
+                const box = await page.locator("#" + name).boundingBox();
+                assert.ok(box && box.width === dimensions[0] && box.height === dimensions[1],
+                    "The canvas must be displayed at its native dimensions");
+                // Use an integer CSS clip so a fractional page offset cannot add a screenshot row.
+                const clip = { x: Math.round(box.x), y: Math.round(box.y), width: box.width, height: box.height };
+                images[name] = await page.screenshot({ clip, scale: "css" });
+            }
             const metrics = await page.evaluate(async ({ gpu, canvas2d }) => {
                 async function pixels(encoded) {
                     const bitmap = await createImageBitmap(new Blob([new Uint8Array(encoded)], { type: "image/png" }));
@@ -55,17 +62,18 @@ if (verify) {
                         data: context.getImageData(0, 0, bitmap.width, bitmap.height).data };
                 }
                 const first = await pixels(gpu), second = await pixels(canvas2d);
-                if (first.data.length !== second.data.length) throw Error("Canvas dimensions disagree");
+                if (first.width !== second.width || first.height !== second.height) throw Error("Canvas dimensions disagree");
                 let outside = 0, max = 0;
                 for (let i = 0; i < first.data.length; i += 4) {
                     let delta = 0;
                     for (let c = 0; c < 3; c++) delta = Math.max(delta, Math.abs(first.data[i + c] - second.data[i + c]));
-                    if (delta > 3) outside++;
+                    if (delta > 1) outside++;
                     max = Math.max(max, delta);
                 }
                 return { pixels: first.width * first.height, outside, max };
             }, { gpu: Array.from(images.gpu), canvas2d: Array.from(images.canvas2d) });
-            assert.ok(metrics.outside / metrics.pixels <= .005, "Rendering parity failed: " + JSON.stringify(metrics));
+            assert.equal(metrics.pixels, dimensions[0] * dimensions[1], "Unexpected screenshot pixel count");
+            assert.equal(metrics.outside, 0, "Rendering parity failed: " + JSON.stringify(metrics));
             parity.push({ count, ...metrics });
             if (count === 2048) {
                 writeFileSync(output + "/webgpu.png", images.gpu);
@@ -84,7 +92,7 @@ if (verify) {
                 "Get-CimInstance Win32_VideoController | Select-Object Name, DriverVersion | ConvertTo-Json -Compress"],
                 { encoding: "utf8" }).stdout?.trim() : null;
         const evidence = { browser: browser.version(), drivers: drivers ? JSON.parse(drivers) : null,
-            dimensions: [960, 600], parity, cases };
+            dimensions, parity, cases };
         writeFileSync(output + "/results.json", JSON.stringify(evidence, null, 2) + "\n");
         console.log("Wrote " + output + "/results.json");
     } finally {

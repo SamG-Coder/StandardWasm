@@ -1,0 +1,1 @@
+{"assembly":"GenericBodyDemo","exportType":"GenericBodyDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["GenericBodyDefinition.dll","GenericBodyConsumer.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":65536,"arguments":[-128]},"expected":-122103}

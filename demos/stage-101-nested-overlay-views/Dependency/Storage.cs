@@ -56,4 +56,19 @@ namespace NestedOverlayDependency
     {
         [FieldOffset(0)] public Mixed Value;
     }
+
+    [StructLayout(LayoutKind.Auto)]
+    public struct AutoThreeShorts
+    {
+        public short First;
+        public short Second;
+        public short Third;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    public struct AutoPaddedOverlay
+    {
+        [FieldOffset(0)] public long Raw;
+        [FieldOffset(0)] public AutoThreeShorts Value;
+    }
 }

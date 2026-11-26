@@ -12,6 +12,7 @@
     <ProjectReference Include="../demos/stage-05-metadata-streams/StreamLibrary.csproj" />
     <ProjectReference Include="../demos/stage-06-method-definitions/MethodLibrary.csproj" />
     <ProjectReference Include="../demos/stage-07-method-bodies/BodyLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-08-integer-division/IntegerDivision.csproj" />
     <ProjectReference Include="../demos/stage-09-portable-emitter/EmitterLibrary.csproj" />
     <ProjectReference Include="../demos/stage-10-portable-control-flow/FlowLibrary.csproj" />
     <ProjectReference Include="../demos/stage-11-portable-linking/LinkLibrary.csproj" />
@@ -29,14 +30,29 @@
     <ProjectReference Include="../demos/stage-27-portable-diagnostics/DiagnosticLibrary.csproj" />
     <ProjectReference Include="../demos/stage-28-wide-storage/WideStorageLibrary.csproj" />
     <ProjectReference Include="../demos/stage-30-portable-floats/PortableReals.csproj" />
+    <ProjectReference Include="../demos/stage-40-portable-math/PortableMath.csproj" />
+    <!-- Built for PortableMathCases, but not referenced: its third-party System.Math must stay invisible here. -->
+    <ProjectReference Include="../demos/stage-40-portable-math/identity/MathIdentityProbe/MathIdentityProbe.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../demos/stage-31-resize-winforms/ResizeLibrary.csproj" />
     <ProjectReference Include="../demos/stage-32-winforms-textbox/Model/ProfileModel.csproj" />
     <ProjectReference Include="../demos/stage-34-shared-winforms-source/ProfileBrowser.csproj" Aliases="BrowserForms" />
     <ProjectReference Include="../demos/stage-35-managed-control-tree/ReferenceLibrary.csproj" />
     <ProjectReference Include="../demos/stage-36-managed-events/EventLibrary.csproj" />
     <Compile Remove="Fixtures/**/*.cs" />
-    <ProjectReference Include="Fixtures/PlatformIdentity/ThirdPartyTypes/ThirdPartyTypes.csproj" Aliases="ThirdParty" />
+    <!-- A separate alias: main's ThirdParty alias also covers ThirdPartyText, which defines its own System.String. -->
+    <ProjectReference Include="Fixtures/PlatformIdentity/ThirdPartyTypes/ThirdPartyTypes.csproj" Aliases="PlatformThirdParty" />
     <ProjectReference Include="Fixtures/PlatformIdentity/PlatformIdentityProbe/PlatformIdentityProbe.csproj" />
+    <ProjectReference Include="../demos/stage-21-managed-formatting/identity/ThirdPartyText/ThirdPartyText.csproj" Aliases="ThirdParty" />
+    <ProjectReference Include="../demos/stage-21-managed-formatting/identity/TextIdentityProbe/TextIdentityProbe.csproj" />
+    <ProjectReference Include="../demos/stage-15-managed-instances/identity/ObjectIdentityProbe/ObjectIdentityProbe.csproj" />
+    <ProjectReference Include="../demos/stage-18-long-integers/LongIntegers.csproj" />
+    <ProjectReference Include="../demos/stage-20-floating-point/FloatingPoint.csproj" />
+    <ProjectReference Include="../demos/stage-25-switch-dispatch/SwitchDispatch.csproj" />
+    <ProjectReference Include="../demos/stage-33-float-remainder/FloatRemainder.csproj" />
+    <ProjectReference Include="../demos/stage-29-math-intrinsics/MathIntrinsics.csproj" />
+    <ProjectReference Include="../demos/stage-37-primitive-arrays/PrimitiveArrays.csproj" />
+    <ProjectReference Include="../demos/stage-16-managed-delegates/identity/ThirdPartyFunc/ThirdPartyFunc.csproj" Aliases="ThirdParty" />
+    <ProjectReference Include="../demos/stage-16-managed-delegates/identity/FuncIdentityProbe/FuncIdentityProbe.csproj" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../demos/stage-39-portable-primitive-arrays/PrimitiveStorage.csproj" />
@@ -90,6 +106,7 @@
     <ProjectReference Include="../demos/stage-108-beforefieldinit-calls/BeforeFieldInitDemo.csproj" />
     <ProjectReference Include="../demos/stage-109-exact-virtual-dispatch/VirtualDispatchDemo.csproj" />
     <ProjectReference Include="../demos/stage-103-handle-generic-constraints/HandleConstraintDemo.csproj" />
+    <ProjectReference Include="../demos/stage-105-generic-method-bodies/GenericBodyDemo.csproj" />
     <ProjectReference Include="../demos/stage-102-nominal-enum-arguments/EnumArgumentDemo.csproj" />
     <ProjectReference Include="../demos/stage-101-nested-overlay-views/NestedOverlayDemo.csproj" />
     <ProjectReference Include="../demos/stage-100-explicit-scalar-layouts/ScalarOverlayDemo.csproj" />
@@ -98,9 +115,7 @@
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
     <ProjectReference Include="../demos/stage-78-strong-names/Alternate/Alternate.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />
-    <Compile Remove="Fixtures/**/*.cs" />
-    <ProjectReference Include="Fixtures/PlatformIdentity/ThirdPartyTypes/ThirdPartyTypes.csproj" Aliases="ThirdParty" />
-    <ProjectReference Include="Fixtures/PlatformIdentity/PlatformIdentityProbe/PlatformIdentityProbe.csproj" />
+    <ProjectReference Include="../demos/stage-110-console-arguments/Vectors/StringVectors.csproj" />
   </ItemGroup>
   <Target Name="CopyStrongNameAlternate" AfterTargets="Build">
     <Copy SourceFiles="$(MSBuildThisFileDirectory)../demos/stage-78-strong-names/Alternate/bin/$(Configuration)/netstandard2.0/SignedDependency.dll"
