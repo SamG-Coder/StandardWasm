@@ -69,7 +69,7 @@ namespace PortableCompiler
                     else return 0;
                     continue;
                 }
-                if (element == 0x12)
+                if (element == 0x12 || element == 0x11)
                 {
                     int leftToken = CompressedUnsigned(caller, left, leftEnd, next);
                     left = next[0];
@@ -108,6 +108,13 @@ namespace PortableCompiler
                     if (match <= 0) return match;
                     left = next[0];
                     right = match;
+                }
+                else if (element == PointerStorage.Element)
+                {
+                    if (!PointerStorage.IsVoidPointer(caller, left, leftEnd) ||
+                        !PointerStorage.IsVoidPointer(target, right, rightEnd)) return 0;
+                    left++;
+                    right++;
                 }
                 else if ((element < 1 || element > 0x0e) && !NativeStorage.IsIntegerElement(element) && element != 0x1c)
                     return 0;

@@ -1,6 +1,6 @@
-# Stage 88 · Volatile instance fields
+# Stage 90 · Volatile instance fields
 
-Run `npm run demo -- stage-88-volatile-field-signatures` and `npm test`.
+Run `npm run demo -- stage-90-volatile-field-signatures` and `npm test`.
 Two compiled .NET Standard assemblies use volatile integer, packed integer
 and reference fields. The generated module preserves stores and reads through
 a call, preserves reference identity, and reports a managed null access.
