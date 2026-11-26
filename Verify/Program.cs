@@ -120,6 +120,7 @@ NullThrowCases.Add(cases);
 BareCatchCases.Add(cases);
 InheritedLayoutCases.Add(cases);
 InitializerReachabilityCases.Add(cases);
+ModuleStartupCases.Add(cases);
 StrongNameCases.Add(cases);
 ForwardingCases.Add(cases);
 CoreRootGuardCases.Add(cases);

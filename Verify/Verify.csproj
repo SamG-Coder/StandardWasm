@@ -85,6 +85,8 @@
     <ProjectReference Include="../demos/stage-75-inherited-layouts/HierarchyDemo.csproj" />
     <ProjectReference Include="../demos/stage-76-initializer-reachability/InitializerReachability.csproj" />
     <ProjectReference Include="../demos/stage-76-initializer-reachability/Module/ModuleInitFixture.csproj" />
+    <ProjectReference Include="../demos/stage-114-empty-module-startup/Linked/EmptyModuleConsumer.csproj" />
+    <ProjectReference Include="../demos/stage-114-empty-module-startup/TypeTrigger/ModuleStartupTypeTrigger.csproj" />
     <ProjectReference Include="../demos/stage-78-strong-names/StrongNameDemo.csproj" />
     <ProjectReference Include="../demos/stage-80-type-forwarding/ForwardingDemo.csproj" />
     <ProjectReference Include="../demos/stage-82-static-field-layout/FieldLayoutDemo.csproj" />
