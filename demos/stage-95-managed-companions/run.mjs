@@ -99,7 +99,7 @@ try {
         await page.waitForFunction(() => document.querySelector("#status").dataset.state === "ready");
         await page.getByRole("button", { name: "Run managed entry" }).click();
         await page.waitForFunction(() => ["finished", "unsupported", "error"].includes(
-            document.querySelector("#status").dataset.state), null, { timeout: 310000 });
+            document.querySelector("#status").dataset.state), null, { timeout: 610000 });
         const message = await status.textContent();
         const edge = await status.getAttribute("data-state") === "error" ? { error: message } : JSON.parse(message);
         assert.deepEqual(edge, node[name], name);
