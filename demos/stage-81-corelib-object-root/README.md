@@ -12,4 +12,7 @@ CoreLib's `System.Object` definition shares the intrinsic root used by
 platform object references and occupies no separate class layout slot.
 The compiler lowers its exact same-image empty constructor as a no-op.
 Other root methods and broader object behavior remain separate.
-Framework files come from the installed runtime and are not committed.
+Framework files come from the installed win-x86 .NET 10 runtime and are not
+committed. The oracle runs on that 32-bit CLR, because the constructor chain
+lowers original CoreLib bodies
+([decision 0044](../../docs/decisions/0044-corelib-native-width.md)).

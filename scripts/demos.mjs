@@ -14,7 +14,8 @@ export function listDemos() {
             return {
                 ...manifest, stage: entry.name,
                 project: join(dir, manifest.assembly + ".csproj"),
-                dll: join(dir, "bin/Release/netstandard2.0", manifest.assembly + ".dll"),
+                // A stage may target another framework, such as net10.0 for System.Runtime references.
+                dll: join(dir, "bin/Release", manifest.targetFramework ?? "netstandard2.0", manifest.assembly + ".dll"),
                 wasm: join(root, "artifacts", manifest.assembly + ".wasm")
             };
         });

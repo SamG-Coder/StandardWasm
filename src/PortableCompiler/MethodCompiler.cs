@@ -172,6 +172,9 @@ namespace PortableCompiler
             var noCatch = new int[0];
             var sizingBuffer = new byte[0];
 
+            // Width evidence is read lazily, so metadata-only use of an
+            // incompatible CoreLib stays available until one of its bodies is lowered.
+            var coreLibWidths = new int[modules];
             int activeOwner = 0;
             for (int current = 0; ; current++)
             {
@@ -197,6 +200,8 @@ namespace PortableCompiler
                     if (count < 0) return -1;
                     activeOwner = owner;
                 }
+                int compatibility = FrameworkPacks.CheckBodyOwner(image, layout, heaps, coreLibWidths, owner);
+                if (compatibility < 0) return compatibility;
                 uint rva = unchecked((uint)MethodDefinitions.ReadColumn(image, layout, source, 0));
                 int status = MethodBodies.Read(image, rva, body);
                 if (status != 0)
@@ -566,7 +571,7 @@ namespace PortableCompiler
                     int field = records[slot + 1];
                     bool write = kind == BranchIl.StoreStaticField;
                     bool linked = records[slot + 3] != 0;
-                    if (!write && linked && owner == 0 && EventMetadata.Member(image, heaps, layout, field) == EventMetadata.Empty)
+                    if (!write && linked && EventMetadata.Member(image, heaps, layout, field) == EventMetadata.Empty)
                     {
                         int eventGlobal = StaticFields.Register(globals, StaticFields.EventOwner, 0, EventArgsReference);
                         if (eventGlobal < 0) return eventGlobal;
@@ -613,7 +618,8 @@ namespace PortableCompiler
                         continue;
                     }
                     int constructorType = Delegate;
-                    if (owner == 0 && !addressed)
+                    // Platform event members are bound by identity in every bundled assembly.
+                    if (!addressed)
                     {
                         int eventMember = EventMetadata.Member(image, heaps, layout, member);
                         if (eventMember == EventMetadata.Construct && opcode == 0x73)
@@ -1128,6 +1134,9 @@ namespace PortableCompiler
         // Class slots have already resolved to an assembly-qualified layout.
         private static bool IsSharedBundleType(int type) =>
             IsScalar(type) || type == String || type == ObjectReference || type == NullPointer || IsArray(StackType(type)) ||
+            // The platform EventArgs and EventHandler representations are
+            // compiler-owned and bound by identity, so every assembly shares them.
+            type == EventArgsReference || type == EventHandlerReference ||
             (type >= ObjectLayouts.FirstClass && type - ObjectLayouts.FirstClass < ObjectLayouts.MaxClasses);
 
         private static bool IsSharedBundleSignature(int[] types, int offset, int arity)
