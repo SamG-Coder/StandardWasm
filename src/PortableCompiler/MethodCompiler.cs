@@ -276,6 +276,7 @@ namespace PortableCompiler
                         if (records[slot] == BranchIl.NullLiteral || records[slot] == BranchIl.ConvertInteger &&
                             records[slot + 3] == BranchIl.ProvenNativeZero) hasNull = true;
                     var outgoingNulls = new byte[hasNull ? states.Length : 0];
+                    var allocatedStates = new byte[virtualUsed[0] != 0 ? states.Length : 0];
                     int exceptionLocals = 0;
                     if (catchRegion.Length != 0)
                     {
@@ -283,11 +284,11 @@ namespace PortableCompiler
                         if (exceptionLocals < 0) return exceptionLocals;
                     }
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
-                        result, signatures, offsets, arities, location, catchRegion, outgoingNulls, objects, virtualTypes);
+                        result, signatures, offsets, arities, location, catchRegion, outgoingNulls, objects, virtualTypes, allocatedStates);
                     if (status < 0) return status;
                     if (virtualUsed[0] != 0)
                     {
-                        functions = LinkVirtualCalls(bundle, records, depths, states, maximum, virtualTypes,
+                        functions = LinkVirtualCalls(bundle, records, depths, states, allocatedStates, maximum, virtualTypes,
                             owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions, location);
                         if (functions < 0) return functions;
                     }
@@ -904,7 +905,7 @@ namespace PortableCompiler
         }
 
         private static int LinkVirtualCalls(BundleImages bundle, int[] records,
-            int[] depths, int[] states, int maximum, int[] types, int[] owners, int[] rows, int[] contexts, int[] bases,
+            int[] depths, int[] states, byte[] allocatedStates, int maximum, int[] types, int[] owners, int[] rows, int[] contexts, int[] bases,
             int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int functions, int[] location)
         {
             var symbol = new int[2];
@@ -916,8 +917,10 @@ namespace PortableCompiler
                 if (records[slot] != BranchIl.VirtualCall || depths[pc] == 0) continue;
                 if (location.Length != 0) location[2] = pc;
                 int shape = records[slot + 1], arity = records[slot + 3];
-                int actual = states[pc * maximum + depths[pc] - 1 - arity];
-                int status = VirtualSlots.SelectVirtualBody(bundle, objects, actual, types[shape + 1],
+                int receiver = pc * maximum + depths[pc] - 1 - arity;
+                int actual = states[receiver];
+                int status = VirtualSlots.SelectVirtualBody(bundle, objects, actual, allocatedStates[receiver] != 0,
+                    types[shape + 1],
                     records[slot + BranchIl.Width + 1], records[slot + BranchIl.Width + 3], symbol);
                 if (status < 0) return status;
                 int owner = symbol[0], row = symbol[1];

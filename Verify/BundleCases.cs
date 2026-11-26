@@ -121,7 +121,7 @@ internal static class BundleCases
         }
     }
 
-    private static byte[] Manifest(Type type, string name)
+    internal static byte[] Manifest(Type type, string name)
     {
         var manifest = new byte[11];
         BinaryPrimitives.WriteInt32LittleEndian(manifest, type.GetMethod(name)!.MetadataToken & 0xffffff);
