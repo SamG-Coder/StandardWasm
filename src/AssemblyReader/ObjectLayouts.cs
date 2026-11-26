@@ -41,7 +41,7 @@ namespace PeLibrary
             uint flags = U32(image, def);
             if ((flags & 0x120) != 0x100) return -2; // Sealed class, no interface.
             uint baseType = ReadIndex(image, def + (uint)(4 + 2 * strings), extends);
-            if ((baseType & 3) != 1 || !IsObjectRef(image, streams, counts, refs, strings, (int)(baseType >> 2)))
+            if ((baseType & 3) != 1 || !IsObjectRef(image, streams, methods, counts, refs, (int)(baseType >> 2)))
                 return -2;
 
             uint first = ReadIndex(image, def + (uint)fieldColumn, fieldIndex);
@@ -182,8 +182,7 @@ namespace PeLibrary
             int parentWidth = memberWidth - strings - blobs;
             uint parent = ReadIndex(image, at, parentWidth);
             if ((parent & 7) != 1 ||
-                !IsObjectRef(image, streams, counts, TypeRefStart(image, streams, counts, start, strings),
-                    strings, (int)(parent >> 3)))
+                !IsObjectRef(image, streams, methods, counts, TypeRefStart(image, streams, counts, start, strings), (int)(parent >> 3)))
                 return false;
 
             uint name = ReadIndex(image, at + (uint)parentWidth, strings);
@@ -194,19 +193,21 @@ namespace PeLibrary
                 U32(image, blob) == 0x01002003; // .ctor, HASTHIS, zero args, void
         }
 
-        private static bool IsObjectRef(byte[] image, int[] streams, int[] counts, int refs, int strings, int row)
+        private static bool IsObjectRef(byte[] image, int[] streams, int[] methods, int[] counts, int refs, int row)
         {
             if (row < 1 || row > counts[1]) return false;
+            int strings = methods[2];
             int scopeWidth = ResolutionWidth(counts);
             uint start = (uint)(refs + (row - 1) * (scopeWidth + 2 * strings));
             uint scope = ReadIndex(image, start, scopeWidth);
-            if ((scope & 3) != 2 || scope >> 2 == 0 || scope >> 2 > (uint)counts[35]) return false;
+            if ((scope & 3) != 2) return false;
             uint name = ReadIndex(image, start + (uint)scopeWidth, strings);
             uint ns = ReadIndex(image, start + (uint)(scopeWidth + strings), strings);
             if (!Fits(name, 7, (uint)streams[3]) || !Fits(ns, 7, (uint)streams[3])) return false;
             uint n = (uint)streams[2] + name, s = (uint)streams[2] + ns;
             return U32(image, n) == 0x656a624f && U16(image, n + 4) == 0x7463 && image[n + 6] == 0 &&
-                U32(image, s) == 0x74737953 && U16(image, s + 4) == 0x6d65 && image[s + 6] == 0;
+                U32(image, s) == 0x74737953 && U16(image, s + 4) == 0x6d65 && image[s + 6] == 0 &&
+                PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, (int)(scope >> 2));
         }
 
         private static int TypeRefStart(byte[] image, int[] streams, int[] counts, int first, int strings) =>

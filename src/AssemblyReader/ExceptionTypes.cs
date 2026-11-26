@@ -21,7 +21,7 @@ namespace PeLibrary
             int refs = first + counts[0] * (2 + strings + 3 * guids);
             uint type = (uint)(refs + (row - 1) * (width + 2 * strings));
             uint scope = Index(image, type, width);
-            if ((scope & 3) != 2 || !AssemblyReferences.IsPlatformPrimitiveAssembly(image, heaps, methods, counts, (int)(scope >> 2)))
+            if ((scope & 3) != 2 || !PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, (int)(scope >> 2)))
                 return 0;
             uint name = Index(image, type + (uint)width, strings);
             uint ns = Index(image, type + (uint)(width + strings), strings);
