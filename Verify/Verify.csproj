@@ -51,6 +51,7 @@
     <ProjectReference Include="../demos/stage-33-float-remainder/FloatRemainder.csproj" />
     <ProjectReference Include="../demos/stage-29-math-intrinsics/MathIntrinsics.csproj" />
     <ProjectReference Include="../demos/stage-37-primitive-arrays/PrimitiveArrays.csproj" />
+    <ProjectReference Include="../demos/stage-116-native-integer-vectors/Linked/LinkedNativeVectors.csproj" />
     <ProjectReference Include="../demos/stage-16-managed-delegates/identity/ThirdPartyFunc/ThirdPartyFunc.csproj" Aliases="ThirdParty" />
     <ProjectReference Include="../demos/stage-16-managed-delegates/identity/FuncIdentityProbe/FuncIdentityProbe.csproj" />
   </ItemGroup>

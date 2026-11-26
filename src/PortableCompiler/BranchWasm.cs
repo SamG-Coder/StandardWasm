@@ -54,7 +54,10 @@ namespace PortableCompiler
                 for (int kind = I32; kind <= spillKinds; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
-                    used = WasmBinary.ValueType(code, used, Representation(objects, kind <= PeLibrary.ConsoleStorage.Writer ? kind : FirstClass + kind - PeLibrary.ConsoleStorage.Writer - 1));
+                    int type = kind == NativeZero ? NativeVector : kind;
+                    if (kind > PeLibrary.ConsoleStorage.Writer)
+                        type = FirstClass + kind - PeLibrary.ConsoleStorage.Writer - 1;
+                    used = WasmBinary.ValueType(code, used, Representation(objects, type));
                 }
             }
             for (int i = 0; i < classes; i++)
@@ -724,7 +727,10 @@ namespace PortableCompiler
 
         // The gap between primitive tags and layout IDs has no Wasm locals.
         private static int SpillBank(int type) =>
-            type >= FirstClass ? PeLibrary.ConsoleStorage.Writer + type - FirstClass : (type == NativeZero ? Native : type) - 1;
+            // NativeZero already spills as Native. Use its otherwise vacant bank
+            // for native arrays without increasing the engine's local pressure.
+            type >= FirstClass ? PeLibrary.ConsoleStorage.Writer + type - FirstClass :
+                (type == NativeZero ? Native : type == NativeVector ? NativeZero : type) - 1;
 
         internal static int LoadOperand(byte[] code, int used, int local, int source, int target)
         {
