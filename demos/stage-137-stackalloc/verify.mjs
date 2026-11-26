@@ -42,7 +42,9 @@ async function runCases(compiler, fixture, oracle) {
     packed.set(image, 4);
     const bundle = upload(packed);
 
-    async function compile(exports) {
+    // Roslyn lowers a constant zero-length stackalloc to null with no localloc, so that
+    // kernel has no memory import. Every allocating kernel must import exactly memory 0.
+    async function compile(exports, memoryFree = false) {
         const entries = new Uint8Array(exports.reduce((size, [, name]) => size + 8 + name.length, 0));
         let cursor = 0;
         for (const [row, name] of exports) {
@@ -57,7 +59,8 @@ async function runCases(compiler, fixture, oracle) {
             throw Error("rows " + exports.map(e => e[0]) + " returned " + status + " at " + [0, 1, 2].map(i => build.ReadDiagnostic(location, i)));
         const module = await WebAssembly.compile(Uint8Array.from({ length: status }, (_, i) => build.ReadByte(output, i)));
         const imports = WebAssembly.Module.imports(module).map(entry => entry.module + "." + entry.name + ":" + entry.kind);
-        if (imports.join() !== "standardwasm:resources.memory:memory") throw Error("unexpected imports " + imports.join());
+        if (imports.join() !== (memoryFree ? "" : "standardwasm:resources.memory:memory"))
+            throw Error("unexpected imports " + imports.join());
         return module;
     }
 
@@ -69,7 +72,8 @@ async function runCases(compiler, fixture, oracle) {
     const results = [];
     for (const test of oracle.cases) {
         const { imports } = lend();
-        const instance = await WebAssembly.instantiate(await compile([[test.row, "run"]]), imports);
+        const memoryFree = test.name === "ConstantZeroIsNull";
+        const instance = await WebAssembly.instantiate(await compile([[test.row, "run"]], memoryFree), memoryFree ? undefined : imports);
         const value = String(instance.exports.run(...test.arguments));
         if (value !== test.expected) throw Error(test.name + "(" + test.arguments + ") returned " + value + ", the CLR returned " + test.expected);
         results.push({ name: test.name, arguments: test.arguments, value });
