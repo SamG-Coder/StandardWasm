@@ -126,6 +126,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [121 · Read-only value-type instance methods](stage-121-value-instance-methods/README.md) | `npm run demo -- stage-121-value-instance-methods` | Call non-mutating struct methods on locals and receivers; diagnose writes through `this` |
 | [122 · Runtime class dispatch](stage-122-runtime-class-dispatch/README.md) | `npm run demo -- stage-122-runtime-class-dispatch` | Select the original virtual override for a polymorphic managed receiver |
 | [123 · SkipLocalsInit bodies](stage-123-skip-locals-init/README.md) | `npm run demo -- stage-123-skip-locals-init` | `[SkipLocalsInit]` methods with locals compile with zeroed locals; stackalloc stays diagnosed |
+| [124 · Closed generic bases](stage-124-closed-generic-bases/README.md) | `npm run demo -- stage-124-closed-generic-bases` | Substitute and reserve closed generic base classes from original managed DLLs |
 
 ## Adding a stage
 

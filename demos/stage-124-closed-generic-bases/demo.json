@@ -1,0 +1,1 @@
+{"assembly":"GenericBaseDemo","exportType":"GenericBaseDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["GenericBaseDependency.dll"]},{"name":"Linked"}],"generated":{"bundle":true,"capacity":65536,"arguments":[5]},"expected":12}

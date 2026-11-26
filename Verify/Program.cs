@@ -154,6 +154,7 @@ BeforeFieldInitCases.Add(cases);
 VirtualDispatchCases.Add(cases);
 AllocatedReceiverCases.Add(cases);
 RuntimeDispatchCases.Add(cases);
+GenericBaseCases.Add(cases);
 StringVectorCases.Add(cases);
 GenericBodyCases.Add(cases);
 ValueConstructionCases.Add(cases);
