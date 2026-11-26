@@ -5,14 +5,20 @@ namespace PeLibrary
     internal static class ObjectLayouts
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
-        internal const int FirstClass = ArrayTypeRefs.Doubles + 1, MaxClasses = 256 - FirstClass, Width = 3;
-        internal const int FieldMapStart = 1 + MaxClasses * Width;
+        internal const int FirstClass = ArrayTypeRefs.Doubles + 1, MaxClasses = 256 - FirstClass;
+        private const int Header = 2, Width = 5, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
+        internal const int FieldMapStart = Header + MaxClasses * Width;
 
-        // Registry: count, fixed triples of TypeDef row, first Field row and field count, then field kinds by row.
-        internal static int Register(byte[] image, int[] streams, int[] methods, int[] registry, int row)
+        // The header stores class count and occupied field slots. Each class
+        // maps an assembly-local TypeDef and Field range to its own field storage.
+        internal static int Register(byte[] image, int[] streams, int[] methods, int[] registry, int assembly, int row)
         {
             for (int i = 0; i < registry[0]; i++)
-                if (registry[1 + i * Width] == row) return FirstClass + i;
+            {
+                int candidate = Slot(FirstClass + i);
+                if (registry[candidate + Assembly] == assembly && registry[candidate + TypeRow] == row)
+                    return FirstClass + i;
+            }
             if (registry[0] >= MaxClasses) return -2;
 
             var counts = new int[45];
@@ -37,14 +43,19 @@ namespace PeLibrary
             uint end = row == counts[2] ? (uint)(counts[4] + 1) :
                 ReadIndex(image, def + (uint)(defWidth + fieldColumn), fieldIndex);
             if (first < 1 || end < first || end > (uint)(counts[4] + 1)) return -1;
-            // Reserve the class ID before resolving fields. Self and mutual
-            // references then resolve to this same ID during recursive discovery.
+            int count = (int)(end - first), storage = FieldMapStart + registry[1];
+            if (count > registry.Length - storage) return -3;
+            // Reserve the class and its whole field slice before following
+            // recursive references. Their registration may append other slices.
             int index = registry[0];
             registry[0] = index + 1;
-            int slot = 1 + index * Width;
-            registry[slot] = row;
-            registry[slot + 1] = (int)first;
-            registry[slot + 2] = (int)(end - first);
+            registry[1] = registry[1] + count;
+            int slot = Slot(FirstClass + index);
+            registry[slot + Assembly] = assembly;
+            registry[slot + TypeRow] = row;
+            registry[slot + FirstField] = (int)first;
+            registry[slot + Fields] = count;
+            registry[slot + Storage] = storage;
             int fields = defs + counts[2] * defWidth;
             int blobs = methods[3];
             for (uint field = first; field < end; field++)
@@ -81,7 +92,7 @@ namespace PeLibrary
                     int coded = CompressedUnsigned(image, (int)blob + 3, endSignature, next);
                     if (coded <= 0 || next[0] != endSignature) return -2;
                     if ((coded & 3) == 0)
-                        type = Register(image, streams, methods, registry, coded >> 2);
+                        type = Register(image, streams, methods, registry, assembly, coded >> 2);
                     else
                     {
                         type = EventMetadata.Reference(image, streams, methods, coded);
@@ -90,7 +101,7 @@ namespace PeLibrary
                     if (type < 0) return type;
                 }
                 else return -2;
-                registry[FieldMapStart + (int)field] = type;
+                registry[storage + (int)(field - first)] = type;
             }
             return FirstClass + index;
         }
@@ -122,17 +133,25 @@ namespace PeLibrary
             return owner;
         }
 
-        internal static int FieldType(int[] registry, int field) => registry[FieldMapStart + field];
+        private static int Slot(int type) => Header + (type - FirstClass) * Width;
+
+        internal static int FieldCount(int[] registry, int type) => registry[Slot(type) + Fields];
+
+        internal static int FieldTypeAt(int[] registry, int type, int offset) =>
+            registry[registry[Slot(type) + Storage] + offset];
+
+        internal static int FieldType(int[] registry, int type, int row) =>
+            FieldTypeAt(registry, type, row - registry[Slot(type) + FirstField]);
 
         internal static int FieldOrdinal(int[] registry, int type, int field)
         {
-            int slot = 1 + (type - FirstClass) * Width;
-            int index = field - registry[slot + 1];
-            if (index < 0 || index >= registry[slot + 2] || FieldType(registry, field) == 0)
+            int slot = Slot(type);
+            int index = field - registry[slot + FirstField], storage = registry[slot + Storage];
+            if (index < 0 || index >= registry[slot + Fields] || registry[storage + index] == 0)
                 return -1;
             int ordinal = 0;
-            for (int i = registry[slot + 1]; i < field; i++)
-                if (FieldType(registry, i) != 0) ordinal++;
+            for (int i = 0; i < index; i++)
+                if (registry[storage + i] != 0) ordinal++;
             return ordinal;
         }
 

@@ -54,5 +54,6 @@
     <ProjectReference Include="../demos/stage-56-instance-null/InstanceNull.csproj" />
     <ProjectReference Include="../demos/stage-57-linked-exceptions/LinkedExceptions.csproj" />
     <ProjectReference Include="../demos/stage-58-linked-references/LinkedReferences.csproj" />
+    <ProjectReference Include="../demos/stage-59-linked-objects/LinkedObjects.csproj" />
   </ItemGroup>
 </Project>

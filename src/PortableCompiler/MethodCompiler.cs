@@ -102,7 +102,9 @@ namespace PortableCompiler
                 bases[module + 1] = bases[module] + size;
             }
             int symbols = bases[modules];
-            var objects = new int[ObjectLayouts.FieldMapStart + main.Length / 6 + 1];
+            // A Field row occupies at least six bytes in each input image.
+            int imageBytes = bundle.Length == 0 ? main.Length : bundle.Length;
+            var objects = new int[ObjectLayouts.FieldMapStart + imageBytes / 6];
             var owners = new int[symbols];
             var rows = new int[symbols];
             var indices = new int[symbols + 1];
@@ -203,14 +205,11 @@ namespace PortableCompiler
                     int localBlob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, body[3]);
                     if (localBlob < 0)
                         return -1;
-                    locals = SignatureTypes.Read(image, heaps, localBlob, frame, parameters, -1, layout, objects);
+                    locals = SignatureTypes.Read(image, heaps, localBlob, frame, parameters, -1, layout, objects, owner);
                     if (locals < 0)
                         return locals;
                     if (locals > 0 && body[4] == 0)
                         return -2;
-                    if (owner != 0)
-                        for (int i = 0; i < locals; i++)
-                            if (!IsSharedBundleType(frame[parameters + i])) return -2;
                 }
                 if (body[1] > (int.MaxValue - 32) / 64)
                     return -2;
@@ -360,8 +359,6 @@ namespace PortableCompiler
                 int kind = records[slot];
                 if (kind == 0) continue;
                 if (location.Length != 0) location[2] = slot / BranchIl.Width;
-                if (owner != 0 && !IsBundleInstruction(kind))
-                    return -2;
                 if (kind == BranchIl.NewArray)
                 {
                     int type = ArrayTypeRefs.ElementType(image, heaps, layout, unchecked((uint)records[slot + 1]));
@@ -380,12 +377,12 @@ namespace PortableCompiler
                     int field = records[slot + 1];
                     int fieldOwner = ObjectLayouts.Owner(image, heaps, layout, field, true);
                     if (fieldOwner < 0) return -1;
-                    int type = ObjectLayouts.Register(image, heaps, layout, objects, fieldOwner);
+                    int type = ObjectLayouts.Register(image, heaps, layout, objects, owner, fieldOwner);
                     if (type < 0) return type;
                     int fieldIndex = ObjectLayouts.FieldOrdinal(objects, type, field);
                     if (fieldIndex < 0) return -1;
                     records[slot + 1] = fieldIndex;
-                    records[slot + 3] = (type << 8) | ObjectLayouts.FieldType(objects, field);
+                    records[slot + 3] = (type << 8) | ObjectLayouts.FieldType(objects, type, field);
                     if (kind == BranchIl.FieldAddress && !LinkExchange(image, heaps, layout, records, slot))
                         return -2;
                     continue;
@@ -597,14 +594,10 @@ namespace PortableCompiler
         private static int Register(byte[] image, int[] layout, int[] heaps, int owner, int row,
             int[] owners, int[] rows, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int functions)
         {
-            if (owner != 0 && (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x10) == 0)
-                return -2;
             int offset = functions == 0 ? 0 : offsets[functions - 1] + arities[functions - 1] + 1;
-            int arity = MethodShape(image, layout, heaps, row, signatures, offset, objects);
+            int arity = MethodShape(image, layout, heaps, owner, row, signatures, offset, objects);
             if (arity < 0)
                 return arity;
-            if (owner != 0 && !IsSharedBundleSignature(signatures, offset, arity))
-                return -2;
             owners[functions] = owner;
             rows[functions] = row;
             indices[bases[owner] + row] = functions + 1;
@@ -613,22 +606,10 @@ namespace PortableCompiler
             return functions + 1;
         }
 
-        private static bool IsBundleInstruction(int kind) =>
-            kind < BranchIl.NewArray ||
-            kind == BranchIl.NewArray || kind == BranchIl.InitializedArray || kind == BranchIl.ArrayLength ||
-            kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet ||
-            kind == BranchIl.LoadString || kind == BranchIl.NullString || kind == BranchIl.StringLength ||
-            kind == BranchIl.StringCharacter || kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars ||
-            kind == BranchIl.Narrow || kind == BranchIl.MemberCall || kind == BranchIl.WideConstant ||
-            kind == BranchIl.ConvertInteger || kind == BranchIl.Switch || kind == BranchIl.SingleConstant ||
-            kind == BranchIl.DoubleConstant || kind == BranchIl.ConvertFloat || kind == BranchIl.CheckedInteger ||
-            kind == BranchIl.CheckedConversion || kind == BranchIl.Leave || kind == BranchIl.Rethrow ||
-            kind == BranchIl.EndFinally;
-
-        // Platform arrays and strings have fixed heap type indices in the
-        // linked module. Assembly-local TypeDef rows cannot share this boundary.
+        // These signatures have no metadata tokens. System.Object crosses the
+        // boundary as an opaque eqref, even when its instance is a local class.
         private static bool IsSharedBundleType(int type) =>
-            IsScalar(type) || type == String || IsArray(StackType(type));
+            IsScalar(type) || type == String || type == ObjectReference || IsArray(StackType(type));
 
         private static bool IsSharedBundleSignature(int[] types, int offset, int arity)
         {
@@ -638,7 +619,7 @@ namespace PortableCompiler
             return true;
         }
 
-        private static int MethodShape(byte[] image, int[] layout, int[] heaps, int row, int[] types, int offset, int[] objects)
+        private static int MethodShape(byte[] image, int[] layout, int[] heaps, int assembly, int row, int[] types, int offset, int[] objects)
         {
             int attributes = MethodDefinitions.ReadColumn(image, layout, row, 2);
             int implementation = MethodDefinitions.ReadColumn(image, layout, row, 1);
@@ -649,11 +630,11 @@ namespace PortableCompiler
             {
                 int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
                 if (owner < 0) return -1;
-                receiver = ObjectLayouts.Register(image, heaps, layout, objects, owner);
+                receiver = ObjectLayouts.Register(image, heaps, layout, objects, assembly, owner);
                 if (receiver < 0) return receiver;
             }
             int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
-            return SignatureTypes.Read(image, heaps, signature, types, offset, receiver, layout, objects);
+            return SignatureTypes.Read(image, heaps, signature, types, offset, receiver, layout, objects, assembly);
         }
     }
 }

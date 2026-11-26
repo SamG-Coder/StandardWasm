@@ -30,12 +30,11 @@ namespace PortableCompiler
             bool recursive = false;
             for (int i = 0; i < objects[0]; i++)
             {
-                int slot = 1 + i * Width;
-                int first = objects[slot + 1], fields = objects[slot + 2];
+                int classType = FirstClass + i, fields = FieldCount(objects, classType);
                 int size = 1, stored = 0;
                 for (int field = 0; field < fields; field++)
                 {
-                    int type = FieldType(objects, first + field);
+                    int type = FieldTypeAt(objects, classType, field);
                     if (type == 0) continue;
                     size += 1 + ValueWidth((byte)type);
                     if (type >= FirstClass) recursive = true;
@@ -215,16 +214,15 @@ namespace PortableCompiler
             }
             for (int i = 0; i < objects[0]; i++)
             {
-                int slot = 1 + i * Width;
-                int first = objects[slot + 1], fields = objects[slot + 2];
+                int classType = FirstClass + i, fields = FieldCount(objects, classType);
                 output[cursor++] = 0x5f; // struct
                 int stored = 0;
                 for (int field = 0; field < fields; field++)
-                    if (FieldType(objects, first + field) != 0) stored++;
+                    if (FieldTypeAt(objects, classType, field) != 0) stored++;
                 cursor = Unsigned(output, cursor, stored);
                 for (int field = 0; field < fields; field++)
                 {
-                    int fieldType = FieldType(objects, first + field);
+                    int fieldType = FieldTypeAt(objects, classType, field);
                     if (fieldType == 0) continue;
                     cursor = ValueType(output, cursor, (byte)fieldType);
                     output[cursor++] = 1;
