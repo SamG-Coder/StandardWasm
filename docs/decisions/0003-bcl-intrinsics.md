@@ -2,7 +2,7 @@
 
 Status: accepted for the host compiler (#58). The portable compiler in `src/` can adopt the same table later.
 
-The README requires every supported .NET Standard API to have a compatible implementation in the module or a documented host import. Some BCL methods need neither. Their .NET behavior on every input is already a Wasm instruction, or a short guarded sequence. The host compiler maps those calls through a curated table in `Compiler/BclIntrinsics.cs` instead of linking the BCL.
+The README requires every supported .NET Standard API to have a compatible implementation in the module or a documented host import. Some BCL methods need neither. Their .NET behavior on every input is already a Wasm instruction, or a short guarded sequence. The portable compiler recognizes the supported platform identities and signatures in `src/AssemblyReader/PlatformMembers.cs` and emits the matching instructions in `src/PortableCompiler/MathWasm.cs`.
 
 ## Rule
 

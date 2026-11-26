@@ -18,9 +18,19 @@ try
     using var pe = new PEReader(stream);
     MetadataReader metadata = pe.GetMetadataReader();
     byte[] manifest = CreateManifest(metadata, args[1]);
-    byte[] output = new byte[2 << 20];
     int[] location = CompilerExports.CreateDiagnostic();
-    int size = CompilerExports.CompileModuleDetailed(image, manifest, output, location);
+    int capacity = 256 << 10;
+    byte[] output;
+    int size;
+    while (true)
+    {
+        output = new byte[capacity];
+        size = CompilerExports.CompileModuleDetailed(image, manifest, output, location);
+        if (size != -3 || capacity == Array.MaxLength) break;
+
+        // The portable compiler uses the output length to size its workspace.
+        capacity = (int)Math.Min((long)capacity * 2, Array.MaxLength);
+    }
     if (size <= 0)
     {
         int row = location[1];
@@ -36,7 +46,8 @@ try
     file.Write(output, 0, size);
     return 0;
 }
-catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or BadImageFormatException)
+catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or
+    BadImageFormatException or OutOfMemoryException)
 {
     Console.Error.WriteLine(error.Message);
     return 1;
