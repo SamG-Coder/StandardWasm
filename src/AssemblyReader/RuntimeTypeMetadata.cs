@@ -33,6 +33,19 @@ namespace PeLibrary
             return first < 0 ? 0 : PlatformTypeReferences.Identify(image, heaps, layout, counts, first, coded >> 2);
         }
 
+        // CoreLib constructors and fields refer to the concrete implementation
+        // by TypeDef. The runtime-created object uses the same canonical
+        // Assembly descriptor when retained by a managed resource stream.
+        internal static bool IsRuntimeAssemblyDefinition(byte[] image, int[] heaps, int[] layout, int coded)
+        {
+            if ((coded & 3) != 0) return false;
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            return first >= 0 &&
+                ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2, "System.Reflection", "RuntimeAssembly") &&
+                PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts);
+        }
+
         internal static bool ValidDefinition(byte[] image, int[] heaps, int row)
         {
             // TypeDef row 1 is the module pseudo-type and has no runtime Type.

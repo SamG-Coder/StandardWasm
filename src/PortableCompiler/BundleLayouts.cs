@@ -217,6 +217,8 @@ namespace PortableCompiler
         internal static int RegisterType(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int coded, int[] objects, bool valueType, bool enumIdentity = false)
         {
+            if (!valueType && RuntimeTypeMetadata.IsRuntimeAssemblyDefinition(image, heaps, layout, coded))
+                return RuntimeTypeMetadata.Assembly;
             int platformType = valueType ? 0 : EventMetadata.Reference(image, heaps, layout, coded);
             if (platformType != 0) return platformType;
 
