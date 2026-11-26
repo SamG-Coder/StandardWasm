@@ -42,3 +42,10 @@ namespace VolatileFieldDemo
             PortableCompiler.MethodCompiler.CompileBundle(bundle, entries, output);
     }
 }
+
+namespace System.Runtime.Extensions
+{
+    // Keep the real facade name in the metadata string heap so the verifier
+    // can exercise a same-name marker scoped to the wrong platform facade.
+    internal sealed class ModifierScopeFixture { }
+}

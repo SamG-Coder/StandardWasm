@@ -85,6 +85,21 @@ internal static class VolatileFieldCases
         byte[] wrongScope = (byte[])image.Clone();
         wrongScope[token + 1] ^= 1;
         Reject("same marker name in wrong scope", BundleCases.Pack(wrongScope, dependency), read, -2);
+
+        byte[] wrongFacade = (byte[])image.Clone();
+        var facadeName = metadata.TypeDefinitions.Select(metadata.GetTypeDefinition)
+            .Single(t => metadata.GetString(t.Name) == "ModifierScopeFixture").Namespace;
+        int assemblyRow = MetadataTokens.GetRowNumber((AssemblyReferenceHandle)marker.ResolutionScope);
+        int assembly = pe.PEHeaders.MetadataStartOffset + metadata.GetTableMetadataOffset(TableIndex.AssemblyRef) +
+            (assemblyRow - 1) * metadata.GetTableRowSize(TableIndex.AssemblyRef);
+        int nameAt = assembly + 12 + (metadata.GetHeapSize(HeapIndex.Blob) < 65536 ? 2 : 4);
+        int nameIndex = MetadataTokens.GetHeapOffset(facadeName);
+        if (metadata.GetHeapSize(HeapIndex.String) < 65536)
+            BinaryPrimitives.WriteUInt16LittleEndian(wrongFacade.AsSpan(nameAt), checked((ushort)nameIndex));
+        else
+            BinaryPrimitives.WriteInt32LittleEndian(wrongFacade.AsSpan(nameAt), nameIndex);
+        Convert.FromHexString("B03F5F7F11D50A3A").CopyTo(wrongFacade.AsSpan(token + 1));
+        Reject("platform facade without marker", BundleCases.Pack(wrongFacade, dependency), read, -2);
         Reject("static access", bundle, nameof(Kernels.ReadStatic), -2);
 
         void CheckNull(string label, byte[] input, Action clr)

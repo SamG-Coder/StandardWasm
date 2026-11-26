@@ -188,8 +188,11 @@ namespace PeLibrary
                 if (row > counts[1]) return false;
                 uint at = (uint)(refs + (row - 1) * refWidth);
                 uint resolution = ReadIndex(image, at, scope);
+                // The other recognized facades forward IsVolatile, while
+                // System.Runtime.Extensions does not export the marker.
                 if ((resolution & 3) != 2 ||
-                    !PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, (int)(resolution >> 2)))
+                    !PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts,
+                        (int)(resolution >> 2), includeRuntimeExtensions: false))
                     return false;
                 name = ReadIndex(image, at + (uint)scope, strings);
                 space = ReadIndex(image, at + (uint)(scope + strings), strings);
