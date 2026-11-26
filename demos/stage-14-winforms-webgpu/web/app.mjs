@@ -45,7 +45,8 @@ async function start() {
     canvas.height = model.height;
     form.style.width = model.width + "px";
     form.style.height = model.height + "px";
-    form.style.minWidth = "min(" + model.width + "px, calc(100vw - 2rem))";
+    const minimumWidth = model.width;
+    form.style.minWidth = "min(" + minimumWidth + "px, calc(100vw - 2rem))";
     form.style.minHeight = model.height + "px";
     document.querySelector("#title").textContent = title;
 
@@ -147,6 +148,12 @@ async function start() {
     const observer = new ResizeObserver(([entry]) => {
         try {
             const { inlineSize, blockSize } = entry.contentBoxSize[0];
+            const narrow = inlineSize < minimumWidth;
+            const wasScaled = form.classList.contains("scaled");
+            form.classList.toggle("scaled", narrow);
+            // Scale rather than resize the managed layout below its minimum.
+            // On exit, wait for the observer to report the unscaled height.
+            if (narrow || wasScaled) return;
             exports.Resize(tree, Math.round(inlineSize), Math.round(blockSize));
             const width = exports.ClientWidth(tree), height = exports.ClientHeight(tree);
             if (width === model.width && height === model.height) return;
