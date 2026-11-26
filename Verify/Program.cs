@@ -81,4 +81,5 @@ NestedHandlerCases.Add(cases);
 RethrowCases.Add(cases);
 ArrayBoundsCases.Add(cases);
 NullAccessCases.Add(cases);
+FinallyCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

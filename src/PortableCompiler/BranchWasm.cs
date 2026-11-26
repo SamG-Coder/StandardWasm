@@ -14,15 +14,17 @@ namespace PortableCompiler
             int classes = frameShape[4];
             bool stringScratch = frameShape[5] != 0;
             bool eventScratch = frameShape[6] != 0;
-            int exceptionLocals = frameShape[8];
+            int exceptionLocals = frameShape[8], continuations = frameShape[9];
             int spillKinds = FirstClass - 1 + classes;
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 1 + spillKinds) +
-                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (exceptionLocals != 0 ? 1 : 0));
+                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (exceptionLocals != 0 ? 1 : 0) +
+                (continuations != 0 ? 1 : 0));
             int spills = arguments + locals;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
             int eventLocals = scratch + (stringScratch ? 5 : 0);
             int pcLocal = eventLocals + (eventScratch ? 6 : 0);
+            int continuationBase = pcLocal + 1 + exceptionLocals;
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < spills; i++)
             {
@@ -62,6 +64,11 @@ namespace PortableCompiler
             {
                 used = WasmBinary.Unsigned(code, used, exceptionLocals);
                 code[used++] = ExceptionDispatchWasm.ExceptionReference;
+            }
+            if (continuations != 0)
+            {
+                used = WasmBinary.Unsigned(code, used, continuations);
+                code[used++] = 0x7f; // normal cleanup destinations
             }
             // Raw Wasm callers supply i32. Enforce the CLI argument width before
             // the first instruction, including on entry from a managed call.
@@ -475,6 +482,10 @@ namespace PortableCompiler
                     }
                     else if (kind == Switch)
                         used = SwitchDispatch(code, used, records, operand, records[slot + 3], next, spills + top);
+                    else if (kind == EndFinally)
+                        used = FinallyWasm.Finish(code, used, pcLocal + 2 + operand, continuationBase + operand);
+                    else if (kind == Leave && continuations != 0)
+                        used = FinallyWasm.Leave(code, used, pc, operand, pcLocal, continuationBase, catchRegion);
                     else used = Const(code, used, kind == Branch || kind == Leave ? operand : next);
                     used = Local(code, used, 0x21, pcLocal);
                     code[used++] = 0x0c;

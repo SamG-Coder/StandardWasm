@@ -135,7 +135,7 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[9];
+            var frameShape = new int[10];
             bool eventArgsEmpty = false;
             int exceptionTags = 0;
             var noCatch = new int[0];
@@ -159,6 +159,7 @@ namespace PortableCompiler
                 if (status != 0)
                     return status == MethodBodies.Malformed ? -1 : -2;
                 int[] catchRegion = noCatch;
+                bool hasFinally = false;
                 if (body[5] != 0)
                 {
                     int regions = ExceptionRegions.Count(image, rva, body);
@@ -170,6 +171,11 @@ namespace PortableCompiler
                     for (int clause = 0; clause < catchRegion.Length; clause += ExceptionRegions.Width)
                     {
                         if (location.Length != 0) location[2] = catchRegion[clause + 3];
+                        if (catchRegion[clause] == 2)
+                        {
+                            hasFinally = true;
+                            continue; // The reader publishes zero in the union field.
+                        }
                         if (catchRegion[clause] != 0) return -2;
                         int mask = ExceptionTypes.CatchMask(image, heaps, layout, catchRegion[clause + 5]);
                         if (mask == 0) return -2;
@@ -272,6 +278,12 @@ namespace PortableCompiler
                         int operation = records[slot + 1];
                         if (depths[pc] != 0)
                         {
+                            if (hasFinally && kind == BranchIl.Leave)
+                            {
+                                int unwindBytes = catchRegion.Length / ExceptionClauses.Width * 32;
+                                if (capacity > int.MaxValue - unwindBytes) return -3;
+                                capacity += unwindBytes;
+                            }
                             int tags = 0;
                             if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion)
                                 tags = ExceptionTypes.Overflow;
@@ -311,6 +323,7 @@ namespace PortableCompiler
                     frameShape[6] = 0;
                     frameShape[7] = length;
                     frameShape[8] = exceptionLocals;
+                    frameShape[9] = hasFinally ? catchRegion.Length / ExceptionClauses.Width : 0;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
