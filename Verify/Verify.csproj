@@ -70,7 +70,7 @@
     <ProjectReference Include="../demos/stage-76-initializer-reachability/InitializerReachability.csproj" />
     <ProjectReference Include="../demos/stage-76-initializer-reachability/Module/ModuleInitFixture.csproj" />
     <ProjectReference Include="../demos/stage-78-strong-names/StrongNameDemo.csproj" />
-    <ProjectReference Include="../demos/stage-79-type-forwarding/ForwardingDemo.csproj" />
+    <ProjectReference Include="../demos/stage-80-type-forwarding/ForwardingDemo.csproj" />
     <ProjectReference Include="../demos/stage-78-strong-names/Alternate/Alternate.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />
     <Compile Remove="Fixtures/**/*.cs" />
@@ -83,7 +83,7 @@
   </Target>
   <Target Name="CopyForwardingVerification" AfterTargets="Build">
     <ItemGroup>
-      <ForwardingFixture Include="$(MSBuildThisFileDirectory)../demos/stage-79-type-forwarding/bin/$(Configuration)/netstandard2.0/forwarded/*.dll" />
+      <ForwardingFixture Include="$(MSBuildThisFileDirectory)../demos/stage-80-type-forwarding/bin/$(Configuration)/netstandard2.0/forwarded/*.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(ForwardingFixture)" DestinationFolder="$(OutDir)forwarding" />
   </Target>

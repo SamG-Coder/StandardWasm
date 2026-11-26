@@ -1,6 +1,6 @@
-# Stage 79 · CLR type forwarding
+# Stage 80 · CLR type forwarding
 
-Run `npm run demo -- stage-79-type-forwarding` and `npm test`. The caller is
+Run `npm run demo -- stage-80-type-forwarding` and `npm test`. The caller is
 compiled against the original signed assembly. The replacement assembly has
 the same identity and uses ordinary C# type forwarders. The caller is unchanged.
 
