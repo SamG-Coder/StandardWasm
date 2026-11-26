@@ -5,7 +5,7 @@ namespace PeLibrary
     internal static class ObjectLayouts
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
-        internal const int FirstClass = PointerStorage.NativeZero + 1, MaxClasses = 256 - FirstClass;
+        internal const int FirstClass = ConsoleStorage.Writer + 1, MaxClasses = 256 - FirstClass;
         private const int Header = 4, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         private const int Arguments = 10, Arity = 11, Element = 12;

@@ -16,6 +16,7 @@ namespace PortableCompiler
             bool stringScratch = frameShape[5] != 0;
             bool eventScratch = frameShape[6] != 0;
             int exceptionLocals = frameShape[8], continuations = frameShape[9];
+            int hostImports = frameShape[10];
             bool hasNull = outgoingNulls.Length != 0;
             int spillKinds = FirstClass - 1 + classes;
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
@@ -187,6 +188,21 @@ namespace PortableCompiler
                         code[used++] = 0x0f;
                     }
                     used = Local(code, used, 0x21, spills + at);
+                }
+                else if (kind == ConsoleWriter)
+                {
+                    used = Const(code, used, operand); // host stream number
+                    used = Local(code, used, 0x21, Spill(spills, maximum, PeLibrary.ConsoleStorage.Writer, depth));
+                }
+                else if (kind == ConsoleWrite)
+                {
+                    bool text = operand != PeLibrary.ConsoleMetadata.WriteEmptyLine;
+                    int writer = text ? top - 1 : top;
+                    // The String scratch bank supplies a Char[] and two i32 locals.
+                    used = ConsoleWasm.Write(code, used, operand,
+                        Spill(spills, maximum, PeLibrary.ConsoleStorage.Writer, writer),
+                        text ? Spill(spills, maximum, states[state + top], top) : 0,
+                        scratch, scratch + 3, scratch + 4);
                 }
                 else if (kind == LoadFunction)
                 {
@@ -377,7 +393,7 @@ namespace PortableCompiler
                         used = LoadOperand(code, used, Spill(spills, maximum, source, argument), source, signatures[shape + 1 + i]);
                     }
                     code[used++] = 0x10;
-                    used = WasmBinary.Unsigned(code, used, operand);
+                    used = WasmBinary.Unsigned(code, used, hostImports + operand);
                     int returned = signatures[shape];
                     if (kind == NewObject)
                     {

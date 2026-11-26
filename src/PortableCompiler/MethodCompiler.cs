@@ -26,16 +26,16 @@ namespace PortableCompiler
             entries[8] = 0x72;
             entries[9] = 0x75;
             entries[10] = 0x6e;
-            return CompileProgram(image, new byte[0], new int[0], entries, output, location);
+            return CompileProgram(image, new byte[0], new int[0], entries, output, location, 0);
         }
 
         internal static int CompileExports(byte[] image, byte[] entries, byte[] output) =>
-            CompileProgram(image, new byte[0], new int[0], entries, output, new int[0]);
+            CompileProgram(image, new byte[0], new int[0], entries, output, new int[0], 0);
 
         internal static int CompileModuleDetailed(byte[] image, byte[] entries, byte[] output, int[] location)
         {
             if (location.Length < CompileLocation.Size) return -3;
-            return CompileProgram(image, new byte[0], new int[0], entries, output, location);
+            return CompileProgram(image, new byte[0], new int[0], entries, output, location, 0);
         }
 
         internal static int CompileBundle(byte[] bundle, byte[] entries, byte[] output) =>
@@ -62,10 +62,14 @@ namespace PortableCompiler
                 ranges[i + 1] = size;
                 cursor += 4 + size;
             }
-            return CompileProgram(AssemblyBundle.Copy(bundle, 4, mainSize), bundle, ranges, entries, output, location);
+            return CompileProgram(AssemblyBundle.Copy(bundle, 4, mainSize), bundle, ranges, entries, output, location, 0);
         }
 
-        private static int CompileProgram(byte[] main, byte[] bundle, int[] ranges, byte[] entries, byte[] output, int[] location)
+        // Host imports occupy the lowest Wasm function indices, and emitted
+        // bodies already contain call indices. A program that turns out to use
+        // the console is therefore compiled again with the imports reserved.
+        private static int CompileProgram(byte[] main, byte[] bundle, int[] ranges, byte[] entries, byte[] output, int[] location,
+            int hostImports)
         {
             CompileLocation.Clear(location);
             byte[] image = main;
@@ -127,6 +131,7 @@ namespace PortableCompiler
             var literals = new byte[output.Length];
             var literalSize = new int[1];
             var remainderFixup = new int[1];
+            var hostUse = new int[1];
             int functions = 0, length = 0;
             for (int export = 0; export < exportCount; export++)
             {
@@ -156,7 +161,7 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[10];
+            var frameShape = new int[11];
             bool eventArgsEmpty = false;
             int exceptionTags = 0;
             var noCatch = new int[0];
@@ -248,7 +253,7 @@ namespace PortableCompiler
                         return status;
                     functions = LinkOperands(main, bundle, ranges, image, layout, heaps, owner, source,
                         parameters == 0 ? 0 : signatures[signature + 1], records, owners, rows,
-                        bases, indices, arities, offsets, signatures, objects, thunks, literals, literalSize, functions, location, frame, catchRegion);
+                        bases, indices, arities, offsets, signatures, objects, thunks, literals, literalSize, functions, location, frame, catchRegion, hostUse);
                     if (functions < 0)
                         return functions;
 
@@ -294,6 +299,11 @@ namespace PortableCompiler
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
+                        if (kind == BranchIl.ConsoleWrite && depths[slot / BranchIl.Width] != 0)
+                        {
+                            if (capacity > int.MaxValue - ConsoleWasm.WriteCapacity) return -3;
+                            capacity += ConsoleWasm.WriteCapacity;
+                        }
                         if (kind == BranchIl.RemoveHandler && depths[slot / BranchIl.Width] != 0)
                         {
                             // The structured search and copy expand a single IL call.
@@ -366,10 +376,12 @@ namespace PortableCompiler
                     frameShape[7] = length;
                     frameShape[8] = exceptionLocals;
                     frameShape[9] = hasFinally ? catchRegion.Length / ExceptionClauses.Width : 0;
+                    frameShape[10] = hostImports;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
-                        if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars) frameShape[5] = 1;
+                        if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars ||
+                            kind == BranchIl.ConsoleWrite) frameShape[5] = 1;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
                             frameShape[6] = 1;
@@ -388,14 +400,17 @@ namespace PortableCompiler
                 sizes[current] = used;
                 length += used;
             }
+            if (hostUse[0] != 0 && hostImports == 0)
+                return CompileProgram(main, bundle, ranges, entries, output, location, ConsoleWasm.ImportCount);
             CompileLocation.Clear(location);
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], eventArgsEmpty, remainderFixup[0], exceptionTags);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], eventArgsEmpty, remainderFixup[0], exceptionTags,
+                hostImports);
         }
 
         private static int LinkOperands(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
             int[] heaps, int owner, int callerRow, int callerReceiver, int[] records, int[] owners, int[] rows, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
-            byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses)
+            byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse)
         {
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
             {
@@ -411,7 +426,9 @@ namespace PortableCompiler
                         uint table = token >> 24;
                         if (table != 1 && table != 2) return -2;
                         int coded = (int)((token & 0xffffff) << 2) | (table == 1 ? 1 : 0);
-                        int element = BundleLayouts.RegisterReference(main, bundle, ranges, image, layout, heaps, owner, coded, objects);
+                        // A String vector holds references to the immutable String struct.
+                        int element = PlatformTypeReferences.IsString(image, heaps, layout, coded) ? String :
+                            BundleLayouts.RegisterReference(main, bundle, ranges, image, layout, heaps, owner, coded, objects);
                         if (element < 0) return element;
                         type = ObjectLayouts.RegisterArray(objects, element);
                     }
@@ -530,6 +547,20 @@ namespace PortableCompiler
                         }
                     }
                     if (opcode == 0x7e) return -2;
+                    int consoleMember = ConsoleMetadata.Member(image, heaps, layout, member);
+                    if (consoleMember == ConsoleMetadata.Unsupported) return -2;
+                    if (consoleMember != 0)
+                    {
+                        // Accessors are static calls. Writes must dispatch virtually:
+                        // a non-virtual call would bypass the console's synchronized writer.
+                        bool accessor = consoleMember == ConsoleMetadata.StandardOutput ||
+                            consoleMember == ConsoleMetadata.StandardError;
+                        if (opcode != (accessor ? 0x28 : 0x6f)) return -2;
+                        records[slot] = accessor ? BranchIl.ConsoleWriter : BranchIl.ConsoleWrite;
+                        records[slot + 1] = accessor ? ConsoleWasm.Stream(consoleMember) : consoleMember;
+                        hostUse[0] = 1;
+                        continue;
+                    }
                     if (opcode == 0x28 && ObjectLayouts.IsObjectConstructor(image, heaps, layout, member))
                     {
                         records[slot] = BranchIl.BaseCtor;

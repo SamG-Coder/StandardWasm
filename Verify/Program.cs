@@ -126,4 +126,5 @@ NamedValueCases.Add(cases);
 ExplicitScalarCases.Add(cases);
 NestedOverlayCases.Add(cases);
 EnumArgumentCases.Add(cases);
+StringVectorCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);
