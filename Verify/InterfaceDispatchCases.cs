@@ -27,7 +27,7 @@ internal static class InterfaceDispatchCases
             foreach (int[] arguments in inputsForOracle)
             {
                 int? expected = null;
-                string? exception = null;
+                string exception = null;
                 try { expected = oracle(arguments); }
                 catch (NullReferenceException error) { exception = error.GetType().FullName; }
                 cases.Add(new
