@@ -138,6 +138,7 @@ namespace PortableCompiler
                 return type;
             }
             bool overlay = ObjectLayouts.IsExplicitValue(objects, type);
+            bool byRefLike = ObjectLayouts.IsByRefLikeValue(objects, type);
             int[] offsets = new int[overlay ? fields : 0];
             int limit = overlay ? ExplicitValueLayouts.Read(image, heaps, layout, ObjectLayouts.TypeDef(objects, type), first, offsets) : 0;
             if (limit < 0) return limit;
@@ -146,6 +147,12 @@ namespace PortableCompiler
                 int storage = ReadFieldStorage(bundle, image, layout, heaps, owner,
                     table, first + offset, type, objects, reference, false);
                 if (storage < 0) return storage;
+                // Scoped aggregates may carry plain scalars and traced references.
+                // Reject pointers, managed locations and nested values until their
+                // lifetimes can be represented and checked transitively.
+                if (byRefLike && storage != 0 &&
+                    (ObjectLayouts.IsValueType(objects, storage) || SignatureTypes.IsNativeInteger(storage) ||
+                        (!SignatureTypes.IsScalar(storage) && !SignatureTypes.IsReference(storage)))) return -2;
                 if (overlay && storage != 0)
                 {
                     int width = ExplicitValueLayouts.ViewWidth(objects, storage);
@@ -180,7 +187,7 @@ namespace PortableCompiler
             else if (reference[0] != 0)
                 storage = RegisterType(bundle, image, layout, heaps, owner,
                     reference[0], objects, reference[1] == 1);
-            return SignatureTypes.IsSpan(storage) ? -2 : storage;
+            return SignatureTypes.IsSpan(storage) || ObjectLayouts.IsByRefLikeValue(objects, storage) ? -2 : storage;
         }
 
         private static int RegisterInterfaces(BundleImages bundle, byte[] image,

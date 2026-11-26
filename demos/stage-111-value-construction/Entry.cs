@@ -50,8 +50,48 @@ namespace ValueConstructionDemo
         private void Assign(int value) => Value = value;
     }
 
+    internal sealed class LayoutState
+    {
+        public int Trace;
+    }
+
+    internal readonly ref struct LayoutScope
+    {
+        private readonly LayoutState state;
+        private readonly bool performLayout;
+
+        internal LayoutScope(LayoutState state, bool performLayout)
+        {
+            this.state = state;
+            this.performLayout = performLayout;
+        }
+
+        public void Dispose()
+        {
+            if (performLayout) state.Trace = unchecked(state.Trace + 7);
+        }
+    }
+
     public static class Kernels
     {
+        public static int DisposeScoped(int value)
+        {
+            var state = new LayoutState();
+            var scope = new LayoutScope(state, value != 0);
+            try
+            {
+                using (scope)
+                {
+                    state.Trace = checked(value + 1);
+                }
+            }
+            catch (OverflowException)
+            {
+                return state.Trace + 100;
+            }
+            return state.Trace;
+        }
+
         public static int Run(int value) =>
             unchecked(Defaults(value) + Fields(value) * 3 + Copies(value) * 5 + Chained(value) * 7);
 

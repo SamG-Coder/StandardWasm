@@ -34,8 +34,9 @@ namespace PeLibrary
                 if (Index(image, at + 4, ownerWidth) != owner) break;
                 if (low - first >= arity || (int)U16(image, at) != low - first) return -2;
                 uint flags = U16(image, at + 2);
-                // Permission widens the CLR's allowed argument set. Actual
-                // byref-like value layouts are rejected before being registered.
+                // Permission widens the CLR's allowed argument set. The compiler
+                // keeps scoped value layouts out of generic specialization for now.
+                if (ObjectLayouts.IsByRefLikeValue(objects, arguments[low - first])) return -2;
                 if ((flags & ~(Variance | Reference | NonNullableValue | DefaultConstructor | AllowByRefLike)) != 0)
                     return -2;
                 bool requiresValue = (flags & NonNullableValue) != 0;

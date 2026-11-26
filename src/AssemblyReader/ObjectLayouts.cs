@@ -11,7 +11,7 @@ namespace PeLibrary
         private const int Header = 4, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         private const int Arguments = 10, Arity = 11, Element = 12;
-        private const int ValueShape = 0x40000000, NullableShape = 0x20000000, InlineArrayShape = 0x10000000;
+        private const int ValueShape = 0x40000000, NullableShape = 0x20000000, InlineArrayShape = 0x10000000, ByRefLikeShape = 0x08000000;
         private const int FieldStorageBits = 16, FieldStorageMask = (1 << FieldStorageBits) - 1;
         private const int EnumHead = 3, EnumKeyBase = 0x100000;
         internal const int FieldMapStart = Header + MaxClasses * Width;
@@ -112,9 +112,17 @@ namespace PeLibrary
                 if ((flags & 0x120) != 0x100 || valueBase != 1)
                     return -2;
                 int attributed = ValueTypeAttributes.ReadInlineArrayLength(image, streams, methods, counts,
-                    row, refs, refWidth, defs, defWidth);
-                if (attributed < 0) return attributed;
-                inlineLength = attributed;
+                    row, refs, refWidth, defs, defWidth, allowByRefLike: true);
+                if (attributed == ValueTypeAttributes.ByRefLike)
+                {
+                    if (layout == 0x10) return -2;
+                    flags |= ByRefLikeShape;
+                }
+                else
+                {
+                    if (attributed < 0) return attributed;
+                    inlineLength = attributed;
+                }
                 if (inlineLength != 0)
                 {
                     // Supported V8 engines accept at most 10,000 fields in
@@ -180,6 +188,7 @@ namespace PeLibrary
 
         internal static int RegisterArray(int[] registry, int element)
         {
+            if (IsByRefLikeValue(registry, element)) return -2;
             for (int i = 0; i < registry[0]; i++)
                 if (registry[Slot(FirstClass + i) + Element] == element) return FirstClass + i;
             if (registry[0] >= MaxClasses) return -2;
@@ -387,6 +396,9 @@ namespace PeLibrary
             type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & 0x20) != 0;
         internal static bool IsValueType(int[] registry, int type) =>
             type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & ValueShape) != 0;
+        internal static bool IsByRefLikeValue(int[] registry, int type) =>
+            IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & ByRefLikeShape) != 0;
+
         internal static bool IsExplicitValue(int[] registry, int type) =>
             IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & 0x18) == 0x10;
 

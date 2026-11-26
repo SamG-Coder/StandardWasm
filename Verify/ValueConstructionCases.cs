@@ -22,6 +22,7 @@ internal static class ValueConstructionCases
         Check(nameof(Kernels.Chained), Kernels.Chained);
         Check(nameof(Kernels.Argument), Kernels.Argument);
         Check(nameof(Kernels.Guarded), Kernels.Guarded);
+        Check(nameof(Kernels.DisposeScoped), Kernels.DisposeScoped);
 
         // A receiver method that writes through this needs copy-out (decision
         // 0049), and a byref argument needs general managed byrefs. The write
