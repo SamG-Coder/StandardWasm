@@ -210,7 +210,7 @@ namespace PortableCompiler
                         return -2;
                     if (owner != 0)
                         for (int i = 0; i < locals; i++)
-                            if (!IsScalar(frame[parameters + i])) return -2;
+                            if (!IsSharedBundleType(frame[parameters + i])) return -2;
                 }
                 if (body[1] > (int.MaxValue - 32) / 64)
                     return -2;
@@ -360,12 +360,8 @@ namespace PortableCompiler
                 int kind = records[slot];
                 if (kind == 0) continue;
                 if (location.Length != 0) location[2] = slot / BranchIl.Width;
-                if (owner != 0 && kind >= BranchIl.NewArray && kind != BranchIl.Narrow && kind != BranchIl.MemberCall &&
-                    kind != BranchIl.WideConstant && kind != BranchIl.ConvertInteger && kind != BranchIl.Switch &&
-                    kind != BranchIl.SingleConstant && kind != BranchIl.DoubleConstant && kind != BranchIl.ConvertFloat &&
-                    kind != BranchIl.CheckedInteger && kind != BranchIl.CheckedConversion &&
-                    kind != BranchIl.Leave && kind != BranchIl.Rethrow && kind != BranchIl.EndFinally)
-                    return -2; // CLI dependency state stays scalar. EH references are internal Wasm locals.
+                if (owner != 0 && !IsBundleInstruction(kind))
+                    return -2;
                 if (kind == BranchIl.NewArray)
                 {
                     int type = ArrayTypeRefs.ElementType(image, heaps, layout, unchecked((uint)records[slot + 1]));
@@ -485,7 +481,7 @@ namespace PortableCompiler
                             if (functions < 0) return functions;
                             linked = functions - 1;
                         }
-                        if (!IsScalarSignature(signatures, offsets[linked], arities[linked]))
+                        if (!IsSharedBundleSignature(signatures, offsets[linked], arities[linked]))
                             return -2;
                         records[slot] = BranchIl.Call;
                         records[slot + 1] = linked;
@@ -607,7 +603,7 @@ namespace PortableCompiler
             int arity = MethodShape(image, layout, heaps, row, signatures, offset, objects);
             if (arity < 0)
                 return arity;
-            if (owner != 0 && !IsScalarSignature(signatures, offset, arity))
+            if (owner != 0 && !IsSharedBundleSignature(signatures, offset, arity))
                 return -2;
             owners[functions] = owner;
             rows[functions] = row;
@@ -617,11 +613,28 @@ namespace PortableCompiler
             return functions + 1;
         }
 
-        private static bool IsScalarSignature(int[] types, int offset, int arity)
+        private static bool IsBundleInstruction(int kind) =>
+            kind < BranchIl.NewArray ||
+            kind == BranchIl.NewArray || kind == BranchIl.InitializedArray || kind == BranchIl.ArrayLength ||
+            kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet ||
+            kind == BranchIl.LoadString || kind == BranchIl.NullString || kind == BranchIl.StringLength ||
+            kind == BranchIl.StringCharacter || kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars ||
+            kind == BranchIl.Narrow || kind == BranchIl.MemberCall || kind == BranchIl.WideConstant ||
+            kind == BranchIl.ConvertInteger || kind == BranchIl.Switch || kind == BranchIl.SingleConstant ||
+            kind == BranchIl.DoubleConstant || kind == BranchIl.ConvertFloat || kind == BranchIl.CheckedInteger ||
+            kind == BranchIl.CheckedConversion || kind == BranchIl.Leave || kind == BranchIl.Rethrow ||
+            kind == BranchIl.EndFinally;
+
+        // Platform arrays and strings have fixed heap type indices in the
+        // linked module. Assembly-local TypeDef rows cannot share this boundary.
+        private static bool IsSharedBundleType(int type) =>
+            IsScalar(type) || type == String || IsArray(StackType(type));
+
+        private static bool IsSharedBundleSignature(int[] types, int offset, int arity)
         {
-            if (!IsScalar(types[offset]) && types[offset] != Void) return false;
+            if (!IsSharedBundleType(types[offset]) && types[offset] != Void) return false;
             for (int index = 1; index <= arity; index++)
-                if (!IsScalar(types[offset + index])) return false;
+                if (!IsSharedBundleType(types[offset + index])) return false;
             return true;
         }
 
