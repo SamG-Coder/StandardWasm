@@ -31,6 +31,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [29 · Math intrinsics](stage-29-math-intrinsics/README.md) | `npm run demo -- stage-29-math-intrinsics` | Hypotenuse(3, 4) = 5 |
 | [33 · Floating-point remainder](stage-33-float-remainder/README.md) | `npm run demo -- stage-33-float-remainder` | WrapDegrees(-30) = 330 |
 | [37 · Primitive arrays](stage-37-primitive-arrays/README.md) | `npm run demo -- stage-37-primitive-arrays` | CountPrimes(100) = 25 |
+| [72 · Windows reference executable](stage-72-winforms-windows-reference/README.md) | `npm run demo -- stage-72-winforms-windows-reference` | Both .NET 10 apphosts launch, with interaction and dependency evidence |
 
 ## Adding a stage
 
