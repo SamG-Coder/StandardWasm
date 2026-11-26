@@ -3,7 +3,6 @@
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Reflection;
-using System.Reflection.Emit;
 using BootstrapLibrary;
 using PortableReals;
 
@@ -77,8 +76,11 @@ internal static class PortableFloatCases
                 () => Signals.RemainderSingle((float)left, (float)right));
         }
         Check(nameof(Signals.RemainderWithCallback), [19.5, 4.0], () => Signals.RemainderWithCallback(19.5, 4.0));
-        Reject(nameof(Signals.CheckedTruncate), OpCodes.Conv_Ovf_I4);
-        Reject(nameof(Signals.CheckedToByte), OpCodes.Conv_Ovf_U1);
+        foreach (double value in new[] { double.NaN, double.PositiveInfinity, -0.75, 255.75, 256.0 })
+        {
+            Check(nameof(Signals.CheckedTruncate), [value], () => Signals.CheckedTruncate(value));
+            Check(nameof(Signals.CheckedToByte), [value], () => Signals.CheckedToByte(value));
+        }
 
         void Check(string method, object[] arguments, Func<object> evaluate, bool linked = false)
         {
@@ -96,32 +98,23 @@ internal static class PortableFloatCases
                     Convert.ToHexString(output.AsSpan(0, size)).ToLowerInvariant());
                 compiled.Add(method, fixture);
             }
+            object? expected;
+            string? exception = null;
+            try { expected = Encode(evaluate()); }
+            catch (OverflowException error)
+            {
+                expected = null;
+                exception = error.GetType().FullName;
+            }
             cases.Add(new
             {
                 module = "BootstrapLibrary", method = linked ? "CompileBundle" : "Compile", fixture = method,
                 inputs = fixture.Inputs,
                 generated = new { capacity, arguments = Array.ConvertAll(arguments, Encode), hex = fixture.Hex, bundle = linked },
-                expected = Encode(evaluate())
+                expected, exception
             });
         }
 
-        void Reject(string method, OpCode opcode)
-        {
-            var fixture = Method(method);
-            int row = fixture.MetadataToken & 0xffffff;
-            int offset = IlOffsets.Find(fixture.GetMethodBody()!.GetILAsByteArray()!, opcode);
-            int[] location = CompilerExports.CreateDiagnostic();
-            Array.Fill(output, (byte)0xa5);
-            int status = CompilerExports.CompileDetailed(image, row, output, location);
-            if (offset < 0 || status != -2 || !location.SequenceEqual(new[] { 0, row, offset }) || output.Any(x => x != 0xa5))
-                throw new InvalidOperationException($"{method}: expected an unsupported diagnostic at IL_{offset:x4}, got {status}");
-            cases.Add(new
-            {
-                module = "BootstrapLibrary", method = "Compile", fixture = method, inputs = new[] { dll, (object)row },
-                generated = new { capacity, arguments = Array.Empty<int>(), diagnostic = location, reject = true },
-                expected = -2
-            });
-        }
     }
 
     private static MethodInfo Method(string name) => typeof(Signals).GetMethod(name)!;

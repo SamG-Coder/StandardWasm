@@ -4,7 +4,7 @@ Run from the repository root.
 
     npm run demo -- stage-27-portable-diagnostics
 
-The Wasm compiler reads DiagnosticLibrary.dll and attempts to compile CheckedByte. The command prints assembly 0, the method's MethodDef row, and IL_0001. Compilation returns -2 because the method uses a checked byte conversion. The demo resolves the row from the DLL and verifies that rejection preserves every output byte.
+The Wasm compiler reads DiagnosticLibrary.dll and attempts to compile BoxedValue. The command prints assembly 0, the method's MethodDef row, and IL_0001. Compilation returns -2 because the method boxes a value type. The demo resolves the row from the DLL and verifies that rejection preserves every output byte.
 
 The self-hosted compiler exposes CompileDetailed, CompileModuleDetailed and CompileBundleDetailed. Each takes its status-only counterpart's arguments followed by a diagnostic array made with CreateDiagnostic. Use ReadDiagnostic(location, index) to read the fields from JavaScript. The return value and output-byte contract are the same as for the status-only exports.
 

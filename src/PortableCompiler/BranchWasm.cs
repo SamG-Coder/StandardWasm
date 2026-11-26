@@ -287,6 +287,13 @@ namespace PortableCompiler
                     }
                     used = Local(code, used, 0x21, Spill(spills, maximum, resultType, top - 1));
                 }
+                else if (kind == CheckedConversion)
+                {
+                    byte source = states[state + top];
+                    byte target = CheckedConversionWasm.Result(operand);
+                    used = CheckedConversionWasm.Emit(code, used, operand, source,
+                        Spill(spills, maximum, source, top), Spill(spills, maximum, target, top));
+                }
                 else if (kind == CheckedInteger)
                 {
                     byte type = states[state + top];
@@ -552,7 +559,7 @@ namespace PortableCompiler
             return WasmBinary.Signed(code, used, value);
         }
 
-        private static int WideConst(byte[] code, int used, int low, int high)
+        internal static int WideConst(byte[] code, int used, int low, int high)
         {
             code[used++] = 0x42;
             return WasmBinary.Signed64(code, used, low, high);

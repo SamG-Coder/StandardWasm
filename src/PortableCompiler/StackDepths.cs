@@ -109,6 +109,12 @@ namespace PortableCompiler
             if (kind == SingleConstant || kind == DoubleConstant)
                 return Push(stack, depth, kind == SingleConstant ? F32 : F64);
             if (kind == Store) return depth > 0 && Assignable(stack[depth - 1], frame[operand]) ? depth - 1 : -1;
+            if (kind == CheckedConversion)
+            {
+                if (depth < 1 || !IsScalar(stack[depth - 1])) return -1;
+                stack[depth - 1] = CheckedConversionWasm.Result(operand);
+                return depth;
+            }
             if (kind == Unary || kind == Narrow || kind == ConvertInteger || kind == ConvertFloat)
             {
                 if (depth < 1) return -1;

@@ -40,5 +40,6 @@
     <ProjectReference Include="../demos/stage-41-portable-narrow-scalars/NarrowScalars.csproj" />
     <ProjectReference Include="../demos/stage-43-array-literals/ArrayLiterals.csproj" />
     <ProjectReference Include="../demos/stage-44-checked-integers/CheckedIntegers.csproj" />
+    <ProjectReference Include="../demos/stage-45-checked-casts/CheckedCasts.csproj" />
   </ItemGroup>
 </Project>

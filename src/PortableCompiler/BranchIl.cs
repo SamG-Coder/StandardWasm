@@ -11,7 +11,7 @@ namespace PortableCompiler
         internal const int LoadEventArgsEmpty = 38, NewEventArgs = 39, CombineHandler = 40, CastHandler = 41, RemoveHandler = 42;
         internal const int FieldAddress = 43, MethodSpecCall = 44, ExchangeHandlerField = 45;
         internal const int FieldToken = 46, InitializedArray = 47;
-        internal const int CheckedInteger = 48;
+        internal const int CheckedInteger = 48, CheckedConversion = 49;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
@@ -236,6 +236,11 @@ namespace PortableCompiler
                 else if (op >= 0xd6 && op <= 0xdb)
                 {
                     kind = CheckedInteger;
+                    operand = op;
+                }
+                else if (op >= 0x82 && op <= 0x89 || op >= 0xb3 && op <= 0xba)
+                {
+                    kind = CheckedConversion;
                     operand = op;
                 }
                 else if (op == 0x65 || op == 0x66)

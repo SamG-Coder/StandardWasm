@@ -235,7 +235,8 @@ namespace PortableCompiler
                             if (capacity > int.MaxValue - 320) return -3;
                             capacity += 320;
                         }
-                        if (kind == BranchIl.CheckedInteger && depths[slot / BranchIl.Width] != 0)
+                        if ((kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion) &&
+                            depths[slot / BranchIl.Width] != 0)
                         {
                             if (capacity > int.MaxValue - 48) return -3;
                             capacity += 48;
@@ -294,7 +295,7 @@ namespace PortableCompiler
                 if (owner != 0 && kind >= BranchIl.NewArray && kind != BranchIl.Narrow && kind != BranchIl.MemberCall &&
                     kind != BranchIl.WideConstant && kind != BranchIl.ConvertInteger && kind != BranchIl.Switch &&
                     kind != BranchIl.SingleConstant && kind != BranchIl.DoubleConstant && kind != BranchIl.ConvertFloat &&
-                    kind != BranchIl.CheckedInteger)
+                    kind != BranchIl.CheckedInteger && kind != BranchIl.CheckedConversion)
                     return -2; // The dependency backend currently admits only scalar state.
                 if (kind == BranchIl.NewArray)
                 {
