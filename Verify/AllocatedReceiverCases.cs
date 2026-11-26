@@ -24,9 +24,9 @@ internal static class AllocatedReceiverCases
 
         Reject(nameof(Kernels.Unknown));
         Reject(nameof(Kernels.MixedJoin));
-        Reject(nameof(Kernels.ReplacementCall));
-        Reject(nameof(Kernels.ReplacementField));
-        Reject(nameof(Kernels.ReplacementElement));
+        Check(nameof(Kernels.ReplacementCall), Kernels.ReplacementCall);
+        Check(nameof(Kernels.ReplacementField), Kernels.ReplacementField);
+        Check(nameof(Kernels.ReplacementElement), Kernels.ReplacementElement);
 
         // Confirm the compiler did not fold the source fixtures into a
         // single allocation or erase the duplicated receiver.
