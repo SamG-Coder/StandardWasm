@@ -1,0 +1,1 @@
+{"assembly":"ArrayLiterals","exportType":"ArrayLiterals.LiteralDemo","method":"Compile","inputs":[{"file":"self"},{"name":"IntegerAt"}],"generated":{"capacity":8192,"arguments":[1]},"expected":-93}
