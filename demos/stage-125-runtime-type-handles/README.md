@@ -21,4 +21,8 @@ descriptor as `typeof`. This path covers class receivers and canonical
 `Type` descriptors. Constructed generic type identity and comparison with
 ordinary managed `Type` objects require separate support.
 
+`ReadonlyTypeField` checks a static readonly `Type` initialized by `typeof`.
+The compiler proves its initializer stores a canonical descriptor and
+preserves the ordinary static field initialization and load.
+
 See [decision 0053](../../docs/decisions/0053-runtime-type-handles.md).

@@ -43,7 +43,7 @@ namespace PortableCompiler
             status = GenericParameters.Check(image, heaps, layout, declaringType, new int[0], objects, new int[0]);
             if (status < 0) return status;
             int storage = BundleLayouts.ReadFieldStorage(bundle, image, layout, heaps, owner,
-                table, field, 0, objects, new int[2], true);
+                table, field, 0, objects, new int[2], true, (flags & 0x20) != 0 ? initializer : 0);
             if (storage < 0) return storage;
             // Value layouts use immutable aggregates. The global holds the
             // current whole value, and loads keep an independent snapshot.

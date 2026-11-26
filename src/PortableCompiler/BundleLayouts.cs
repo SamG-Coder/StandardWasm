@@ -168,7 +168,7 @@ namespace PortableCompiler
 
         internal static int ReadFieldStorage(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int table, int row, int receiver, int[] objects,
-            int[] reference, bool staticField)
+            int[] reference, bool staticField, int readonlyInitializer = 0)
         {
             int storage = ObjectLayouts.ReadStorage(image, heaps, layout, table, row, reference, staticField);
             if (storage < 0) return storage;
@@ -184,6 +184,10 @@ namespace PortableCompiler
                         owner, reference, end, receiver, objects);
                 if (storage >= 0 && reference[0] != end) return -1;
             }
+            else if (reference[0] != 0 && readonlyInitializer != 0 &&
+                RuntimeTypeMetadata.Storage(image, heaps, layout, reference[0], reference[1] == 1) == RuntimeTypeMetadata.Type &&
+                RuntimeTypeFields.HasCanonicalInitializer(image, heaps, layout, readonlyInitializer, row))
+                storage = RuntimeTypeMetadata.Type;
             else if (reference[0] != 0)
                 storage = RegisterType(bundle, image, layout, heaps, owner,
                     reference[0], objects, reference[1] == 1);

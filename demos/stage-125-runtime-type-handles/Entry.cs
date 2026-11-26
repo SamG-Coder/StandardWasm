@@ -23,8 +23,21 @@ namespace RuntimeTypeDemo
 {
     using RuntimeTypeFixtures;
 
+    internal static class RuntimeTypeCache
+    {
+        internal static readonly Type Child = typeof(FirstRuntimeChild);
+    }
+
     public static class Kernels
     {
+        public static int ReadonlyTypeField(int selection)
+        {
+            RuntimeBase instance;
+            if (selection > 0) instance = new FirstRuntimeChild();
+            else instance = new SecondRuntimeChild();
+            return instance.GetType() == RuntimeTypeCache.Child ? 1 : 0;
+        }
+
         private static bool Same(object left, object right) => left == right;
 
         private static Type Resolve(RuntimeTypeHandle handle) => Type.GetTypeFromHandle(handle);

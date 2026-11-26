@@ -18,7 +18,7 @@ namespace PortableCompiler
                 int init = RuntimeTypeTokens.IsDescriptorOwner(owner)
                     ? RuntimeTypeWasm.InitializerSize(descriptorHeap, RuntimeTypeTokens.ModuleSlot(owner), StaticFields.Row(globals, index))
                     : owner == StaticFields.EventOwner ? 3 :
-                        type == F32 ? 5 : type == F64 ? 9 : IsScalar(type) || type == ObjectLayouts.ObjectReference ? 2 : width;
+                        type == F32 ? 5 : type == F64 ? 9 : IsScalar(type) || type == ObjectLayouts.ObjectReference || RuntimeTypeMetadata.IsStorage(type) ? 2 : width;
                 int entry = width + init + 2; // mutability and end opcode
                 if (entry > int.MaxValue - size) return int.MaxValue;
                 size += entry;
@@ -56,7 +56,7 @@ namespace PortableCompiler
                 else
                 {
                     output[cursor++] = 0xd0; // ref.null
-                    int heap = type == ObjectLayouts.ObjectReference ? -19 : WasmBinary.HeapType(type);
+                    int heap = type == ObjectLayouts.ObjectReference || RuntimeTypeMetadata.IsStorage(type) ? -19 : WasmBinary.HeapType(type);
                     cursor = WasmBinary.Signed(output, cursor, heap);
                 }
                 output[cursor++] = 0x0b;

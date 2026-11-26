@@ -18,6 +18,7 @@ internal static class RuntimeTypeCases
 
         Check(nameof(Kernels.Local), Kernels.Local);
         Check(nameof(Kernels.RuntimeClass), Kernels.RuntimeClass, [-1, 0, 1, 2]);
+        Check(nameof(Kernels.ReadonlyTypeField), Kernels.ReadonlyTypeField, [0, 1]);
         Check(nameof(Kernels.Linked), Kernels.Linked);
         Check(nameof(Kernels.DefaultHandle), Kernels.DefaultHandle);
         Check(nameof(Kernels.WithoutInitializer), Kernels.WithoutInitializer);
