@@ -1,0 +1,1 @@
+{"assembly":"RuntimeDispatchDemo","exportType":"RuntimeDispatchDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["DispatchDependency.dll"]},{"name":"DiscoveredOverride"}],"generated":{"bundle":true,"capacity":65536,"arguments":[5]},"expected":85}
