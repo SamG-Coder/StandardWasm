@@ -8,7 +8,7 @@ namespace PortableCompiler
     //   - Sqrt, Floor, Ceiling, Truncate, Round(ToEven) and floating Abs are single IEEE instructions.
     //   - Floating Max/Min propagate NaN and order -0 below +0, as .NET Core 3.0+ does.
     //   - Integer Max/Min select with the parameter's signedness.
-    //   - Integer Abs traps on MinValue, where .NET throws OverflowException.
+    //   - Integer Abs raises the managed OverflowException tag for MinValue.
     internal static class MathWasm
     {
         internal static byte Type(int intrinsic)
@@ -21,19 +21,18 @@ namespace PortableCompiler
 
         internal static int Arity(int intrinsic) => intrinsic >= MaxF64 && intrinsic <= MinU64 ? 2 : 1;
 
+        internal static bool CanOverflow(int intrinsic) => intrinsic == AbsI32 || intrinsic == AbsI64;
+
         // left and right are the spill locals holding the operands. A unary intrinsic ignores right.
         internal static int Emit(byte[] code, int used, int intrinsic, int left, int right)
         {
-            if (intrinsic == AbsI32 || intrinsic == AbsI64)
+            if (CanOverflow(intrinsic))
             {
                 bool wide = intrinsic == AbsI64;
                 used = BranchWasm.Local(code, used, 0x20, left);
                 used = wide ? Wide(code, used, 0, int.MinValue) : BranchWasm.Const(code, used, int.MinValue);
                 code[used++] = wide ? (byte)0x51 : (byte)0x46; // eq
-                code[used++] = 0x04; // if
-                code[used++] = 0x40;
-                code[used++] = 0x00; // unreachable
-                code[used++] = 0x0b;
+                used = ExceptionTagsWasm.ThrowIf(code, used);
                 used = wide ? Wide(code, used, 0, 0) : BranchWasm.Const(code, used, 0);
                 used = BranchWasm.Local(code, used, 0x20, left);
                 code[used++] = wide ? (byte)0x7d : (byte)0x6b; // sub: 0 - x
