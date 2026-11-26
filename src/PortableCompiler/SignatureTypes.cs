@@ -193,7 +193,8 @@ namespace PortableCompiler
                     int type = RuntimeTypeMetadata.Storage(image, heap, methods, coded, valueType);
                     // Keep the upstream System.Type layout when this bundle supplies it.
                     // The opaque descriptor is the fallback for libraries without that definition.
-                    if (type == RuntimeTypeMetadata.Type &&
+                    // A single-image compile has no framework assembly lookup.
+                    if (type == RuntimeTypeMetadata.Type && bundle.Length != 0 &&
                         AssemblyBundle.ClassIdentity(bundle, image, methods, heap, assembly, coded, new int[2]) != -4)
                         type = 0;
                     if (type == 0)
