@@ -58,12 +58,12 @@ export async function measurePressure(bytes) {
 // A 10,000-node list stays live and is traced by every collection; its sum must survive (49,995,000).
 export async function measureModelB(bytes) {
     const results = [];
-    for (const budget of [0, 32 << 20])
+    for (const [budget, liveNodes] of [[0, 10000], [32 << 20, 10000], [32 << 20, 1000000]])
         for (const pattern of patterns) {
             const { instance: { exports: x } } = await WebAssembly.instantiate(bytes,
                 { host: { now: () => performance.now() } });
             x.configure(budget);
-            x.buildLive(10000);
+            x.buildLive(liveNodes);
             const start = performance.now();
             let exhausted = false;
             for (let round = 0; round < pattern.rounds && !exhausted; round++) {
@@ -71,11 +71,11 @@ export async function measureModelB(bytes) {
                 if (pattern.rounds > 1) await new Promise(resolve => setTimeout(resolve, 0));
             }
             results.push({
-                strategy: budget ? `B: collect every ${budget >> 20} MiB` : "B: no collection",
+                strategy: (budget ? `B: collect every ${budget >> 20} MiB` : "B: no collection") + `, ${liveNodes / 1000}k live`,
                 pattern: pattern.name, allocatedMiB: pattern.rounds * pattern.perRound / 16, peakMiB: x.pages() / 16,
                 ms: +(performance.now() - start).toFixed(1), collections: x.collections(),
                 maxPauseMs: +(x.maxPauseUs() / 1000).toFixed(2), totalPauseMs: +(x.totalPauseUs() / 1000).toFixed(1),
-                liveIntact: x.liveSum() === 49995000, exhausted
+                liveIntact: x.liveSum() === ((liveNodes * (liveNodes - 1) / 2) | 0), exhausted
             });
         }
     return results;

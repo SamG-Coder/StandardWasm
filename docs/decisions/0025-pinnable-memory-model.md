@@ -84,15 +84,18 @@ B remains the fallback if no strategy works. It is correct and as fast on these 
   | B | Node yielding | Node sync | Edge yielding | Edge sync |
   | --- | --- | --- | --- | --- |
   | no collection | 626.5 MiB | 313.9 | 626.5 | 313.9 |
-  | collect every 32 MiB | **33.4 MiB**, 19 collections, max pause 0.07 ms | **33.4**, 9 collections, 22 ms total | **33.4**, max pause 0.2 ms | **33.4**, 20 ms total |
+  | collect every 32 MiB, 10k live nodes | **40.4 MiB**, 19 collections, max pause ≤ 1.4 ms | **40.4**, 9 collections | **40.4**, max pause 0.1 ms | **40.4** |
+  | collect every 32 MiB, **1 M live nodes** | **63.1 MiB**, max pause 4.9 ms, 35 ms total | **63.1**, max pause 1.6 ms, 13 ms total | **63.1**, max pause 2.1 ms, 34 ms total | **63.1**, max pause 1.7 ms |
+
+  The peaks include the 8 MiB object table, which was enlarged for the 1 M run (an earlier 1 MiB table gave 33.4 MiB with 10k nodes).
 
   The live list was intact after every collection. Edge pause figures are at the page's 0.1 ms timer resolution.
 
   **Consequence.** On memory, B is clearly stronger. It enforces the budget exactly (live data + budget), even inside one synchronous call, where C peaked at 110–157 MiB at best. Its collections were cheap here. The comparison is not finished, though, because this probe flatters B in two ways:
-  - Its live heap is 10,000 small nodes. Pause time grows with the live heap, and WinForms plus CoreLib will hold far more objects, so a realistic-size heap must be measured (mark time per live object, worst-case pause).
+  - **Live heap.** With 1,000,000 live list nodes, the bound still held (63 MiB) and the worst pause was 1.6–4.9 ms. That's about 2–5 ns per live object for mark plus sweep, on a simple singly linked graph. Real object graphs, with more pointers per object and less locality, will cost more per object. This is evidence that pauses scale acceptably, not a final figure.
   - Every reference held by JavaScript (DOM handles, callbacks, WebGPU objects) must become an explicit root or handle table under B. Under C, Wasm GC handles cycles through JS for free.
 
-  B also needs precise stack maps for every compiled frame (shadow-stack spilling of references at every call), and that costs code size and speed in all compiled code, not just allocation. Next experiment: a B collector over a realistic live heap (≥ 1 M objects with a reference graph) plus the cost of shadow-stack reference spilling on the stage 77 access probes. Then C vs B is decided with Codex.
+  B also needs precise stack maps for every compiled frame (shadow-stack spilling of references at every call), and that costs code size and speed in all compiled code, not just allocation. Next experiment: the cost of shadow-stack reference spilling and stack maps across compiled code (on the stage 77 access probes and a call-heavy probe), and JS-held-reference handling. Then C vs B is decided with Codex.
 
 - **Allocator.** A size-class free-list allocator with zero-initialization (the CLR guarantees zeroed arrays) and growth via `memory.grow`. The prototypes use bump and single-size LIFO allocators.
 - **Interior pointers into class fields.** Pinning a field of a class instance (`fixed (int* p = &obj.Field)`) isn't covered, because class instances stay in Wasm GC. Whole-program compilation could find every type whose fields are ever pinned and give those types C-style storage. That needs its own fixture.

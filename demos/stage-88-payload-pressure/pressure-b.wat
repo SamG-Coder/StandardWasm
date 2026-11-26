@@ -5,13 +5,13 @@
 ;; hard bound: live data + budget + fragmentation. A long-lived list of `liveNodes` nodes is traced by every collection.
 (module
   (import "host" "now" (func $now (result f64)))
-  (memory (export "memory") 18 16384)
-  ;; Layout: [0, 64 KiB) shadow stack (grows down from 65536); object table at 65536 (262,144 slots, 1 MiB);
-  ;; heap from 1,114,112. A full table refuses allocation (-1) instead of writing into the heap.
+  (memory (export "memory") 130 16384)
+  ;; Layout: [0, 64 KiB) shadow stack (grows down from 65536); object table at 65536 (2,097,152 slots, 8 MiB);
+  ;; heap from 8,454,144. A full table refuses allocation (-1) instead of writing into the heap.
   (global $sp (mut i32) (i32.const 65536))
   (global $table i32 (i32.const 65536))
   (global $tableCount (mut i32) (i32.const 0))
-  (global $heap (mut i32) (i32.const 1114112))
+  (global $heap (mut i32) (i32.const 8454144))
   (global $freeArrays (mut i32) (i32.const 0))
   (global $freeNodes (mut i32) (i32.const 0))
   (global $sinceCollect (mut i32) (i32.const 0))
@@ -45,7 +45,7 @@
       (then (if (global.get $freeNodes) (then
         (local.set $b (global.get $freeNodes)) (global.set $freeNodes (i32.load offset=16 (local.get $b)))))))
     (if (i32.eqz (local.get $b)) (then
-      (if (i32.ge_u (global.get $tableCount) (i32.const 262144)) (then (return (i32.const -1))))
+      (if (i32.ge_u (global.get $tableCount) (i32.const 2097152)) (then (return (i32.const -1))))
       (local.set $b (call $bump (i32.add (local.get $size) (i32.const 16))))
       (if (i32.eq (local.get $b) (i32.const -1)) (then (return (i32.const -1))))
       ;; New blocks are recorded in the object table for the sweep.
