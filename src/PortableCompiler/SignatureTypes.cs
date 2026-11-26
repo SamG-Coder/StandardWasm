@@ -85,7 +85,9 @@ namespace PortableCompiler
 
         // Destination for a method is [result, parameters...]. Local signatures
         // write only their slots. Stack values normalize CLI small integers to i32.
-        internal static int Read(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly)
+        // context is the closed declaring layout that supplies VAR arguments,
+        // or zero when the declaring type is not generic.
+        internal static int Read(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context)
         {
             if (index <= 0 || index >= heap[1])
                 return -2;
@@ -142,7 +144,7 @@ namespace PortableCompiler
                     {
                         next[0] = cursor - 1;
                         storage = ManagedReferenceSignatures.ReadStorage(main, bundle, ranges, image, methods, heap,
-                            assembly, next, end, receiver, objects);
+                            assembly, next, end, context, objects);
                         if (storage < 0) return storage;
                         cursor = next[0];
                     }
@@ -161,11 +163,23 @@ namespace PortableCompiler
                     {
                         next[0] = cursor - 1;
                         int type = ManagedReferenceSignatures.ReadStorage(main, bundle, ranges, image, methods, heap,
-                            assembly, next, end, receiver, objects);
+                            assembly, next, end, context, objects);
                         if (type < 0) return type;
                         cursor = next[0];
                         types[target] = type;
                     }
+                }
+                else if (element == 0x13)
+                {
+                    // A class type parameter takes the storage of the closed
+                    // argument. int and uint share i32 storage here; their
+                    // signed and unsigned semantics stay in the caller's IL.
+                    int number = CompressedUnsigned(image, cursor, end, next);
+                    if (number < 0) return -2;
+                    cursor = next[0];
+                    int argument = ObjectLayouts.Argument(objects, context, number);
+                    if (argument < 0) return argument;
+                    types[target] = ObjectLayouts.SignatureStorage(objects, argument);
                 }
                 else if (element == 0x12 || element == 0x11)
                 {

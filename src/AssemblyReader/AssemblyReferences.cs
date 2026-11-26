@@ -12,7 +12,7 @@ namespace PeLibrary
         // Version byte offset, assembly/type/namespace/member string indexes,
         // signature blob index, then key kind and its validated byte range.
         // The type name slots identify the outer type for forwarder lookup.
-        internal static int ReadMember(byte[] image, int[] streams, int[] methods, int row, int[] reference, bool allowClosedField = false)
+        internal static int ReadMember(byte[] image, int[] streams, int[] methods, int row, int[] reference, bool allowClosedParent = false)
         {
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
@@ -24,7 +24,9 @@ namespace PeLibrary
             int parentWidth = memberWidth - strings - blobs;
             uint member = (uint)(table + (row - 1) * memberWidth);
             uint parent = Index(image, member, parentWidth);
-            if (allowClosedField && (parent & 7) == 4)
+            // A TypeSpec parent names a closed generic declaring type. The
+            // caller resolves its blob against the closed layout graph.
+            if (allowClosedParent && (parent & 7) == 4)
             {
                 int blob = TypeSpecBlob(image, streams, methods, counts, (int)(parent >> 3));
                 if (blob < 0) return blob;

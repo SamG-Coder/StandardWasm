@@ -307,6 +307,27 @@ namespace PeLibrary
             return owner;
         }
 
+        // Publish the half-open MethodDef rows [range[0], range[1]) owned by a TypeDef.
+        internal static int MethodRange(byte[] image, int[] streams, int[] methods, int typeRow, int[] range)
+        {
+            var counts = new int[45];
+            int start = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
+            if (start < 0 || typeRow < 1 || typeRow > counts[2]) return -1;
+            int strings = methods[2];
+            int refs = TypeRefStart(image, streams, counts, start, strings);
+            int defs = refs + counts[1] * (ResolutionWidth(counts) + 2 * strings);
+            int fieldIndex = IndexWidth(counts[4]), methodIndex = IndexWidth(counts[6]);
+            int column = 4 + 2 * strings + CodedWidth(counts[2], counts[1], counts[27]) + fieldIndex;
+            int width = column + methodIndex;
+            uint first = ReadIndex(image, (uint)(defs + (typeRow - 1) * width + column), methodIndex);
+            uint end = typeRow == counts[2] ? (uint)(counts[6] + 1) :
+                ReadIndex(image, (uint)(defs + typeRow * width + column), methodIndex);
+            if (first == 0 || end < first || end > (uint)(counts[6] + 1)) return -1;
+            range[0] = (int)first;
+            range[1] = (int)end;
+            return 0;
+        }
+
         private static int Slot(int type) => Header + (type - FirstClass) * Width;
 
         internal static int Parent(int[] registry, int type) => registry[Slot(type) + Base];
