@@ -14,6 +14,9 @@ namespace PortableCompiler
         internal const int CheckedInteger = 48, CheckedConversion = 49, Leave = 50, Rethrow = 51, EndFinally = 52;
         internal const int CastClass = 53, TestClass = 54, ThrowNull = 55;
         internal const int LocalAddress = 56, InitializeValue = 57, UpdateValue = 58, ClearValue = 59;
+        // Console.Out/Error push a host stream; the operand is the stream number.
+        // ConsoleWrite consumes a stream and, unless writing an empty line, a String.
+        internal const int ConsoleWriter = 60, ConsoleWrite = 61;
         internal const int ProvenNativeZero = 2;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.

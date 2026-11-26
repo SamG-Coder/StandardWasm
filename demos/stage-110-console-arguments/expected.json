@@ -1,0 +1,42 @@
+[
+  {
+    "arguments": [],
+    "exitCode": 0,
+    "stdout": "\r\n\r\n",
+    "stderr": "no arguments\r\n"
+  },
+  {
+    "arguments": [
+      ""
+    ],
+    "exitCode": 1,
+    "stdout": "[]\r\n\r\n\r\n",
+    "stderr": "first: \r\n"
+  },
+  {
+    "arguments": [
+      "two words"
+    ],
+    "exitCode": 91,
+    "stdout": "[two words]\r\n\r\n\r\n",
+    "stderr": "first: two words\r\n"
+  },
+  {
+    "arguments": [
+      "Grüße 😀"
+    ],
+    "exitCode": 81,
+    "stdout": "[Grüße 😀]\r\n\r\n\r\n",
+    "stderr": "first: Grüße 😀\r\n"
+  },
+  {
+    "arguments": [
+      "",
+      "two words",
+      "😀"
+    ],
+    "exitCode": 113,
+    "stdout": "[😀]\r\n[two words]\r\n[]\r\n\r\n\r\n",
+    "stderr": "first: \r\n"
+  }
+]

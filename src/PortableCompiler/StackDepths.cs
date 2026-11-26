@@ -107,6 +107,14 @@ namespace PortableCompiler
             int[] signatures, int[] offsets, int[] arities, int[] objects)
         {
             if (kind == LoadString) return Push(stack, depth, String);
+            // [] -> [writer]; [writer, string-or-null] -> []; [writer] -> [] for WriteLine().
+            if (kind == ConsoleWriter) return Push(stack, depth, PeLibrary.ConsoleStorage.Writer);
+            if (kind == ConsoleWrite)
+            {
+                int writer = operand == PeLibrary.ConsoleMetadata.WriteEmptyLine ? depth - 1 : depth - 2;
+                if (writer < 0 || stack[writer] != PeLibrary.ConsoleStorage.Writer) return -1;
+                return writer == depth - 1 || Match(stack, depth, String) ? writer : -1;
+            }
             if (kind == ClearValue) return depth;
             if (kind == NullLiteral) return Push(stack, depth, NullValue);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, depth, EventArgsReference);
