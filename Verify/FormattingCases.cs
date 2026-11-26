@@ -39,6 +39,7 @@ internal static class FormattingCases
         foreach (int cp in new[] { 0, 65, 0x03a9, 0xffff })
             AddCase("CopyThenMutate", [cp], Kernels.CopyThenMutate(cp));
         AddCase("FromNullableArray", [null], new string((char[])null));
+        AddIdentityCases(cases, outputs);
 
         void AddCase(string export, object[] arguments, string expected)
         {
@@ -49,6 +50,36 @@ internal static class FormattingCases
                 expected
             });
         }
+    }
+
+    private static void AddIdentityCases(List<object> cases, byte[] output)
+    {
+        if (TextIdentityProbe.Kernels.ConcatLength() != "third-party".Length ||
+            TextIdentityProbe.Kernels.Construct() != 99 || TextIdentityProbe.Kernels.Allocate() != 3)
+            throw new InvalidOperationException("Unexpected CLR result from the third-party text library.");
+
+        var type = typeof(TextIdentityProbe.Kernels);
+        byte[] image = File.ReadAllBytes(type.Assembly.Location);
+        object encoded = Encode(image);
+        var failures = new List<string>();
+        foreach (string name in new[] { nameof(TextIdentityProbe.Kernels.ConcatLength),
+                     nameof(TextIdentityProbe.Kernels.Construct), nameof(TextIdentityProbe.Kernels.Allocate) })
+        {
+            int row = type.GetMethod(name)!.MetadataToken & 0xffffff;
+            Array.Fill(output, (byte)0xa5);
+            int status = FormattingDemo.Compile(image, row, output);
+            if (status != -2 || output.Any(value => value != 0xa5))
+                failures.Add(name + " returned " + status);
+            cases.Add(new
+            {
+                module = "FormattingLibrary", method = "Compile", fixture = "third-party text: " + name,
+                inputs = new object[] { encoded, row },
+                generated = new { capacity = output.Length, arguments = Array.Empty<int>(), reject = true },
+                expected = -2
+            });
+        }
+        if (failures.Count != 0)
+            throw new InvalidOperationException("Expected rejection before emission: " + string.Join(", ", failures));
     }
 
     private static object Encode(byte[] bytes) => new { bytes = Array.ConvertAll(bytes, value => (int)value) };

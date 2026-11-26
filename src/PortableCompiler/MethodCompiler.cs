@@ -331,6 +331,8 @@ namespace PortableCompiler
                             int tags = 0;
                             if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion || kind == BranchIl.NewArray)
                                 tags = ExceptionTypes.Overflow;
+                            else if (kind == BranchIl.NewDelegate)
+                                tags = ExceptionTypes.Argument;
                             else if (kind == BranchIl.CastClass)
                                 tags = ExceptionTypes.InvalidCast;
                             else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet || kind == BranchIl.StringCharacter)
@@ -510,6 +512,14 @@ namespace PortableCompiler
                 if (kind == BranchIl.MemberCall)
                 {
                     int member = records[slot + 1], opcode = records[slot + 3];
+                    // Exact System.Math intrinsics, identified by platform assembly and signature (decision 0003).
+                    int intrinsic = opcode == 0x28 ? PlatformMembers.MathIntrinsic(image, heaps, layout, member) : 0;
+                    if (intrinsic != 0)
+                    {
+                        records[slot] = BranchIl.MathCall;
+                        records[slot + 1] = intrinsic;
+                        continue;
+                    }
                     int constructorType = Delegate;
                     if (owner == 0)
                     {
