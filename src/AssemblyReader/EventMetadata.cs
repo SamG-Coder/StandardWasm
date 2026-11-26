@@ -123,7 +123,7 @@ namespace PeLibrary
         private static int ReadType(byte[] image, int[] heaps, int[] methods, int[] counts, int first, int row)
         {
             if (row < 1 || row > counts[1]) return 0;
-            int strings = methods[2], blobs = methods[3];
+            int strings = methods[2];
             int scopeWidth = counts[0] < 16384 && counts[1] < 16384 && counts[26] < 16384 && counts[35] < 16384 ? 2 : 4;
             int guid = (image[heaps[4] + 6] & 2) == 0 ? 2 : 4;
             int typeRefs = first + counts[0] * (2 + strings + 3 * guid);
@@ -146,19 +146,9 @@ namespace PeLibrary
                 !Name(image, heaps, ns, 6, 0x74737953, 0x6d65, 0))
                 return 0;
 
-            // Read the AssemblyRef public key token and culture as well as its name.
-            // Matching a bare TypeRef name would bind user-defined types to the BCL.
-            int assemblies = MetadataTableRows.TableStart(heaps, methods, counts, 35);
-            if (assemblies < 0) return 0;
-            uint assembly = (uint)(assemblies + ((int)(scope >> 2) - 1) * (12 + 2 * strings + 2 * blobs));
-            if (U32(image, assembly + 8) != 0 || Index(image, assembly + (uint)(12 + blobs + strings), strings) != 0 ||
-                !Name(image, heaps, Index(image, assembly + (uint)(12 + blobs), strings), 11, 0x7374656e, 0x646e6174, 0x647261)) // netstandard
-                return 0;
-            uint key = Index(image, assembly + 12, blobs);
-            if (key == 0 || !Fits(key, 9, (uint)heaps[1])) return 0;
-            uint token = (uint)heaps[0] + key;
-            return image[token] == 8 && U32(image, token + 1) == 0xff137bcc &&
-                U32(image, token + 5) == 0x51dd2dcd ? type : 0;
+            // Event lowering currently supports the .NET Standard facade.
+            return PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, (int)(scope >> 2),
+                netstandardOnly: true) ? type : 0;
         }
 
         // CLR metadata names are UTF-8. These ASCII signatures are packed in

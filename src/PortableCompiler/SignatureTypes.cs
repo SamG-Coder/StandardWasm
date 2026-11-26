@@ -130,16 +130,8 @@ namespace PortableCompiler
                     int coded = CompressedUnsigned(image, cursor, end, next);
                     if (coded <= 0) return -2;
                     cursor = next[0];
-                    int type;
-                    if ((coded & 3) == 0)
-                        type = ObjectLayouts.Register(image, heap, methods, objects, assembly, coded >> 2);
-                    else
-                    {
-                        type = EventMetadata.Reference(image, heap, methods, coded);
-                        if (type == 0)
-                            type = AssemblyBundle.RegisterClassReference(main, bundle, ranges, image, methods,
-                                heap, assembly, coded, objects);
-                    }
+                    int type = BundleLayouts.RegisterReference(main, bundle, ranges, image, methods,
+                        heap, assembly, coded, objects);
                     if (type < 0) return type;
                     types[target] = type;
                 }
