@@ -39,7 +39,13 @@ namespace PortableCompiler
                 int token = CompressedUnsigned(image, at + 1, end, next);
                 if (token <= 0) return -1;
                 int primitive = ArrayTypeRefs.PrimitiveElement(image, heaps, layout, token);
-                return primitive > 0 ? GenericScalar.Key(primitive) : primitive;
+                if (primitive > 0) return GenericScalar.Key(primitive);
+                if (primitive != -2) return primitive;
+
+                int type = BundleLayouts.RegisterType(main, bundle, ranges, image, layout, heaps, owner, token, objects, true);
+                if (type < 0) return type;
+                // Generic arguments carry their defining assembly and TypeDef identity through the layout registry.
+                return ObjectLayouts.IsValueType(objects, type) ? type : -2;
             }
             if (element == 0x0e) return String;
             if (element == 0x1c) return ObjectLayouts.ObjectReference;

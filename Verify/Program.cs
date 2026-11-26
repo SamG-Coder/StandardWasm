@@ -122,4 +122,5 @@ FloatFieldCases.Add(cases);
 PrimitiveGenericCases.Add(cases);
 ByRefPermissionCases.Add(cases);
 ValueConstraintCases.Add(cases);
+NamedValueCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);
