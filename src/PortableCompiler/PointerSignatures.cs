@@ -4,7 +4,7 @@ namespace PortableCompiler
 {
     internal static class PointerSignatures
     {
-        internal static int ReadStorage(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
+        internal static int ReadStorage(BundleImages bundle, byte[] image, int[] layout,
             int[] heaps, int owner, int position, int end, int[] next)
         {
             int pointee = PointerStorage.ReadPointee(image, position, end, next);
@@ -13,7 +13,7 @@ namespace PortableCompiler
             {
                 // The CLI type must bind even when the only supported value is
                 // null. An opaque native struct needs no managed Wasm layout.
-                int status = AssemblyBundle.ClassIdentity(main, bundle, ranges, image, layout, heaps, owner,
+                int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner,
                     pointee, new int[2]);
                 if (status < 0) return status;
             }
@@ -21,7 +21,7 @@ namespace PortableCompiler
         }
 
         // Returns the right cursor and leaves the left cursor in next.
-        internal static int Match(byte[] main, byte[] bundle, int[] ranges, byte[] caller, int[] callerLayout,
+        internal static int Match(BundleImages bundle, byte[] caller, int[] callerLayout,
             int[] callerHeaps, int callerOwner, byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner,
             int left, int leftEnd, int right, int rightEnd, int[] leftClass, int[] rightClass, int[] next)
         {
@@ -41,10 +41,10 @@ namespace PortableCompiler
             if (leftPointee < 0) return leftPointee;
             if (leftPointee > 0)
             {
-                int status = AssemblyBundle.ClassIdentity(main, bundle, ranges, caller, callerLayout, callerHeaps,
+                int status = AssemblyBundle.ClassIdentity(bundle, caller, callerLayout, callerHeaps,
                     callerOwner, leftPointee, leftClass);
                 if (status < 0) return status;
-                status = AssemblyBundle.ClassIdentity(main, bundle, ranges, target, targetLayout, targetHeaps,
+                status = AssemblyBundle.ClassIdentity(bundle, target, targetLayout, targetHeaps,
                     targetOwner, rightPointee, rightClass);
                 if (status < 0 || leftClass[0] != rightClass[0] || leftClass[1] != rightClass[1]) return 0;
             }
