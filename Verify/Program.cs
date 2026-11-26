@@ -118,6 +118,7 @@ NominalCastCases.Add(cases);
 BaseExceptionCases.Add(cases);
 NullThrowCases.Add(cases);
 BareCatchCases.Add(cases);
+SkipLocalsInitCases.Add(cases);
 InheritedLayoutCases.Add(cases);
 InitializerReachabilityCases.Add(cases);
 ModuleStartupCases.Add(cases);
