@@ -6,6 +6,7 @@ namespace FriendFixture
     public static class Dependency
     {
         public static int Compute(int input) => input + 9;
+        public static int Visible(int input) => input + 1;
     }
 
     public class Widener
@@ -24,6 +25,9 @@ namespace FriendFixture
     {
         // Assembly access: visible to InternalsVisibleTo friends.
         internal static int Compute(int input) => input + 9;
+
+        // A public member of the same type binds for every caller, granted or not.
+        public static int Visible(int input) => input + 1;
 
         // Private stays inaccessible even to friends.
         private static int Hidden(int input) => input - 1;

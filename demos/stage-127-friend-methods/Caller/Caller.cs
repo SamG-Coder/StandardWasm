@@ -9,5 +9,9 @@ namespace FriendFixture
         public static int Run(int input) => Dependency.Compute(input) + Widener.Wide(input) + new Box(input).Twice();
 
         public static int ComputeOnly(int input) => Dependency.Compute(input);
+
+        // A public call into a type that also declares internal members. It must bind
+        // even when the provider grants nothing, without consulting friend metadata.
+        public static int PublicOnly(int input) => Dependency.Visible(input);
     }
 }

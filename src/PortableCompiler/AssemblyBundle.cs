@@ -55,6 +55,13 @@ namespace PortableCompiler
             {
                 int flags = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 2);
                 int access = flags & 7;
+                // The cheap static and name filters run first, so the friend metadata is read
+                // only for a candidate that could actually bind this call.
+                bool isStatic = (flags & 0x10) != 0;
+                if (isStatic && opcode != 0x28) continue;
+                int name = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 3);
+                if (!AssemblyReferences.SameString(caller, heaps, reference[4], target, targetHeaps, name))
+                    continue;
                 // A closed parent in the caller's own assembly may name assembly
                 // members, and private members of the caller's own definition.
                 // Nested-type access is not modeled and stays unbound.
@@ -76,11 +83,6 @@ namespace PortableCompiler
                     local = friend != 0;
                 }
                 if (access != 6 && !local && !(baseCall && opcode == 0x28 && (access == 4 || access == 5))) continue;
-                bool isStatic = (flags & 0x10) != 0;
-                if (isStatic && opcode != 0x28) continue;
-                int name = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 3);
-                if (!AssemblyReferences.SameString(caller, heaps, reference[4], target, targetHeaps, name))
-                    continue;
                 int signature = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 4);
                 int match = BundleSignatures.Match(bundle, caller, layout, heaps, owner, reference[5],
                     target, targetLayout, targetHeaps, matched, signature, false, objects, closed);
