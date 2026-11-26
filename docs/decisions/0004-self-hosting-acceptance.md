@@ -30,6 +30,6 @@ Each host compiler capability (64-bit integers, floating point, `switch`, `Math`
 
 ## Current status (2026-11-26)
 
-- Item 1: met on main since #24. `npm test` asserts C = G1 = G2 = G3 in Node and Edge: 128,404 bytes, SHA-256 cd9c80c7ccefbad75775d1b8d90e1fb8a8d4c86aba9522f42ea6d93981fc0e36.
-- Item 2: open. Stage 12 still uses B's GC transport, which #25 / PR #26 replaces.
-- Items 3–4: open. Codex's audit (#85) lists the concrete gaps (#82, #83, #84). Portable ports of i64, switch, diagnostics and floats are in review (#51, #55, #56, #61).
+- Item 1: met on main since #24. Since #26, `npm test` asserts C = G1 = G2 = G3 in Node and Edge with the multi-export compiler: 138,112 bytes, SHA-256 e5a069a46ef5973f3d1003ef120927128abc123fb299d1c1327a0165ad8d9ec6, also saved as `artifacts/StandardWasm.Compiler.wasm`.
+- Item 2: met on main since #26. B's exports only emit G1. G2 and G3 are built through the previous generation's own CreateBytes, SetByte, ReadByte and CompileModule exports, and every generated-code case runs through G2's exports. A fresh process holding only the saved compiler file reproduces it byte for byte.
+- Items 3–4: open. With this compiler, Codex's direct audit (#85) passes 4,017 of 40,240 CLR cases in Node and Edge, and the rest are compiler diagnostics. The concrete gaps are tracked in #82, #83 and #84, and #139 ports Math. Portable ports of i64, switch, diagnostics and floats are in review (#51, #55, #56, #61).
