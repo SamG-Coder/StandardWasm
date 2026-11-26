@@ -38,7 +38,7 @@ internal static class ReferenceFieldCases
             {
                 module = "BootstrapLibrary", method = "Compile", fixture = method,
                 inputs = new object[] { encoded, row },
-                generated = new { capacity, arguments, hex }, expected, exception
+                generated = new { capacity, arguments, hex, exceptionType = exception }, expected, exception
             });
         }
     }

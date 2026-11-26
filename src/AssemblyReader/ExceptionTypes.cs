@@ -6,7 +6,10 @@ namespace PeLibrary
     {
         internal const int Overflow = 1, DivideByZero = 2, Arithmetic = Overflow | DivideByZero;
 
-        internal static int ArithmeticMask(byte[] image, int[] heaps, int[] methods, int token)
+        internal const int IndexOutOfRange = 4, NullReference = 8, InvalidCast = 16;
+        internal const int Supported = Arithmetic | IndexOutOfRange | NullReference | InvalidCast;
+
+        internal static int CatchMask(byte[] image, int[] heaps, int[] methods, int token)
         {
             if ((uint)token >> 24 != 1) return 0;
             int row = token & 0xffffff;
@@ -18,7 +21,7 @@ namespace PeLibrary
             int refs = first + counts[0] * (2 + strings + 3 * guids);
             uint type = (uint)(refs + (row - 1) * (width + 2 * strings));
             uint scope = Index(image, type, width);
-            if ((scope & 3) != 2 || !AssemblyReferences.IsPlatformPrimitiveAssembly(image, heaps, methods, counts, (int)(scope >> 2)))
+            if ((scope & 3) != 2 || !PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, (int)(scope >> 2)))
                 return 0;
             uint name = Index(image, type + (uint)width, strings);
             uint ns = Index(image, type + (uint)(width + strings), strings);
@@ -38,6 +41,18 @@ namespace PeLibrary
             if (Fits(name, 20, limit) && U32(image, n) == 0x74697241 && U32(image, n + 4) == 0x74656d68 &&
                 U32(image, n + 8) == 0x78456369 && U32(image, n + 12) == 0x74706563 && U32(image, n + 16) == 0x006e6f69)
                 return Arithmetic;
+            if (Fits(name, 25, limit) && U32(image, n) == 0x65646e49 && U32(image, n + 4) == 0x74754f78 &&
+                U32(image, n + 8) == 0x6152664f && U32(image, n + 12) == 0x4565676e &&
+                U32(image, n + 16) == 0x70656378 && U32(image, n + 20) == 0x6e6f6974 && image[n + 24] == 0)
+                return IndexOutOfRange;
+            if (Fits(name, 23, limit) && U32(image, n) == 0x6c6c754e && U32(image, n + 4) == 0x65666552 &&
+                U32(image, n + 8) == 0x636e6572 && U32(image, n + 12) == 0x63784565 &&
+                U32(image, n + 16) == 0x69747065 && U16(image, n + 20) == 0x6e6f && image[n + 22] == 0)
+                return NullReference;
+            if (Fits(name, 21, limit) && U32(image, n) == 0x61766e49 && U32(image, n + 4) == 0x4364696c &&
+                U32(image, n + 8) == 0x45747361 && U32(image, n + 12) == 0x70656378 &&
+                U32(image, n + 16) == 0x6e6f6974 && image[n + 20] == 0)
+                return InvalidCast;
             return 0;
         }
 
