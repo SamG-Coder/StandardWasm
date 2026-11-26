@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CS8981;CA2014</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Dependency/**/*.cs" />
+    <ProjectReference Include="Dependency/FrameworkDelegateDependency.csproj" />
+    <Compile Include="../../src/AssemblyReader/*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="../../src/PortableCompiler/*.cs" Link="%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

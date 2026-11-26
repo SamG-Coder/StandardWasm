@@ -146,9 +146,13 @@ namespace PeLibrary
                 !Name(image, heaps, ns, 6, 0x74737953, 0x6d65, 0))
                 return 0;
 
-            // Event lowering currently supports the .NET Standard facade.
-            return PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, (int)(scope >> 2),
-                netstandardOnly: true) ? type : 0;
+            // The .NET Standard facade, mscorlib, System.Runtime and CoreLib all
+            // name the same platform types. A compiled .NET app reaches them
+            // through System.Runtime, and the framework through CoreLib.
+            int assembly = (int)(scope >> 2);
+            return (type == InterlockedType
+                ? PlatformAssemblyIdentity.IsThreadingAssembly(image, heaps, methods, counts, assembly)
+                : PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, assembly)) ? type : 0;
         }
 
         // CLR metadata names are UTF-8. These ASCII signatures are packed in

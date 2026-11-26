@@ -76,6 +76,17 @@ namespace PortableCompiler
                     int rightToken = CompressedUnsigned(target, right, rightEnd, next);
                     right = next[0];
 
+                    // Platform EventArgs and EventHandler are compiler-owned and
+                    // named by identity through any platform assembly (System.Runtime,
+                    // netstandard, CoreLib), which need not be bundled.
+                    int leftPlatform = element == 0x12 ? EventMetadata.Reference(caller, callerHeaps, callerLayout, leftToken) : 0;
+                    int rightPlatform = element == 0x12 ? EventMetadata.Reference(target, targetHeaps, targetLayout, rightToken) : 0;
+                    if (leftPlatform != 0 || rightPlatform != 0)
+                    {
+                        if (leftPlatform != rightPlatform) return 0;
+                        continue;
+                    }
+
                     // Local coded indices can differ even when the classes are
                     // identical. Match the resolved assembly and TypeDef row.
                     int status = AssemblyBundle.ClassIdentity(main, bundle, ranges, caller, callerLayout,

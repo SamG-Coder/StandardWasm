@@ -119,6 +119,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [114 · Empty module startup](stage-114-empty-module-startup/README.md) | `npm run demo -- stage-114-empty-module-startup` | Prove empty module startup in standalone and linked .NET Standard libraries |
 | [115 · Sequential reference layouts](stage-115-sequential-reference-layouts/README.md) | `npm run demo -- stage-115-sequential-reference-layouts` | Compile sequential classes like the browser CoreLib `Delegate` and `Type`; diagnose explicit, packed and auto-based shapes |
 | [116 · Native integer vectors](stage-116-native-integer-vectors/README.md) | `npm run demo -- stage-116-native-integer-vectors` | wasm32 native vector storage, loads and stores on original managed DLLs |
+| [119 · Framework delegates](stage-119-framework-delegates/README.md) | `npm run demo -- stage-119-framework-delegates` | EventHandler subscribe, combine and remove through System.Runtime match the CLR |
 
 ## Adding a stage
 

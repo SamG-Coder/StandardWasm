@@ -1,0 +1,1 @@
+{"assembly":"FrameworkDelegateDemo","exportType":"FrameworkDelegateDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["FrameworkDelegateDependency.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":65536,"arguments":[5]},"expected":18171061}

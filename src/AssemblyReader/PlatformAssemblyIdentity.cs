@@ -69,6 +69,27 @@ namespace PeLibrary
                 U32(image, n + 8) == 0x6f736e6f && U16(image, n + 12) == 0x656c && image[n + 14] == 0;
         }
 
+        // .NET Core reference assemblies place Interlocked in System.Threading,
+        // which carries the System.Runtime public key token.
+        internal static bool IsThreadingAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row)
+        {
+            if (IsPlatformAssembly(image, heaps, methods, counts, row)) return true;
+            int table = MetadataTableRows.TableStart(heaps, methods, counts, 35);
+            if (table < 0 || row < 1 || row > counts[35]) return false;
+            int strings = methods[2], blobs = methods[3];
+            uint at = (uint)(table + (row - 1) * (12 + 2 * strings + 2 * blobs));
+            if (U32(image, at + 8) != 0 || Index(image, at + (uint)(12 + blobs + strings), strings) != 0) return false;
+            uint key = Index(image, at + 12, blobs);
+            if (key == 0 || !Fits(key, 9, (uint)heaps[1])) return false;
+            uint blob = (uint)heaps[0] + key;
+            if (image[blob] != 8 || U32(image, blob + 1) != 0x7f5f3fb0 || U32(image, blob + 5) != 0x3a0ad511) return false;
+            uint name = Index(image, at + (uint)(12 + blobs), strings);
+            uint n = (uint)heaps[2] + name;
+            return name != 0 && Fits(name, 17, (uint)heaps[3]) && U32(image, n) == 0x74737953 &&
+                U32(image, n + 4) == 0x542e6d65 && U32(image, n + 8) == 0x61657268 &&
+                U32(image, n + 12) == 0x676e6964 && image[n + 16] == 0; // System.Threading
+        }
+
         internal static bool IsCoreLibDefinition(byte[] image, int[] heaps, int[] methods, int[] counts)
         {
             if (counts[32] != 1) return false;
