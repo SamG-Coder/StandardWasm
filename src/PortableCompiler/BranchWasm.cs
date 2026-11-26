@@ -1123,6 +1123,9 @@ namespace PortableCompiler
             // for native arrays without increasing the engine's local pressure.
             type == ConstructorAddress ? I32 - 1 :
             PeLibrary.RuntimeTypeMetadata.IsStorage(type) || IsValueLocation(type) ? ObjectReference - 1 :
+            // A base Delegate slot currently accepts EventHandler lists only.
+            // Both types have the same physical storage but distinct CLI stack identities.
+            type == DelegateReference ? EventHandlerReference - 1 :
             IsManagedLocation(type) ? LastScalarBank :
             IsSpan(type) ? LastScalarBank + (flags & LocationSpill) :
             type >= FirstClass ? LastScalarBank + ExtraSpillBanks(flags) + type - FirstClass :

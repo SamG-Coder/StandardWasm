@@ -1670,9 +1670,9 @@ namespace PortableCompiler
         private static bool IsSharedBundleType(int type) =>
             IsScalar(type) || type == String || type == ObjectReference || type == NullPointer ||
             RuntimeTypeMetadata.IsStorage(type) || IsSpan(type) || IsArray(StackType(type)) || IsValueLocation(type) ||
-            // The platform EventArgs and EventHandler representations are
-            // compiler-owned and bound by identity, so every assembly shares them.
-            type == EventArgsReference || type == EventHandlerReference ||
+            // The platform event types share a compiler-owned ABI across assemblies.
+            // A Delegate slot currently holds only supported EventHandler values.
+            type == EventArgsReference || type == EventHandlerReference || type == DelegateReference ||
             (type >= ObjectLayouts.FirstClass && type - ObjectLayouts.FirstClass < ObjectLayouts.MaxClasses);
 
         private static bool IsSharedBundleSignature(int[] types, int offset, int arity)

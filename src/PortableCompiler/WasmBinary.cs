@@ -523,7 +523,7 @@ namespace PortableCompiler
         internal static int HeapType(int type) =>
             IsValueLocation(type) ? ValueLocationHeap : type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
                 type == EventArgsReference ? EventArgsHeap :
-                type == EventHandlerReference ? EventHandlerHeap :
+                type == EventHandlerReference || type == DelegateReference ? EventHandlerHeap :
                 type == Singles ? SingleArrayHeap : type == Doubles ? DoubleArrayHeap :
                 type == NativeVector ? NativeArrayHeap : IsManagedLocation(type) ? ObjectLocationHeap : IsSpan(type) ? ReadOnlySpanHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;

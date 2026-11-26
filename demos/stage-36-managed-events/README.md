@@ -30,4 +30,9 @@ Every handler checks that the sender is the original source and the arguments ar
 
 The release build generates event accessors that call `System.Delegate.Combine` or `System.Delegate.Remove`, then use generic `Interlocked.CompareExchange` on the delegate field. The compiler recognizes a field address followed by two frame loads and the exact platform `CompareExchange<EventHandler>` call. The fused operation returns the old field value and writes only if the comparand is the same object. The module executes this operation on one Wasm agent, with no call between the read and write. The raise method uses a snapshot followed by `EventHandler.Invoke(object, EventArgs)`.
 
+The base `System.Delegate` ABI accepts supported `EventHandler` values in parameters, returns
+and fields. `BaseDelegateStorage` checks that these values preserve identity, invocation order
+and null behavior through the base type. The unchanged WinForms call to
+`EventHandlerList.AddHandler` uses this ABI.
+
 The current delegate support covers bound, nonvirtual instance handlers. Static handlers, general managed field addresses, and shared-memory interlocked operations are outside this stage.

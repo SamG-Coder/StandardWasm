@@ -235,10 +235,16 @@ namespace PortableCompiler
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, allocated, depth, EventArgsReference);
             if (kind == NewRootObject) return Push(stack, allocated, depth, ObjectReference);
             if (kind == CombineHandler || kind == RemoveHandler)
-                return Match(stack, depth, EventHandlerReference) && Match(stack, depth - 1, EventHandlerReference)
-                    ? depth - 1 : -1;
-            // The supported delegate operations already proved the result's concrete type.
-            if (kind == CastHandler) return Match(stack, depth, EventHandlerReference) ? depth : -1;
+                return depth >= 2 && Assignable(stack[depth - 1], DelegateReference, objects) &&
+                    Assignable(stack[depth - 2], DelegateReference, objects)
+                    ? Push(stack, allocated, depth - 2, EventHandlerReference) : -2;
+            if (kind == CastHandler)
+            {
+                if (depth == 0 || !Assignable(stack[depth - 1], DelegateReference, objects)) return -2;
+                // The CLR types differ, but every supported Delegate uses the EventHandler heap.
+                if (stack[depth - 1] != NullValue) stack[depth - 1] = EventHandlerReference;
+                return depth;
+            }
             if (kind == BoxValue || kind == UnboxValue || kind == TestBox)
             {
                 if (depth < 1) return -1;

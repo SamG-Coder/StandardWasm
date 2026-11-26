@@ -45,7 +45,7 @@ namespace PortableCompiler
         // Widen classes, strings, and primitive GC vectors without allocating or losing identity.
         // Boxing and other CLR reference conversions use separate IL operations.
         internal static bool IsObjectReference(int type) =>
-            type == String || RuntimeTypeMetadata.IsReference(type) || IsArray(type) ||
+            type == String || type == ObjectLayouts.DelegateReference || RuntimeTypeMetadata.IsReference(type) || IsArray(type) ||
             type >= ObjectLayouts.FirstClass && type < ConstructorAddress ||
             type >= ObjectLayouts.ObjectReference && type <= ObjectLayouts.EventHandlerReference;
 
@@ -70,6 +70,7 @@ namespace PortableCompiler
             return source == NullValue && IsReference(expected) ||
                 source == NativeZero && (target == Native || target == NullPointer) ||
                 target == ObjectLayouts.ObjectReference && IsObjectReference(source) ||
+                target == ObjectLayouts.DelegateReference && source == ObjectLayouts.EventHandlerReference ||
                 ObjectLayouts.Inherits(objects, source, expected) || ObjectLayouts.Implements(objects, source, expected);
         }
 

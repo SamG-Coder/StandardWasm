@@ -5,6 +5,7 @@ namespace PeLibrary
     internal static class ObjectLayouts
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
+        internal const int DelegateReference = 0x85;
         // Keep layout IDs above primitive, packed storage and generic scalar keys.
         internal const int FirstClass = 0x400, MaxClasses = 4096, MaxTypeDepth = 236;
         private const int Header = 4, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
