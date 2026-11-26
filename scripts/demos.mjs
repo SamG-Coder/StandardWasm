@@ -10,6 +10,7 @@ export function listDemos() {
         .map(entry => {
             const dir = join(base, entry.name);
             const manifest = JSON.parse(readFileSync(join(dir, "demo.json"), "utf8"));
+            if (manifest.runner) return { ...manifest, stage: entry.name };
             return {
                 ...manifest, stage: entry.name,
                 project: join(dir, manifest.assembly + ".csproj"),

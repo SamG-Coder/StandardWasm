@@ -10,7 +10,7 @@ import { verify } from "./verify.mjs";
 process.chdir(root);
 mkdirSync("artifacts", { recursive: true });
 run("dotnet", ["run", "-c", "Release", "--project", "Verify", "--", "artifacts/oracle.json"]);
-const demos = listDemos();
+const demos = listDemos().filter(demo => !demo.runner);
 for (const demo of demos) {
     compile(demo.dll, demo.exportType, demo.wasm);
     const { instance } = await WebAssembly.instantiate(readFileSync(demo.wasm));

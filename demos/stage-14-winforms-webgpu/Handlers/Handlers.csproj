@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>netstandard2.0</TargetFramework></PropertyGroup>
+  <ItemGroup><Compile Include="../Shared/CounterHandlers.cs" Link="CounterHandlers.cs" /></ItemGroup>
+</Project>

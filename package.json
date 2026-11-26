@@ -6,6 +6,8 @@
     "test": "node scripts/test.mjs",
     "compile": "node scripts/compile.mjs",
     "demo": "node scripts/demo.mjs",
+    "winforms": "node scripts/winforms.mjs",
+    "test:winforms": "node scripts/winforms.mjs --verify",
     "audit:portable": "node scripts/portable-audit.mjs"
   },
   "type": "commonjs",
