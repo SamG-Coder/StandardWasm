@@ -9,6 +9,9 @@ namespace RuntimeTypeFixtures
     // The dependency declares a distinct type with this same full name.
     public sealed class Marker { }
     public sealed class Other { }
+    public class RuntimeBase { }
+    public sealed class FirstRuntimeChild : RuntimeBase { }
+    public sealed class SecondRuntimeChild : RuntimeBase { }
 
     public sealed class Uninitialized
     {
@@ -30,6 +33,31 @@ namespace RuntimeTypeDemo
         {
             Type selected = selection > 0 ? typeof(Marker) : typeof(Other);
             return Same(selected, typeof(Marker)) ? 1 : 0;
+        }
+
+        public static int RuntimeClass(int selection)
+        {
+            RuntimeBase instance;
+            if (selection < 0) instance = new FirstRuntimeChild();
+            else if (selection == 0) instance = null;
+            else if (selection == 1) instance = new RuntimeBase();
+            else instance = new SecondRuntimeChild();
+            try
+            {
+                return Classify(instance);
+            }
+            catch (NullReferenceException)
+            {
+                return -1;
+            }
+        }
+
+        private static int Classify(RuntimeBase instance)
+        {
+            Type actual = instance.GetType();
+            if (actual == typeof(RuntimeBase)) return 1;
+            if (actual == typeof(FirstRuntimeChild)) return 2;
+            return actual == typeof(SecondRuntimeChild) ? 3 : 0;
         }
 
         public static int Linked(int selection)

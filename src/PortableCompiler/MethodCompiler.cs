@@ -521,7 +521,7 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || nativeField || kind == BranchIl.StringLength || kind == BranchIl.InvokeDelegate ||
-                                kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection ||
+                                kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection || kind == BranchIl.GetObjectType ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
                                 kind == BranchIl.LoadObjectIndirect || kind == BranchIl.StoreObjectIndirect ||
                                 kind == BranchIl.ExchangeHandlerField || (kind == BranchIl.Call && (records[slot + 3] & 1) != 0))
@@ -597,6 +597,22 @@ namespace PortableCompiler
                 return CompileProgram(bundle, entries, output, location, hostFeatures | hostUse[0]);
             length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, length, hostImports, location);
             if (length < 0) return length;
+            if (reflection.ObjectTypes.Fixups[0] != 0)
+            {
+                if (functions >= owners.Length) return -3;
+                int offset = NextSignature(offsets, arities, functions);
+                if (offset + 1 >= signatures.Length) return -3;
+                signatures[offset] = RuntimeTypeMetadata.Type;
+                signatures[offset + 1] = ObjectReference;
+                arities[functions] = 1;
+                offsets[functions] = offset;
+                bodyOffsets[functions] = length;
+                length = reflection.ObjectTypes.Write(moduleCode, length, objects, globals);
+                if (length < 0) return length;
+                WasmIndexFixups.Resolve(moduleCode, reflection.ObjectTypes.Fixups[0], hostImports + functions);
+                sizes[functions] = length - bodyOffsets[functions];
+                functions++;
+            }
             if (initializers.Epoch >= 0 || shadowStack[0] != 0)
             {
                 // Stage 129 (decision 0057): every host export enters through a wrapper
@@ -1041,6 +1057,17 @@ namespace PortableCompiler
                     if (opcode == 0x28 && !addressed && RuntimeTypeMetadata.IsGetTypeFromHandle(image, heaps, layout, member))
                     {
                         records[slot] = BranchIl.TypeFromHandle;
+                        continue;
+                    }
+                    int objectTypeMember = addressed ? 0 : RuntimeTypeMetadata.ObjectTypeMember(image, heaps, layout, member);
+                    if (objectTypeMember == 1 && (opcode == 0x28 || opcode == 0x6f))
+                    {
+                        records[slot] = BranchIl.GetObjectType;
+                        continue;
+                    }
+                    if (objectTypeMember == 2 && opcode == 0x28)
+                    {
+                        records[slot] = BranchIl.EqualRuntimeTypes;
                         continue;
                     }
                     int reflectionMember = !addressed && (opcode == 0x28 || opcode == 0x6f)

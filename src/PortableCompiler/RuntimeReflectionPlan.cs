@@ -11,6 +11,7 @@ namespace PortableCompiler
         private const string UnknownName = "<Unknown>";
 
         internal readonly int[] HeapFixups = new int[1];
+        internal readonly RuntimeObjectTypes ObjectTypes = new RuntimeObjectTypes();
         internal int[] Slots { get; private set; }
         internal int ResourceOwner { get; private set; } = -1;
         internal int ResourceOpen { get; private set; }

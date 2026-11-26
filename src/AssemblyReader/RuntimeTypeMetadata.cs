@@ -54,6 +54,50 @@ namespace PeLibrary
             return MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) >= 0 && row <= counts[2];
         }
 
+        // Match the actual platform Object.GetType or Type.op_Equality signature.
+        internal static int ObjectTypeMember(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            var member = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadMember(image, heaps, layout, row, member) < 0 ||
+                member[AssemblyReferences.Depth] != 0) return 0;
+            int leaf = member[AssemblyReferences.Leaf];
+            uint name = (uint)member[4];
+            bool getType = MatchesAscii(image, heaps, name, "GetType") &&
+                ObjectLayouts.IsCoreObjectType(image, heaps, layout, leaf << 2 | 1);
+            bool equality = MatchesAscii(image, heaps, name, "op_Equality");
+            if (!getType && !equality) return 0;
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0 || equality &&
+                PlatformTypeReferences.Identify(image, heaps, layout, counts, first, leaf) != PlatformTypeReferences.Type) return 0;
+            int limit = heaps[0] + heaps[1], blob = member[5];
+            if (blob <= 0 || blob >= heaps[1]) return 0;
+            var next = new int[1];
+            int bytes = CompressedUnsigned(image, heaps[0] + blob, limit, next);
+            int start = next[0];
+            if (bytes < 4 || bytes > limit - start) return 0;
+            int end = start + bytes, cursor = start + 2;
+            if (getType)
+            {
+                if (image[start] != 0x20 || image[start + 1] != 0) return 0;
+            }
+            else
+            {
+                if (image[start] != 0 || image[start + 1] != 2 || image[cursor] != 2) return 0;
+                cursor++;
+            }
+            int types = getType ? 1 : 2;
+            for (int index = 0; index < types; index++)
+            {
+                if (cursor >= end || image[cursor++] != 0x12) return 0;
+                int token = CompressedUnsigned(image, cursor, end, next);
+                if ((token & 3) != 1 || PlatformTypeReferences.Identify(image, heaps, layout, counts, first, token >> 2) != PlatformTypeReferences.Type)
+                    return 0;
+                cursor = next[0];
+            }
+            return cursor != end ? 0 : getType ? 1 : 2;
+        }
+
         internal static bool IsGetTypeFromHandle(byte[] image, int[] heaps, int[] layout, int row)
         {
             var member = new int[AssemblyReferences.SymbolWidth];

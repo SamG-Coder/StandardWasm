@@ -217,6 +217,24 @@ namespace PortableCompiler
                     used = WasmBinary.Unsigned(code, used, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, PeLibrary.RuntimeTypeMetadata.Handle, depth));
                 }
+                else if (kind == GetObjectType)
+                {
+                    int type = states[state + top];
+                    reflection.ObjectTypes.Include(type);
+                    int receiver = Spill(spills, maximum, spillFlags, type, top);
+                    used = GuardNull(code, used, receiver);
+                    used = Local(code, used, 0x20, receiver);
+                    code[used++] = 0x10; // call the type lookup after all layouts are linked
+                    used = WasmIndexFixups.Write(code, used, frameShape[7], reflection.ObjectTypes.Fixups);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, PeLibrary.RuntimeTypeMetadata.Type, top));
+                }
+                else if (kind == EqualRuntimeTypes)
+                {
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1));
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
+                    code[used++] = 0xd3; // ref.eq on canonical Type descriptors
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top - 1));
+                }
                 // TypeFromHandle changes the CLI category while retaining the reference in the same spill.
                 else if (kind == ReadReflection)
                 {

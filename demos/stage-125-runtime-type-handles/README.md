@@ -14,4 +14,11 @@ The standalone checks also compile one DLL through both compiler entry points.
 Boxing a runtime handle or casting to a reflection type still produces a
 diagnostic.
 
+`RuntimeClass` checks `Object.GetType()` on a base class and on two different
+derived classes with the same field layout. It also checks the null-receiver
+exception. The compiler uses linked class identity to return the same
+descriptor as `typeof`. This path covers class receivers and canonical
+`Type` descriptors. Constructed generic type identity and comparison with
+ordinary managed `Type` objects require separate support.
+
 See [decision 0053](../../docs/decisions/0053-runtime-type-handles.md).

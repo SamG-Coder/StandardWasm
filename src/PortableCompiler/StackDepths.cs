@@ -219,6 +219,17 @@ namespace PortableCompiler
                 if (!IsNativeInteger(address) && (address != CharacterLocation || operand != 0x53)) return -2;
                 return depth - 2;
             }
+            if (kind == GetObjectType)
+            {
+                if (depth == 0) return -1;
+                int receiver = stack[depth - 1];
+                if (receiver != NullValue && (receiver < FirstClass || receiver >= ConstructorAddress ||
+                    IsInterface(objects, receiver) || IsValueType(objects, receiver) || ArrayElement(objects, receiver) != 0)) return -2;
+                return Push(stack, allocated, depth - 1, PeLibrary.RuntimeTypeMetadata.Type);
+            }
+            if (kind == EqualRuntimeTypes)
+                return Match(stack, depth, PeLibrary.RuntimeTypeMetadata.Type) &&
+                    Match(stack, depth - 1, PeLibrary.RuntimeTypeMetadata.Type) ? Push(stack, allocated, depth - 2, I32) : -2;
             if (kind == TypeFromHandle)
                 return depth > 0 && stack[depth - 1] == PeLibrary.RuntimeTypeMetadata.Handle
                     ? Push(stack, allocated, depth - 1, PeLibrary.RuntimeTypeMetadata.Type) : -1;
