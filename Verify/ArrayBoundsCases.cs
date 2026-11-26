@@ -36,7 +36,8 @@ internal static class ArrayBoundsCases
                 string? exception = null, exceptionType = null;
                 try { expected = oracle(); }
                 catch (IndexOutOfRangeException error) { exception = exceptionType = error.GetType().FullName; }
-                catch (NullReferenceException error) { exception = error.GetType().FullName; }
+                catch (NullReferenceException error) { exception = exceptionType = error.GetType().FullName; }
+                catch (OverflowException error) { exception = exceptionType = error.GetType().FullName; }
                 cases.Add(new
                 {
                     module = "BootstrapLibrary", method = "Compile", fixture = method,

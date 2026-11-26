@@ -61,12 +61,13 @@ internal static class StringCases
             foreach (int[] args in arguments)
             {
                 int? expected;
+                string exceptionType = null;
                 try { expected = oracle(args); }
-                catch (IndexOutOfRangeException) { expected = null; }
+                catch (IndexOutOfRangeException error) { expected = null; exceptionType = error.GetType().FullName; }
                 cases.Add(new
                 {
                     module = "StringLibrary", method = "Compile", fixture = method, inputs,
-                    generated = new { capacity, arguments = args, hex }, expected
+                    generated = new { capacity, arguments = args, hex, exceptionType }, expected
                 });
             }
         }

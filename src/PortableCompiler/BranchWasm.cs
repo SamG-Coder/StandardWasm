@@ -7,27 +7,38 @@ namespace PortableCompiler
     internal static class BranchWasm
     {
         internal static int Emit(int[] records, int[] depths, byte[] states, int[] frameShape, int[] frame,
-            int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion)
+            int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
+            byte[] outgoingNulls)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
             int classes = frameShape[4];
             bool stringScratch = frameShape[5] != 0;
             bool eventScratch = frameShape[6] != 0;
-            int exceptionLocals = frameShape[8];
+            int exceptionLocals = frameShape[8], continuations = frameShape[9];
+            bool hasNull = outgoingNulls.Length != 0;
             int spillKinds = FirstClass - 1 + classes;
-            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 1 + spillKinds) +
-                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (exceptionLocals != 0 ? 1 : 0));
-            int spills = arguments + locals;
+            int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
+                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (exceptionLocals != 0 ? 1 : 0) +
+                (continuations != 0 ? 1 : 0));
+            int spills = arguments + locals + (hasNull ? 1 : 0);
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
             int eventLocals = scratch + (stringScratch ? 5 : 0);
             int pcLocal = eventLocals + (eventScratch ? 6 : 0);
+            int continuationBase = pcLocal + 1 + exceptionLocals;
             // Keep declared locals in CLI order, then allocate one bank per spill type.
-            for (int i = arguments; i < spills; i++)
+            for (int i = arguments; i < arguments + locals; i++)
             {
                 code[used++] = 1;
                 used = WasmBinary.ValueType(code, used, frame[i]);
+            }
+            if (hasNull)
+            {
+                // A default-initialized bottom reference supplies any concrete
+                // managed heap type and never needs to be written.
+                code[used++] = 1;
+                code[used++] = NullSpillWasm.NullRef;
             }
             if (maximum != 0)
             {
@@ -63,6 +74,11 @@ namespace PortableCompiler
                 used = WasmBinary.Unsigned(code, used, exceptionLocals);
                 code[used++] = ExceptionDispatchWasm.ExceptionReference;
             }
+            if (continuations != 0)
+            {
+                used = WasmBinary.Unsigned(code, used, continuations);
+                code[used++] = 0x7f; // normal cleanup destinations
+            }
             // Raw Wasm callers supply i32. Enforce the CLI argument width before
             // the first instruction, including on entry from a managed call.
             for (int i = 0; i < arguments; i++)
@@ -89,7 +105,7 @@ namespace PortableCompiler
                 code[used++] = 0x04;
                 code[used++] = 0x40;
 
-                if (kind == Load || kind == Constant || kind == WideConstant || kind == Dup ||
+                if (kind == Load || kind == Constant || kind == WideConstant || (kind == Dup && states[state + top] != NullValue) ||
                     kind == SingleConstant || kind == DoubleConstant)
                 {
                     byte pushed = I32;
@@ -141,24 +157,22 @@ namespace PortableCompiler
                     else used = Gc(code, used, 1, EventArgsReference); // struct.new_default
                     used = Local(code, used, 0x21, Spill(spills, maximum, EventArgsReference, depth));
                 }
-                else if (kind == NullString)
-                {
-                    code[used++] = 0xd0;
-                    code[used++] = 5;
-                    used = Local(code, used, 0x21, Spill(spills, maximum, String, depth));
-                }
                 else if (kind == JoinStrings || kind == StringFromChars)
                 {
                     bool join = kind == JoinStrings;
                     int at = top - (join ? 1 : 0);
-                    used = StringWasm.Copy(code, used, Spill(spills, maximum, join ? String : Chars, at),
-                        Spill(spills, maximum, String, top), scratch, join);
+                    used = StringWasm.Copy(code, used, Spill(spills, maximum, states[state + at], at),
+                        Spill(spills, maximum, states[state + top], top), scratch, join);
                     used = Local(code, used, 0x21, Spill(spills, maximum, String, at));
                 }
                 else if (kind == StringLength || kind == StringCharacter)
                 {
                     int at = top - (kind == StringCharacter ? 1 : 0);
-                    used = Local(code, used, 0x20, Spill(spills, maximum, String, at));
+                    int reference = Spill(spills, maximum, states[state + at], at);
+                    used = GuardNull(code, used, reference);
+                    if (kind == StringCharacter)
+                        used = GuardArrayIndex(code, used, reference, spills + top, true);
+                    used = Local(code, used, 0x20, reference);
                     used = StringWasm.Unwrap(code, used);
                     if (kind == StringCharacter)
                     {
@@ -200,21 +214,24 @@ namespace PortableCompiler
                 }
                 else if (kind == CombineHandler || kind == RemoveHandler)
                 {
-                    int left = Spill(spills, maximum, EventHandlerReference, top - 1);
-                    int right = Spill(spills, maximum, EventHandlerReference, top);
+                    int left = Spill(spills, maximum, states[state + top - 1], top - 1);
+                    int right = Spill(spills, maximum, states[state + top], top);
                     used = kind == CombineHandler ? EventWasm.CombineLists(code, used, left, right, eventLocals) :
                         EventWasm.RemoveLast(code, used, left, right, eventLocals);
-                    used = Local(code, used, 0x21, left);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, EventHandlerReference, top - 1));
                 }
                 else if (kind == InvokeDelegate && operand == EventHandlerReference)
                 {
-                    used = EventWasm.Invoke(code, used, Spill(spills, maximum, EventHandlerReference, top - 2),
+                    int callback = Spill(spills, maximum, states[state + top - 2], top - 2);
+                    used = GuardNull(code, used, callback);
+                    used = EventWasm.Invoke(code, used, callback,
                         Spill(spills, maximum, states[state + top - 1], top - 1),
-                        Spill(spills, maximum, EventArgsReference, top), eventLocals);
+                        Spill(spills, maximum, states[state + top], top), eventLocals);
                 }
                 else if (kind == InvokeDelegate)
                 {
-                    int closure = Spill(spills, maximum, Delegate, top);
+                    int closure = Spill(spills, maximum, states[state + top], top);
+                    used = GuardNull(code, used, closure);
                     used = Local(code, used, 0x20, closure);
                     used = Gc(code, used, 2, Delegate); // struct.get receiver
                     code[used++] = 0;
@@ -231,6 +248,12 @@ namespace PortableCompiler
                     used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
                     used = NormalizeSlot(code, used, frame[operand]);
                     used = Local(code, used, 0x21, operand);
+                }
+                else if (kind == CastClass || kind == TestClass)
+                {
+                    byte type = (byte)operand;
+                    used = ReferenceCastWasm.Emit(code, used, Spill(spills, maximum, states[state + top], top),
+                        Spill(spills, maximum, type, top), type, kind == CastClass);
                 }
                 else if (kind == Unary || kind == Narrow || kind == ConvertInteger || kind == ConvertFloat)
                 {
@@ -296,7 +319,11 @@ namespace PortableCompiler
                         used = NumericLocal(code, used, right, rightType, width);
                         if (type == I64 && IsShift(operand)) code[used++] = 0xad;
                         if (IsFloat(width)) used = FloatWasm.Binary(code, used, operand, width);
-                        else if (IsObjectReference(type)) code[used++] = 0xd3; // ref.eq
+                        else if (ReferenceComparison(type, rightType))
+                        {
+                            code[used++] = 0xd3; // ref.eq
+                            if (operand == 0x4b) code[used++] = 0x45; // cgt.un against null is not-equal
+                        }
                         else code[used++] = NumericOpcode(operand, type);
                     }
                     used = Local(code, used, 0x21, Spill(spills, maximum, resultType, top - 1));
@@ -329,12 +356,17 @@ namespace PortableCompiler
                         used = Gc(code, used, 1, type); // struct.new_default
                         used = Local(code, used, 0x22, temp);
                     }
+                    if (kind == Call && records[slot + 3] != 0)
+                    {
+                        // The receiver and arguments have already been evaluated.
+                        // Keep callvirt's managed null check before calling the known body.
+                        int target = Spill(spills, maximum, states[state + first], first);
+                        used = GuardNull(code, used, target);
+                    }
                     for (int i = receiver; i < arity; i++)
                     {
                         int argument = first + i - receiver;
                         used = Local(code, used, 0x20, Spill(spills, maximum, states[state + argument], argument));
-                        if (i == 0 && records[slot + 3] != 0)
-                            code[used++] = 0xd4; // callvirt null-check on a known nonvirtual target
                     }
                     code[used++] = 0x10;
                     used = WasmBinary.Unsigned(code, used, operand);
@@ -350,8 +382,10 @@ namespace PortableCompiler
                 else if (kind == ExchangeHandlerField)
                 {
                     byte owner = (byte)(records[slot + 3] >> 8);
-                    int receiver = Spill(spills, maximum, owner, top);
+                    int receiver = Spill(spills, maximum, states[state + top], top);
                     int oldValue = Spill(spills, maximum, EventHandlerReference, top);
+                    // The fused ldflda permits only side-effect-free loads after this check.
+                    used = GuardNull(code, used, receiver);
                     used = Local(code, used, 0x20, receiver);
                     used = Gc(code, used, 2, owner); // struct.get
                     used = WasmBinary.Unsigned(code, used, operand);
@@ -373,7 +407,9 @@ namespace PortableCompiler
                     int descriptor = records[slot + 3];
                     byte type = (byte)(descriptor >> 8), value = unchecked((byte)descriptor);
                     int address = kind == GetField ? top : top - 1;
-                    used = Local(code, used, 0x20, Spill(spills, maximum, type, address));
+                    int reference = Spill(spills, maximum, states[state + address], address);
+                    used = GuardNull(code, used, reference);
+                    used = Local(code, used, 0x20, reference);
                     if (kind == SetField)
                         used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
                     used = Gc(code, used, kind == GetField ? 2 : 5, type);
@@ -384,6 +420,15 @@ namespace PortableCompiler
                 {
                     if (kind == InitializedArray)
                         used = Const(code, used, records[slot + 3]);
+                    else
+                    {
+                        // Wasm allocation interprets its length as unsigned. The CLI
+                        // raises overflow for a negative length before allocation.
+                        used = Local(code, used, 0x20, spills + top);
+                        used = Const(code, used, 0);
+                        code[used++] = 0x48; // i32.lt_s
+                        used = ExceptionTagsWasm.ThrowIf(code, used);
+                    }
                     used = Local(code, used, 0x20, spills + top);
                     used = Gc(code, used, kind == NewArray ? 7 : 9, operand); // default or passive data
                     if (kind == InitializedArray) code[used++] = 0; // shared data segment index
@@ -391,16 +436,19 @@ namespace PortableCompiler
                 }
                 else if (kind == ArrayLength)
                 {
-                    used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
+                    int reference = Spill(spills, maximum, states[state + top], top);
+                    used = GuardNull(code, used, reference);
+                    used = Local(code, used, 0x20, reference);
                     code[used++] = 0xfb;
                     code[used++] = 0x0f;
                     used = Local(code, used, 0x21, spills + top);
                 }
                 else if (kind == ArrayGet)
                 {
-                    byte array = states[state + top - 1];
-                    int reference = Spill(spills, maximum, array, top - 1), index = spills + top;
-                    used = GuardArrayIndex(code, used, reference, index);
+                    byte array = ArrayLoadType(operand);
+                    int reference = Spill(spills, maximum, states[state + top - 1], top - 1), index = spills + top;
+                    used = GuardNull(code, used, reference);
+                    used = GuardArrayIndex(code, used, reference, index, false);
                     used = Local(code, used, 0x20, reference);
                     used = Local(code, used, 0x20, index);
                     // The opcode selects the extension of packed cells. Full-
@@ -412,9 +460,10 @@ namespace PortableCompiler
                 }
                 else if (kind == ArraySet)
                 {
-                    byte array = states[state + top - 2];
-                    int reference = Spill(spills, maximum, array, top - 2), index = spills + top - 1;
-                    used = GuardArrayIndex(code, used, reference, index);
+                    byte array = ArrayStoreType(operand);
+                    int reference = Spill(spills, maximum, states[state + top - 2], top - 2), index = spills + top - 1;
+                    used = GuardNull(code, used, reference);
+                    used = GuardArrayIndex(code, used, reference, index, false);
                     used = Local(code, used, 0x20, reference);
                     used = Local(code, used, 0x20, index);
                     used = Local(code, used, 0x20, Spill(spills, maximum, ArrayValueType(array), top));
@@ -434,6 +483,8 @@ namespace PortableCompiler
                     used = ExceptionDispatchWasm.ThrowReference(code, used, pcLocal + 2 + operand);
                 else
                 {
+                    if (hasNull)
+                        used = NullSpillWasm.Transfer(code, used, records, pc, depths, states, outgoingNulls, maximum, spills);
                     if (kind == Conditional)
                     {
                         int comparison = records[slot + 3];
@@ -449,7 +500,7 @@ namespace PortableCompiler
                         }
                         used = NumericLocal(code, used, Spill(spills, maximum, type, top), type, width);
                         if (IsFloat(width)) used = FloatWasm.Binary(code, used, comparison, width);
-                        else if (type == String || IsObjectReference(type))
+                        else if (type == NullValue || IsReference(type))
                         {
                             code[used++] = IsComparison(comparison) ? (byte)0xd3 : (byte)0xd1; // ref.eq or ref.is_null
                             if (comparison == 0 || comparison == 0x47) code[used++] = 0x45;
@@ -465,6 +516,10 @@ namespace PortableCompiler
                     }
                     else if (kind == Switch)
                         used = SwitchDispatch(code, used, records, operand, records[slot + 3], next, spills + top);
+                    else if (kind == EndFinally)
+                        used = FinallyWasm.Finish(code, used, pcLocal + 2 + operand, continuationBase + operand);
+                    else if (kind == Leave && continuations != 0)
+                        used = FinallyWasm.Leave(code, used, pc, operand, pcLocal, continuationBase, catchRegion);
                     else used = Const(code, used, kind == Branch || kind == Leave ? operand : next);
                     used = Local(code, used, 0x21, pcLocal);
                     code[used++] = 0x0c;
@@ -481,12 +536,21 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int GuardArrayIndex(byte[] code, int used, int reference, int index)
+        private static int GuardNull(byte[] code, int used, int reference)
         {
+            used = Local(code, used, 0x20, reference);
+            code[used++] = 0xd1; // ref.is_null
+            return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.NullTag);
+        }
+
+        private static int GuardArrayIndex(byte[] code, int used, int reference, int index, bool wrapped)
+        {
+            // A managed null check precedes this helper, even for negative indices.
             used = Local(code, used, 0x20, index);
             used = Local(code, used, 0x20, reference);
+            if (wrapped) used = StringWasm.Unwrap(code, used);
             code[used++] = 0xfb;
-            code[used++] = 0x0f; // array.len, which still traps on null
+            code[used++] = 0x0f; // array.len
             // An unsigned comparison rejects negative indices and indices at or above length.
             code[used++] = 0x4f;
             return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.IndexTag);
@@ -545,8 +609,8 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int Spill(int first, int maximum, byte type, int depth) =>
-            first + (type - 1) * maximum + depth;
+        internal static int Spill(int first, int maximum, byte type, int depth) =>
+            type == NullValue ? first - 1 : first + (type - 1) * maximum + depth;
 
         private static int NormalizeSlot(byte[] code, int used, int type)
         {

@@ -48,7 +48,8 @@ namespace PortableCompiler
             // so an unmatched inner try can fall back to an enclosing one.
             for (int clause = 0; clause < clauses.Length; clause += ExceptionClauses.Width)
             {
-                if ((clauses[clause + ExceptionClauses.Mask] & (1 << tag)) == 0) continue;
+                if (!ExceptionClauses.IsFinally(clauses, clause) &&
+                    (clauses[clause + ExceptionClauses.Mask] & (1 << tag)) == 0) continue;
                 used = Local(code, used, 0x20, pc);
                 used = Const(code, used, clauses[clause + ExceptionClauses.TryStart]);
                 code[used++] = 0x6b;

@@ -9,7 +9,11 @@ export function managedExceptionType(exports, error) {
     const divide = exports["\0divideByZero"];
     if (divide instanceof WebAssembly.Tag && error.is(divide)) return "System.DivideByZeroException";
     const index = exports["\0indexOutOfRange"];
-    return index instanceof WebAssembly.Tag && error.is(index) ? "System.IndexOutOfRangeException" : null;
+    if (index instanceof WebAssembly.Tag && error.is(index)) return "System.IndexOutOfRangeException";
+    const nullReference = exports["\0nullReference"];
+    if (nullReference instanceof WebAssembly.Tag && error.is(nullReference)) return "System.NullReferenceException";
+    const invalidCast = exports["\0invalidCast"];
+    return invalidCast instanceof WebAssembly.Tag && error.is(invalidCast) ? "System.InvalidCastException" : null;
 }
 
 export function invoke(exports, method, inputs) {
