@@ -49,3 +49,12 @@ It, and the PRs stacked above it, are rebased onto main separately.
   behaviour, so main's callers are unchanged.
 - **Verify.** `Verify/Program.cs` and `Verify/Verify.csproj` keep both
   sides' cases and fixture references.
+
+## Relation to 0040
+
+[0040](0040-stack-collapse-review.md) records the segment-collapse
+procedure, which was approved first and used to land #51 and #55. The
+owner's later choice replaces it for the PRs still stacked above #55. For
+this integration only, the single PR merges after the full test run, and
+Codex re-attests the merged revision afterwards. Later stacks return to
+the AGENTS.md procedure.
