@@ -12,5 +12,5 @@ with its type. Array bounds failures still surface as Wasm traps.
 
 `npm test` compares the same .NET Standard DLL with the CLR in Node
 and Edge and replays the cases with a generated compiler. Handler use of
-the exception object, nested protected regions, and filters and finally
-blocks require further lowering.
+the exception object, filters and finally blocks require further lowering.
+[Stage 50](../stage-50-nested-catches/README.md) adds nested and disjoint protected regions.

@@ -77,4 +77,5 @@ TypedOverflowCases.Add(cases);
 ExceptionTableCases.Add(cases);
 OverflowHandlerCases.Add(cases);
 ArithmeticHandlerCases.Add(cases);
+NestedHandlerCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

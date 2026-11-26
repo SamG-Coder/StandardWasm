@@ -25,7 +25,7 @@ The first working backend takes a DLL and a public export type, follows reachabl
 | 32-bit integers, unsigned comparisons, booleans, locals, loops, conditional branches, static calls and recursion | No general BCL linker, virtual dispatch, generics, strings or floating-point lowering |
 | Managed one-dimensional int and byte arrays backed by Wasm GC | Allocation, length, indexed read and write for int and packed byte elements |
 | Direct tail calls for eligible call/return pairs | Managed exception handling and stack-trace fidelity are open |
-| Integer arithmetic and array access | The portable compiler uses typed tags for checked overflow and integer divide-by-zero. Stage 49 supports ordered sibling catches for those tags, including `ArithmeticException`. Array failures still trap. Exception objects, nested regions, and native-sized checked casts are open. |
+| Integer arithmetic and array access | The portable compiler uses typed tags for checked overflow and integer divide-by-zero. Stage 50 supports ordered sibling, nested and disjoint catches for those tags, including `ArithmeticException`. Array failures still trap. Exception objects, finally regions, and native-sized checked casts are open. |
 
 ## Build and test
 

@@ -27,27 +27,32 @@ namespace PortableCompiler
             code[used++] = 0x0b; // try_table
             code[used++] = 0;    // only the catch edges may reach the destinations
             code[used++] = 0x0b; // overflow destination
-            used = Dispatch(code, used, pc, region, region[ArithmeticCatch.OverflowResume], 0, 1);
+            used = Dispatch(code, used, pc, region, ArithmeticExceptionWasm.OverflowTag, 1);
             code[used++] = 0x0b; // divide-by-zero destination
-            return Dispatch(code, used, pc, region, region[ArithmeticCatch.DivideResume], 1, 0);
+            return Dispatch(code, used, pc, region, ArithmeticExceptionWasm.DivideTag, 0);
         }
 
-        private static int Dispatch(byte[] code, int used, int pc, int[] region, int resume, int tag, int loop)
+        private static int Dispatch(byte[] code, int used, int pc, int[] clauses, int tag, int loop)
         {
-            if (resume == 0) return ArithmeticExceptionWasm.Throw(code, used, tag);
-            // The dispatcher changes pc after an instruction succeeds. An
-            // exception outside the interval, including in a handler, escapes.
-            used = Local(code, used, 0x20, pc);
-            used = Const(code, used, region[ArithmeticCatch.TryStart]);
-            code[used++] = 0x6b;
-            used = Const(code, used, region[ArithmeticCatch.TryLength]);
-            code[used++] = 0x4f; // i32.ge_u
-            used = ArithmeticExceptionWasm.ThrowIf(code, used, tag);
-            used = Const(code, used, resume);
-            used = Local(code, used, 0x21, pc);
-            code[used++] = 0x0c;
-            code[used++] = (byte)loop;
-            return used;
+            // pc still names the throwing instruction. Walk the ordered clauses
+            // so an unmatched inner try can fall back to an enclosing one.
+            for (int clause = 0; clause < clauses.Length; clause += ArithmeticCatch.Width)
+            {
+                if ((clauses[clause + ArithmeticCatch.Mask] & (1 << tag)) == 0) continue;
+                used = Local(code, used, 0x20, pc);
+                used = Const(code, used, clauses[clause + ArithmeticCatch.TryStart]);
+                code[used++] = 0x6b;
+                used = Const(code, used, clauses[clause + ArithmeticCatch.TryLength]);
+                code[used++] = 0x49; // i32.lt_u
+                code[used++] = 0x04; // if
+                code[used++] = 0x40;
+                used = Const(code, used, clauses[clause + ArithmeticCatch.Resume]);
+                used = Local(code, used, 0x21, pc);
+                code[used++] = 0x0c;
+                code[used++] = (byte)(loop + 1);
+                code[used++] = 0x0b;
+            }
+            return ArithmeticExceptionWasm.Throw(code, used, tag);
         }
     }
 }

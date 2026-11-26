@@ -22,20 +22,7 @@ internal static class ArithmeticHandlerCases
         Check(nameof(Handlers.ArrayAccess), new[] { -1, 0, 1 }.Select(i =>
             (new[] { i }, (Func<int>)(() => Handlers.ArrayAccess(i)))));
 
-        int nested = typeof(Handlers).GetMethod(nameof(Handlers.Nested))!.MetadataToken & 0xffffff;
-        var untouched = Enumerable.Repeat((byte)0xa5, capacity).ToArray();
-        var location = CompilerExports.CreateDiagnostic();
-        int status = CompilerExports.CompileDetailed(image, nested, untouched, location);
-        if (status != -2 || location[0] != 0 || location[1] != nested || location[2] < 0 ||
-            untouched.Any(value => value != 0xa5))
-            throw new InvalidOperationException("Nested arithmetic catches should report unsupported EH");
-        cases.Add(new
-        {
-            module = "BootstrapLibrary", method = "Compile", fixture = "nested arithmetic catches",
-            inputs = new object[] { encoded, nested },
-            generated = new { capacity, arguments = Array.Empty<int>(), reject = true, diagnostic = location },
-            expected = status
-        });
+        CheckPairs(nameof(Handlers.Nested), signed, Handlers.Nested);
 
         void CheckPairs(string method, (int A, int B)[] inputs, Func<int, int, int> oracle) =>
             Check(method, inputs.Select(pair => (new[] { pair.A, pair.B }, (Func<int>)(() => oracle(pair.A, pair.B)))));
