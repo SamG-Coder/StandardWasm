@@ -172,6 +172,7 @@ namespace PortableCompiler
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * 3];
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
+            var nativePlans = new NativeAggregatePlans();
             var initializerSlot = new int[1];
             int exceptionTags = 0;
             var noCatch = new int[0];
@@ -324,7 +325,7 @@ namespace PortableCompiler
                     functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
                         parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod, valueMethod, records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
-                        initializers);
+                        initializers, nativePlans);
                     if (functions < 0)
                         return functions;
 
@@ -398,6 +399,15 @@ namespace PortableCompiler
                         int operation = records[slot + 1];
                         if ((kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect) && depths[pc] != 0)
                             linearMemory = true;
+                        if ((kind == BranchIl.LoadObject || kind == BranchIl.StoreObject || kind == BranchIl.InitializeNative) && depths[pc] != 0)
+                        {
+                            linearMemory = true;
+                            int fields = ObjectLayouts.FieldCount(objects, records[slot + 1]);
+                            // A load or store per field, nested structs included (bounded by size).
+                            int bytes = 64 + 24 * (fields + NativeAggregates.Size(nativePlans.Plans, records[slot + 3] - 1));
+                            if (capacity > int.MaxValue - bytes) return -3;
+                            capacity += bytes;
+                        }
                         // Stage 143 (decision 0071): p->F loads and stores also address memory 0.
                         if ((kind == BranchIl.GetField || kind == BranchIl.SetField) && depths[pc] != 0 &&
                             records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
@@ -468,6 +478,7 @@ namespace PortableCompiler
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || kind == BranchIl.StringLength || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect ||
+                                kind == BranchIl.LoadObject || kind == BranchIl.StoreObject || kind == BranchIl.InitializeNative ||
                                 kind == BranchIl.ExchangeHandlerField || (kind == BranchIl.Call && records[slot + 3] != 0))
                                 tags = ExceptionTypes.NullReference;
                             else if (kind == BranchIl.Binary)
@@ -524,7 +535,7 @@ namespace PortableCompiler
                     }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
-                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers);
+                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers, nativePlans.Plans);
                 }
 
                 if (used < 0) return used;
@@ -574,7 +585,7 @@ namespace PortableCompiler
         private static int LinkOperands(BundleImages bundle, byte[] image, int[] layout,
             int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed,
-            TypeInitializerPlan initializers)
+            TypeInitializerPlan initializers, NativeAggregatePlans nativePlans)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
@@ -638,7 +649,25 @@ namespace PortableCompiler
                     if (lowered < 0) return lowered;
                     continue;
                 }
-                if (kind == BranchIl.MethodSpecCall || kind == BranchIl.FieldToken || kind == BranchIl.InitializeValue)
+                if (kind == BranchIl.LoadObject || kind == BranchIl.StoreObject || kind == BranchIl.InitializeValue)
+                {
+                    // Stage 145 (decision 0073): a blittable struct through a native address.
+                    // initobj on a managed local was lowered by ValueOperands already.
+                    uint token = unchecked((uint)records[slot + 1]);
+                    uint table = token >> 24;
+                    int row = (int)(token & 0xffffff);
+                    if (table != 1 && table != 2) return -2;
+                    int coded = row << 2 | (table == 1 ? 1 : 0);
+                    int type = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true);
+                    if (type < 0) return type;
+                    int plan = NativeAggregates.Plan(bundle, objects, type, nativePlans);
+                    if (plan < 0) return plan;
+                    if (kind == BranchIl.InitializeValue) records[slot] = BranchIl.InitializeNative;
+                    records[slot + 1] = type;
+                    records[slot + 3] = plan + 1;
+                    continue;
+                }
+                if (kind == BranchIl.MethodSpecCall || kind == BranchIl.FieldToken)
                     return -2;
                 if (kind == BranchIl.GetField || kind == BranchIl.SetField || kind == BranchIl.FieldAddress)
                 {

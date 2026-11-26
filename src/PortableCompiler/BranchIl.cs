@@ -33,6 +33,9 @@ namespace PortableCompiler
         internal const int LocalAllocate = 72;
         // sizeof <type>: lowered to an int32 Constant once the layout is measured.
         internal const int SizeOf = 73;
+        // ldobj / stobj / initobj of a blittable struct through a native address (decision 0073).
+        // Operand: the registry value type; auxiliary: native plan index + 1.
+        internal const int LoadObject = 74, StoreObject = 75, InitializeNative = 76;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
@@ -361,6 +364,13 @@ namespace PortableCompiler
                     // through an address and stay unsupported.
                     kind = op <= 0x4f ? LoadIndirect : StoreIndirect;
                     operand = op;
+                }
+                else if (op == 0x71 || op == 0x81)
+                {
+                    if (length - pc < 4) return -1;
+                    operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                    pc += 4;
+                    kind = op == 0x71 ? LoadObject : StoreObject;
                 }
                 else if (op == 0) kind = Nop;
                 else if (op == 0x2a) kind = Return;

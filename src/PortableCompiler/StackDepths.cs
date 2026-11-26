@@ -147,6 +147,13 @@ namespace PortableCompiler
             // Only an unmanaged pointer (a native int, decision 0060) addresses memory 0.
             // A proven null (NativeZero) spills as Native and raises NullReferenceException
             // at run time, as on the CLR. A managed byref stays a diagnostic.
+            if (kind == LoadObject)
+                return depth >= 1 && IsNativeInteger(stack[depth - 1]) ? Push(stack, allocated, depth - 1, operand) : -2;
+            if (kind == StoreObject)
+                return depth >= 2 && IsNativeInteger(stack[depth - 2]) &&
+                    (stack[depth - 1] == operand || stack[depth - 1] == NullValue) ? depth - 2 : -2;
+            if (kind == InitializeNative)
+                return depth >= 1 && IsNativeInteger(stack[depth - 1]) ? depth - 1 : -2;
             if (kind == LocalAllocate)
             {
                 // ECMA-335 III.3.47: the size is a native unsigned int (an int32 is accepted).

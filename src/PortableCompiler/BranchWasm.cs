@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects, int[] fieldInitializers)
+            byte[] outgoingNulls, int[] objects, int[] fieldInitializers, int[] nativePlans)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -539,6 +539,31 @@ namespace PortableCompiler
                     used = Gc(code, used, 5, owner);
                     used = WasmBinary.Unsigned(code, used, operand);
                     code[used++] = 0x0b;
+                }
+                else if (kind == LoadObject)
+                {
+                    int address = Spill(spills, maximum, Native, top);
+                    used = LinearMemoryWasm.GuardNull(code, used, address);
+                    used = NativeAggregates.Load(code, used, nativePlans, records[slot + 3] - 1, address, 0);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, operand, top));
+                }
+                else if (kind == StoreObject)
+                {
+                    // CLI order: address and value are evaluated, then the store checks null.
+                    int address = Spill(spills, maximum, Native, top - 1);
+                    int value = Spill(spills, maximum, operand, top);
+                    used = LinearMemoryWasm.GuardNull(code, used, address);
+                    if (states[state + top] == NullValue) used = ValueFieldsWasm.Clear(code, used, operand, value);
+                    used = ValueFieldsWasm.Materialize(code, used, operand, value);
+                    used = Local(code, used, 0x21, value);
+                    used = NativeAggregates.Store(code, used, nativePlans, objects, records[slot + 3] - 1, address, 0,
+                        value, spills, maximum, top);
+                }
+                else if (kind == InitializeNative)
+                {
+                    int address = Spill(spills, maximum, Native, top);
+                    used = LinearMemoryWasm.GuardNull(code, used, address);
+                    used = NativeAggregates.Clear(code, used, nativePlans, records[slot + 3] - 1, address);
                 }
                 else if (kind == LocalAllocate)
                 {
