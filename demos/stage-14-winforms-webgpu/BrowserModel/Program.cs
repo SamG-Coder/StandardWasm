@@ -8,9 +8,6 @@ if (args.Length != 2)
 
 var resources = new
 {
-    title = CounterText.Title,
-    increment = CounterText.Increment,
-    prefix = CounterText.ResultPrefix,
     keys = new { increment = CounterLayout.Increment, result = CounterLayout.Result },
     kinds = new { button = ControlTree.Button, label = ControlTree.Label },
     columns = new
@@ -20,7 +17,7 @@ var resources = new
     }
 };
 
-// The browser creates controls at runtime. This build step only packages captions and compiles exports.
+// The browser creates controls at runtime. This build step only packages control schema IDs and compiles exports.
 using var manifest = new MemoryStream();
 using var writer = new BinaryWriter(manifest);
 var handlers = typeof(CounterHandlers);

@@ -7,11 +7,12 @@ namespace PortableCompiler
     internal static class WasmBinary
     {
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies,
-            byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks)
+            byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
+            byte[] literals, int literalSize)
         {
-            int typeOffset = objects[0] + 4;
+            int typeOffset = objects[0] + 5;
             int totalFunctions = functions + thunks[0];
-            int typeSize = UnsignedSize(functions + typeOffset) + 17;
+            int typeSize = UnsignedSize(functions + typeOffset) + 20;
             for (int i = 0; i < objects[0]; i++)
             {
                 int slot = 1 + i * Width;
@@ -79,7 +80,13 @@ namespace PortableCompiler
             remaining = Reserve(remaining, exportSize);
             if (thunks[0] != 0)
                 remaining = Reserve(remaining, elementSize);
-            if (Reserve(remaining, codeSize) < 0) return -3;
+            if (literalSize != 0)
+                remaining = Reserve(remaining, 1); // DataCount
+            remaining = Reserve(remaining, codeSize);
+            int dataOverhead = 2 + UnsignedSize(literalSize);
+            if (remaining < 0 || (literalSize != 0 && (dataOverhead > remaining ||
+                literalSize > remaining - dataOverhead || Reserve(remaining, dataOverhead + literalSize) < 0)))
+                return -3;
 
             output[0] = 0;
             output[1] = 0x61;
@@ -108,6 +115,9 @@ namespace PortableCompiler
             output[cursor++] = 0x6d;
             output[cursor++] = 0;
             output[cursor++] = 0x70;
+            output[cursor++] = 0;
+            output[cursor++] = 0x5e; // immutable packed UTF-16 array
+            output[cursor++] = 0x77;
             output[cursor++] = 0;
             for (int i = 0; i < objects[0]; i++)
             {
@@ -180,6 +190,12 @@ namespace PortableCompiler
                     cursor = Unsigned(output, cursor, functions + i);
             }
 
+            if (literalSize != 0)
+            {
+                cursor = Section(output, cursor, 12, 1);
+                output[cursor++] = 1;
+            }
+
             cursor = Section(output, cursor, 10, codeSize);
             cursor = Unsigned(output, cursor, totalFunctions);
             int start = 0;
@@ -204,6 +220,15 @@ namespace PortableCompiler
                 output[cursor++] = 0x10;
                 cursor = Unsigned(output, cursor, function);
                 output[cursor++] = 0x0b;
+            }
+            if (literalSize != 0)
+            {
+                cursor = Section(output, cursor, 11, dataOverhead + literalSize);
+                output[cursor++] = 1; // one passive segment
+                output[cursor++] = 1;
+                cursor = Unsigned(output, cursor, literalSize);
+                for (int i = 0; i < literalSize; i++)
+                    output[cursor++] = literals[i];
             }
             return cursor;
         }

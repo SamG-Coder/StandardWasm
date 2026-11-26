@@ -12,9 +12,9 @@ namespace PortableCompiler
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             byte result = (byte)frameShape[3];
             int classes = frameShape[4];
-            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 6 + classes));
+            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 7 + classes));
             int spills = arguments + locals;
-            int temporaries = spills + (5 + classes) * maximum;
+            int temporaries = spills + (6 + classes) * maximum;
             int pcLocal = temporaries + classes;
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < spills; i++)
@@ -24,7 +24,7 @@ namespace PortableCompiler
             }
             if (maximum != 0)
             {
-                for (int kind = I32; kind <= MethodPointer + classes; kind++)
+                for (int kind = I32; kind <= String + classes; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
                     used = WasmBinary.ValueType(code, used, (byte)kind);
@@ -68,6 +68,38 @@ namespace PortableCompiler
                     }
                     else used = Const(code, used, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, pushed, depth));
+                }
+                else if (kind == LoadString)
+                {
+                    int characters = records[slot + 3];
+                    if (characters != 0)
+                    {
+                        used = Const(code, used, operand);
+                        used = Const(code, used, characters);
+                    }
+                    code[used++] = 0xfb;
+                    code[used++] = characters == 0 ? (byte)8 : (byte)9; // fixed empty or passive data
+                    code[used++] = 4;
+                    code[used++] = 0;
+                    used = Local(code, used, 0x21, Spill(spills, maximum, String, depth));
+                }
+                else if (kind == StringLength || kind == StringCharacter)
+                {
+                    int at = top - (kind == StringCharacter ? 1 : 0);
+                    used = Local(code, used, 0x20, Spill(spills, maximum, String, at));
+                    if (kind == StringCharacter)
+                    {
+                        used = Local(code, used, 0x20, spills + top);
+                        code[used++] = 0xfb;
+                        code[used++] = 0x0d;
+                        code[used++] = 4;
+                    }
+                    else
+                    {
+                        code[used++] = 0xfb;
+                        code[used++] = 0x0f;
+                    }
+                    used = Local(code, used, 0x21, spills + at);
                 }
                 else if (kind == LoadFunction)
                 {

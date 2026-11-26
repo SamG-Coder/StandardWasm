@@ -5,7 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../Shared/CounterText.cs" Link="CounterText.cs" />
     <ProjectReference Include="../Handlers/Handlers.csproj" />
     <ProjectReference Include="../../stage-13-complete-bootstrap/BootstrapLibrary.csproj" />
   </ItemGroup>

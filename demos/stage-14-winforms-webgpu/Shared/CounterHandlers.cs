@@ -28,6 +28,12 @@ namespace CounterExample
             return count;
         }
 
+        public static string Title() => CounterText.Title;
+        public static string ButtonCaption() => CounterText.Increment;
+        public static string ResultPrefix() => CounterText.ResultPrefix;
+        public static int TextLength(string text) => text.Length;
+        public static int TextCodeUnit(string text, int index) => text[index];
+
         public static ControlTree BuildTree() => CounterLayout.Build();
         public static int ClientWidth(ControlTree tree) => tree.ClientWidth();
         public static int ClientHeight(ControlTree tree) => tree.ClientHeight();
