@@ -4,13 +4,15 @@ namespace PeLibrary
 {
     internal static class GenericParameters
     {
-        private const uint AllowByRefLike = 0x20;
+        private const uint Variance = 3, Reference = 4, NonNullableValue = 8,
+            DefaultConstructor = 0x10, AllowByRefLike = 0x20;
 
         internal static int Check(byte[] image, int[] heaps, int[] methods, int typeRow, int[] arguments, int[] objects)
         {
             int arity = arguments.Length;
             var counts = new int[45];
-            if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;
+            int start = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (start < 0) return -1;
             if (counts[42] == 0) return arity == 0 ? 0 : -2;
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 42);
             if (table < 0) return -1;
@@ -34,11 +36,16 @@ namespace PeLibrary
                 uint flags = U16(image, at + 2);
                 // Permission widens the CLR's allowed argument set. Actual
                 // byref-like value layouts are rejected before being registered.
-                if ((flags & ~(7u | AllowByRefLike)) != 0) return -2;
-                if ((flags & 4) != 0)
+                if ((flags & ~(Variance | Reference | NonNullableValue | DefaultConstructor | AllowByRefLike)) != 0)
+                    return -2;
+                bool requiresValue = (flags & NonNullableValue) != 0;
+                if ((flags & DefaultConstructor) != 0 && !requiresValue) return -2;
+                if ((flags & Reference) != 0 || requiresValue)
                 {
                     int argument = arguments[low - first];
-                    if (GenericScalar.IsScalar(argument) || ObjectLayouts.IsValueType(objects, argument)) return -2;
+                    bool value = GenericScalar.IsScalar(argument) || ObjectLayouts.IsValueType(objects, argument);
+                    if ((flags & Reference) != 0 && value ||
+                        requiresValue && (!value || ObjectLayouts.IsNullableValueType(objects, argument))) return -2;
                 }
                 low++;
             }
@@ -47,11 +54,19 @@ namespace PeLibrary
             int constraints = MetadataTableRows.TableStart(heaps, methods, counts, 44);
             if (constraints < 0) return -1;
             int indexWidth = counts[42] < 65536 ? 2 : 4;
-            int constraintWidth = indexWidth + (counts[2] < 16384 && counts[1] < 16384 && counts[27] < 16384 ? 2 : 4);
+            int typeWidth = counts[2] < 16384 && counts[1] < 16384 && counts[27] < 16384 ? 2 : 4;
+            int constraintWidth = indexWidth + typeWidth;
             for (int i = 0; i < counts[44]; i++)
             {
-                int parameter = Index(image, (uint)(constraints + i * constraintWidth), indexWidth);
-                if (parameter > first && parameter <= low) return -2; // Nominal constraints require substitution.
+                uint at = (uint)(constraints + i * constraintWidth);
+                int parameter = Index(image, at, indexWidth);
+                if (parameter <= first || parameter > low) continue;
+                uint flags = U16(image, (uint)(table + (parameter - 1) * width + 2));
+                int type = Index(image, at + (uint)indexWidth, typeWidth);
+                // C# pairs the value-type bit with a nominal System.ValueType
+                // row. Other nominal constraints still require substitution.
+                if ((flags & NonNullableValue) == 0 ||
+                    !ObjectLayouts.IsPlatformValueType(image, heaps, methods, counts, start, type)) return -2;
             }
             return 0;
         }

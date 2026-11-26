@@ -9,7 +9,7 @@ namespace PeLibrary
         private const int Header = 3, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         private const int Arguments = 10, Arity = 11, Element = 12;
-        private const int ValueShape = 0x40000000;
+        private const int ValueShape = 0x40000000, NullableShape = 0x20000000;
         internal const int FieldMapStart = Header + MaxClasses * Width;
 
         // The header stores the type count, occupied field slots and occupied
@@ -72,6 +72,7 @@ namespace PeLibrary
                 if (supported < 0) return supported;
                 baseType = 0;
                 flags |= ValueShape;
+                if (IsPlatformNullable(image, streams, methods, counts, def)) flags |= NullableShape;
             }
             else if (valueBase != 0)
                 return -2; // A value definition cannot enter a class slot.
@@ -283,6 +284,9 @@ namespace PeLibrary
             type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & 0x20) != 0;
         internal static bool IsValueType(int[] registry, int type) =>
             type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & ValueShape) != 0;
+        internal static bool IsNullableValueType(int[] registry, int type) =>
+            IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & NullableShape) != 0;
+
         internal static int Representation(int[] registry, int type) => IsInterface(registry, type) ? ObjectReference : type;
         internal static int AssemblyOf(int[] registry, int type) => registry[Slot(type) + Assembly];
         internal static int TypeDef(int[] registry, int type) => registry[Slot(type) + TypeRow];
@@ -491,6 +495,23 @@ namespace PeLibrary
             uint n = (uint)streams[2] + name, s = (uint)streams[2] + ns;
             return U32(image, n) == 0x656a624f && U16(image, n + 4) == 0x7463 && image[n + 6] == 0 &&
                 U32(image, s) == 0x74737953 && U16(image, s + 4) == 0x6d65 && image[s + 6] == 0;
+        }
+
+        internal static bool IsPlatformValueType(byte[] image, int[] streams, int[] methods, int[] counts, int start, int coded) =>
+            coded > 0 && (coded & 3) <= 1 &&
+            ValueBase(image, streams, methods, counts, TypeRefStart(image, streams, counts, start, methods[2]), (uint)coded) == 1;
+
+        private static bool IsPlatformNullable(byte[] image, int[] streams, int[] methods, int[] counts, uint definition)
+        {
+            int strings = methods[2];
+            uint name = ReadIndex(image, definition + 4, strings);
+            uint space = ReadIndex(image, definition + (uint)(4 + strings), strings);
+            if (!Fits(name, 11, (uint)streams[3]) || !Fits(space, 7, (uint)streams[3])) return false;
+            uint n = (uint)streams[2] + name, s = (uint)streams[2] + space;
+            return U32(image, n) == 0x6c6c754e && U32(image, n + 4) == 0x656c6261 &&
+                U16(image, n + 8) == 0x3160 && image[n + 10] == 0 &&
+                U32(image, s) == 0x74737953 && U16(image, s + 4) == 0x6d65 && image[s + 6] == 0 &&
+                PlatformAssemblyIdentity.IsCoreLibDefinition(image, streams, methods, counts);
         }
 
         private static int ValueBase(byte[] image, int[] streams, int[] methods, int[] counts, int refs, uint coded)
