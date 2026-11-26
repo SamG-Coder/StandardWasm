@@ -92,6 +92,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [103 · Handle generic constraints](stage-103-handle-generic-constraints/README.md) | `npm run demo -- stage-103-handle-generic-constraints` | Compiled unmanaged marker and closed nominal interface constraints |
 | [104 · Wide layout IDs](stage-104-wide-layout-ids/README.md) | `npm run demo -- stage-104-wide-layout-ids` | Allocation, fields and checked casts over 300 managed layouts |
 | [106 · Static field storage](stage-106-static-field-storage/README.md) | `npm run demo -- stage-106-static-field-storage` | Private typed Wasm globals shared by linked managed methods |
+| [108 · BeforeFieldInit calls](stage-108-beforefieldinit-calls/README.md) | `npm run demo -- stage-108-beforefieldinit-calls` | Allow non-triggering static calls and diagnose reached initializers |
 
 ## Adding a stage
 

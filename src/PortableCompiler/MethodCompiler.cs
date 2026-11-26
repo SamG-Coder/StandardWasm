@@ -762,10 +762,14 @@ namespace PortableCompiler
                 return -2;
             int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
             if (owner < 0) return -1;
-            int initialization = TypeInitializers.RejectDeclaringType(image, layout, heaps, owner);
+            bool isStatic = (attributes & 0x10) != 0;
+            // The initializer itself cannot be exposed as an ordinary method.
+            if (isStatic && MethodNames.IsInitializer(image, layout, heaps, row)) return -2;
+            int initialization = TypeInitializers.RejectDeclaringType(image, layout, heaps, owner,
+                allowBeforeFieldInit: true);
             if (initialization < 0) return initialization;
             int receiver = 0;
-            if ((attributes & 0x10) == 0)
+            if (!isStatic)
             {
                 receiver = BundleLayouts.Register(main, bundle, ranges, image, layout, heaps, assembly, owner, objects);
                 if (receiver < 0) return receiver;
