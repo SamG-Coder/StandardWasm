@@ -16,8 +16,10 @@ in the original dependency manifest. It resolves publish paths and checks
 the PE format. StandardWasm binds the assemblies by CLR identity. The page
 can also supply a separately selected set of framework DLLs. The runner
 uses that option to send the original Stage 72 WinForms fixture and its
-installed dependencies through the worker. Compilation stops with an
-unsupported status before the first window opens.
+installed dependencies through the worker. The fixture pack includes the
+component-model and collection assemblies reached while analyzing the form
+constructor. Compilation stops with an unsupported diagnostic before the
+first window opens.
 
 This stage covers managed runtime assets for the selected manifest target,
 a parameterless integer entry, and import-free output. It does not implement
