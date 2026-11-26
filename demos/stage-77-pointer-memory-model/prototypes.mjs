@@ -1,4 +1,4 @@
-// Hand-written lowerings of the stage 75 scenarios under three candidate memory models (#167).
+// Hand-written lowerings of the stage 77 scenarios under three candidate memory models (#167).
 // The scenario bodies are shared text. Each model supplies only the array, pin and slice primitives, so any
 // difference against the CLR comes from the memory model and not from the scenario code.
 //
@@ -116,7 +116,7 @@ function linearHelpers(length, payload, allocate, ref) {
     (i32.store8 (i32.add (i32.add ${payload} (local.get $offset)) (local.get $i)) (local.get $v)))`;
 }
 
-// Scenario bodies follow demos/stage-75-pointer-memory-model/Patterns.cs line by line.
+// Scenario bodies follow demos/stage-77-pointer-memory-model/Patterns.cs line by line.
 const scenarios = m => `
   (func $fillB (param $n i32) (result ${m.B}) (local $a ${m.B}) (local $i i32)
     (local.set $a (call $newB (local.get $n)))

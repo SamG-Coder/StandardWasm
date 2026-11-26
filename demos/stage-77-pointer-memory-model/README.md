@@ -1,7 +1,7 @@
-# Stage 75 · Pointer memory-model experiment
+# Stage 77 · Pointer memory-model experiment
 
     npm ci
-    npm run demo -- stage-75-pointer-memory-model
+    npm run demo -- stage-77-pointer-memory-model
 
 This is an experiment, not a compiler stage. It backs [decision 0025](../../docs/decisions/0025-pinnable-memory-model.md).
 

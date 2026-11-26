@@ -8,7 +8,7 @@ Running upstream WinForms and runtime code unmodified (decision 0024 / Codex's u
 
 ## Experiment
 
-Stage 75 (`npm run demo -- stage-75-pointer-memory-model`) records CLR results for eight patterns in an ordinary netstandard2.1 library (34 cases). It then runs hand-written lowerings of the same scenarios under three models in Node and Edge. The scenario text is shared. Only the array, pin and slice primitives differ.
+Stage 77 (`npm run demo -- stage-77-pointer-memory-model`) records CLR results for eight patterns in an ordinary netstandard2.1 library (34 cases). It then runs hand-written lowerings of the same scenarios under three models in Node and Edge. The scenario text is shared. Only the array, pin and slice primitives differ.
 
 - **A** · payloads are Wasm GC arrays. `fixed` copies the array into linear memory and copies it back at scope exit.
 - **B** · every object is in linear memory as `[length][payload]`. A reference is an address.
@@ -39,7 +39,7 @@ Adopt **C**, the hybrid model:
 - **Reclamation.** A payload is freed when its wrapper is collected (`FinalizationRegistry` or a successor mechanism), through a free-list allocator. The compiler keeps the wrapper alive for the whole `fixed` scope, like a CLR pinned local, so a pointer never outlives its storage within the scope.
 
 Rejected:
-- **A** is incorrect. The CLR makes managed and pointer accesses to a pinned array alias, and a copy breaks that (stage 75 `FixedAliasing`). It is also linear in array size on every `fixed`.
+- **A** is incorrect. The CLR makes managed and pointer accesses to a pinned array alias, and a copy breaks that (stage 77 `FixedAliasing`). It is also linear in array size on every `fixed`.
 - **B** is correct and as fast for these probes, but it gives up Wasm GC entirely. It would need precise root scanning of a shadow copy of every reference, its own collector, and manual handling of references held by JS. It brings no gain over C on any probe.
 
 ## Consequences and open items

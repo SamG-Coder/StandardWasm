@@ -1,4 +1,4 @@
-// Stage 75: memory-model experiment for pointers into managed memory (#167).
+// Stage 77: memory-model experiment for pointers into managed memory (#167).
 // 1. Build PointerPatterns.dll and record CLR results for every scenario.
 // 2. Assemble the hand-written lowerings of candidates A, B and C (prototypes.mjs).
 // 3. Check them against the CLR and time the cost probes in Node and in Edge. Write artifacts/pointer-memory-model.json.
@@ -11,7 +11,7 @@ import { root, run } from "../../scripts/toolchain.mjs";
 import { buildWat, modelNames } from "./prototypes.mjs";
 import { measure } from "./measure-core.mjs";
 
-const stage = "demos/stage-75-pointer-memory-model";
+const stage = "demos/stage-77-pointer-memory-model";
 const out = join(root, "artifacts", "pointer-memory-model");
 mkdirSync(out, { recursive: true });
 
