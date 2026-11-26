@@ -21,6 +21,19 @@ namespace BootstrapLibrary
         public static int CompileBundleDetailed(byte[] bundle, byte[] entries, byte[] output, int[] location) =>
             PortableCompiler.MethodCompiler.CompileBundleDetailed(bundle, entries, output, location);
         public static int BundleModuleOrigins() => 1;
+        // The low 32 bits identify the original file offset. The high bits
+        // hold the byte length. A negative result is a reader diagnostic.
+        public static long FindEmbeddedResource(byte[] image, byte[] utf8Name)
+        {
+            if (image == null || utf8Name == null) return -1;
+            var methods = new int[4];
+            var heaps = new int[8];
+            int status = PeLibrary.CompressedTables.FindWithHeaps(image, methods, heaps);
+            if (status < 0) return status;
+            var range = new int[2];
+            status = PeLibrary.ManifestResources.Find(image, heaps, methods, utf8Name, range);
+            return status < 0 ? status : ((long)range[1] << 32) | (uint)range[0];
+        }
         public static int ReadWebcilEntryToken(byte[] image)
         {
             int token = PeLibrary.WebcilLocator.ReadEntryToken(image);

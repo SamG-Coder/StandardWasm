@@ -20,7 +20,7 @@ const built = join(stage, "Fixture", "bin", "Release", "netstandard2.0");
 run("dotnet", ["run", "--project", join(stage, "Oracle"), "-c", "Release", "--",
     join(built, "ReflectionFixture.dll"), join(built, "ReflectionDependency.dll"), evidence]);
 const oracle = JSON.parse(readFileSync(join(evidence, "oracle.json"), "utf8"));
-const assets = new Map([["/compiler", artifact]]);
+const assets = new Map([["/compiler", artifact], ["/resource-image", readFileSync(oracle.fixture)]]);
 const tests = oracle.results.map((test, index) => {
     const asset = path => ({ path: basename(path), bytes: readFileSync(path), loadedFromBytes: test.mode === "memory" });
     const [bundle, entries] = packEntry(asset(oracle.fixture), [asset(oracle.dependency)], test.row, true);
@@ -30,7 +30,7 @@ const tests = oracle.results.map((test, index) => {
     return { ...test, source, manifest };
 });
 
-async function execute({ tests, get }) {
+async function execute({ tests, resourceName, get }) {
     const { instance: { exports: compiler } } = await WebAssembly.instantiate(await get("/compiler"));
     function upload(bytes) {
         const array = compiler.CreateBytes(bytes.length);
@@ -53,29 +53,46 @@ async function execute({ tests, get }) {
         const values = [instance.exports.run()];
         results.push({ method: test.method, size, values });
     }
-    return results;
+    const imageBytes = await get("/resource-image");
+    const image = upload(imageBytes);
+    const encoder = new TextEncoder();
+    const found = compiler.FindEmbeddedResource(image, upload(encoder.encode(resourceName)));
+    if (found < 0n) throw Error("Embedded resource lookup returned " + found);
+    const offset = Number(found & 0xffffffffn), length = Number(found >> 32n);
+    if (offset > imageBytes.length || length > imageBytes.length - offset)
+        throw Error("Embedded resource range leaves the input image");
+    const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", imageBytes.subarray(offset, offset + length)));
+    const digest = Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+    for (const missing of [resourceName.toUpperCase(), resourceName + "\0suffix", ""]) {
+        if (compiler.FindEmbeddedResource(image, upload(encoder.encode(missing))) !== -4n)
+            throw Error("Raw resource lookup matched an absent ordinal name");
+    }
+    return { results, resource: { length, digest } };
 }
 
-const node = await execute({ tests, get: path => assets.get(path) });
-for (const [index, test] of oracle.results.entries()) assert.deepEqual(node[index].values, [test.expected]);
+const { resourceName } = oracle;
+const node = await execute({ tests, resourceName, get: path => assets.get(path) });
+for (const [index, test] of oracle.results.entries()) assert.deepEqual(node.results[index].values, [test.expected]);
+for (const { length, digest } of oracle.resourceResults) assert.deepEqual(node.resource, { length, digest });
 const browser = await chromium.launch({ channel: "msedge" });
 try {
     const page = await browser.newPage();
-    await page.route("http://reflection-accessors.test/**", route => {
+    await page.route("http://localhost/**", route => {
         const bytes = assets.get(new URL(route.request().url()).pathname);
         return route.fulfill(bytes ? { contentType: "application/octet-stream", body: Buffer.from(bytes) }
             : { contentType: "text/html", body: "<title>Pending address verification</title>" });
     });
-    await page.goto("http://reflection-accessors.test/");
-    const edge = await page.evaluate(async ({ tests, code }) => {
+    await page.goto("http://localhost/");
+    const edge = await page.evaluate(async ({ tests, resourceName, code }) => {
         const execute = (0, eval)("(" + code + ")");
-        return execute({ tests, get: async path => new Uint8Array(await (await fetch(path)).arrayBuffer()) });
-    }, { tests, code: execute.toString() });
+        return execute({ tests, resourceName, get: async path => new Uint8Array(await (await fetch(path)).arrayBuffer()) });
+    }, { tests, resourceName, code: execute.toString() });
     assert.deepEqual(edge, node);
-    const result = { node: process.version, edge: browser.version(), results: node,
+    const result = { node: process.version, edge: browser.version(), ...node,
         compilerSha256: createHash("sha256").update(artifact).digest("hex") };
     writeFileSync(join(evidence, "results.json"), JSON.stringify(result, null, 2));
-    console.log("Node and Edge matched " + oracle.results.length + " CLR reflection cases. Evidence at " + evidence);
+    console.log("Node and Edge matched " + oracle.results.length +
+        " CLR reflection cases and the original embedded resource bytes. Evidence at " + evidence);
 } finally {
     await browser.close();
 }

@@ -9,5 +9,8 @@ the actual basename of renamed file-backed modules, `<Unknown>` for modules
 loaded from a byte stream, and the typed exception for a null module receiver.
 The resource-name fixture also compares managed strings by ordinal UTF-16
 code units, including null, empty, combining marks and supplementary characters.
+It verifies that the standalone compiler locates the original embedded
+bytes by ordinal UTF-8 name, with the same SHA-256 as the CLR reads from
+the file-backed and stream-loaded fixture.
 The unchanged WinForms startup uses these same reflection accessors.
 See [decision 0059](../../docs/decisions/0059-runtime-reflection.md).

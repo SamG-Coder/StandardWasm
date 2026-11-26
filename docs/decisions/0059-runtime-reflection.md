@@ -49,6 +49,13 @@ This supports ordinal lookup before any payload is copied and preserves
 empty embedded resources. The original WinForms x86 DLL contains 199
 embedded resources totaling 3,170,595 bytes. Resource discovery therefore
 does not put a second copy of every resource into the generated module.
+The standalone compiler exposes `FindEmbeddedResource` for the host to
+obtain a validated offset and length in the original image. The export
+compares the supplied UTF-8 bytes exactly and leaves resource ownership
+with the caller. For the Windows CoreCLR contract, the native adapter
+must apply the null-terminated UTF-16 name rules before this lookup.
+The x86 CLR resolves a valid name followed by U+0000 and a suffix to
+the original resource. A leading U+0000 raises ArgumentException.
 
 [CoreCLR 10.0.10](https://github.com/dotnet/runtime/blob/v10.0.10/src/coreclr/System.Private.CoreLib/src/System/Reflection/RuntimeAssembly.cs)
 gets the payload through its native resource lookup and returns a read-only

@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.Loader;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 var modes = new[] { "file", "memory" };
@@ -11,6 +12,8 @@ string dependency = Path.Combine(work, "Dépendency.dll");
 File.Copy(oldFixture, fixture, true);
 File.Copy(oldDependency, dependency, true);
 var results = new List<object>();
+const string resourceName = "StandardWasm.Reflection.é.東京.𐐀";
+var resourceResults = new List<object>();
 foreach (string mode in modes)
 {
     var context = new AssemblyLoadContext(mode, isCollectible: true);
@@ -22,7 +25,14 @@ foreach (string mode in modes)
     }
 
     Load(dependency);
-    var type = Load(fixture).GetType("ReflectionFixture.Kernels")!;
+    Assembly owner = Load(fixture);
+    var type = owner.GetType("ReflectionFixture.Kernels")!;
+    using (Stream resource = owner.GetManifestResourceStream(resourceName)
+        ?? throw new InvalidOperationException("Missing resource fixture."))
+    {
+        resourceResults.Add(new { mode, length = resource.Length,
+            digest = Convert.ToHexString(SHA256.HashData(resource)).ToLowerInvariant() });
+    }
     foreach (string method in new[] { "ModuleName", "DependencyModuleName", "ModuleIdentity", "AssemblyIdentity", "NullModule", "ResourceBufferIdentity", "OrdinalResourceNames", "OrdinalNullAndEmpty", "OrdinalSeparateStrings" })
     {
         MethodInfo info = type.GetMethod(method)!;
@@ -31,4 +41,5 @@ foreach (string mode in modes)
     context.Unload();
 }
 File.WriteAllText(Path.Combine(work, "oracle.json"),
-    JsonSerializer.Serialize(new { fixture, dependency, results }, new JsonSerializerOptions { WriteIndented = true }));
+    JsonSerializer.Serialize(new { fixture, dependency, results, resourceName, resourceResults },
+        new JsonSerializerOptions { WriteIndented = true }));

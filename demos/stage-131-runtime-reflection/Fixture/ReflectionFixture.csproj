@@ -1,4 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>netstandard2.0</TargetFramework></PropertyGroup>
-  <ItemGroup><ProjectReference Include="../Dependency/ReflectionDependency.csproj" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Dependency/ReflectionDependency.csproj" />
+    <EmbeddedResource Include="Kernels.cs" LogicalName="StandardWasm.Reflection.é.東京.𐐀" />
+  </ItemGroup>
 </Project>
