@@ -14,7 +14,7 @@ element types even when the Wasm representation of an interface element is
 each store against the declared element type. Null and bounds failures retain
 their managed exception tags.
 
-Specialized constructor and method bodies need a method identity that includes
-the declaring instantiation. Generic base classes, nominal constraints,
+Specialized constructor and method bodies use a method identity that includes
+the declaring instantiation ([decision 0037](0037-closed-generic-method-bodies.md)). Generic base classes, nominal constraints,
 value-type arguments, and reference array covariance also need additional
 implementation. See [Stage 86](../../demos/stage-86-closed-generic-layouts/README.md).

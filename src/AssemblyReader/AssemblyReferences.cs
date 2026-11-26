@@ -12,7 +12,7 @@ namespace PeLibrary
         // Version byte offset, assembly/type/namespace/member string indexes,
         // signature blob index, then key kind and its validated byte range.
         // The type name slots identify the outer type for forwarder lookup.
-        internal static int ReadMember(byte[] image, int[] streams, int[] methods, int row, int[] reference, bool allowClosedField = false)
+        internal static int ReadMember(byte[] image, int[] streams, int[] methods, int row, int[] reference, bool allowClosedParent = false)
         {
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
@@ -24,7 +24,9 @@ namespace PeLibrary
             int parentWidth = memberWidth - strings - blobs;
             uint member = (uint)(table + (row - 1) * memberWidth);
             uint parent = Index(image, member, parentWidth);
-            if (allowClosedField && (parent & 7) == 4)
+            // A TypeSpec parent names a closed generic declaring type. The
+            // caller resolves its blob against the closed layout graph.
+            if (allowClosedParent && (parent & 7) == 4)
             {
                 int blob = TypeSpecBlob(image, streams, methods, counts, (int)(parent >> 3));
                 if (blob < 0) return blob;
@@ -128,7 +130,7 @@ namespace PeLibrary
             return 0;
         }
 
-        internal static int Matches(byte[] source, int[] sourceHeaps, int[] reference,
+        internal static int Matches(byte[] source, int[] sourceHeaps, int[] sourceMethods, int[] reference,
             byte[] candidate, int[] heaps, int[] methods)
         {
             var counts = new int[45];
@@ -142,7 +144,9 @@ namespace PeLibrary
             if (!SameString(source, sourceHeaps, reference[1], candidate, heaps, name))
                 return 0;
             uint version = (uint)reference[0];
-            if (U32(candidate, row + 4) != U32(source, version) || U32(candidate, row + 8) != U32(source, version + 4))
+            if ((U32(candidate, row + 4) != U32(source, version) || U32(candidate, row + 8) != U32(source, version + 4)) &&
+                !FrameworkFacadeVersions.AllowsNetStandard(source, sourceHeaps, sourceMethods, reference,
+                    candidate, row, counts))
                 return 0;
             uint flags = U32(candidate, row + 12);
             uint key = Index(candidate, row + 16, blobs);
