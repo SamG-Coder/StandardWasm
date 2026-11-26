@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <SignAssembly>true</SignAssembly>
+    <PublicSign>true</PublicSign>
+    <AssemblyOriginatorKeyFile>../stage-78-strong-names/fixture-a.public.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Contracts.cs;Original/**/*.cs;Implementation/**/*.cs;Facade/**/*.cs" />
+    <ProjectReference Include="Original/NestedContract.csproj" />
+    <ProjectReference Include="Facade/NestedFacade.csproj" ReferenceOutputAssembly="false" />
+    <Compile Include="../../src/AssemblyReader/*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="../../src/PortableCompiler/*.cs" Link="%(Filename)%(Extension)" />
+  </ItemGroup>
+  <Target Name="CopyNestedForwarders" AfterTargets="Build">
+    <ItemGroup>
+      <ForwardedAsset Include="$(MSBuildThisFileDirectory)Facade/bin/$(Configuration)/netstandard2.0/NestedContract.dll" />
+      <ForwardedAsset Include="$(MSBuildThisFileDirectory)Implementation/bin/$(Configuration)/netstandard2.0/NestedImplementation.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ForwardedAsset)" DestinationFolder="$(OutDir)forwarded" />
+  </Target>
+</Project>
