@@ -81,17 +81,21 @@ namespace PortableCompiler
                     // netstandard, CoreLib), which need not be bundled.
                     int leftPlatform = element == 0x12 ? EventMetadata.Reference(caller, callerHeaps, callerLayout, leftToken) : 0;
                     int rightPlatform = element == 0x12 ? EventMetadata.Reference(target, targetHeaps, targetLayout, rightToken) : 0;
-                    if (!field)
-                    {
-                        if (leftPlatform == 0)
-                            leftPlatform = RuntimeTypeMetadata.Storage(caller, callerHeaps, callerLayout, leftToken, element == 0x11);
-                        if (rightPlatform == 0)
-                            rightPlatform = RuntimeTypeMetadata.Storage(target, targetHeaps, targetLayout, rightToken, element == 0x11);
-                    }
                     if (leftPlatform != 0 || rightPlatform != 0)
                     {
                         if (leftPlatform != rightPlatform) return 0;
                         continue;
+                    }
+                    if (!field)
+                    {
+                        int leftRuntime = RuntimeTypeMetadata.Storage(caller, callerHeaps, callerLayout, leftToken, element == 0x11);
+                        int rightRuntime = RuntimeTypeMetadata.Storage(target, targetHeaps, targetLayout, rightToken, element == 0x11);
+                        // When one side is a TypeDef, use the ordinary nominal binder.
+                        if (leftRuntime != 0 && rightRuntime != 0)
+                        {
+                            if (leftRuntime != rightRuntime) return 0;
+                            continue;
+                        }
                     }
 
                     // Local coded indices can differ even when the classes are

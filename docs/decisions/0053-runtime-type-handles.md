@@ -13,6 +13,9 @@ the default handle. Descriptor identity is allocation identity. An ordinary
 integer supplied as a Wasm `eqref` is distinct, including when the Type
 reference is widened to `System.Object`.
 
+Linked nominal System.Type signatures retain the upstream layout and ABI.
+Descriptors are available for libraries without that linked definition.
+
 The supported runtime binder accepts the exact platform TypeRef and
 `GetTypeFromHandle` signature. The raw Wasm ABI rejects these internal
 types. Constructed type tokens, field and method handles beyond existing

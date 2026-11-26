@@ -25,6 +25,8 @@ internal static class RuntimeTypeScopeCases
         Check("MemberInfo facade", Image(runtime, runtime, reflection, "MemberInfo"), -2, 10);
         Check("TypeInfo facade", Image(runtime, runtime, reflection, "TypeInfo"), -2, 10);
 
+        CheckNominalLayout(cases, entries, capacity);
+
         void Check(string name, byte[] image, int expected, int offset, bool clrRejects = false)
         {
             try
@@ -125,6 +127,51 @@ internal static class RuntimeTypeScopeCases
             }
             return metadata.AddTypeReference(reference, metadata.GetOrAddString(space), metadata.GetOrAddString(name));
         }
+    }
+
+    private static void CheckNominalLayout(List<object> cases, byte[] entries, int capacity)
+    {
+        // A caller can exchange the linked nominal System.Type value through its existing ABI.
+        // The test supplies a minimal wasm32 CoreLib layout and passes a null reference.
+        var metadata = new MetadataBuilder();
+        metadata.AddModule(0, metadata.GetOrAddString("NominalTypeProbe.dll"), metadata.GetOrAddGuid(Guid.Empty), default, default);
+        metadata.AddAssembly(metadata.GetOrAddString("NominalTypeProbe"), new Version(1, 0), default, default, 0, AssemblyHashAlgorithm.None);
+        var core = metadata.AddAssemblyReference(metadata.GetOrAddString("System.Private.CoreLib"), new Version(1, 0),
+            default, metadata.GetOrAddBlob(typeof(object).Assembly.GetName().GetPublicKeyToken()!), 0, default);
+        var system = metadata.GetOrAddString("System");
+        var type = metadata.AddTypeReference(core, system, metadata.GetOrAddString("Type"));
+        var root = metadata.AddTypeReference(core, system, metadata.GetOrAddString("Object"));
+        var entry = MetadataTokens.MethodDefinitionHandle(1);
+        var fields = MetadataTokens.FieldDefinitionHandle(1);
+        metadata.AddTypeDefinition(TypeAttributes.NotPublic, default, metadata.GetOrAddString("<Module>"), default, fields, entry);
+        metadata.AddTypeDefinition(TypeAttributes.Public, default, metadata.GetOrAddString("NominalTypeProbe"), root, fields, entry);
+        var bodies = new BlobBuilder();
+        var il = new InstructionEncoder(new BlobBuilder());
+        il.LoadArgument(0);
+        il.OpCode(ILOpCode.Ldnull);
+        il.OpCode(ILOpCode.Ceq);
+        il.OpCode(ILOpCode.Ret);
+        int method = new MethodBodyStreamEncoder(bodies).AddMethodBody(il, maxStack: 2);
+        var signature = new BlobBuilder();
+        signature.WriteBytes(new byte[] { 0, 1, 8, 0x12 }); // static int32 (class ...)
+        signature.WriteCompressedInteger(MetadataTokens.GetRowNumber(type) << 2 | 1);
+        metadata.AddMethodDefinition(MethodAttributes.Public | MethodAttributes.Static, MethodImplAttributes.IL,
+            metadata.GetOrAddString("Run"), metadata.GetOrAddBlob(signature), method, MetadataTokens.ParameterHandle(1));
+        var result = new BlobBuilder();
+        new ManagedPEBuilder(new PEHeaderBuilder(imageCharacteristics: Characteristics.Dll),
+            new MetadataRootBuilder(metadata), bodies).Serialize(result);
+
+        byte[] bundle = BundleCases.Pack(result.ToArray(), CoreRootGuardCases.RuntimeTypeCoreLibImage());
+        byte[] output = new byte[capacity];
+        int length = CompilerExports.CompileBundle(bundle, entries, output);
+        if (length <= 0) throw new InvalidOperationException($"Linked System.Type layout returned {length}.");
+        cases.Add(new
+        {
+            module = "BootstrapLibrary", method = "CompileBundle", fixture = "runtime type linked nominal signature",
+            inputs = new[] { Encode(bundle), Encode(entries) }, expected = 1,
+            generated = new { capacity, bundle = true, arguments = new object?[] { null },
+                hex = Convert.ToHexString(output.AsSpan(0, length)).ToLowerInvariant() }
+        });
     }
 
     private static object Encode(byte[] bytes) => new { bytes = Array.ConvertAll(bytes, value => (int)value) };

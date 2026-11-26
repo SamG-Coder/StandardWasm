@@ -191,6 +191,11 @@ namespace PortableCompiler
                     cursor = next[0];
                     bool valueType = element == 0x11;
                     int type = RuntimeTypeMetadata.Storage(image, heap, methods, coded, valueType);
+                    // Keep the upstream System.Type layout when this bundle supplies it.
+                    // The opaque descriptor is the fallback for libraries without that definition.
+                    if (type == RuntimeTypeMetadata.Type &&
+                        AssemblyBundle.ClassIdentity(bundle, image, methods, heap, assembly, coded, new int[2]) != -4)
+                        type = 0;
                     if (type == 0)
                         type = BundleLayouts.RegisterType(bundle, image, methods, heap, assembly, coded, objects, valueType);
                     if (type < 0) return type;
