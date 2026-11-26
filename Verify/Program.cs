@@ -157,6 +157,7 @@ RuntimeDispatchCases.Add(cases);
 InterfaceDispatchCases.Add(cases);
 TypeInitializerCases.Add(cases);
 FieldlessValueCases.Add(cases);
+InlineArrayLayoutCases.Add(cases);
 GenericBaseCases.Add(cases);
 RuntimeTypeCases.Add(cases);
 StringVectorCases.Add(cases);

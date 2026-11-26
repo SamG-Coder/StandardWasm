@@ -125,6 +125,18 @@ namespace PortableCompiler
             int fields = ObjectLayouts.FieldCount(objects, type);
             int first = ObjectLayouts.FirstRow(objects, type);
             int table = ObjectLayouts.TableOf(objects, type);
+            if (ObjectLayouts.IsInlineArray(objects, type))
+            {
+                int element = ReadFieldStorage(bundle, image, layout, heaps, owner,
+                    table, first, type, objects, reference, false);
+                if (element <= 0) return element == 0 ? -2 : element;
+
+                // Only the backing field has a metadata row. The remaining slots
+                // use its resolved storage in this closed generic context.
+                for (int offset = 0; offset < fields; offset++)
+                    ObjectLayouts.SetFieldType(objects, type, offset, element);
+                return type;
+            }
             bool overlay = ObjectLayouts.IsExplicitValue(objects, type);
             int[] offsets = new int[overlay ? fields : 0];
             int limit = overlay ? ExplicitValueLayouts.Read(image, heaps, layout, ObjectLayouts.TypeDef(objects, type), first, offsets) : 0;

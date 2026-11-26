@@ -1,0 +1,8 @@
+{
+  "assembly": "InlineArrayLayouts",
+  "targetFramework": "net10.0",
+  "exportType": "InlineArrayLayouts.Kernels",
+  "method": "CopyFirst",
+  "inputs": [23, -7],
+  "expected": 30
+}
