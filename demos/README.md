@@ -134,6 +134,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [128 · Interface dispatch](stage-128-interface-dispatch/README.md) | `npm run demo -- stage-128-interface-dispatch` | Inherited and explicit interface slots select their CLR bodies |
 | [129 · Type initializers and root objects](stage-129-type-initializers/README.md) | `npm run demo -- stage-129-type-initializers` | Reached `.cctor`s run once at CLI triggers; failures trap on every trigger; `new object()` allocates |
 | [130 · Fieldless sequential values](stage-130-fieldless-values/README.md) | `npm run demo -- stage-130-fieldless-values` | One-byte nominal empty values keep their managed identity |
+| [132 · Primitive unmanaged pointers](stage-132-unmanaged-pointers/README.md) | `npm run demo -- stage-132-unmanaged-pointers` | `byte*`, `int*` and other primitive pointers read and write host-lent memory; null raises NullReferenceException |
 | [138 · Inline-array layouts](stage-138-inline-array-layouts/README.md) | `npm run demo -- stage-138-inline-array-layouts` | Preserve the declared element and value copies of managed inline arrays |
 
 ## Adding a stage

@@ -522,6 +522,26 @@ namespace PortableCompiler
                     used = WasmBinary.Unsigned(code, used, operand);
                     code[used++] = 0x0b;
                 }
+                else if (kind == LoadIndirect)
+                {
+                    int address = Spill(spills, maximum, Native, top);
+                    used = LinearMemoryWasm.GuardNull(code, used, address);
+                    used = Local(code, used, 0x20, address);
+                    used = LinearMemoryWasm.Load(code, used, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, StackDepths.IndirectType(operand), top));
+                }
+                else if (kind == StoreIndirect)
+                {
+                    // CLI order: the address and the value are both evaluated, then the
+                    // store raises NullReferenceException for address 0.
+                    int address = Spill(spills, maximum, Native, top - 1), value = states[state + top];
+                    used = LinearMemoryWasm.GuardNull(code, used, address);
+                    used = Local(code, used, 0x20, address);
+                    used = Local(code, used, 0x20, Spill(spills, maximum, value, top));
+                    if (operand == 0x56 && value == F64) code[used++] = 0xb6; // f32.demote_f64
+                    if (operand == 0x57 && value == F32) code[used++] = 0xbb; // f64.promote_f32
+                    used = LinearMemoryWasm.Store(code, used, operand);
+                }
                 else if (kind == LoadStaticField)
                 {
                     used = TypeInitializerWasm.Trigger(code, used, fieldInitializers, operand, hostImports);

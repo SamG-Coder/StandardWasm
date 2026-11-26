@@ -26,6 +26,9 @@ namespace PortableCompiler
         internal const int LoadTypeToken = 67, TypeFromHandle = 68;
         // newobj System.Object::.ctor: a fresh plain object (decision 0057). [] -> [Object].
         internal const int NewRootObject = 69;
+        // ldind.* / stind.* through an unmanaged pointer into memory 0 (decision 0060).
+        // [address] -> [value] and [address, value] -> []. The operand is the opcode.
+        internal const int LoadIndirect = 70, StoreIndirect = 71;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
@@ -337,6 +340,13 @@ namespace PortableCompiler
                 else if (op == 0x6b || op == 0x6c || op == 0x76)
                 {
                     kind = ConvertFloat;
+                    operand = op;
+                }
+                else if (op >= 0x46 && op <= 0x4f || op >= 0x52 && op <= 0x57 || op == 0xdf)
+                {
+                    // ldind.ref and stind.ref (0x50, 0x51) move managed references
+                    // through an address and stay unsupported.
+                    kind = op <= 0x4f ? LoadIndirect : StoreIndirect;
                     operand = op;
                 }
                 else if (op == 0) kind = Nop;

@@ -99,9 +99,10 @@ namespace PortableCompiler
             1 + 2 * (1 + ModuleNameLength + 1 + 1) + 5 + 7 +
             WasmBinary.UnsignedSize(firstType) + WasmBinary.UnsignedSize(firstType + 1);
 
-        internal static int WriteImports(byte[] output, int cursor, int firstType)
+        // count is the import section's entry count: these two, plus any memory import.
+        internal static int WriteImports(byte[] output, int cursor, int firstType, int count = 2)
         {
-            output[cursor++] = 2;
+            output[cursor++] = (byte)count;
             cursor = Import(output, cursor);
             output[cursor++] = 5;
             output[cursor++] = 0x77; // write

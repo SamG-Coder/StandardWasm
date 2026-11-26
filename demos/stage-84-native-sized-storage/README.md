@@ -13,6 +13,8 @@ For an independent width check, run the built verifier with a 32-bit .NET 10
 host and `--native-storage-oracle <output.json>`. This runs the original DLLs
 with the full-width inputs on the 32-bit CLR.
 
-Native arithmetic, native arrays, pointer dereference, external calling
-conventions and executing CoreLib delegates need separate work.
+Native arrays, external calling conventions and executing CoreLib delegates
+need separate work. Native arithmetic and primitive pointer dereference arrived
+in [Stage 132](../stage-132-unmanaged-pointers/README.md), and the old
+`RejectNativeAdd` kernel now compares its wasm32 sum.
 See the [browser native integer decision](../../docs/decisions/0027-native-integer-width.md).

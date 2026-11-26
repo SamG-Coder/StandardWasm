@@ -132,6 +132,8 @@ namespace PortableCompiler
             var hostUse = new int[1];
             int functions = 0, length = 0;
             bool externalObjects = false;
+            // Any reachable ldind/stind needs the host-lent memory 0 (decision 0060).
+            bool linearMemory = false;
             var dispatch = new VirtualDispatch(output.Length);
             for (int export = 0; export < exportCount; export++)
             {
@@ -392,6 +394,8 @@ namespace PortableCompiler
                         }
                         int pc = slot / BranchIl.Width;
                         int operation = records[slot + 1];
+                        if ((kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect) && depths[pc] != 0)
+                            linearMemory = true;
                         if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField)
                         {
                             if (capacity > int.MaxValue - TypeInitializerWasm.TriggerCapacity) return -3;
@@ -435,7 +439,7 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || kind == BranchIl.StringLength || kind == BranchIl.InvokeDelegate ||
-                                kind == BranchIl.ThrowNull ||
+                                kind == BranchIl.ThrowNull || kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect ||
                                 kind == BranchIl.ExchangeHandlerField || (kind == BranchIl.Call && records[slot + 3] != 0))
                                 tags = ExceptionTypes.NullReference;
                             else if (kind == BranchIl.Binary)
@@ -532,7 +536,8 @@ namespace PortableCompiler
             }
             CompileLocation.Clear(location);
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostImports);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostImports,
+                linearMemory);
         }
 
         private static int LinkOperands(BundleImages bundle, byte[] image, int[] layout,
