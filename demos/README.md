@@ -134,6 +134,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [128 · Interface dispatch](stage-128-interface-dispatch/README.md) | `npm run demo -- stage-128-interface-dispatch` | Inherited and explicit interface slots select their CLR bodies |
 | [129 · Type initializers and root objects](stage-129-type-initializers/README.md) | `npm run demo -- stage-129-type-initializers` | Reached `.cctor`s run once at CLI triggers; failures trap on every trigger; `new object()` allocates |
 | [130 · Fieldless sequential values](stage-130-fieldless-values/README.md) | `npm run demo -- stage-130-fieldless-values` | One-byte nominal empty values keep their managed identity |
+| [136 · Closed generic methods](stage-136-method-instantiations/README.md) | `npm run demo -- stage-136-method-instantiations` | Verify MethodSpec targets and exact generic argument signatures |
 
 ## Adding a stage
 
