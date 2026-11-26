@@ -1,6 +1,7 @@
 // Stage 88: bounding linear-memory growth for model C payloads (#196, decision 0025 follow-up).
 // Churns 64 KiB payloads under five strategies and two allocation patterns, in Node and Edge, without forced GC,
 // and reports peak linear memory, time, and how often the JSPI slow path had to yield.
+import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -48,17 +49,30 @@ writeFileSync(join(out, "results.json"), JSON.stringify({ node: { version: proce
 for (const [label, all] of [["Node " + process.version, node], ["Edge " + engine, edge]]) {
     console.log(label);
     for (const r of all.c)
-        console.log(`  ${r.strategy.padEnd(30)} ${r.pattern.padEnd(30)} peak ${String(r.peakMiB).padStart(7)} MiB of ` +
-            `${r.allocatedMiB} MiB, ${r.ms} ms, ${r.freed} freed, slow path ${r.relieveCalls} (${r.relieveFailures} gave up)` +
+        console.log(`  ${r.strategy.padEnd(30)} ${r.pattern.padEnd(30)} peak ${String(r.peakMiB).padStart(7)} MiB, ` +
+            `${r.completedMiB} of ${r.requestedMiB} MiB completed, ${r.ms} ms, ${r.freed} freed, slow path ${r.relieveCalls} (${r.relieveFailures} gave up)` +
             (r.exhausted ? ", EXHAUSTED" : "") + (r.timedOut ? ", STOPPED AT 60 s" : ""));
 }
 for (const [label, all] of [["Node " + process.version, node], ["Edge " + engine, edge]]) {
     console.log(label + " (model B)");
     for (const r of all.b)
-        console.log(`  ${r.strategy.padEnd(30)} ${r.pattern.padEnd(30)} peak ${String(r.peakMiB).padStart(7)} MiB of ` +
-            `${r.allocatedMiB} MiB, ${r.ms} ms, ${r.collections} collections, max pause ${r.maxPauseMs} ms, ` +
-            `total pause ${r.totalPauseMs} ms, live list ${r.liveIntact ? "intact" : "CORRUPTED"}` + (r.exhausted ? ", EXHAUSTED" : ""));
+        console.log(`  ${r.strategy.padEnd(30)} ${r.pattern.padEnd(30)} peak ${String(r.peakMiB).padStart(7)} MiB, ` +
+            `${r.completedMiB} of ${r.requestedMiB} MiB completed, ${r.ms} ms, ${r.collections} collections, max pause ${r.maxPauseMs} ms, ` +
+            `total pause ${r.totalPauseMs} ms, final live-list checksum ${r.liveIntact ? "matches" : "MISMATCH"}` + (r.exhausted ? ", EXHAUSTED" : ""));
 }
 for (const [label, all] of [["Node " + process.version, node], ["Edge " + engine, edge]])
     console.log(`${label} frame cost, median ms for 20 sums over 262,143 nodes: Wasm GC (C) ${all.spill.gcSum}, ` +
         `linear unrooted ${all.spill.linearSum}, linear with shadow-stack spills (B) ${all.spill.spillSum}`);
+
+// Checks that fail the stage: the final live-list checksum must match everywhere, every non-ceiling run must
+// complete its full churn, and each ceiling run must stop with an explicit exhaustion after fewer allocations.
+for (const [label, all] of [["Node", node], ["Edge", edge]]) {
+    for (const r of all.b) assert.ok(r.liveIntact, `${label} ${r.strategy}: final live-list checksum mismatch`);
+    for (const r of [...all.c, ...all.b]) {
+        const ceiling = r.strategy.includes("ceiling");
+        assert.equal(r.exhausted, ceiling, `${label} ${r.strategy} ${r.pattern}: unexpected exhaustion state`);
+        if (ceiling) assert.ok(r.completedMiB < r.requestedMiB, `${label} ${r.strategy}: ceiling did not stop allocation`);
+        else if (!r.timedOut) assert.equal(r.completedMiB, r.requestedMiB, `${label} ${r.strategy}: incomplete churn`);
+    }
+}
+console.log("Checks passed: live-list checksums match; ceilings exhaust explicitly; other runs complete their churn.");

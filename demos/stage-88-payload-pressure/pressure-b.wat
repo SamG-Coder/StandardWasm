@@ -20,16 +20,23 @@
   (global $maxPauseUs (mut f64) (f64.const 0))
   (global $totalPauseUs (mut f64) (f64.const 0))
   (global $rootList (mut i32) (i32.const 0))       ;; global root: head of the long-lived node list
+  (global $limitPages (mut i32) (i32.const 0))     ;; 0 = only the module maximum; otherwise a configured ceiling
+  (global $completed (mut i32) (i32.const 0))      ;; churn allocations that actually succeeded
 
-  (func (export "configure") (param $budget i32) (global.set $budget (local.get $budget)))
+  (func (export "configure") (param $budget i32) (param $limitPages i32)
+    (global.set $budget (local.get $budget)) (global.set $limitPages (local.get $limitPages)))
 
-  (func $bump (param $size i32) (result i32) (local $p i32)
+  ;; Grow first; the cursor moves only after the memory exists, so a failed growth leaves the allocator valid.
+  (func $bump (param $size i32) (result i32) (local $p i32) (local $next i32) (local $pages i32)
     (local.set $p (global.get $heap))
-    (global.set $heap (i32.add (local.get $p) (local.get $size)))
-    (if (i32.gt_u (global.get $heap) (i32.mul (memory.size) (i32.const 65536)))
-      (then (if (i32.eq (memory.grow (i32.add (i32.shr_u (i32.sub (global.get $heap)
-          (i32.mul (memory.size) (i32.const 65536))) (i32.const 16)) (i32.const 1))) (i32.const -1))
+    (local.set $next (i32.add (local.get $p) (local.get $size)))
+    (local.set $pages (i32.shr_u (i32.add (local.get $next) (i32.const 65535)) (i32.const 16)))
+    (if (i32.and (i32.ne (global.get $limitPages) (i32.const 0)) (i32.gt_u (local.get $pages) (global.get $limitPages)))
+      (then (return (i32.const -1))))
+    (if (i32.gt_u (local.get $pages) (memory.size))
+      (then (if (i32.eq (memory.grow (i32.sub (local.get $pages) (memory.size))) (i32.const -1))
         (then (return (i32.const -1))))))
+    (global.set $heap (local.get $next))
     (local.get $p))
 
   ;; Allocate a block of the given kind and payload size. Returns the payload address, or -1 when memory is exhausted.
@@ -94,13 +101,16 @@
     (if (f64.gt (local.get $pause) (global.get $maxPauseUs)) (then (global.set $maxPauseUs (local.get $pause)))))
 
   ;; Build the long-lived list the collector must trace every cycle. The head is rooted in a global.
-  (func (export "buildLive") (param $n i32) (local $i i32) (local $node i32)
+  (func (export "buildLive") (param $n i32) (result i32) (local $i i32) (local $node i32)
     (block $done (loop $next (br_if $done (i32.ge_s (local.get $i) (local.get $n)))
       (local.set $node (call $allocate (i32.const 2) (i32.const 8)))
+      ;; Propagate exhaustion before writing through the result.
+      (if (i32.eq (local.get $node) (i32.const -1)) (then (return (i32.const -1))))
       (i32.store (local.get $node) (global.get $rootList))
       (i32.store offset=4 (local.get $node) (local.get $i))
       (global.set $rootList (local.get $node))
-      (local.set $i (i32.add (local.get $i) (i32.const 1))) (br $next))))
+      (local.set $i (i32.add (local.get $i) (i32.const 1))) (br $next)))
+    (i32.const 0))
 
   ;; Allocate n 64 KiB arrays, each rooted on the shadow stack only while in use (then dropped).
   (func (export "churn") (param $n i32) (result i32) (local $i i32) (local $a i32)
@@ -109,6 +119,7 @@
       (local.set $a (call $allocate (i32.const 1) (i32.const 65536)))
       (if (i32.eq (local.get $a) (i32.const -1)) (then
         (global.set $sp (i32.add (global.get $sp) (i32.const 4))) (return (i32.const -1))))
+      (global.set $completed (i32.add (global.get $completed) (i32.const 1)))
       (i32.store (global.get $sp) (local.get $a))       ;; the frame's reference, visible to the collector
       (i32.store8 (local.get $a) (local.get $i))
       (i32.store (global.get $sp) (i32.const 0))        ;; dropped
@@ -124,6 +135,7 @@
       (local.set $p (i32.load (local.get $p))) (br $walk)))
     (local.get $sum))
   (func (export "pages") (result i32) (memory.size))
+  (func (export "completed") (result i32) (global.get $completed))
   (func (export "collections") (result i32) (global.get $collections))
   (func (export "maxPauseUs") (result f64) (global.get $maxPauseUs))
   (func (export "totalPauseUs") (result f64) (global.get $totalPauseUs)))

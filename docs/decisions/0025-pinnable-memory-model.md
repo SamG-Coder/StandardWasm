@@ -83,15 +83,17 @@ B remains the fallback if no strategy works. It is correct and as fast on these 
 
   | B | Node yielding | Node sync | Edge yielding | Edge sync |
   | --- | --- | --- | --- | --- |
-  | no collection | 626.5 MiB | 313.9 | 626.5 | 313.9 |
-  | collect every 32 MiB, 10k live nodes | **40.4 MiB**, 19 collections, max pause ≤ 1.4 ms | **40.4**, 9 collections | **40.4**, max pause 0.1 ms | **40.4** |
-  | collect every 32 MiB, **1 M live nodes** | **63.1 MiB**, max pause 4.9 ms, 35 ms total | **63.1**, max pause 1.6 ms, 13 ms total | **63.1**, max pause 2.1 ms, 34 ms total | **63.1**, max pause 1.7 ms |
+  | no collection (8 MiB object table) | 633.5 MiB | 320.875 | 633.5 | 320.875 |
+  | 32 MiB collection trigger, 10k live nodes | **40.375 MiB**, 19 collections, max pause ≤ 1.4 ms | **40.4**, 9 collections | **40.4**, max pause 0.1 ms | **40.4** |
+  | 32 MiB collection trigger, **1 M live nodes** | **63.0625 MiB**, max pause 4.9 ms, 35 ms total | **63.1**, max pause 1.6 ms, 13 ms total | **63.1**, max pause 2.1 ms, 34 ms total | **63.1**, max pause 1.7 ms |
 
-  The peaks include the 8 MiB object table, which was enlarged for the 1 M run (an earlier 1 MiB table gave 33.4 MiB with 10k nodes).
+  32 MiB is the **collection trigger** (bytes allocated since the last collection), not a cap on memory. The measured peak adds the live graph, the object table (8 MiB here; an earlier 1 MiB table gave 33.375 MiB with 10k nodes), block headers and the allocation that crosses the trigger. The live-list check is a single checksum taken after the churn ends, and the stage fails if it doesn't match.
+
+  **Exhaustion, exercised.** With a configured ceiling, allocation stops with an explicit -1 and the allocator stays valid: its cursor moves only after growth succeeds, and `buildLive` propagates failure before writing. Model C stops at a 4 MiB ceiling after 3.9375 of 312.5 MiB requested. Model B, with no collection and a 12.5 MiB ceiling, stops after 4.1875 MiB with the live list intact. In the compiler, that -1 becomes `OutOfMemoryException`. Every other run completes its full requested churn, and the stage asserts that.
 
   The live list was intact after every collection. Edge pause figures are at the page's 0.1 ms timer resolution.
 
-  **Consequence.** On memory, B is clearly stronger. It enforces the budget exactly (live data + budget), even inside one synchronous call, where C peaked at 110–157 MiB at best. Its collections were cheap here. The comparison is not finished, though, because this probe flatters B in two ways:
+  **Consequence.** On memory, B is clearly stronger. Its peak tracks live data plus the collection trigger (plus table and block overhead), even inside one synchronous call, where C peaked at 110–157 MiB at best. Its collections were cheap here. The comparison is not finished, though, because this probe flatters B in two ways:
   - **Live heap.** With 1,000,000 live list nodes, the bound still held (63 MiB) and the worst pause was 1.6–4.9 ms. That's about 2–5 ns per live object for mark plus sweep, on a simple singly linked graph. Real object graphs, with more pointers per object and less locality, will cost more per object. This is evidence that pauses scale acceptably, not a final figure.
   - Every reference held by JavaScript (DOM handles, callbacks, WebGPU objects) must become an explicit root or handle table under B. Under C, Wasm GC handles cycles through JS for free.
 

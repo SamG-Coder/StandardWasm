@@ -18,25 +18,36 @@
   (global $budget (mut i32) (i32.const 0))        ;; 0 = no budget
   (global $relieveCalls (mut i32) (i32.const 0))
   (global $relieveFailures (mut i32) (i32.const 0))
+  (global $limitPages (mut i32) (i32.const 0))    ;; 0 = only the module maximum; otherwise a configured ceiling
+  (global $completed (mut i32) (i32.const 0))     ;; allocations that actually succeeded
 
-  (func (export "configure") (param $shift i32) (param $budget i32)
-    (global.set $ballastShift (local.get $shift)) (global.set $budget (local.get $budget)))
+  (func (export "configure") (param $shift i32) (param $budget i32) (param $limitPages i32)
+    (global.set $ballastShift (local.get $shift)) (global.set $budget (local.get $budget))
+    (global.set $limitPages (local.get $limitPages)))
 
-  (func $alloc (result i32) (local $p i32)
+  (func $alloc (result i32) (local $p i32) (local $next i32) (local $pages i32)
     ;; Slow path: over budget, let the host run finalization before taking more memory.
     (if (i32.and (i32.ne (global.get $budget) (i32.const 0)) (i32.gt_u (global.get $live) (global.get $budget)))
       (then
         (global.set $relieveCalls (i32.add (global.get $relieveCalls) (i32.const 1)))
         (if (i32.eqz (call $relieve))
           (then (global.set $relieveFailures (i32.add (global.get $relieveFailures) (i32.const 1)))))))
-    (global.set $live (i32.add (global.get $live) (i32.const 65536)))
     (if (global.get $free) (then
       (local.set $p (global.get $free)) (global.set $free (i32.load (local.get $p)))
-      (memory.fill (local.get $p) (i32.const 0) (i32.const 65536)) (return (local.get $p))))
+      (memory.fill (local.get $p) (i32.const 0) (i32.const 65536))
+      (global.set $live (i32.add (global.get $live) (i32.const 65536)))
+      (return (local.get $p))))
+    ;; Grow first; the cursor and live count change only after the memory exists (allocator state stays valid on failure).
     (local.set $p (global.get $heap))
-    (global.set $heap (i32.add (local.get $p) (i32.const 65536)))
-    (if (i32.gt_u (global.get $heap) (i32.mul (memory.size) (i32.const 65536)))
-      (then (if (i32.eq (memory.grow (i32.const 1)) (i32.const -1)) (then (return (i32.const -1))))))
+    (local.set $next (i32.add (local.get $p) (i32.const 65536)))
+    (local.set $pages (i32.shr_u (i32.add (local.get $next) (i32.const 65535)) (i32.const 16)))
+    (if (i32.and (i32.ne (global.get $limitPages) (i32.const 0)) (i32.gt_u (local.get $pages) (global.get $limitPages)))
+      (then (return (i32.const -1))))
+    (if (i32.gt_u (local.get $pages) (memory.size))
+      (then (if (i32.eq (memory.grow (i32.sub (local.get $pages) (memory.size))) (i32.const -1))
+        (then (return (i32.const -1))))))
+    (global.set $heap (local.get $next))
+    (global.set $live (i32.add (global.get $live) (i32.const 65536)))
     (local.get $p))
 
   (func (export "free") (param $p i32)
@@ -48,6 +59,7 @@
     (block $done (loop $next (br_if $done (i32.ge_s (local.get $i) (local.get $n)))
       (local.set $p (call $alloc))
       (if (i32.eq (local.get $p) (i32.const -1)) (then (return (i32.const -1))))
+      (global.set $completed (i32.add (global.get $completed) (i32.const 1)))
       (call $track
         (struct.new $Obj (local.get $p) (i32.const 65536)
           (if (result (ref null $Ballast)) (global.get $ballastShift)
@@ -58,6 +70,7 @@
     (i32.const 0))
 
   (func (export "live") (result i32) (global.get $live))
+  (func (export "completed") (result i32) (global.get $completed))
   (func (export "pages") (result i32) (memory.size))
   (func (export "relieveCalls") (result i32) (global.get $relieveCalls))
   (func (export "relieveFailures") (result i32) (global.get $relieveFailures)))
