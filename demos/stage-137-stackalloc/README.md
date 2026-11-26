@@ -21,6 +21,11 @@ The kernels cover:
 - `stackalloc int[0x40000000]`, whose size overflows and raises `OverflowException`
 - a 600 KiB block, which fits once but not twice
 
+`ZeroIsNull` checks that a zero-sized `stackalloc` is null, as on CoreCLR. Wasm-only checks lend
+a memory that cannot grow (`ZeroIsNull(0)` succeeds, and a real allocation traps). They also run
+an untaken allocation in one fixed page, and three outer-after-inner calls in room for exactly
+one reservation.
+
 A Wasm-only sequence allocates 600 KiB and then exhausts the stack in a nested frame. That is an
 engine trap: the CLR's `StackOverflowException` would end the process. The next host call on the
 same instance must find an empty shadow stack. The design is decision 0065.
