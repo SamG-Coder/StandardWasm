@@ -11,6 +11,7 @@ pointees. The default field values agree with the CLR. The demo returns 38.
 The verification suite changes the test field reference to the other named
 pointee and checks that both the CLR and StandardWasm reject the reference.
 Changing the method reference from an `int*` to a `uint*` parameter also fails
-binding on both runtimes. Other diagnostics cover a nonzero address, an
-indirect read and a pointer export. See the
+binding on both runtimes. Other diagnostics cover a nonzero address stored in a
+struct pointer and a pointer export. Since [Stage 132](../stage-132-unmanaged-pointers/README.md),
+a read through the null `int*` field raises `NullReferenceException` on both runtimes. See the
 [pointer signature decision](../../docs/decisions/0035-typed-null-pointer-signatures.md).

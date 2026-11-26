@@ -74,7 +74,8 @@ namespace SkipLocalsInitFixture
             return other == null ? -box.Value : other.Value;
         }
 
-        // stackalloc memory is not a Wasm local. It stays an explicit diagnostic (decision 0051).
+        // stackalloc memory is not a Wasm local: since Stage 137 it lives on the shadow
+        // stack in memory 0 (decision 0065), zeroed even without InitLocals.
         public static unsafe int Stack(int x)
         {
             int* p = stackalloc int[4];

@@ -32,14 +32,15 @@ observe the difference: `Unsafe.SkipInit`, unsafe pointer reads of a local, or
 hand-written IL. On the CLR such code sees whatever the stack held, which no
 program can rely on, and here it consistently sees zero.
 
-`localloc` (`stackalloc`) memory is not a Wasm local. It is not decoded, and a
-body that uses it still returns an explicit -2, whatever its header flag says.
+`localloc` (`stackalloc`) memory is not a Wasm local. Decision 0065 (Stage 137)
+places it on a shadow stack in memory 0. The block is zeroed whatever the header
+flag says, which is the same refinement as for locals.
 
 ## Verification
 
 Stage 123 compiles ordinary C# under `[SkipLocalsInit]` and `AllowUnsafeBlocks`.
 The Verify oracle first checks that each kernel has locals and a cleared flag.
 It then compares scalar, value-type copy, nested-block and reference locals
-against the CLR in Node and Edge, and confirms that a `stackalloc` method still
-returns -2 with its output buffer untouched. Restoring the old rule makes
+against the CLR in Node and Edge. Its `stackalloc` method returned -2 until
+Stage 137, and it now compares with the CLR. Restoring the old rule makes
 Verify fail at the first kernel (`Scalars compiler returned -2`).

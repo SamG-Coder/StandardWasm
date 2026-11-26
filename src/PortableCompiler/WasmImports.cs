@@ -24,7 +24,7 @@ namespace PortableCompiler
         {
             int size = WasmBinary.UnsignedSize(EntryCount(features));
             if ((features & Console) != 0) size += ConsoleWasm.ImportEntryBytes(firstType);
-            if (HasMemory(features)) size += ResourceWasm.MemoryEntryBytes;
+            if (HasMemory(features)) size += LinearMemoryWasm.ImportBytes;
             if ((features & Resources) != 0) size += ResourceWasm.ImportEntryBytes(firstType + ConsoleFunctions(features));
             return size;
         }
@@ -40,7 +40,7 @@ namespace PortableCompiler
         {
             cursor = WasmBinary.Unsigned(output, cursor, EntryCount(features));
             if ((features & Console) != 0) cursor = ConsoleWasm.WriteEntries(output, cursor, firstType);
-            if (HasMemory(features)) cursor = ResourceWasm.WriteMemory(output, cursor);
+            if (HasMemory(features)) cursor = LinearMemoryWasm.WriteImport(output, cursor);
             if ((features & Resources) != 0) cursor = ResourceWasm.WriteEntries(output, cursor, firstType + ConsoleFunctions(features));
             return cursor;
         }

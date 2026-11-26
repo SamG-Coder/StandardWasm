@@ -22,7 +22,9 @@ namespace PortableCompiler
             // initializer on entry. An initializer body runs behind its guard.
             int prologue = frameShape[12] - 1, guard = frameShape[13] - 1, epoch = frameShape[14] - 1;
             int activeInitializers = frameShape[15] - 1;
-            int resourceFunction = frameShape[16] - 1;
+            // Stage 137 (decision 0065): a frame that uses localloc owns a slice of the shadow stack.
+            int stackPointer = frameShape[16] - 1, stackBase = frameShape[17] - 1, stackLimit = frameShape[18] - 1;
+            int resourceFunction = frameShape[19] - 1;
             bool hasNull = outgoingNulls.Length != 0;
             int spillKinds = PeLibrary.ConsoleStorage.Writer + classes;
             // V8 counts parameters together with function locals. Reject
@@ -32,7 +34,8 @@ namespace PortableCompiler
                 continuations > MaxLocals) return -2;
             int spills = arguments + locals + (hasNull ? 1 : 0);
             int fixedLocals = spills + classes + (stringScratch ? 5 : 0) +
-                (eventScratch ? 6 : 0) + (resourceFunction >= 0 ? 7 : 0) + 1 + 2 * exceptionLocals + continuations;
+                (eventScratch ? 6 : 0) + (resourceFunction >= 0 ? 7 : 0) + 1 + 2 * exceptionLocals + continuations +
+                (stackPointer >= 0 ? 1 : 0);
             if (fixedLocals > MaxLocals || maximum > (MaxLocals - fixedLocals) / spillKinds) return -2;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
@@ -45,7 +48,9 @@ namespace PortableCompiler
             int objectBase = continuationBase + continuations;
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
                 (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
-                (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0));
+                (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0));
+            // The saved shadow-stack pointer follows every other local.
+            int stackFrame = objectBase + exceptionLocals;
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < arguments + locals; i++)
             {
@@ -115,6 +120,11 @@ namespace PortableCompiler
                 used = WasmBinary.Unsigned(code, used, exceptionLocals);
                 code[used++] = ExceptionDispatchWasm.ObjectReference;
             }
+            if (stackPointer >= 0)
+            {
+                code[used++] = 1;
+                code[used++] = 0x7f;
+            }
             // Raw Wasm callers supply i32. Enforce the CLI argument width before
             // the first instruction, including on entry from a managed call.
             for (int i = 0; i < arguments; i++)
@@ -130,6 +140,14 @@ namespace PortableCompiler
                 used = WasmBinary.Unsigned(code, used, hostImports + prologue);
             }
             if (guard >= 0) used = TypeInitializerWasm.Begin(code, used, guard, epoch, activeInitializers, pcLocal);
+            if (stackPointer >= 0)
+            {
+                used = StackAllocationWasm.Begin(code, used, stackPointer, stackFrame);
+                // An exception leaving this frame releases its allocations, then continues.
+                code[used++] = 0x02; code[used++] = ExceptionDispatchWasm.ExceptionReference; // block (result exnref)
+                code[used++] = 0x1f; code[used++] = 0x40; code[used++] = 1;                  // try_table
+                code[used++] = 0x03; code[used++] = 0;                                         // catch_all_ref 0
+            }
             code[used++] = 0x03;
             code[used++] = 0x40;
             if (catchRegion.Length != 0) used = ExceptionDispatchWasm.Begin(code, used);
@@ -438,11 +456,12 @@ namespace PortableCompiler
                 }
                 else if (kind == CheckedInteger)
                 {
-                    int type = states[state + top];
-                    int left = Spill(spills, maximum, type, top - 1);
+                    int type = states[state + top], leftType = states[state + top - 1];
+                    bool native = IsNativeInteger(type) || IsNativeInteger(leftType);
+                    int left = Spill(spills, maximum, leftType, top - 1);
                     int right = Spill(spills, maximum, type, top);
-                    used = CheckedIntegerWasm.Emit(code, used, operand, type, left, right);
-                    used = Local(code, used, 0x21, left);
+                    used = CheckedIntegerWasm.Emit(code, used, operand, native ? I32 : type, left, right);
+                    used = Local(code, used, 0x21, native ? Spill(spills, maximum, Native, top - 1) : left);
                 }
                 else if (kind == Call || kind == NewObject)
                 {
@@ -483,7 +502,7 @@ namespace PortableCompiler
                     // Preserve the current frame whenever it can handle an exception.
                     // With the same result type, the callee already normalizes its return value.
                     // An initializer must observe its callee's failure, so it never tail-calls.
-                    if (kind == Call && catchRegion.Length == 0 && guard < 0 && first == 0 && returned == result &&
+                    if (kind == Call && catchRegion.Length == 0 && guard < 0 && stackPointer < 0 && first == 0 && returned == result &&
                         next < depths.Length && records[next * Width] == Return)
                     {
                         code[used++] = 0x12; // return_call
@@ -550,6 +569,32 @@ namespace PortableCompiler
                     used = Gc(code, used, 5, owner);
                     used = WasmBinary.Unsigned(code, used, operand);
                     code[used++] = 0x0b;
+                }
+                else if (kind == LocalAllocate)
+                {
+                    int size = Spill(spills, maximum, states[state + top], top);
+                    used = StackAllocationWasm.Allocate(code, used, stackPointer, stackBase, stackLimit, size,
+                        Spill(spills, maximum, Native, top), pcLocal);
+                }
+                else if (kind == LoadIndirect)
+                {
+                    int address = Spill(spills, maximum, Native, top);
+                    used = LinearMemoryWasm.GuardNull(code, used, address);
+                    used = Local(code, used, 0x20, address);
+                    used = LinearMemoryWasm.Load(code, used, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, StackDepths.IndirectType(operand), top));
+                }
+                else if (kind == StoreIndirect)
+                {
+                    // CLI order: the address and the value are both evaluated, then the
+                    // store raises NullReferenceException for address 0.
+                    int address = Spill(spills, maximum, Native, top - 1), value = states[state + top];
+                    used = LinearMemoryWasm.GuardNull(code, used, address);
+                    used = Local(code, used, 0x20, address);
+                    used = Local(code, used, 0x20, Spill(spills, maximum, value, top));
+                    if (operand == 0x56 && value == F64) code[used++] = 0xb6; // f32.demote_f64
+                    if (operand == 0x57 && value == F32) code[used++] = 0xbb; // f64.promote_f32
+                    used = LinearMemoryWasm.Store(code, used, operand);
                 }
                 else if (kind == LoadStaticField)
                 {
@@ -694,6 +739,7 @@ namespace PortableCompiler
                         used = NormalizeSlot(code, used, result);
                     }
                     if (guard >= 0) used = TypeInitializerWasm.Complete(code, used, guard, activeInitializers);
+                    if (stackPointer >= 0) used = StackAllocationWasm.Release(code, used, stackPointer, stackLimit, stackFrame);
                     code[used++] = 0x0f;
                 }
                 else if (kind == ThrowNull)
@@ -769,6 +815,14 @@ namespace PortableCompiler
             code[used++] = 0x0b;
             code[used++] = 0;
             if (guard >= 0) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers);
+            if (stackPointer >= 0)
+            {
+                code[used++] = 0x0b; // end try_table
+                code[used++] = 0x00;
+                code[used++] = 0x0b; // end block: the caught exnref is on the stack
+                used = StackAllocationWasm.Release(code, used, stackPointer, stackLimit, stackFrame);
+                code[used++] = 0x0a; // throw_ref
+            }
             code[used++] = 0x0b;
             return used;
         }

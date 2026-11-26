@@ -6,8 +6,9 @@ using System.Text.Json;
 var echo = typeof(DateOverlay).GetMethod(nameof(DateOverlay.Copy))!;
 long[] inputs = [long.MinValue, -1, 0, 1, 0x123456789abcdef, long.MaxValue];
 string core = typeof(DateTime).Assembly.Location;
-var inline = typeof(InlineWords).GetMethod(nameof(InlineWords.Read))!;
-if (Unsafe.SizeOf<InlineWords>() != 8 || InlineWords.Read(default) != 1)
+var inline = typeof(InlineWords).GetMethod(nameof(InlineWords.CopyFirst))!;
+int inlineExpected = InlineWords.CopyFirst(19);
+if (Unsafe.SizeOf<InlineWords>() != 8 || inlineExpected != 19)
     throw new InvalidOperationException("The CLR did not accept the inline-array fixture.");
 File.WriteAllText(args[0], JsonSerializer.Serialize(new
 {
@@ -17,6 +18,7 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     runtime = RuntimeInformation.FrameworkDescription,
     entry = echo.MetadataToken & 0xffffff,
     inline = inline.MetadataToken & 0xffffff,
+    inlineExpected,
     inputs = inputs.Select(bits => bits.ToString(CultureInfo.InvariantCulture)),
     expected = inputs.Select(bits => DateOverlay.Copy(bits).ToString(CultureInfo.InvariantCulture))
 }));
@@ -43,5 +45,12 @@ public struct InlineWords
 {
     private int _first;
 
-    public static int Read(InlineWords value) => 1;
+    private static int Read(InlineWords value) => value._first;
+
+    public static int CopyFirst(int value)
+    {
+        InlineWords source = default;
+        source._first = value;
+        return Read(source);
+    }
 }

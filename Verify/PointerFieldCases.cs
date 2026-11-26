@@ -52,9 +52,22 @@ internal static class PointerFieldCases
             });
         }
 
-        Reject("ordinary native address", bundle, nameof(Kernels.RejectAddress), OpCodes.Stfld, -1);
-        Reject("indirect read", bundle, nameof(Kernels.RejectDereference), OpCodes.Ldind_I4, -2);
-        Reject("exported pointer", bundle, nameof(Kernels.RejectExport), null, -2);
+        // Stage 137 (decision 0060): void* is a native address in memory 0.
+        foreach (int value in new[] { int.MinValue, -1, 0, 7, int.MaxValue })
+            Positive("nonzero void* address", nameof(Kernels.StoreAddress), [value], Kernels.StoreAddress(value), null);
+        // The CLR returns a null void*, which is address 0 (ReadEmpty checks the same null
+        // return inside managed code).
+        Positive("null void* export", nameof(Kernels.ExportNull), [], 0, null);
+        try
+        {
+            Kernels.DereferenceNullAddress();
+            throw new InvalidOperationException("The CLR read through a null void* field.");
+        }
+        catch (NullReferenceException error)
+        {
+            Positive("null void* dereference", nameof(Kernels.DereferenceNullAddress), [], null, error.GetType().FullName,
+                memory: true);
+        }
         Reject("function pointer field", bundle, nameof(Kernels.RejectCallbackLayout), OpCodes.Newobj, -2);
 
         using var pe = new PEReader(new MemoryStream(image));
@@ -81,6 +94,19 @@ internal static class PointerFieldCases
             if (size <= 0)
                 throw new InvalidOperationException($"{name} returned {size} at [{string.Join(", ", location)}].");
             return ([Encode(bundle), Encode(entries)], Convert.ToHexString(output.AsSpan(0, size)).ToLowerInvariant());
+        }
+
+        void Positive(string label, string name, object[] arguments, int? expected, string? exception, bool memory = false)
+        {
+            var (inputs, hex) = Compile(name);
+            cases.Add(new
+            {
+                module = "BootstrapLibrary", method = "CompileBundle", fixture = "pointer field " + label, inputs,
+                generated = memory
+                    ? (object)new { capacity, bundle = true, arguments, hex, exceptionType = exception, memory = true }
+                    : new { capacity, bundle = true, arguments, hex, exceptionType = exception },
+                expected, exception
+            });
         }
 
         void Reject(string label, byte[] input, string name, OpCode? opcode, int expected)
