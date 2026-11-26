@@ -70,6 +70,7 @@ DiagnosticCases.Add(cases);
 PlatformIdentityCases.Add(cases);
 WideStorageCases.Add(cases);
 PortableFloatCases.Add(cases);
+PortableMathCases.Add(cases);
 ResizeCases.Add(cases);
 TextBoxCases.Add(cases);
 SharedWinFormsCases.Add(cases);
