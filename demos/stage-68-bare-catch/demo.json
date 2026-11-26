@@ -1,0 +1,1 @@
+{"assembly":"BareCatch","exportType":"BareCatch.CatchDemo","method":"Compile","inputs":[{"file":"self"},{"name":"Rethrow"}],"generated":{"capacity":8192,"arguments":[7,0]},"expected":-301}

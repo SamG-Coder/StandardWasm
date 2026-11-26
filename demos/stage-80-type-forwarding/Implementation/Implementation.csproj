@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>ForwardImplementation</AssemblyName>
+    <SignAssembly>true</SignAssembly>
+    <PublicSign>true</PublicSign>
+    <AssemblyOriginatorKeyFile>../../stage-78-strong-names/fixture-b.public.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+  <ItemGroup><Compile Include="../Types.cs" Link="Types.cs" /></ItemGroup>
+</Project>

@@ -72,7 +72,7 @@ namespace PortableCompiler
                 {
                     if (Protected(clauses, pc)) return -1;
                 }
-                else
+                else if (kind != ThrowNull) // Explicit throws exit via the exception dispatcher.
                 {
                     if ((kind == Branch || kind == Conditional) && !Edge(clauses, pc, operand, false)) return -1;
                     if (kind == Switch)

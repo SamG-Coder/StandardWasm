@@ -63,6 +63,12 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [64 · Fields with types declared in another DLL](stage-64-foreign-field-types/README.md) | `npm run demo -- stage-64-foreign-field-types` | Run(17) = 35 |
 | [65 · Managed reference casts](stage-65-nominal-casts/README.md) | `npm run demo -- stage-65-nominal-casts` | Run(7) = 13 |
 | [66 · Managed exception base catches](stage-66-base-exception-catches/README.md) | `npm run demo -- stage-66-base-exception-catches` | Rethrow runs cleanup and returns 118 |
+| [67 · Explicit null throws](stage-67-null-throw/README.md) | `npm run demo -- stage-67-null-throw` | A typed null exception runs cleanup and returns 113 |
+| [68 · Bare catch clauses](stage-68-bare-catch/README.md) | `npm run demo -- stage-68-bare-catch` | A bare catch rethrows to a typed handler and returns -301 |
+| [75 · Inherited layouts](stage-75-inherited-layouts/README.md) | `npm run demo -- stage-75-inherited-layouts` | Base and derived field storage are shared across three DLLs |
+| [76 · Initializer reachability](stage-76-initializer-reachability/README.md) | `npm run demo -- stage-76-initializer-reachability` | Unused type initializers leave independent calls available |
+| [78 · Strong-named assembly identity](stage-78-strong-names/README.md) | `npm run demo -- stage-78-strong-names` | A compiled DLL binds a signed dependency by its public key token |
+| [80 · CLR type forwarding](stage-80-type-forwarding/README.md) | `npm run demo -- stage-80-type-forwarding` | An unchanged caller follows a signed type facade to its implementation |
 
 ## Adding a stage
 

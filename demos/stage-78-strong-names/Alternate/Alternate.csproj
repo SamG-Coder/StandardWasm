@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <SignAssembly>true</SignAssembly>
+    <PublicSign>true</PublicSign>
+    <AssemblyOriginatorKeyFile>../fixture-b.public.snk</AssemblyOriginatorKeyFile>
+    <AssemblyName>SignedDependency</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Dependency/Operations.cs" Link="Operations.cs" />
+  </ItemGroup>
+</Project>

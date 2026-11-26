@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal static int Analyze(int[] records, int[] depths, byte[] states, int maximum,
             int[] frame, int result, int[] signatures, int[] offsets, int[] arities, int[] location, int[] catchRegion,
-            byte[] outgoingNulls)
+            byte[] outgoingNulls, int[] objects)
         {
             if (depths.Length == 0)
                 return -1;
@@ -45,11 +45,17 @@ namespace PortableCompiler
                     stack[i] = states[pc * maximum + i];
                 if (kind == Return)
                 {
-                    if (result == Void ? depth != 0 : depth != 1 || !Assignable(stack[0], result))
+                    if (result == Void ? depth != 0 : depth != 1 || !Assignable(stack[0], result, objects))
                         return -1;
                     continue;
                 }
 
+                if (kind == ThrowNull)
+                {
+                    if (depth == 0) return -1;
+                    if (stack[depth - 1] != NullValue) return -2;
+                    continue; // throw has no normal successor and clears the evaluation stack.
+                }
                 if (kind == Rethrow || kind == EndFinally) continue; // Unwinding drops the evaluation stack.
 
                 int next;
@@ -60,14 +66,14 @@ namespace PortableCompiler
                 }
                 else if (kind == ExchangeHandlerField)
                 {
-                    if (!Match(stack, depth, (byte)(records[slot + 3] >> 8)) ||
+                    if ((depth == 0 || !Assignable(stack[depth - 1], (byte)(records[slot + 3] >> 8), objects)) ||
                         frame[records[slot + BranchIl.Width + 1]] != EventHandlerReference ||
                         frame[records[slot + 2 * BranchIl.Width + 1]] != EventHandlerReference)
                         return -1;
                     next = Push(stack, depth - 1, EventHandlerReference);
                 }
                 else next = Transition(stack, depth, kind, operand, records[slot + 3], frame,
-                    signatures, offsets, arities);
+                    signatures, offsets, arities, objects);
                 if (next < 0)
                     return next;
                 if (outgoingNulls.Length != 0)
@@ -97,7 +103,7 @@ namespace PortableCompiler
         }
 
         private static int Transition(byte[] stack, int depth, int kind, int operand, int extra, int[] frame,
-            int[] signatures, int[] offsets, int[] arities)
+            int[] signatures, int[] offsets, int[] arities, int[] objects)
         {
             if (kind == LoadString) return Push(stack, depth, String);
             if (kind == NullLiteral) return Push(stack, depth, NullValue);
@@ -133,7 +139,7 @@ namespace PortableCompiler
             {
                 if (operand == EventHandlerReference)
                     return Match(stack, depth, EventArgsReference) && depth >= 3 &&
-                        Assignable(stack[depth - 2], ObjectReference) && Match(stack, depth - 2, EventHandlerReference)
+                        Assignable(stack[depth - 2], ObjectReference, objects) && Match(stack, depth - 2, EventHandlerReference)
                         ? depth - 3 : -1;
                 if (!Match(stack, depth, Delegate)) return -1;
                 return Push(stack, depth - 1, I32);
@@ -143,7 +149,7 @@ namespace PortableCompiler
                 return Push(stack, depth, kind == WideConstant ? I64 : I32);
             if (kind == SingleConstant || kind == DoubleConstant)
                 return Push(stack, depth, kind == SingleConstant ? F32 : F64);
-            if (kind == Store) return depth > 0 && Assignable(stack[depth - 1], frame[operand]) ? depth - 1 : -1;
+            if (kind == Store) return depth > 0 && Assignable(stack[depth - 1], frame[operand], objects) ? depth - 1 : -1;
             if (kind == CheckedConversion)
             {
                 if (depth < 1 || !IsScalar(stack[depth - 1])) return -1;
@@ -187,7 +193,7 @@ namespace PortableCompiler
                 if (type == NullValue || top == NullValue || IsReference(type) || IsReference(top))
                 {
                     if (needed == 1) return depth - 1;
-                    if (!ReferenceComparison(type, top)) return -1;
+                    if (!ReferenceComparison(type, top, objects)) return -1;
                     if (kind == Conditional)
                         return extra == 0x46 || extra == 0x47 ? depth - needed : -1;
                     // C# materializes a boolean type test with isinst, ldnull,
@@ -216,7 +222,7 @@ namespace PortableCompiler
                 if (start < 0)
                     return -1;
                 for (int i = receiver; i < count; i++)
-                    if (!Assignable(stack[start + i - receiver], signatures[offset + 1 + i]))
+                    if (!Assignable(stack[start + i - receiver], signatures[offset + 1 + i], objects))
                         return -1;
                 int result = kind == NewObject ? signatures[offset + 1] : signatures[offset];
                 return result == Void ? start : Push(stack, start, StackType(result));
@@ -225,13 +231,13 @@ namespace PortableCompiler
                 return depth > 0 && stack[depth - 1] >= FirstClass ? depth - 1 : -1;
             if (kind == GetField)
             {
-                if (!Match(stack, depth, (byte)(extra >> 8))) return -1;
+                if (depth == 0 || !Assignable(stack[depth - 1], (byte)(extra >> 8), objects)) return -1;
                 stack[depth - 1] = unchecked((byte)extra);
                 return depth;
             }
             if (kind == SetField)
-                return Match(stack, depth - 1, (byte)(extra >> 8)) &&
-                    Assignable(stack[depth - 1], unchecked((byte)extra)) ? depth - 2 : -1;
+                return depth >= 2 && Assignable(stack[depth - 2], (byte)(extra >> 8), objects) &&
+                    Assignable(stack[depth - 1], unchecked((byte)extra), objects) ? depth - 2 : -1;
             if (kind == NewArray || kind == InitializedArray)
             {
                 if (!Match(stack, depth, I32)) return -1;
