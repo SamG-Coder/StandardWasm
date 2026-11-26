@@ -6,9 +6,10 @@ Run `npm run demo -- stage-108-beforefieldinit-calls`. The linked demo returns
 Methods and constructors on a BeforeFieldInit type can run before the first
 access to one of its static fields. The fixture observes this timing for
 local and linked static calls, a constructor and an instance call.
-The linker diagnoses a reached static field, a static call that requires a
-precise initializer and a direct attempt to export the initializer.
+Since [Stage 129](../stage-129-type-initializers/README.md), a reached static
+field and a static call that needs a precise initializer run that initializer
+first. A direct attempt to export the initializer is still diagnosed.
 
 This uses the timing allowed by [ECMA-335](https://ecma-international.org/publications-and-standards/standards/ecma-335/)
-Partition I 8.9.5. Execution of reached initializers, including failure and
-recursive initialization, is tracked in [#232](https://github.com/SamG-Coder/StandardWasm/issues/232).
+Partition I 8.9.5. Initializer execution, including failure and recursion, is
+decision 0057.

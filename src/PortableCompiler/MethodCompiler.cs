@@ -166,9 +166,11 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[12];
+            var frameShape = new int[16];
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * 3];
+            var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
+            var initializerSlot = new int[1];
             int exceptionTags = 0;
             var noCatch = new int[0];
             var sizingBuffer = new byte[0];
@@ -203,6 +205,32 @@ namespace PortableCompiler
                 }
                 int compatibility = FrameworkPacks.CheckBodyOwner(image, layout, heaps, coreLibWidths, owner);
                 if (compatibility < 0) return compatibility;
+                // Stage 129 (decision 0057): an initializer body runs behind its guard. A
+                // static method or constructor of a precise (non-BeforeFieldInit) type runs
+                // the type's initializer on entry, after the caller evaluated the arguments.
+                int initializerGuard = -1, initializerPrologue = -1;
+                if (MethodNames.IsInitializer(image, layout, heaps, source))
+                {
+                    initializerGuard = initializers.Guard(current);
+                    if (initializerGuard < 0) return -1;
+                }
+                else
+                {
+                    int declaringType = ObjectLayouts.Owner(image, heaps, layout, source, false);
+                    if (declaringType < 1) return -1;
+                    var initializerFlags = new int[1];
+                    int initializer = TypeInitializers.Find(image, layout, heaps, declaringType, initializerFlags);
+                    if (initializer < 0) return initializer;
+                    int memberFlags = MethodDefinitions.ReadColumn(image, layout, source, 2);
+                    if (initializer != 0 && initializerFlags[0] == 0 &&
+                        ((memberFlags & 0x10) != 0 || ObjectLayouts.IsConstructor(image, heaps, layout, source)))
+                    {
+                        functions = initializers.Ensure(bundle, owner, declaringType, initializer, owners, rows, contexts,
+                            bases, indices, arities, offsets, signatures, objects, globals, functions, initializerSlot);
+                        if (functions < 0) return functions;
+                        initializerPrologue = initializerSlot[0];
+                    }
+                }
                 uint rva = unchecked((uint)MethodDefinitions.ReadColumn(image, layout, source, 0));
                 int status = MethodBodies.Read(image, rva, body);
                 if (status != 0)
@@ -279,7 +307,7 @@ namespace PortableCompiler
                     return -2;
 
                 var code = new byte[body[1] * 4 + 2];
-                int used = scalar && locals == 0 && catchRegion.Length == 0
+                int used = scalar && locals == 0 && catchRegion.Length == 0 && initializerPrologue < 0
                     ? StraightLineIl.Translate(image, body, parameters, code) : -2;
                 if (used < 0)
                 {
@@ -293,7 +321,8 @@ namespace PortableCompiler
                     virtualUsed[0] = 0;
                     functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
                         parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod, valueMethod, records, owners, rows, contexts,
-                        bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed, reflection);
+                        bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
+                        initializers, reflection);
                     if (functions < 0)
                         return functions;
 
@@ -343,6 +372,8 @@ namespace PortableCompiler
                     if (narrowParameters > (int.MaxValue - capacity) / 16)
                         return -3;
                     capacity += narrowParameters * 16;
+                    if (initializerGuard >= 0 || initializerPrologue >= 0)
+                        capacity += TypeInitializerWasm.Capacity;
                     int classBytes = objects[0] * 12;
                     if (classBytes > int.MaxValue - capacity) return -3;
                     capacity += classBytes;
@@ -362,6 +393,11 @@ namespace PortableCompiler
                         }
                         int pc = slot / BranchIl.Width;
                         int operation = records[slot + 1];
+                        if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField)
+                        {
+                            if (capacity > int.MaxValue - TypeInitializerWasm.TriggerCapacity) return -3;
+                            capacity += TypeInitializerWasm.TriggerCapacity;
+                        }
                         if (kind == BranchIl.NewObject && depths[pc] != 0)
                         {
                             int allocated = signatures[offsets[operation] + 1];
@@ -445,6 +481,10 @@ namespace PortableCompiler
                     frameShape[9] = hasFinally ? catchRegion.Length / ExceptionClauses.Width : 0;
                     frameShape[10] = hostImports;
                     frameShape[11] = valueConstructor ? 1 : 0;
+                    frameShape[12] = initializerPrologue + 1;
+                    frameShape[13] = initializerGuard + 1;
+                    frameShape[14] = initializers.Epoch + 1;
+                    frameShape[15] = initializers.Active + 1;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
@@ -456,7 +496,7 @@ namespace PortableCompiler
                     }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
-                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, reflection);
+                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers, reflection);
                 }
 
                 if (used < 0) return used;
@@ -472,6 +512,31 @@ namespace PortableCompiler
                 return CompileProgram(bundle, entries, output, location, ConsoleWasm.ImportCount);
             length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, length, hostImports, location);
             if (length < 0) return length;
+            if (initializers.Epoch >= 0)
+            {
+                // Stage 129 (decision 0057): every host export enters through a wrapper
+                // that retires initializers interrupted by an earlier raw trap. Internal
+                // calls keep the original bodies, so recursion stays in the same epoch.
+                for (int export = 0; export < exportCount; export++)
+                {
+                    if (functions >= owners.Length) return -3;
+                    int target = exports[export], arity = arities[target];
+                    int offset = NextSignature(offsets, arities, functions);
+                    if (arity >= signatures.Length - offset) return -3;
+                    for (int i = 0; i <= arity; i++) signatures[offset + i] = signatures[offsets[target] + i];
+                    owners[functions] = owners[target];
+                    rows[functions] = 0; // synthetic
+                    contexts[functions] = contexts[target];
+                    arities[functions] = arity;
+                    offsets[functions] = offset;
+                    bodyOffsets[functions] = length;
+                    length = TypeInitializerWasm.ExportEntry(moduleCode, length, initializers.Epoch, initializers.Active,
+                        hostImports + target, arity);
+                    if (length < 0) return length;
+                    sizes[functions] = length - bodyOffsets[functions];
+                    exports[export] = functions++;
+                }
+            }
             CompileLocation.Clear(location);
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
                 moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostImports, reflection.HeapFixups[0]);
@@ -479,7 +544,8 @@ namespace PortableCompiler
 
         private static int LinkOperands(BundleImages bundle, byte[] image, int[] layout,
             int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
-            int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed, RuntimeReflectionPlan reflection)
+            int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed,
+            TypeInitializerPlan initializers, RuntimeReflectionPlan reflection)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
@@ -598,7 +664,7 @@ namespace PortableCompiler
                 }
                 if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField)
                 {
-                    var symbol = new int[2];
+                    var symbol = new int[5];
                     int field = records[slot + 1];
                     bool write = kind == BranchIl.StoreStaticField;
                     bool linked = records[slot + 3] != 0;
@@ -614,8 +680,17 @@ namespace PortableCompiler
                     if (linked && bundle.Length == 0) return -2;
                     int status = linked ? AssemblyBundle.ResolveField(bundle, image, layout, heaps, owner,
                         field, write, true, objects, globals, symbol, context, callerType) :
-                        StaticFields.ResolveLocal(bundle, image, layout, heaps, owner, field, write, objects, globals, symbol);
+                        StaticFields.ResolveLocal(bundle, image, layout, heaps, owner, field, write, objects, globals, symbol, callerRow);
                     if (status < 0) return status;
+                    if (symbol[3] != 0)
+                    {
+                        // Bound declaring owner, so an inherited field initializes only its base.
+                        var initializer = new int[1];
+                        functions = initializers.Ensure(bundle, symbol[2], symbol[4], symbol[3], owners, rows, contexts,
+                            bases, indices, arities, offsets, signatures, objects, globals, functions, initializer);
+                        if (functions < 0) return functions;
+                        initializers.SetFieldInitializer(symbol[0], initializer[0]);
+                    }
                     records[slot + 1] = symbol[0];
                     records[slot + 3] = symbol[1];
                     continue;
@@ -700,9 +775,12 @@ namespace PortableCompiler
                         hostUse[0] = 1;
                         continue;
                     }
-                    if (opcode == 0x28 && !addressed && ObjectLayouts.IsObjectConstructor(image, heaps, layout, member))
+                    // call Object::.ctor runs the empty base constructor; newobj allocates a
+                    // fresh plain object of the canonical root (decision 0057).
+                    if ((opcode == 0x28 || opcode == 0x73) && !addressed &&
+                        ObjectLayouts.IsObjectConstructor(image, heaps, layout, member))
                     {
-                        records[slot] = BranchIl.BaseCtor;
+                        records[slot] = opcode == 0x73 ? BranchIl.NewRootObject : BranchIl.BaseCtor;
                         continue;
                     }
                     int stringMember = addressed ? 0 : StringMetadata.Member(image, heaps, layout, member);
@@ -811,10 +889,10 @@ namespace PortableCompiler
                 int target = records[slot + 1];
                 if (target < 1 || target > bases[owner + 1] - bases[owner])
                     return -1;
-                if (kind == BranchIl.Call && records[slot + 3] == 0 &&
+                if ((kind == BranchIl.NewObject || kind == BranchIl.Call && records[slot + 3] == 0) &&
                     ObjectLayouts.IsCoreObjectConstructor(image, heaps, layout, target))
                 {
-                    records[slot] = BranchIl.BaseCtor;
+                    records[slot] = kind == BranchIl.NewObject ? BranchIl.NewRootObject : BranchIl.BaseCtor;
                     continue;
                 }
                 bool virtualMethodLocal = (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x40) != 0;
@@ -1164,13 +1242,13 @@ namespace PortableCompiler
             return -1;
         }
 
-        private static int Register(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner, int row,
+        internal static int Register(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner, int row,
             int context, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures,
-            int[] objects, int functions, bool allowVirtual = false)
+            int[] objects, int functions, bool allowVirtual = false, bool initializer = false)
         {
             if (functions >= owners.Length) return -3;
             int offset = NextSignature(offsets, arities, functions);
-            int arity = MethodShape(bundle, image, layout, heaps, owner, row, context, signatures, offset, objects, allowVirtual);
+            int arity = MethodShape(bundle, image, layout, heaps, owner, row, context, signatures, offset, objects, allowVirtual, initializer);
             if (arity < 0)
                 return arity;
             owners[functions] = owner;
@@ -1200,7 +1278,7 @@ namespace PortableCompiler
         }
 
         private static int MethodShape(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int assembly, int row,
-            int context, int[] types, int offset, int[] objects, bool allowVirtual)
+            int context, int[] types, int offset, int[] objects, bool allowVirtual, bool initializer)
         {
             int attributes = MethodDefinitions.ReadColumn(image, layout, row, 2);
             int implementation = MethodDefinitions.ReadColumn(image, layout, row, 1);
@@ -1209,11 +1287,19 @@ namespace PortableCompiler
             int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
             if (owner < 0) return -1;
             bool isStatic = (attributes & 0x10) != 0;
-            // The initializer itself cannot be exposed as an ordinary method.
-            if (isStatic && MethodNames.IsInitializer(image, layout, heaps, row)) return -2;
-            int initialization = TypeInitializers.RejectDeclaringType(image, layout, heaps, owner,
-                allowBeforeFieldInit: true);
+            // The initializer itself is reached only through its guard (decision 0057).
+            if (isStatic && MethodNames.IsInitializer(image, layout, heaps, row) != initializer) return -2;
+            var initializerFlags = new int[1];
+            int initialization = TypeInitializers.Find(image, layout, heaps, owner, initializerFlags);
             if (initialization < 0) return initialization;
+            // A generic type has one initializer per closed instantiation, which needs
+            // per-instantiation guards. Only a precise type runs it on a method call; a
+            // beforefieldinit generic type waits for a static field access, and generic
+            // static fields are still diagnosed (Stage 108). A precise value type also
+            // triggers on instance methods. Both stay explicit diagnostics.
+            if (initialization != 0 && initializerFlags[0] == 0 && (context != 0 ||
+                GenericParameters.Check(image, heaps, layout, owner, new int[0], objects, new int[8]) != 0))
+                return -2;
             if (context != 0)
             {
                 // The closed layout must instantiate this method's own definition.
@@ -1237,6 +1323,8 @@ namespace PortableCompiler
                     receiver = BundleLayouts.RegisterValue(bundle, image, layout, heaps, assembly, owner, objects);
                 if (receiver < 0) return receiver;
                 if (ObjectLayouts.IsInterface(objects, receiver)) return -2;
+                if (initialization != 0 && initializerFlags[0] == 0 && ObjectLayouts.IsValueType(objects, receiver) &&
+                    !ObjectLayouts.IsConstructor(image, heaps, layout, row)) return -2;
             }
             int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
             int arity = SignatureTypes.Read(bundle, image, heaps, signature, types, offset, receiver, layout, objects, assembly, context);

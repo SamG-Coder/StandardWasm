@@ -19,10 +19,13 @@ internal static class BeforeFieldInitCases
 
         if (Kernels.NeedsField() != 42 || Journal.Value != 42 || Kernels.NeedsPrecise(5) != 78 || Journal.Value != 73)
             throw new InvalidOperationException("Unexpected CLR initialization trigger.");
-        MethodInfo field = typeof(Relaxed).GetMethod(nameof(Relaxed.Read))!;
-        Reject(Method(nameof(Kernels.NeedsField)), [1, Row(field), Offset(field, OpCodes.Ldsfld)]);
-        MethodInfo precise = Method(nameof(Kernels.NeedsPrecise));
-        Reject(precise, [0, Row(precise), Offset(precise, OpCodes.Call)]);
+        // Stage 129 (decision 0057): a reached static field and a precise static call
+        // now run their initializers. The CLR values above fix the results: Relaxed's
+        // initializer records 42 for the field, Precise's records 73 before Skip adds it.
+        Triggered(Method(nameof(Kernels.NeedsField)), [[]], _ => 42);
+        Triggered(Method(nameof(Kernels.NeedsPrecise)), [[int.MinValue], [-5], [0], [5], [int.MaxValue]],
+            arguments => unchecked(arguments[0] + 73));
+        // The initializer itself is reached only through its guard, never as an export.
         ConstructorInfo initializer = typeof(Local).TypeInitializer!;
         Reject(initializer, [0, Row(initializer), -1]);
 
@@ -45,6 +48,22 @@ internal static class BeforeFieldInitCases
                     expected
                 });
             }
+        }
+
+        void Triggered(MethodInfo run, int[][] inputs, Func<int[], int> expectedResult)
+        {
+            byte[] entries = Manifest(run);
+            int length = CompilerExports.CompileBundleDetailed(bundle, entries, output, location);
+            if (length < 1) throw new InvalidOperationException($"{run.Name} returned {length} at [{string.Join(", ", location)}].");
+            string hex = Convert.ToHexString(output.AsSpan(0, length)).ToLowerInvariant();
+            foreach (int[] arguments in inputs)
+                cases.Add(new
+                {
+                    module = "BootstrapLibrary", method = "CompileBundle", fixture = "initializer trigger " + run.Name,
+                    inputs = new[] { Encode(bundle), Encode(entries) },
+                    generated = new { capacity, bundle = true, arguments, hex },
+                    expected = expectedResult(arguments)
+                });
         }
 
         void Reject(MethodBase method, int[] diagnostic)

@@ -34,8 +34,11 @@ namespace PortableCompiler
         {
             int status = StaticFieldMetadata.Check(image, heaps, layout, field, flags, write);
             if (status < 0) return status;
-            status = TypeInitializers.RejectDeclaringType(image, layout, heaps, declaringType);
-            if (status < 0) return status;
+            // The declaring type's initializer runs before each access (decision 0057).
+            // result[2..4] receive its module, .cctor row and TypeDef, or zero.
+            int initializer = TypeInitializers.Find(image, layout, heaps, declaringType, new int[1]);
+            if (initializer < 0) return initializer;
+            if (initializer != 0 && result.Length < 5) return -2;
             // A constructed generic needs separate static data for each instantiation.
             status = GenericParameters.Check(image, heaps, layout, declaringType, new int[0], objects, new int[0]);
             if (status < 0) return status;
@@ -48,14 +51,25 @@ namespace PortableCompiler
             if (index < 0) return index;
             result[0] = index;
             result[1] = storage;
+            if (result.Length >= 5)
+            {
+                result[2] = initializer == 0 ? 0 : owner;
+                result[3] = initializer;
+                result[4] = initializer == 0 ? 0 : declaringType;
+            }
             return 0;
         }
 
         internal static int ResolveLocal(BundleImages bundle, byte[] image, int[] layout,
-            int[] heaps, int owner, int row, bool write, int[] objects, int[] globals, int[] result)
+            int[] heaps, int owner, int row, bool write, int[] objects, int[] globals, int[] result, int callerRow)
         {
             int declaring = ObjectLayouts.Owner(image, heaps, layout, row, true);
             if (declaring < 1) return -1;
+            // ECMA-335 II.16.1.2: the declaring type's own initializer may write an
+            // initonly static field. Every other write stays rejected.
+            if (write && MethodNames.IsInitializer(image, layout, heaps, callerRow) &&
+                ObjectLayouts.Owner(image, heaps, layout, callerRow, false) == declaring)
+                write = false;
             int table = AssemblyReferences.FieldTable(image, heaps, layout);
             if (table < 0) return table;
             var definition = new int[3];
