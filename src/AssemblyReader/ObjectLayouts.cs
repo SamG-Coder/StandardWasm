@@ -116,8 +116,11 @@ namespace PeLibrary
                 inlineLength = attributed;
                 if (inlineLength != 0)
                 {
+                    // Supported V8 engines accept at most 10,000 fields in
+                    // one GC struct. Diagnose larger arrays at their type use.
+                    const int MaxStructFields = 10000;
                     // The single declared instance field is element zero.
-                    if (layout == 0x10 || end - first != 1) return -2;
+                    if (inlineLength > MaxStructFields || layout == 0x10 || end - first != 1) return -2;
                     int fieldWidth = 2 + strings + methods[3];
                     if ((U16(image, (uint)(fields + ((int)first - 1) * fieldWidth)) & 0x10) != 0)
                         return -2;

@@ -45,3 +45,19 @@ public static class Kernels
         return ReadSlots(slots, marker);
     }
 }
+
+[InlineArray(10001)]
+public struct WideWords
+{
+    public int First;
+}
+
+public static class LayoutBoundary
+{
+    public static int Read(int seed)
+    {
+        WideWords value = default;
+        value.First = seed;
+        return value.First;
+    }
+}
