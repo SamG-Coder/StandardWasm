@@ -2,11 +2,12 @@ export const resourceImportModule = "standardwasm:resources";
 
 const pageSize = 65536;
 const nullName = -8n, emptyName = -9n, malformed = -1n;
+const createMemory = () => new WebAssembly.Memory({ initial: 1 });
 
 // The module asks for writable scratch for its UTF-16 name. Successful lookups
 // return a stable address in this memory, which stays alive with the instance.
 export function createResourceHost(compiler, images) {
-    const memory = new WebAssembly.Memory({ initial: 1 });
+    const memory = createMemory();
     const handles = new Array(images.length);
     const resources = images.map(() => new Map());
     const decoder = new TextDecoder("utf-16le", { ignoreBOM: true });
@@ -97,6 +98,8 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
             throw Error("The generated module requests an unsupported runtime import.");
     }
     if (!requestedResources.size) return WebAssembly.instantiate(module, runtimeImports);
+    if (requestedResources.size === 1 && requestedResources.has("memory"))
+        return WebAssembly.instantiate(module, { ...runtimeImports, [resourceImportModule]: { memory: createMemory() } });
     if (requestedResources.size !== resourceImportKinds.size || typeof compiler.FindEmbeddedResource !== "function")
         throw Error("The generated module requires the complete StandardWasm resource contract.");
     // The bundle owner indices use this same image order, starting at zero.

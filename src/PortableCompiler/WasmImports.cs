@@ -4,7 +4,7 @@ namespace PortableCompiler
     // advances only for function imports.
     internal static class WasmImports
     {
-        internal const int Console = 1, Resources = 2;
+        internal const int Console = 1, Resources = 2, Memory = 4;
 
         internal static int FunctionCount(int features) =>
             ConsoleFunctions(features) + ((features & Resources) != 0 ? ResourceWasm.FunctionCount : 0);
@@ -15,13 +15,16 @@ namespace PortableCompiler
 
         private static int ConsoleFunctions(int features) => (features & Console) != 0 ? ConsoleWasm.ImportCount : 0;
 
-        private static int EntryCount(int features) =>
-            ConsoleFunctions(features) + ((features & Resources) != 0 ? ResourceWasm.EntryCount : 0);
+        // Resource calls and native indirection share one memory index.
+        private static bool HasMemory(int features) => (features & (Resources | Memory)) != 0;
+
+        private static int EntryCount(int features) => FunctionCount(features) + (HasMemory(features) ? 1 : 0);
 
         internal static int Size(int features, int firstType)
         {
             int size = WasmBinary.UnsignedSize(EntryCount(features));
             if ((features & Console) != 0) size += ConsoleWasm.ImportEntryBytes(firstType);
+            if (HasMemory(features)) size += ResourceWasm.MemoryEntryBytes;
             if ((features & Resources) != 0) size += ResourceWasm.ImportEntryBytes(firstType + ConsoleFunctions(features));
             return size;
         }
@@ -37,6 +40,7 @@ namespace PortableCompiler
         {
             cursor = WasmBinary.Unsigned(output, cursor, EntryCount(features));
             if ((features & Console) != 0) cursor = ConsoleWasm.WriteEntries(output, cursor, firstType);
+            if (HasMemory(features)) cursor = ResourceWasm.WriteMemory(output, cursor);
             if ((features & Resources) != 0) cursor = ResourceWasm.WriteEntries(output, cursor, firstType + ConsoleFunctions(features));
             return cursor;
         }

@@ -7,9 +7,11 @@ namespace PortableCompiler
     // name address and code-unit count, and returns length/address or a diagnostic.
     internal static class ResourceWasm
     {
-        internal const int FunctionCount = 2, EntryCount = 3, TypeBytes = 12;
+        internal const int FunctionCount = 2, TypeBytes = 12;
         private const string ModuleName = "standardwasm:resources";
         private const string Memory = "memory", Reserve = "reserveName", Locate = "locate";
+        private static int EntryPrefixBytes => 1 + ModuleName.Length + 1 + 1;
+        internal static int MemoryEntryBytes => EntryPrefixBytes + Memory.Length + 2;
 
         internal static int WriteTypes(byte[] output, int cursor)
         {
@@ -29,14 +31,19 @@ namespace PortableCompiler
         }
 
         internal static int ImportEntryBytes(int firstType) =>
-            EntryCount * (1 + ModuleName.Length + 1 + 1) + Memory.Length + Reserve.Length + Locate.Length +
-            2 + WasmBinary.UnsignedSize(firstType) + WasmBinary.UnsignedSize(firstType + 1);
+            FunctionCount * EntryPrefixBytes + Reserve.Length + Locate.Length +
+            WasmBinary.UnsignedSize(firstType) + WasmBinary.UnsignedSize(firstType + 1);
 
-        internal static int WriteEntries(byte[] output, int cursor, int firstType)
+        internal static int WriteMemory(byte[] output, int cursor)
         {
             cursor = Entry(output, cursor, Memory, 2);
             output[cursor++] = 0; // wasm32 limits with no maximum
             output[cursor++] = 1; // one initial page
+            return cursor;
+        }
+
+        internal static int WriteEntries(byte[] output, int cursor, int firstType)
+        {
             cursor = Entry(output, cursor, Reserve, 0);
             cursor = WasmBinary.Unsigned(output, cursor, firstType);
             cursor = Entry(output, cursor, Locate, 0);

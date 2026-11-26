@@ -74,6 +74,12 @@ At the lookup boundary, -8 denotes a null name and -9 denotes an empty
 name after applying Windows termination rules. The managed binding must
 translate these results to the corresponding CLR exceptions.
 
+Native pointers and resources share memory index zero. A module with
+native indirection can request only `standardwasm:resources.memory`.
+The loader supplies a fresh memory for each instance without requiring
+the compiler resource lookup export. A module requesting resource
+functions receives those functions and the same single memory entry.
+
 The linker binds the platform `Assembly.GetManifestResourceStream(string)`
 call to the verified `RuntimeAssembly` override in the selected CoreLib.
 The method takes the canonical Assembly descriptor as its receiver and
