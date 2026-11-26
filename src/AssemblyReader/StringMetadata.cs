@@ -100,5 +100,33 @@ namespace PeLibrary
         }
 
         private static uint Index(byte[] image, uint at, int width) => width == 2 ? U16(image, at) : U32(image, at);
+
+        internal static int AccessorDefinition(byte[] image, int[] streams, int[] methods, int row)
+        {
+            uint name = (uint)MethodDefinitions.ReadColumn(image, methods, row, 3);
+            bool length = MatchesAscii(image, streams, name, "get_Length");
+            if (!length && !MatchesAscii(image, streams, name, "get_Chars")) return 0;
+            int owner = ObjectLayouts.Owner(image, streams, methods, row, false);
+            if (owner < 1 || !PlatformTypeReferences.IsString(image, streams, methods, owner << 2)) return 0;
+            uint signature = (uint)MethodDefinitions.ReadColumn(image, methods, row, 4);
+            uint at = (uint)streams[0] + signature;
+            if (!Fits(signature, length ? 4u : 5u, (uint)streams[1])) return 0;
+            if (length) return U32(image, at) == 0x08002003 ? Length : 0;
+            return U32(image, at) == 0x03012004 && image[at + 4] == 8 ? Character : 0;
+        }
+
+        internal static bool IsEmptyDefinition(byte[] image, int[] streams, int[] methods, int row)
+        {
+            int owner = ObjectLayouts.Owner(image, streams, methods, row, true);
+            if (owner < 1 || !PlatformTypeReferences.IsString(image, streams, methods, owner << 2)) return false;
+            int table = AssemblyReferences.FieldTable(image, streams, methods);
+            if (table < 0) return false;
+            var field = new int[3];
+            AssemblyReferences.ReadField(image, methods, table, row, field);
+            if ((field[0] & 0x10) == 0 || !MatchesAscii(image, streams, (uint)field[1], "Empty") ||
+                !Fits((uint)field[2], 3, (uint)streams[1])) return false;
+            uint at = (uint)(streams[0] + field[2]);
+            return U16(image, at) == 0x0602 && image[at + 2] == 0x0e;
+        }
     }
 }

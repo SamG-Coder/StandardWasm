@@ -967,7 +967,8 @@ namespace PortableCompiler
                         continue;
                     }
 
-                    if (linked && StringMetadata.Member(image, heaps, layout, field) == StringMetadata.Empty)
+                    if (linked ? StringMetadata.Member(image, heaps, layout, field) == StringMetadata.Empty :
+                        StringMetadata.IsEmptyDefinition(image, heaps, layout, field))
                     {
                         if (write) return -2;
                         int empty = StringLiterals.LowerEmpty(records, slot, globals);
@@ -1247,6 +1248,17 @@ namespace PortableCompiler
                 int target = records[slot + 1];
                 if (target < 1 || target > bases[owner + 1] - bases[owner])
                     return -1;
+                if (kind == BranchIl.Call)
+                {
+                    int accessor = StringMetadata.AccessorDefinition(image, heaps, layout, target);
+                    if (accessor != 0)
+                    {
+                        // CoreLib's accessors read the desktop layout. Other
+                        // String methods retain their managed IL and use the GC string ABI.
+                        records[slot] = accessor == StringMetadata.Length ? BranchIl.StringLength : BranchIl.StringCharacter;
+                        continue;
+                    }
+                }
                 if ((kind == BranchIl.NewObject || kind == BranchIl.Call && records[slot + 3] == 0) &&
                     ObjectLayouts.IsCoreObjectConstructor(image, heaps, layout, target))
                 {
@@ -1696,9 +1708,11 @@ namespace PortableCompiler
                 int open = GenericParameters.Check(image, heaps, layout, owner, new int[0], objects, new int[8]);
                 if (open != 0) return open < 0 ? open : -2;
             }
-            // Canonical runtime Assembly descriptors use their shared ABI
-            // while executing this verified CoreLib override.
+            // Compiler-owned representations can execute trusted managed bodies
+            // without registering the desktop object's physical layout.
             int receiver = isStatic ? 0 : receiverOverride != 0 ? receiverOverride : context;
+            if (!isStatic && receiver == 0 && PlatformTypeReferences.IsString(image, heaps, layout, owner << 2))
+                receiver = String;
             if (!isStatic && receiver == 0)
             {
                 receiver = BundleLayouts.Register(bundle, image, layout, heaps, assembly, owner, objects);
