@@ -12,6 +12,7 @@ internal static class RuntimeTypeCases
         byte[] peer = File.ReadAllBytes(typeof(ExternalTypes).Assembly.Location);
         byte[] bundle = BundleCases.Pack(image, peer);
         object encoded = Encode(bundle);
+        object standalone = Encode(image);
         var output = new byte[capacity];
         int[] location = CompilerExports.CreateDiagnostic();
 
@@ -31,6 +32,9 @@ internal static class RuntimeTypeCases
         if (Kernels.BoxHandle() != 1) throw new InvalidOperationException("CLR handle boxing fixture changed.");
         Reject(nameof(Kernels.BoxHandle), bundle, encoded, OpCodes.Box, -2);
 
+        CheckStandalone(nameof(Kernels.Local), Kernels.Local);
+        CheckStandalone(nameof(Kernels.DefaultHandle), Kernels.DefaultHandle);
+        CheckStandalone(nameof(Kernels.WithoutInitializer), Kernels.WithoutInitializer);
         RuntimeTypeScopeCases.Add(cases);
 
         void Check(string name, Func<int, int> oracle, int[] values = null)
@@ -48,6 +52,30 @@ internal static class RuntimeTypeCases
                     generated = new { capacity, bundle = true, arguments = new[] { value }, hex },
                     expected = oracle(value)
                 });
+        }
+
+        void CheckStandalone(string name, Func<int, int> oracle)
+        {
+            int row = typeof(Kernels).GetMethod(name)!.MetadataToken & 0xffffff;
+            foreach (bool detailed in new[] { false, true })
+            {
+                int length = detailed
+                    ? CompilerExports.CompileDetailed(image, row, output, location)
+                    : CompilerExports.Compile(image, row, output);
+                int[] diagnostic = detailed ? [-1, 0, -1] : null;
+                if (length <= 0 || detailed && !location.SequenceEqual(diagnostic))
+                    throw new InvalidOperationException($"Standalone {name} returned {length} at [{string.Join(", ", location)}].");
+                string hex = Convert.ToHexString(output.AsSpan(0, length)).ToLowerInvariant();
+                string method = detailed ? "CompileDetailed" : "Compile";
+                foreach (int value in new[] { int.MinValue, -1, 0, 5, int.MaxValue })
+                    cases.Add(new
+                    {
+                        module = "BootstrapLibrary", method, fixture = $"runtime type standalone {name}",
+                        inputs = new[] { standalone, (object)row },
+                        generated = new { capacity, arguments = new[] { value }, hex, diagnostic },
+                        expected = oracle(value)
+                    });
+            }
         }
 
         void Reject(string name, byte[] input, object packed, OpCode operation, int expected)

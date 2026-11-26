@@ -10,6 +10,7 @@ assemblies, a default runtime handle, and a type with a throwing initializer.
 The host comparison checks that a numeric object never aliases a Type.
 The compiler reports unsupported constructed type tokens and missing
 dependencies at their IL offsets. The verifier checks exact facade scopes.
+The standalone checks also compile one DLL through both compiler entry points.
 Boxing a runtime handle or casting to a reflection type still produces a
 diagnostic.
 
