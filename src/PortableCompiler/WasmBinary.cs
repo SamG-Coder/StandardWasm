@@ -11,7 +11,7 @@ namespace PortableCompiler
         private const int NativeArrayHeap = DoubleArrayHeap + 1;
         private const int FirstClassHeap = NativeArrayHeap + 2;
 
-        internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int functions, byte[] bodies,
+        internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
             byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostImports)
         {
@@ -403,14 +403,12 @@ namespace PortableCompiler
 
             cursor = Section(output, cursor, 10, codeSize);
             cursor = Unsigned(output, cursor, totalFunctions);
-            int start = 0;
             for (int body = 0; body < functions; body++)
             {
-                int size = sizes[body];
+                int size = sizes[body], start = bodyOffsets[body];
                 cursor = Unsigned(output, cursor, size);
                 for (int i = 0; i < size; i++)
                     output[cursor++] = bodies[start + i];
-                start += size;
             }
             for (int i = 0; i < thunks[0]; i++)
             {

@@ -3,7 +3,6 @@
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Reflection;
-using System.Reflection.Emit;
 using BootstrapLibrary;
 using ForeignCounter;
 using LinkedInstances;
@@ -25,25 +24,7 @@ internal static class LinkedInstanceCases
         Case(nameof(Kernels.ConstructWide), [int.MinValue - 1L, int.MinValue, 31L, int.MaxValue, int.MaxValue + 1L],
             value => [new { i64 = value.ToString(CultureInfo.InvariantCulture) }], Kernels.ConstructWide);
 
-        // Assert that rejecting virtual dispatch points at the calling IL, not
-        // at a signature or a body reached accidentally through static binding.
-        MethodInfo virtualRead = typeof(Kernels).GetMethod(nameof(Kernels.VirtualRead))!;
-        int callOffset = IlOffsets.Find(virtualRead.GetMethodBody()!.GetILAsByteArray()!, OpCodes.Callvirt);
-        int[] expectedLocation = [0, virtualRead.MetadataToken & 0xffffff, callOffset];
-        byte[] virtualManifest = Manifest(virtualRead);
-        var rejected = Enumerable.Repeat((byte)0xa5, capacity).ToArray();
-        int[] location = CompilerExports.CreateDiagnostic();
-        int status = CompilerExports.CompileBundleDetailed(bundle, virtualManifest, rejected, location);
-        if (callOffset < 0 || status != -2 || !location.SequenceEqual(expectedLocation) ||
-            rejected.Any(value => value != 0xa5))
-            throw new InvalidOperationException($"Virtual call returned {status} at [{string.Join(", ", location)}]");
-        cases.Add(new
-        {
-            module = "BootstrapLibrary", method = "CompileBundle", fixture = "foreign virtual dispatch diagnostic",
-            inputs = new[] { encoded, Encode(virtualManifest) },
-            generated = new { capacity, bundle = true, arguments = Array.Empty<int>(), reject = true, diagnostic = expectedLocation },
-            expected = status
-        });
+        Case(nameof(Kernels.VirtualRead), [0], _ => [], _ => Kernels.VirtualRead());
 
         void Case<T>(string name, T[] values, Func<T, object?[]> arguments, Func<T, int> oracle)
         {
