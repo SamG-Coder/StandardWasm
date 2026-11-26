@@ -6,7 +6,7 @@ a dependency that also declares a type initializer. The unused type's
 initializer does not prevent compilation.
 
 Node and Edge compare the results with the CLR for plain and bundled
-compilation. A reached type with an initializer and a genuine module
+compilation. A reached initialization trigger and a genuine module
 initializer still get an unsupported diagnostic and leave the destination
 unchanged. The compiler does not run or skip required initializers. Static
 field storage, precise initialization triggers, exception wrapping and

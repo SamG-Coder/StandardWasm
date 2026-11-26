@@ -29,12 +29,27 @@ internal static class StaticLayoutCases
                 expected = Kernels.Run(value)
             });
 
-        Reject(nameof(Kernels.ReadLocalStatic), OpCodes.Ldsfld);
-        Reject(nameof(Kernels.ReadForeignStatic), OpCodes.Ldsfld);
-        Reject(nameof(Kernels.WriteForeignStatic), OpCodes.Stsfld);
+        CheckStatic(nameof(Kernels.ReadLocalStatic), [], Kernels.ReadLocalStatic());
+        CheckStatic(nameof(Kernels.ReadForeignStatic), [], Kernels.ReadForeignStatic());
         if (Kernels.ConstructInitialized(5) != 5 || Initialized.Marker != 41)
             throw new InvalidOperationException("The CLR initializer fixture did not execute.");
         Reject(nameof(Kernels.ConstructInitialized), OpCodes.Newobj);
+
+        void CheckStatic(string name, int[] arguments, int expected)
+        {
+            byte[] entries = Manifest(name);
+            int length = CompilerExports.CompileBundleDetailed(bundle, entries, output, location);
+            if (length <= 0)
+                throw new InvalidOperationException($"{name} returned {length} at [{string.Join(", ", location)}].");
+            string bytes = Convert.ToHexString(output.AsSpan(0, length)).ToLowerInvariant();
+            cases.Add(new
+            {
+                module = "BootstrapLibrary", method = "CompileBundle", fixture = name,
+                inputs = new[] { encoded, Encode(entries) },
+                generated = new { capacity, bundle = true, arguments, hex = bytes },
+                expected
+            });
+        }
 
         void Reject(string name, OpCode opcode)
         {

@@ -86,7 +86,7 @@ namespace PortableCompiler
         }
 
         internal static int ResolveField(byte[] main, byte[] bundle, int[] ranges, byte[] caller,
-            int[] layout, int[] heaps, int owner, int member, bool write, int[] objects, int[] field)
+            int[] layout, int[] heaps, int owner, int member, bool write, bool staticField, int[] objects, int[] globals, int[] field)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedField: true);
@@ -100,6 +100,7 @@ namespace PortableCompiler
             int parent = reference[AssemblyReferences.GenericParent];
             if (parent != 0)
             {
+                if (staticField) return -2;
                 type = ManagedReferenceSignatures.ReadInstantiation(main, bundle, ranges, caller, layout, heaps,
                     owner, parent, objects);
                 if (type < ObjectLayouts.FirstClass) return type < 0 ? type : -2;
@@ -122,7 +123,7 @@ namespace PortableCompiler
             int table = AssemblyReferences.FieldTable(target, targetHeaps, targetLayout);
             if (table < 0) return table;
             var definition = new int[3];
-            int row = 0;
+            int row = 0, flags = 0;
             for (int candidate = range[0]; candidate < range[1]; candidate++)
             {
                 AssemblyReferences.ReadField(target, targetLayout, table, candidate, definition);
@@ -132,11 +133,15 @@ namespace PortableCompiler
                     target, targetLayout, targetHeaps, matched, definition[2], true, objects, type);
                 if (match < 0) return match;
                 if (match == 0) continue;
-                if ((definition[0] & 0x17) != 6 || (write && (definition[0] & 0x20) != 0)) return -2;
+                flags = definition[0];
+                if ((flags & 0x17) != (staticField ? 0x16 : 6) || (write && (flags & 0x20) != 0)) return -2;
                 if (row != 0) return -5;
                 row = candidate;
             }
             if (row == 0) return -6;
+            if (staticField)
+                return StaticFields.Bind(main, bundle, ranges, target, targetLayout, targetHeaps, matched, declaringType,
+                    row, table, flags, write, objects, globals, field);
             if (type == 0) type = ObjectLayouts.Find(objects, matched, declaringType, new int[0]);
             if (type == 0)
                 type = BundleLayouts.Register(main, bundle, ranges, target, targetLayout, targetHeaps, matched, declaringType, objects);
