@@ -15,6 +15,8 @@ if (process.platform !== "win32") throw Error("The Windows executable comparison
 if (!existsSync(compiler)) throw Error("Build the self-hosted compiler with npm test first.");
 
 const profile = process.argv.includes("--profile-bundle-images");
+const baseline = profile && process.env.STANDARDWASM_BASELINE_DEADLINE === "1";
+const dropDeadlineMs = baseline ? 1_500_000 : 600_000;
 const evidenceRoot = join(root, "artifacts", profile ? "bundle-image-reuse" : "managed-companions");
 mkdirSync(evidenceRoot, { recursive: true });
 const evidence = mkdtempSync(join(evidenceRoot, "run-"));
@@ -38,12 +40,7 @@ const missing = ordinaryFiles.filter(asset => asset !== dependency);
 const wrong = [...missing, { path: companion, bytes: readFileSync(join(ordinary, "LaunchProbe.dll")) }];
 const invalid = [...missing, { path: companion, bytes: Buffer.from("not a managed PE") }];
 
-const windowsRuns = join(root, "artifacts", "winforms-windows-reference");
-const before = new Set(existsSync(windowsRuns) ? readdirSync(windowsRuns) : []);
-run(process.execPath, ["scripts/demo.mjs", "stage-72-winforms-windows-reference"]);
-const added = readdirSync(windowsRuns).filter(path => !before.has(path) && path.startsWith("run-"));
-assert.equal(added.length, 1);
-const desktopRun = join(windowsRuns, added[0]);
+const desktopRun = (profile && process.env.STANDARDWASM_WINFORMS_REFERENCE) || buildWindowsReference();
 const desktopOutput = join(desktopRun, "ordinary");
 const desktopFiles = readdirSync(desktopOutput).filter(path => !path.endsWith(".pdb")).map(path => file(desktopOutput, path));
 const { framework, runtime } = desktopFramework(desktopRun);
@@ -83,12 +80,25 @@ assert.equal(node.wrongIdentity.compilerStatus, -4);
 assert.equal(node.duplicateIdentity.compilerStatus, -5);
 assert.equal(node.winforms.state, "unsupported");
 assert.equal(node.winforms.compilerStatus, -2);
+if (profile) {
+    assert.deepEqual(node.winforms.diagnostic, [0, 3, 361]);
+    for (const field of ["exitCode", "moduleBytes", "moduleSha256"])
+        assert.equal(Object.hasOwn(node.winforms, field), false, field);
+}
 
 const server = await serveLaunch(0, compiler);
 let browser;
 try {
     browser = await chromium.launch({ channel: "msedge" });
     const page = await browser.newPage();
+    if (baseline) {
+        // The historical compiler can exceed the production launch deadline.
+        await page.addInitScript(deadline => {
+            const schedule = globalThis.setTimeout;
+            globalThis.setTimeout = (callback, milliseconds, ...args) =>
+                schedule(callback, milliseconds === 600_000 ? deadline : milliseconds, ...args);
+        }, dropDeadlineMs);
+    }
     for (const [name, files, , pack] of cases) {
         await page.goto(server.url + "/?run");
         await page.locator("#framework").setInputFiles(pack.map(payload));
@@ -108,7 +118,7 @@ try {
         const started = performance.now();
         await page.getByRole("button", { name: "Run managed entry" }).click();
         await page.waitForFunction(() => ["finished", "unsupported", "error"].includes(
-            document.querySelector("#status").dataset.state), null, { timeout: 610000 });
+            document.querySelector("#status").dataset.state), null, { timeout: dropDeadlineMs + 10_000 });
         timingsMs[name].edge = Math.round(performance.now() - started);
         const message = await status.textContent();
         const edge = await status.getAttribute("data-state") === "error" ? { error: message } : JSON.parse(message);
@@ -117,7 +127,7 @@ try {
     writeFileSync(join(evidence, "results.json"), JSON.stringify({
         node: process.version, edge: browser.version(), runtime, originalExit,
         compilerSha256: createHash("sha256").update(compilerBytes).digest("hex"),
-        framework: framework.map(asset => asset.path), cases: node, timingsMs,
+        framework: framework.map(asset => asset.path), cases: node, timingsMs, dropDeadlineMs,
         winformsBundle
     }, null, 2) + "\n");
 } finally {
@@ -131,11 +141,24 @@ if (profile) {
     console.log("Evidence written to " + evidence);
 }
 
+function buildWindowsReference() {
+    const windowsRuns = join(root, "artifacts", "winforms-windows-reference");
+    const before = new Set(existsSync(windowsRuns) ? readdirSync(windowsRuns) : []);
+    run(process.execPath, ["scripts/demo.mjs", "stage-72-winforms-windows-reference"]);
+    const added = readdirSync(windowsRuns).filter(path => !before.has(path) && path.startsWith("run-"));
+    assert.equal(added.length, 1);
+    return join(windowsRuns, added[0]);
+}
+
 function describeBundle(files, framework) {
     const selection = openExecutable(files, "WinFormsReference.exe");
     const deps = JSON.parse(selection.deps.bytes.toString("utf8"));
     const companions = readManagedCompanions({ ...selection, framework }, deps, deps.runtimeTarget.name);
-    const [packed] = packEntry(selection.entry, companions, selection.entryToken & 0xffffff);
+    const [packed, entries] = packEntry(selection.entry, companions, selection.entryToken & 0xffffff);
+    if (process.env.STANDARDWASM_SAVE_BUNDLE === "1") {
+        writeFileSync(join(evidence, "bundle.bin"), packed);
+        writeFileSync(join(evidence, "entries.bin"), entries);
+    }
     const images = companions.length + 1;
     return {
         sha256: createHash("sha256").update(packed).digest("hex"),
