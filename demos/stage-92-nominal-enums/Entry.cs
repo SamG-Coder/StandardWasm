@@ -10,6 +10,10 @@ namespace EnumFieldDemo
 
     public static class Kernels
     {
+        // Keep these two enum references together for the equal-width metadata substitution in Verify.
+        public static int Read(Frame frame) => (int)frame.State;
+        public static int ScoreOther(int value) => Rules.Score(unchecked((OtherStates)value));
+
         public static int Run(int value)
         {
             var frame = new DerivedFrame();
@@ -41,8 +45,6 @@ namespace EnumFieldDemo
             return unchecked((long)frame.Long ^ ((long)frame.UnsignedLong >> 32));
         }
 
-        public static int Read(Frame frame) => (int)frame.State;
-        public static int ScoreOther(int value) => Rules.Score(unchecked((OtherStates)value));
         public static object RejectBox(int value) => unchecked((States)value);
     }
 

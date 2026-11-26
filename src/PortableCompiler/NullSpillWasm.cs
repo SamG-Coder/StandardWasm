@@ -8,7 +8,7 @@ namespace PortableCompiler
         internal const byte NullRef = 0x71;
 
         internal static int Transfer(byte[] code, int used, int[] records, int pc, int[] depths,
-            int[] states, byte[] outgoingNulls, int maximum, int spills)
+            int[] states, byte[] outgoingNulls, int maximum, int spills, int spillFlags = 0)
         {
             int slot = pc * BranchIl.Width;
             int kind = records[slot];
@@ -17,18 +17,18 @@ namespace PortableCompiler
 
             int operand = records[slot + 1];
             if (kind == Branch || kind == Conditional)
-                used = Edge(code, used, depths, states, outgoingNulls, maximum, spills, pc, operand);
+                used = Edge(code, used, depths, states, outgoingNulls, maximum, spills, spillFlags, pc, operand);
             if (kind == Switch)
                 for (int i = 0; i < records[slot + 3]; i++)
-                    used = Edge(code, used, depths, states, outgoingNulls, maximum, spills,
+                    used = Edge(code, used, depths, states, outgoingNulls, maximum, spills, spillFlags,
                         pc, SwitchTarget(records, operand, i));
             if (kind != Branch)
-                used = Edge(code, used, depths, states, outgoingNulls, maximum, spills, pc, records[slot + 2]);
+                used = Edge(code, used, depths, states, outgoingNulls, maximum, spills, spillFlags, pc, records[slot + 2]);
             return used;
         }
 
         private static int Edge(byte[] code, int used, int[] depths, int[] states, byte[] outgoingNulls,
-            int maximum, int spills, int pc, int successor)
+            int maximum, int spills, int spillFlags, int pc, int successor)
         {
             int count = depths[successor] - 1;
             for (int i = 0; i < count; i++)
@@ -50,7 +50,7 @@ namespace PortableCompiler
                 code[used++] = 0xd0;
                 code[used++] = NullRef;
                 code[used++] = 0x21;
-                used = WasmBinary.Unsigned(code, used, BranchWasm.Spill(spills, maximum, target, i));
+                used = WasmBinary.Unsigned(code, used, BranchWasm.Spill(spills, maximum, spillFlags, target, i));
             }
             return used;
         }

@@ -782,7 +782,8 @@ namespace PortableCompiler
                     int[] targetLayout = layout, targetHeaps = heaps;
                     if ((method & 1) != 0)
                     {
-                        if (bundle.Length == 0) return -2;
+                        // Closed generic instance receivers have no lowering yet.
+                        if (bundle.Length == 0 || MemberHasThis(image, heaps, layout, row)) return -2;
                         if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
                         if (callerType < 0) return -1;
                         var symbol = new int[5];
