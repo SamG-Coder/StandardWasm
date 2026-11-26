@@ -2,6 +2,12 @@ using Sample;
 using ArrayLibrary;
 using ByteLibrary;
 
+if (args is ["--native-storage-oracle", var nativeOracle])
+{
+    NativeStorageCases.Write32BitOracle(nativeOracle);
+    return;
+}
+
 var cases = new List<object>();
 void Check(string module, string method, int[] inputs, Func<int> run)
 {
@@ -103,4 +109,11 @@ StrongNameCases.Add(cases);
 ForwardingCases.Add(cases);
 StaticLayoutCases.Add(cases);
 InterfaceReferenceCases.Add(cases);
+NativeStorageCases.Add(cases);
+NestedReferenceCases.Add(cases);
+GenericLayoutCases.Add(cases);
+PackedFieldCases.Add(cases);
+VolatileFieldCases.Add(cases);
+PointerFieldCases.Add(cases);
+EmbeddedValueCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

@@ -7,11 +7,13 @@ namespace PortableCompiler
     {
         internal const byte Void = 0, I32 = 1, Bytes = ArrayTypeRefs.Bytes, Ints = ArrayTypeRefs.Ints, Delegate = 4,
             MethodPointer = 5, String = 6, Chars = ArrayTypeRefs.Packed16, I64 = WideStorage.Scalar, Longs = WideStorage.Array,
-            F32 = 10, F64 = 11, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles;
+            F32 = 10, F64 = 11, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles, Native = NativeStorage.Scalar;
+        internal const byte VoidPointer = PointerStorage.VoidPointer, NativeZero = PointerStorage.NativeZero;
 
         // Signature and frame tags keep the CLI storage width. Narrow types
         // live above the byte range reserved for evaluation stack types.
-        internal const int Signed8 = 256, Unsigned8 = 257, Signed16 = 258, Unsigned16 = 259, Character = 260;
+        internal const int Signed8 = NarrowStorage.Signed8, Unsigned8 = NarrowStorage.Unsigned8,
+            Signed16 = NarrowStorage.Signed16, Unsigned16 = NarrowStorage.Unsigned16, Character = NarrowStorage.Character;
 
         internal static bool IsNarrow(int type) => type >= Signed8 && type <= Character;
         internal static byte StackType(int type) => IsNarrow(type) ? I32 : unchecked((byte)type);
@@ -19,7 +21,12 @@ namespace PortableCompiler
 
         internal static bool IsFloat(int type) => type == F32 || type == F64;
 
-        internal static bool IsScalar(int type) => IsInteger(type) || IsFloat(type);
+        internal static bool IsNativeInteger(int type) => type == Native || type == NativeZero;
+
+        internal static bool IsScalar(int type) => IsInteger(type) || IsFloat(type) || IsNativeInteger(type);
+
+        internal static byte IntegerConversionType(int opcode) =>
+            opcode == 0x6a || opcode == 0x6e ? I64 : opcode == 0xd3 || opcode == 0xe0 ? Native : I32;
 
         // Widen supported class references without allocating or losing sender identity.
         // Boxing and other CLR reference conversions use separate IL operations.
@@ -39,11 +46,16 @@ namespace PortableCompiler
             (IsObjectReference(left) && IsObjectReference(right) &&
                 (Assignable(left, right, objects) || Assignable(right, left, objects)));
 
-        internal static bool Assignable(byte source, int target, int[] objects) =>
-            source == StackType(target) || source == NullValue && IsReference(StackType(target)) ||
-            target == ObjectLayouts.ObjectReference && IsObjectReference(source) ||
-            ObjectLayouts.Inherits(objects, source, StackType(target)) ||
-            ObjectLayouts.Implements(objects, source, StackType(target));
+        internal static bool Assignable(byte source, int target, int[] objects)
+        {
+            byte expected = StackType(target);
+            if (source == expected) return true;
+            if (ObjectLayouts.IsValueType(objects, source) || ObjectLayouts.IsValueType(objects, expected)) return false;
+            return source == NullValue && IsReference(expected) ||
+                source == NativeZero && (target == Native || target == VoidPointer) ||
+                target == ObjectLayouts.ObjectReference && IsObjectReference(source) ||
+                ObjectLayouts.Inherits(objects, source, expected) || ObjectLayouts.Implements(objects, source, expected);
+        }
 
         internal static byte FloatWidth(byte left, byte right) => left == F64 || right == F64 ? F64 : F32;
 
@@ -103,12 +115,18 @@ namespace PortableCompiler
                     types[target] = Void;
                 else if (element == 2 || element == 8 || element == 9)
                     types[target] = I32;
-                else if (element == 3)
-                    types[target] = Character;
-                else if (element >= 4 && element <= 7)
-                    types[target] = Signed8 + element - 4;
+                else if (element >= 3 && element <= 7)
+                    types[target] = NarrowStorage.FromElement(element);
                 else if (WideStorage.IsIntegerElement(element))
                     types[target] = I64;
+                else if (NativeStorage.IsIntegerElement(element))
+                    types[target] = Native;
+                else if (element == PointerStorage.Element)
+                {
+                    if (!PointerStorage.IsVoidPointer(image, cursor, end)) return -2;
+                    cursor++;
+                    types[target] = VoidPointer;
+                }
                 else if (element == 0x0c || element == 0x0d)
                     types[target] = element == 0x0c ? F32 : F64;
                 else if (element == 0x0e)
@@ -117,23 +135,43 @@ namespace PortableCompiler
                     types[target] = ObjectLayouts.ObjectReference;
                 else if (element == 0x1d && cursor < end)
                 {
-                    byte storage = ArrayTypeRefs.Storage(image[cursor++]);
-                    if (storage == 0) return -2;
+                    int storage = ArrayTypeRefs.Storage(image[cursor]);
+                    if (storage == 0)
+                    {
+                        next[0] = cursor - 1;
+                        storage = ManagedReferenceSignatures.Read(main, bundle, ranges, image, methods, heap,
+                            assembly, next, end, receiver, objects, 0);
+                        if (storage < 0) return storage;
+                        cursor = next[0];
+                    }
+                    else cursor++;
                     types[target] = storage;
                 }
                 else if (element == 0x15)
                 {
-                    cursor = DelegateMetadata.ParseFunc(image, heap, methods, cursor - 1, end);
-                    if (cursor < 0) return -2;
-                    types[target] = Delegate;
+                    int afterDelegate = DelegateMetadata.ParseFunc(image, heap, methods, cursor - 1, end);
+                    if (afterDelegate >= 0)
+                    {
+                        cursor = afterDelegate;
+                        types[target] = Delegate;
+                    }
+                    else
+                    {
+                        next[0] = cursor - 1;
+                        int type = ManagedReferenceSignatures.Read(main, bundle, ranges, image, methods, heap,
+                            assembly, next, end, receiver, objects, 0);
+                        if (type < 0) return type;
+                        cursor = next[0];
+                        types[target] = type;
+                    }
                 }
-                else if (element == 0x12)
+                else if (element == 0x12 || element == 0x11)
                 {
                     int coded = CompressedUnsigned(image, cursor, end, next);
                     if (coded <= 0) return -2;
                     cursor = next[0];
-                    int type = BundleLayouts.RegisterReference(main, bundle, ranges, image, methods,
-                        heap, assembly, coded, objects);
+                    int type = BundleLayouts.RegisterType(main, bundle, ranges, image, methods,
+                        heap, assembly, coded, objects, element == 0x11);
                     if (type < 0) return type;
                     types[target] = type;
                 }

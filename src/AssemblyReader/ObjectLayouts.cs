@@ -5,25 +5,31 @@ namespace PeLibrary
     internal static class ObjectLayouts
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
-        internal const int FirstClass = ArrayTypeRefs.Doubles + 1, MaxClasses = 256 - FirstClass;
-        private const int Header = 3, Width = 10, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
+        internal const int FirstClass = PointerStorage.NativeZero + 1, MaxClasses = 256 - FirstClass;
+        private const int Header = 3, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
+        private const int Arguments = 10, Arity = 11, Element = 12;
+        private const int ValueShape = 0x40000000;
         internal const int FieldMapStart = Header + MaxClasses * Width;
 
         // The header stores the type count, occupied field slots and occupied
-        // interface edge slots. Field slices and interface edges grow inward.
-        internal static int Find(int[] registry, int assembly, int row)
+        // auxiliary slots. Field slices and auxiliary data grow inward.
+        internal static int Find(int[] registry, int assembly, int row, int[] arguments)
         {
             for (int i = 0; i < registry[0]; i++)
             {
                 int candidate = Slot(FirstClass + i);
-                if (registry[candidate + Assembly] == assembly && registry[candidate + TypeRow] == row)
-                    return FirstClass + i;
+                if (registry[candidate + Assembly] != assembly || registry[candidate + TypeRow] != row ||
+                    registry[candidate + Arity] != arguments.Length) continue;
+                int start = registry[candidate + Arguments];
+                int j = 0;
+                while (j < arguments.Length && registry[start + j] == arguments[j]) j++;
+                if (j == arguments.Length) return FirstClass + i;
             }
             return 0;
         }
 
-        internal static int ReadShape(byte[] image, int[] streams, int[] methods, int row, int[] shape)
+        internal static int ReadShape(byte[] image, int[] streams, int[] methods, int row, int[] shape, bool valueType = false)
         {
             var counts = new int[45];
             int start = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
@@ -39,10 +45,23 @@ namespace PeLibrary
             uint def = (uint)(defs + (row - 1) * defWidth);
             uint flags = U32(image, def);
             bool isInterface = (flags & 0x20) != 0;
-            if ((flags & 0x18) != 0) return -2; // Non-auto layout.
+            if ((flags & 0x18) != (valueType ? 8u : 0u)) return -2;
             uint baseType = ReadIndex(image, def + (uint)(4 + 2 * strings), extends);
             if (isInterface ? baseType != 0 : baseType == 0 || (baseType & 3) > 1) return -2;
-            if ((baseType & 3) == 1 && IsObjectRef(image, streams, methods, counts, refs, (int)(baseType >> 2)))
+            if (valueType)
+            {
+                // Managed field access uses the declared value shape. Raw
+                // packing and explicit layout require a separate memory ABI.
+                if ((flags & 0x120) != 0x100 || !IsValueTypeBase(image, streams, methods, counts, refs, baseType))
+                    return -2;
+                int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]));
+                if (supported < 0) return supported;
+                baseType = 0;
+                flags |= ValueShape;
+            }
+            else if (baseType != 0 && IsValueTypeBase(image, streams, methods, counts, refs, baseType))
+                return -2; // A value definition cannot enter a class slot.
+            else if ((baseType & 3) == 1 && IsObjectRef(image, streams, methods, counts, refs, (int)(baseType >> 2)))
                 baseType = 0;
 
             uint first = ReadIndex(image, def + (uint)fieldColumn, fieldIndex);
@@ -58,11 +77,12 @@ namespace PeLibrary
             return 0;
         }
 
-        internal static int Reserve(int[] registry, int assembly, int row, int[] shape, int parent)
+        internal static int Reserve(int[] registry, int assembly, int row, int[] shape, int parent, int[] arguments)
         {
             if (registry[0] >= MaxClasses) return -2;
             int count = shape[2], storage = FieldMapStart + registry[1];
-            if (count > registry.Length - registry[2] - storage) return -3;
+            int argumentStart = registry.Length - registry[2] - arguments.Length;
+            if (count > argumentStart - storage) return -3;
             // Reserve the class and its whole field slice before following
             // recursive references. Their registration may append other slices.
             int index = registry[0];
@@ -77,7 +97,32 @@ namespace PeLibrary
             registry[slot + Base] = parent;
             registry[slot + ShapeFlags] = shape[4];
             registry[slot + FieldTable] = shape[0];
+            registry[slot + Arguments] = argumentStart;
+            registry[slot + Arity] = arguments.Length;
+            for (int i = 0; i < arguments.Length; i++) registry[argumentStart + i] = arguments[i];
+            registry[2] = registry[2] + arguments.Length;
             return FirstClass + index;
+        }
+
+        internal static int RegisterArray(int[] registry, int element)
+        {
+            for (int i = 0; i < registry[0]; i++)
+                if (registry[Slot(FirstClass + i) + Element] == element) return FirstClass + i;
+            if (registry[0] >= MaxClasses) return -2;
+            int type = FirstClass + registry[0];
+            registry[0] = registry[0] + 1;
+            registry[Slot(type) + Element] = element;
+            return type;
+        }
+
+        internal static int ArrayElement(int[] registry, int type) =>
+            type >= FirstClass && type - FirstClass < registry[0] ? registry[Slot(type) + Element] : 0;
+
+        internal static int Argument(int[] registry, int type, int index)
+        {
+            if (type < FirstClass || type - FirstClass >= registry[0]) return -2;
+            int slot = Slot(type);
+            return index < 0 || index >= registry[slot + Arity] ? -2 : registry[registry[slot + Arguments] + index];
         }
 
         // Return storage directly for known types. A class signature yields
@@ -85,32 +130,111 @@ namespace PeLibrary
         internal static int ReadStorage(byte[] image, int[] streams, int[] methods, int table, int row, int[] reference)
         {
             reference[0] = 0;
+            reference[1] = 0;
             int strings = methods[2], blobs = methods[3];
             uint at = (uint)(table + (row - 1) * (2 + strings + blobs));
             uint flags = U16(image, at);
             if ((flags & 0x10) != 0) return 0; // Static fields have no instance storage.
             uint sig = ReadIndex(image, at + (uint)(2 + strings), blobs);
-            if (!Fits(sig, 3, (uint)streams[1])) return -1;
-            uint blob = (uint)streams[0] + sig;
-            int size = image[blob];
-            if (size < 2 || !Fits(sig, (uint)(size + 1), (uint)streams[1])) return -1;
-            if (image[blob + 1] != 6) return -2;
-            byte element = image[blob + 2];
-            if (size == 2 && element == 8) return 1;
+            if (sig == 0 || sig >= (uint)streams[1]) return -1;
+            int limit = streams[0] + streams[1];
+            int size = CompressedUnsigned(image, (int)((uint)streams[0] + sig), limit, reference);
+            int blob = reference[0], end = blob + size;
+            reference[0] = 0;
+            if (size < 2 || size > limit - blob) return -1;
+            if (image[blob] != 6) return -2;
+            reference[0] = blob + 1;
+            int modifier = ReadFieldModifier(image, streams, methods, reference, end);
+            if (modifier < 0) return modifier;
+            blob = reference[0] - 1;
+            size = end - blob;
+            reference[0] = 0;
+            byte element = image[blob + 1];
+            if (size == 3 && element == PointerStorage.Element && PointerStorage.IsVoidPointer(image, blob + 2, end))
+                return PointerStorage.VoidPointer;
+            if (size == 2 && (element == 8 || element == 9)) return 1;
+            if (size == 2 && element >= 2 && element <= 7) return NarrowStorage.FromElement(element);
             if (size == 2 && element == 0x0e) return 6;
             if (size == 2 && element == 0x1c) return ObjectReference;
             if (size == 2 && WideStorage.IsIntegerElement(element)) return WideStorage.Scalar;
+            if (size == 2 && NativeStorage.IsIntegerElement(element)) return NativeStorage.Scalar;
             if (size == 3 && element == 0x1d)
             {
-                byte type = ArrayTypeRefs.Storage(image[blob + 3]);
-                return type == 0 ? -2 : type;
+                byte type = ArrayTypeRefs.Storage(image[blob + 2]);
+                if (type != 0) return type;
             }
-            if (element != 0x12) return -2;
-            int end = (int)blob + 1 + size;
-            int coded = CompressedUnsigned(image, (int)blob + 3, end, reference);
+            if (element == 0x15 || element == 0x13 || element == 0x1d)
+            {
+                reference[0] = -blob - 1;
+                reference[1] = end;
+                return 0;
+            }
+            if (element != 0x12 && element != 0x11) return -2;
+            int coded = CompressedUnsigned(image, blob + 2, end, reference);
             if (coded <= 0 || reference[0] != end) return -2;
             reference[0] = coded;
+            if (element == 0x11) reference[1] = 1;
             return 0;
+        }
+
+        // A required modifier participates in linkage even when the storage
+        // bits are unchanged. Volatile ordering belongs to the IL prefix.
+        internal static int ReadFieldModifier(byte[] image, int[] heaps, int[] methods, int[] cursor, int end)
+        {
+            int at = cursor[0];
+            if (at >= end) return -1;
+            if (image[at] == 0x20) return -2; // Optional modifiers need their own binding policy.
+            if (image[at] != 0x1f) return 0;
+            int coded = CompressedUnsigned(image, at + 1, end, cursor);
+            if (coded <= 0 || cursor[0] >= end) return -1;
+            return IsVolatileMarker(image, heaps, methods, coded) ? 1 : -2;
+        }
+
+        private static bool IsVolatileMarker(byte[] image, int[] heaps, int[] methods, int coded)
+        {
+            int tag = coded & 3, row = coded >> 2;
+            if (tag > 1 || row < 1) return false;
+            var counts = new int[45];
+            int start = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (start < 0) return false;
+            int strings = methods[2], scope = ResolutionWidth(counts);
+            int refs = TypeRefStart(image, heaps, counts, start, strings);
+            int refWidth = scope + 2 * strings;
+            uint name, space;
+            if (tag == 1)
+            {
+                if (row > counts[1]) return false;
+                uint at = (uint)(refs + (row - 1) * refWidth);
+                uint resolution = ReadIndex(image, at, scope);
+                // The other recognized facades forward IsVolatile, while
+                // System.Runtime.Extensions does not export the marker.
+                if ((resolution & 3) != 2 ||
+                    !PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts,
+                        (int)(resolution >> 2), includeRuntimeExtensions: false))
+                    return false;
+                name = ReadIndex(image, at + (uint)scope, strings);
+                space = ReadIndex(image, at + (uint)(scope + strings), strings);
+            }
+            else
+            {
+                if (row > counts[2] || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, methods, counts))
+                    return false;
+                int width = 4 + 2 * strings + CodedWidth(counts[2], counts[1], counts[27]) +
+                    IndexWidth(counts[4]) + IndexWidth(counts[6]);
+                uint at = (uint)(refs + counts[1] * refWidth + (row - 1) * width);
+                if ((U32(image, at) & 7) != 1) return false; // The CoreLib marker is top-level and public.
+                name = ReadIndex(image, at + 4, strings);
+                space = ReadIndex(image, at + (uint)(4 + strings), strings);
+            }
+            if (!Fits(name, 11, (uint)heaps[3]) || !Fits(space, 32, (uint)heaps[3])) return false;
+            uint n = (uint)heaps[2] + name, s = (uint)heaps[2] + space;
+            // IsVolatile, System.Runtime.CompilerServices.
+            return U32(image, n) == 0x6f567349 && U32(image, n + 4) == 0x6974616c &&
+                U16(image, n + 8) == 0x656c && image[n + 10] == 0 &&
+                U32(image, s) == 0x74737953 && U32(image, s + 4) == 0x522e6d65 &&
+                U32(image, s + 8) == 0x69746e75 && U32(image, s + 12) == 0x432e656d &&
+                U32(image, s + 16) == 0x69706d6f && U32(image, s + 20) == 0x5372656c &&
+                U32(image, s + 24) == 0x69767265 && U32(image, s + 28) == 0x00736563;
         }
 
         internal static int Owner(byte[] image, int[] streams, int[] methods, int member, bool field)
@@ -147,6 +271,8 @@ namespace PeLibrary
         internal static bool IsAbstract(int[] registry, int type) => (registry[Slot(type) + ShapeFlags] & 0x80) != 0;
         internal static bool IsInterface(int[] registry, int type) =>
             type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & 0x20) != 0;
+        internal static bool IsValueType(int[] registry, int type) =>
+            type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & ValueShape) != 0;
         internal static int Representation(int[] registry, int type) => IsInterface(registry, type) ? ObjectReference : type;
         internal static int AssemblyOf(int[] registry, int type) => registry[Slot(type) + Assembly];
         internal static int TypeDef(int[] registry, int type) => registry[Slot(type) + TypeRow];
@@ -355,6 +481,55 @@ namespace PeLibrary
             uint n = (uint)streams[2] + name, s = (uint)streams[2] + ns;
             return U32(image, n) == 0x656a624f && U16(image, n + 4) == 0x7463 && image[n + 6] == 0 &&
                 U32(image, s) == 0x74737953 && U16(image, s + 4) == 0x6d65 && image[s + 6] == 0;
+        }
+
+        private static bool IsValueTypeBase(byte[] image, int[] streams, int[] methods, int[] counts, int refs, uint coded)
+        {
+            int row = (int)(coded >> 2);
+            int tag = (int)(coded & 3), strings = methods[2], scope = ResolutionWidth(counts);
+            int refWidth = scope + 2 * strings;
+            if (row < 1 || row > counts[tag == 1 ? 1 : 2]) return false;
+            uint name, space, resolution = 0;
+            if (tag == 1)
+            {
+                uint at = (uint)(refs + (row - 1) * refWidth);
+                resolution = ReadIndex(image, at, scope);
+                if ((resolution & 3) != 2) return false;
+                name = ReadIndex(image, at + (uint)scope, strings);
+                space = ReadIndex(image, at + (uint)(scope + strings), strings);
+            }
+            else
+            {
+                if (row > counts[2]) return false;
+                int width = 4 + 2 * strings + CodedWidth(counts[2], counts[1], counts[27]) +
+                    IndexWidth(counts[4]) + IndexWidth(counts[6]);
+                uint at = (uint)(refs + counts[1] * refWidth + (row - 1) * width);
+                name = ReadIndex(image, at + 4, strings);
+                space = ReadIndex(image, at + (uint)(4 + strings), strings);
+            }
+            if (!Fits(name, 10, (uint)streams[3]) || !Fits(space, 7, (uint)streams[3])) return false;
+            uint n = (uint)streams[2] + name, s = (uint)streams[2] + space;
+            if (U32(image, n) != 0x756c6156 || U32(image, n + 4) != 0x70795465 || U16(image, n + 8) != 0x65 ||
+                U32(image, s) != 0x74737953 || U16(image, s + 4) != 0x6d65 || image[s + 6] != 0) return false;
+            return tag == 1
+                ? PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts,
+                    (int)(resolution >> 2), includeRuntimeExtensions: false)
+                : PlatformAssemblyIdentity.IsCoreLibDefinition(image, streams, methods, counts);
+        }
+
+        private static int DefaultPacking(byte[] image, int[] heaps, int[] methods, int[] counts, int row, int typeIndex)
+        {
+            if (counts[15] == 0) return 0;
+            int table = MetadataTableRows.TableStart(heaps, methods, counts, 15);
+            if (table < 0) return -1;
+            int width = 6 + typeIndex;
+            for (int i = 0; i < counts[15]; i++)
+            {
+                uint at = (uint)(table + i * width);
+                if (ReadIndex(image, at + 6, typeIndex) == (uint)row &&
+                    (U16(image, at) != 0 || U32(image, at + 2) != 0)) return -2;
+            }
+            return 0;
         }
 
         private static int TypeRefStart(byte[] image, int[] streams, int[] counts, int first, int strings) =>

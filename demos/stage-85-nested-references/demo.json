@@ -1,0 +1,1 @@
+{"assembly":"NestedDemo","exportType":"NestedDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["NestedContract.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":32768,"arguments":[5]},"expected":11}

@@ -37,7 +37,7 @@ namespace PortableCompiler
         }
 
         internal static int Resolve(byte[] main, byte[] bundle, int[] ranges, byte[] caller,
-            int[] layout, int[] heaps, int owner, int member, int opcode, bool baseCall, int[] symbol)
+            int[] layout, int[] heaps, int owner, int member, int opcode, bool baseCall, int[] objects, int[] symbol)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference);
@@ -46,7 +46,7 @@ namespace PortableCompiler
             var targetLayout = new int[4];
             var targetHeaps = new int[8];
             var range = new int[2];
-            byte[] target = ResolveType(main, bundle, ranges, caller, heaps, reference, false,
+            byte[] target = ResolveType(main, bundle, ranges, caller, heaps, layout, reference, false,
                 binding, targetLayout, targetHeaps, range);
             int matched = binding[0], declaring = binding[1];
             if (declaring < 0) return declaring;
@@ -63,7 +63,7 @@ namespace PortableCompiler
                     continue;
                 int signature = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 4);
                 int match = BundleSignatures.Match(main, bundle, ranges, caller, layout, heaps, owner, reference[5],
-                    target, targetLayout, targetHeaps, matched, signature, false);
+                    target, targetLayout, targetHeaps, matched, signature, false, objects);
                 if (match < 0) return match;
                 if (match == 0) continue;
                 // Direct calls can bind a known body. callvirt additionally
@@ -95,7 +95,7 @@ namespace PortableCompiler
             var targetLayout = new int[4];
             var targetHeaps = new int[8];
             var range = new int[2];
-            byte[] target = ResolveType(main, bundle, ranges, caller, heaps, reference, true,
+            byte[] target = ResolveType(main, bundle, ranges, caller, heaps, layout, reference, true,
                 binding, targetLayout, targetHeaps, range);
             int matched = binding[0], declaringType = binding[1];
             if (declaringType < 0) return declaringType;
@@ -110,7 +110,7 @@ namespace PortableCompiler
                 if (!AssemblyReferences.SameString(caller, heaps, reference[4], target, targetHeaps, definition[1]))
                     continue;
                 int match = BundleSignatures.Match(main, bundle, ranges, caller, layout, heaps, owner, reference[5],
-                    target, targetLayout, targetHeaps, matched, definition[2], true);
+                    target, targetLayout, targetHeaps, matched, definition[2], true, objects);
                 if (match < 0) return match;
                 if (match == 0) continue;
                 if ((definition[0] & 0x17) != 6 || (write && (definition[0] & 0x20) != 0)) return -2;
@@ -118,13 +118,15 @@ namespace PortableCompiler
                 row = candidate;
             }
             if (row == 0) return -6;
-            int type = BundleLayouts.Register(main, bundle, ranges, target, targetLayout, targetHeaps, matched, declaringType, objects);
+            int type = ObjectLayouts.Find(objects, matched, declaringType, new int[0]);
+            if (type == 0)
+                type = BundleLayouts.Register(main, bundle, ranges, target, targetLayout, targetHeaps, matched, declaringType, objects);
             if (type < 0) return type;
             int index = ObjectLayouts.FieldOrdinal(objects, type, row);
             if (index < 0) return index;
             field[0] = index;
             // The receiver layout and value type come from the same owning DLL.
-            field[1] = (type << 8) | ObjectLayouts.FieldType(objects, type, row);
+            field[1] = FieldAccess.Encode(type, ObjectLayouts.FieldType(objects, type, row));
             return 0;
         }
 
@@ -151,7 +153,7 @@ namespace PortableCompiler
             if (status < 0) return status;
             var targetLayout = new int[4];
             var targetHeaps = new int[8];
-            byte[] target = ResolveType(main, bundle, ranges, image, heaps, reference, false,
+            byte[] target = ResolveType(main, bundle, ranges, image, heaps, layout, reference, false,
                 symbol, targetLayout, targetHeaps, new int[2]);
             if (symbol[1] < 0) return symbol[1];
             if (ObjectLayouts.IsCoreObjectType(target, targetHeaps, targetLayout, symbol[1] << 2))
@@ -166,7 +168,7 @@ namespace PortableCompiler
         // signature fixed while each facade supplies a fresh AssemblyRef.
         // binding carries (owner, TypeDef) on success, or a negative status in slot 1.
         private static byte[] ResolveType(byte[] main, byte[] bundle, int[] ranges, byte[] caller,
-            int[] heaps, int[] reference, bool fields, int[] binding, int[] targetLayout,
+            int[] heaps, int[] layout, int[] reference, bool fields, int[] binding, int[] targetLayout,
             int[] targetHeaps, int[] range)
         {
             int owner = FindOwner(main, bundle, ranges, caller, heaps, reference);
@@ -176,7 +178,7 @@ namespace PortableCompiler
                 status = -1;
                 byte[] target = Load(main, bundle, ranges, owner);
                 if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) break;
-                status = AssemblyReferences.FindType(caller, heaps, reference,
+                status = AssemblyReferences.FindType(caller, heaps, layout, reference,
                     target, targetHeaps, targetLayout, range, fields);
                 if (status > 0)
                 {

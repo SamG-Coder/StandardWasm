@@ -14,6 +14,7 @@ namespace PortableCompiler
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
             byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup, int exceptionTags)
         {
+            if (!ValueFieldsWasm.CheckLayouts(objects)) return -2;
             int typeOffset = objects[0] + FirstClassHeap;
             bool hasRemainder = remainderFixup != 0;
             bool overflow = (exceptionTags & ExceptionTypes.Overflow) != 0;
@@ -35,6 +36,13 @@ namespace PortableCompiler
             for (int i = 0; i < objects[0]; i++)
             {
                 int classType = FirstClass + i, fields = LayoutFieldCount(objects, classType);
+                int element = ArrayElement(objects, classType);
+                if (element != 0)
+                {
+                    classBytes += 2 + ValueWidth(Representation(objects, element));
+                    if (classBytes > output.Length) return -3;
+                    continue;
+                }
                 int size = 1, stored = 0, parent = Parent(objects, classType);
                 if (parent != 0) size += 2 + UnsignedSize(HeapType((byte)parent));
                 else if (!IsSealed(objects, classType) && !IsInterface(objects, classType)) size += 2;
@@ -221,6 +229,14 @@ namespace PortableCompiler
             for (int i = 0; i < objects[0]; i++)
             {
                 int classType = FirstClass + i, fields = LayoutFieldCount(objects, classType);
+                int element = ArrayElement(objects, classType);
+                if (element != 0)
+                {
+                    output[cursor++] = 0x5e; // mutable reference vector
+                    cursor = ValueType(output, cursor, Representation(objects, element));
+                    output[cursor++] = 1;
+                    continue;
+                }
                 int parent = Parent(objects, classType);
                 // Interface IDs reserve an empty type entry to keep heap
                 // indices stable. Interface values use eqref and never
@@ -241,8 +257,11 @@ namespace PortableCompiler
                 {
                     int fieldType = LayoutFieldType(objects, classType, field);
                     if (fieldType == 0) continue;
-                    cursor = ValueType(output, cursor, Representation(objects, fieldType));
-                    output[cursor++] = 1;
+                    if (IsNarrow(fieldType))
+                        output[cursor++] = fieldType == Signed8 || fieldType == Unsigned8 ? (byte)0x78 : (byte)0x77;
+                    else
+                        cursor = ValueType(output, cursor, Representation(objects, fieldType));
+                    output[cursor++] = IsValueType(objects, classType) ? (byte)0 : (byte)1;
                 }
             }
             for (int type = 0; type < functions; type++)
@@ -389,14 +408,16 @@ namespace PortableCompiler
         }
 
         private static int ValueWidth(int type) =>
-            type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference ? 1 :
+            type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference || type == VoidPointer ? 1 :
                 HeapType(StackType(type)) <= 63 ? 2 : 3;
 
         internal static int ValueType(byte[] output, int cursor, int slot)
         {
             byte type = StackType(slot);
-            if (type == I32 || type == MethodPointer)
+            if (type == I32 || type == MethodPointer || IsNativeInteger(type))
                 output[cursor++] = 0x7f;
+            else if (type == VoidPointer)
+                output[cursor++] = NullSpillWasm.NullRef; // Only the null pointer inhabits the browser storage type.
             else if (type == I64)
                 output[cursor++] = 0x7e;
             else if (IsFloat(type))

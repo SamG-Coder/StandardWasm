@@ -6,7 +6,7 @@ namespace PeLibrary
     {
         // Validate the exact AssemblyRef name, token and neutral culture.
         internal static bool IsPlatformAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row,
-            bool netstandardOnly = false)
+            bool netstandardOnly = false, bool includeRuntimeExtensions = true)
         {
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 35);
             if (table < 0 || row < 1 || row > counts[35]) return false;
@@ -34,7 +34,8 @@ namespace PeLibrary
                     U32(image, n + 4) != 0x522e6d65 || U32(image, n + 8) != 0x69746e75)
                     return false;
                 return U16(image, n + 12) == 0x656d && image[n + 14] == 0 ||
-                    Fits(name, 26, size) && U32(image, n + 12) == 0x452e656d && U32(image, n + 16) == 0x6e657478 &&
+                    includeRuntimeExtensions && Fits(name, 26, size) &&
+                    U32(image, n + 12) == 0x452e656d && U32(image, n + 16) == 0x6e657478 &&
                     U32(image, n + 20) == 0x6e6f6973 && U16(image, n + 24) == 0x73;
             }
             // System.Private.CoreLib
