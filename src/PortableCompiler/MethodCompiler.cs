@@ -363,8 +363,9 @@ namespace PortableCompiler
                 if (owner != 0 && kind >= BranchIl.NewArray && kind != BranchIl.Narrow && kind != BranchIl.MemberCall &&
                     kind != BranchIl.WideConstant && kind != BranchIl.ConvertInteger && kind != BranchIl.Switch &&
                     kind != BranchIl.SingleConstant && kind != BranchIl.DoubleConstant && kind != BranchIl.ConvertFloat &&
-                    kind != BranchIl.CheckedInteger && kind != BranchIl.CheckedConversion && kind != BranchIl.Leave)
-                    return -2; // The dependency backend currently admits only scalar state.
+                    kind != BranchIl.CheckedInteger && kind != BranchIl.CheckedConversion &&
+                    kind != BranchIl.Leave && kind != BranchIl.Rethrow && kind != BranchIl.EndFinally)
+                    return -2; // CLI dependency state stays scalar. EH references are internal Wasm locals.
                 if (kind == BranchIl.NewArray)
                 {
                     int type = ArrayTypeRefs.ElementType(image, heaps, layout, unchecked((uint)records[slot + 1]));

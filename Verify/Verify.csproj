@@ -52,5 +52,6 @@
     <ProjectReference Include="../demos/stage-54-finally/FinallyLibrary.csproj" />
     <ProjectReference Include="../demos/stage-55-allocation-delegates/AllocationDelegates.csproj" />
     <ProjectReference Include="../demos/stage-56-instance-null/InstanceNull.csproj" />
+    <ProjectReference Include="../demos/stage-57-linked-exceptions/LinkedExceptions.csproj" />
   </ItemGroup>
 </Project>

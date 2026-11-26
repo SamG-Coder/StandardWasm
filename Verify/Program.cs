@@ -84,4 +84,5 @@ NullAccessCases.Add(cases);
 FinallyCases.Add(cases);
 AllocationDelegateCases.Add(cases);
 InstanceNullCases.Add(cases);
+LinkedExceptionCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);
