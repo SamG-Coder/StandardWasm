@@ -12,6 +12,7 @@ namespace PortableCompiler
         internal const int FieldAddress = 43, MethodSpecCall = 44, ExchangeHandlerField = 45;
         internal const int FieldToken = 46, InitializedArray = 47;
         internal const int CheckedInteger = 48, CheckedConversion = 49, Leave = 50, Rethrow = 51, EndFinally = 52;
+        internal const int CastClass = 53, TestClass = 54;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
@@ -177,14 +178,17 @@ namespace PortableCompiler
                         comparison = op == 0x6f ? 1 : 0;
                     }
                 }
-                else if (op == 0x74)
+                else if (op == 0x74 || op == 0x75)
                 {
                     if (length - pc < 4) return -1;
                     uint token = ImageBytes.U32(image, (uint)(start + pc));
                     pc += 4;
-                    if (token >> 24 != 1) return -2;
-                    kind = CastHandler;
-                    operand = (int)(token & 0xffffff);
+                    uint table = token >> 24;
+                    if (table != 1 && table != 2) return -2;
+                    int row = (int)(token & 0xffffff);
+                    if (row == 0) return -1;
+                    kind = op == 0x74 ? CastClass : TestClass;
+                    operand = (row << 2) | (table == 1 ? 1 : 0);
                 }
                 else if (op == 0x14) kind = NullLiteral;
                 else if (op == 0x72)

@@ -256,7 +256,8 @@ namespace PortableCompiler
                     int capacity = body[1] * 64 + 32;
                     if (catchRegion.Length != 0)
                     {
-                        int handlerBytes = 80 + catchRegion.Length / ExceptionClauses.Width * 160;
+                        int handlerBytes = 32 + ExceptionTagsWasm.Count * 20 +
+                            catchRegion.Length / ExceptionClauses.Width * (40 * ExceptionTagsWasm.Count);
                         if (capacity > int.MaxValue - handlerBytes) return -3;
                         capacity += handlerBytes;
                     }
@@ -297,6 +298,8 @@ namespace PortableCompiler
                             int tags = 0;
                             if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion || kind == BranchIl.NewArray)
                                 tags = ExceptionTypes.Overflow;
+                            else if (kind == BranchIl.CastClass)
+                                tags = ExceptionTypes.InvalidCast;
                             else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet || kind == BranchIl.StringCharacter)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
@@ -377,10 +380,15 @@ namespace PortableCompiler
                     if (type < 0) return type;
                     records[slot + 1] = type;
                 }
-                if (kind == BranchIl.CastHandler)
+                if (kind == BranchIl.CastClass || kind == BranchIl.TestClass)
                 {
-                    int coded = (records[slot + 1] << 2) | 1;
-                    if (EventMetadata.Reference(image, heaps, layout, coded) != EventHandlerReference) return -2;
+                    int type = BundleLayouts.RegisterReference(main, bundle, ranges, image, layout, heaps, owner,
+                        records[slot + 1], objects);
+                    if (type < 0) return type;
+                    if (kind == BranchIl.CastClass && type == EventHandlerReference)
+                        records[slot] = BranchIl.CastHandler;
+                    else if (type < ObjectLayouts.FirstClass) return -2;
+                    records[slot + 1] = type;
                     continue;
                 }
                 if (kind == BranchIl.MethodSpecCall || kind == BranchIl.FieldToken) return -2;
@@ -400,7 +408,7 @@ namespace PortableCompiler
                     }
                     int fieldOwner = ObjectLayouts.Owner(image, heaps, layout, field, true);
                     if (fieldOwner < 0) return -1;
-                    int type = ObjectLayouts.Register(image, heaps, layout, objects, owner, fieldOwner);
+                    int type = BundleLayouts.Register(main, bundle, ranges, image, layout, heaps, owner, fieldOwner, objects);
                     if (type < 0) return type;
                     int fieldIndex = ObjectLayouts.FieldOrdinal(objects, type, field);
                     if (fieldIndex < 0) return -1;
@@ -655,7 +663,7 @@ namespace PortableCompiler
             {
                 int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
                 if (owner < 0) return -1;
-                receiver = ObjectLayouts.Register(image, heaps, layout, objects, assembly, owner);
+                receiver = BundleLayouts.Register(main, bundle, ranges, image, layout, heaps, assembly, owner, objects);
                 if (receiver < 0) return receiver;
             }
             int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);

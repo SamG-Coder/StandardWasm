@@ -118,7 +118,7 @@ namespace PortableCompiler
                 row = candidate;
             }
             if (row == 0) return -6;
-            int type = ObjectLayouts.Register(target, targetHeaps, targetLayout, objects, matched, declaringType);
+            int type = BundleLayouts.Register(main, bundle, ranges, target, targetLayout, targetHeaps, matched, declaringType, objects);
             if (type < 0) return type;
             int index = ObjectLayouts.FieldOrdinal(objects, type, row);
             if (index < 0) return index;
@@ -154,20 +154,6 @@ namespace PortableCompiler
             symbol[0] = matched;
             symbol[1] = row;
             return 0;
-        }
-
-        internal static int RegisterClassReference(byte[] main, byte[] bundle, int[] ranges, byte[] image,
-            int[] layout, int[] heaps, int owner, int coded, int[] objects)
-        {
-            var symbol = new int[2];
-            int status = ClassIdentity(main, bundle, ranges, image, layout, heaps, owner, coded, symbol);
-            if (status < 0) return status;
-            if (symbol[0] == owner) return ObjectLayouts.Register(image, heaps, layout, objects, owner, symbol[1]);
-            byte[] target = Load(main, bundle, ranges, symbol[0]);
-            var targetLayout = new int[4];
-            var targetHeaps = new int[8];
-            if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
-            return ObjectLayouts.Register(target, targetHeaps, targetLayout, objects, symbol[0], symbol[1]);
         }
 
         private static int FindOwner(byte[] main, byte[] bundle, int[] ranges, byte[] caller, int[] heaps, int[] reference)
