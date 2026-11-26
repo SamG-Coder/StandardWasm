@@ -114,6 +114,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [108 � BeforeFieldInit calls](stage-108-beforefieldinit-calls/README.md) | `npm run demo -- stage-108-beforefieldinit-calls` | Allow non-triggering static calls and diagnose reached initializers |
 | [109 � Virtual dispatch on sealed receivers](stage-109-exact-virtual-dispatch/README.md) | `npm run demo -- stage-109-exact-virtual-dispatch` | Resolve inherited and hidden virtual slots for sealed classes |
 | [110 · Console arguments and streams](stage-110-console-arguments/README.md) | `npm run demo -- stage-110-console-arguments` | Windows, Node and Edge match on exit status and stdout/stderr bytes for `Main(string[])` |
+| [111 · Value-type construction](stage-111-value-construction/README.md) | `npm run demo -- stage-111-value-construction` | Local and linked value constructors, in place and through newobj, match the CLR |
 | [112 · Standalone Webcil intake](stage-112-standalone-webcil-intake/README.md) | `npm run demo -- stage-112-standalone-webcil-intake` | Inspect the original .NET 10 standalone publish in Node and Edge |
 | [114 · Empty module startup](stage-114-empty-module-startup/README.md) | `npm run demo -- stage-114-empty-module-startup` | Prove empty module startup in standalone and linked .NET Standard libraries |
 | [116 · Native integer vectors](stage-116-native-integer-vectors/README.md) | `npm run demo -- stage-116-native-integer-vectors` | wasm32 native vector storage, loads and stores on original managed DLLs |

@@ -108,6 +108,7 @@
     <ProjectReference Include="../demos/stage-106-static-field-storage/StaticStorageDemo.csproj" />
     <ProjectReference Include="../demos/stage-108-beforefieldinit-calls/BeforeFieldInitDemo.csproj" />
     <ProjectReference Include="../demos/stage-109-exact-virtual-dispatch/VirtualDispatchDemo.csproj" />
+    <ProjectReference Include="../demos/stage-111-value-construction/ValueConstructionDemo.csproj" />
     <ProjectReference Include="../demos/stage-103-handle-generic-constraints/HandleConstraintDemo.csproj" />
     <ProjectReference Include="../demos/stage-105-generic-method-bodies/GenericBodyDemo.csproj" />
     <ProjectReference Include="../demos/stage-102-nominal-enum-arguments/EnumArgumentDemo.csproj" />

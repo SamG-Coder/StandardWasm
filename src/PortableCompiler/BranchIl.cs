@@ -19,6 +19,10 @@ namespace PortableCompiler
         internal const int ConsoleWriter = 61, ConsoleWrite = 62;
         internal const int LoadStaticField = 63, StoreStaticField = 64;
         internal const int VirtualCall = 65;
+        // call S::.ctor on the managed address of a local or of a value
+        // constructor's receiver: [S, arguments] -> []. The operand is the
+        // function and the auxiliary field is the addressed frame index.
+        internal const int ConstructValue = 66;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
