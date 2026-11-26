@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>ForwardContract</AssemblyName>
+    <SignAssembly>true</SignAssembly>
+    <PublicSign>true</PublicSign>
+    <AssemblyOriginatorKeyFile>../../stage-78-strong-names/fixture-a.public.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../Implementation/Implementation.csproj" /></ItemGroup>
+</Project>
