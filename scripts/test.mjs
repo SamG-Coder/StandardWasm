@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { decode, invoke, invokeGenerated } from "./invoke.mjs";
 import { demoInputs, listDemos } from "./demos.mjs";
 import { chromium } from "playwright-core";
@@ -76,6 +76,8 @@ assert.equal(rejectedArrayIdentity.status, 1);
 assert.match(rejectedArrayIdentity.stderr, /Probe::Make\(System\.Int32\) at IL_[0-9a-f]+ \(newarr\): Arrays of System\.Int16 in ThirdPartyPrimitive/);
 // #141: the oracle writes MathIntrinsics.dll with Culture set on its platform AssemblyRefs (name and token unchanged).
 // The CLR does not bind that reference to the BCL, so its System.Double is not the CLI primitive.
+// Remove any earlier output first, so the no-output check below cannot pass or fail on a stale file.
+rmSync("artifacts/unsupported-culture.wat", { force: true });
 const rejectedCulture = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler", "--",
     "artifacts/culture-probe/MathIntrinsics.dll", "MathIntrinsics.Measures", "artifacts/unsupported-culture.wat"],
     { encoding: "utf8" });
