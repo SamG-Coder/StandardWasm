@@ -17,9 +17,13 @@ null-only reference, so no pointer could be dereferenced.
   a module never has two memories. A memory import takes no function index.
 - **Pointers.** A single-level pointer to a primitive (`bool`, `char`, the
   sized integers, `float`, `double`, `nint`, `nuint`) is an i32 address. This
-  is the CLI native-int stack type (ECMA-335 III.1.1.5). `void*`, pointers to
-  named structs and multi-level pointers keep the null-only storage of
-  decisions 0032 and 0035 until their own lowering. Signature binding still
+  is the CLI native-int stack type (ECMA-335 III.1.1.5).
+- **`void*`.** Since Stage 137, a single-level `void*` is the same address. A
+  `byte*` passes to a `void*` parameter with no IL conversion. The original
+  `UnmanagedMemoryStream.Initialize` relies on this when it calls
+  `ArgumentNullException.ThrowIfNull(void*, string)` (Codex, handoff 087).
+  Pointers to named structs and multi-level pointers keep the null-only storage
+  of decisions 0032 and 0035 until their own lowering. Signature binding still
   compares pointer levels and the terminal encoding.
 - **Arithmetic.** Native int combined with int32 or native int gives native
   int for arithmetic and bitwise operations, and a shift keeps the type of
