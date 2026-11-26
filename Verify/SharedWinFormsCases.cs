@@ -23,7 +23,7 @@ internal static class SharedWinFormsCases
             throw new InvalidOperationException($"Shared form fixture returned {length}.");
         string hex = Convert.ToHexString(output.AsSpan(0, length)).ToLowerInvariant();
         var inputs = new[] { Encode(image), Encode(manifest) };
-        foreach (int action in Enumerable.Range(0, 6))
+        foreach (int action in Enumerable.Range(0, 7))
             cases.Add(new
             {
                 module = "BootstrapLibrary", method = "CompileModule", fixture = $"Shared WinForms source {action}",

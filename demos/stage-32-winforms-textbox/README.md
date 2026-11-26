@@ -8,7 +8,7 @@ Open the printed local URL and type into Name. The WebGPU preview shows Hello, f
 
     dotnet run -c Release --project demos/stage-32-winforms-textbox/Desktop
 
-Both hosts use the same C# profile model and handler. Windows uses WinForms TextBox.TextChanged. The browser uses a standard single-line input for editing, selection and keyboard behavior, and forwards UTF-16 code units to the managed Wasm model. Input under composition is forwarded after composition ends. The C# state retains the string in a sealed object and formats the preview, which WebGPU renders on the canvas.
+Both hosts use the same C# profile model and TextChanged and Click subscriptions. Windows uses WinForms controls. The browser uses a standard single-line input for editing, selection and keyboard behavior, and forwards UTF-16 code units to the Wasm text box. Input under composition is forwarded after composition ends. The managed TextChanged handler formats the preview, which WebGPU renders on the canvas.
 
 Run the native/browser parity check with:
 

@@ -27,12 +27,21 @@ namespace PortableCompiler
                     stack[i] = states[pc * maximum + i];
                 if (kind == Return)
                 {
-                    if (result == Void ? depth != 0 : depth != 1 || stack[0] != result)
+                    if (result == Void ? depth != 0 : depth != 1 || !Assignable(stack[0], result))
                         return -1;
                     continue;
                 }
 
-                int next = Transition(stack, depth, kind, operand, records[slot + 3], frame,
+                int next;
+                if (kind == ExchangeHandlerField)
+                {
+                    if (!Match(stack, depth, (byte)(records[slot + 3] >> 8)) ||
+                        frame[records[slot + BranchIl.Width + 1]] != EventHandlerReference ||
+                        frame[records[slot + 2 * BranchIl.Width + 1]] != EventHandlerReference)
+                        return -1;
+                    next = Push(stack, depth - 1, EventHandlerReference);
+                }
+                else next = Transition(stack, depth, kind, operand, records[slot + 3], frame,
                     signatures, offsets, arities);
                 if (next < 0)
                     return next;
@@ -63,6 +72,12 @@ namespace PortableCompiler
             byte[] signatures, int[] offsets, int[] arities)
         {
             if (kind == LoadString || kind == NullString) return Push(stack, depth, String);
+            if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, depth, EventArgsReference);
+            if (kind == CombineHandler || kind == RemoveHandler)
+                return Match(stack, depth, EventHandlerReference) && Match(stack, depth - 1, EventHandlerReference)
+                    ? depth - 1 : -1;
+            // The supported delegate operations already proved the result's concrete type.
+            if (kind == CastHandler) return Match(stack, depth, EventHandlerReference) ? depth : -1;
             if (kind == JoinStrings)
                 return Match(stack, depth, String) && Match(stack, depth - 1, String)
                     ? Push(stack, depth - 2, String) : -1;
@@ -77,10 +92,14 @@ namespace PortableCompiler
             if (kind == NewDelegate)
             {
                 if (!Match(stack, depth, MethodPointer) || !Match(stack, depth - 1, (byte)extra)) return -1;
-                return Push(stack, depth - 2, Delegate);
+                return Push(stack, depth - 2, (byte)operand);
             }
             if (kind == InvokeDelegate)
             {
+                if (operand == EventHandlerReference)
+                    return Match(stack, depth, EventArgsReference) && depth >= 3 &&
+                        Assignable(stack[depth - 2], ObjectReference) && Match(stack, depth - 2, EventHandlerReference)
+                        ? depth - 3 : -1;
                 if (!Match(stack, depth, Delegate)) return -1;
                 return Push(stack, depth - 1, I32);
             }
@@ -89,7 +108,7 @@ namespace PortableCompiler
                 return Push(stack, depth, kind == WideConstant ? I64 : I32);
             if (kind == SingleConstant || kind == DoubleConstant)
                 return Push(stack, depth, kind == SingleConstant ? F32 : F64);
-            if (kind == Store) return Match(stack, depth, frame[operand]) ? depth - 1 : -1;
+            if (kind == Store) return depth > 0 && Assignable(stack[depth - 1], frame[operand]) ? depth - 1 : -1;
             if (kind == Unary || kind == Narrow || kind == ConvertInteger || kind == ConvertFloat)
             {
                 if (depth < 1) return -1;
@@ -118,9 +137,11 @@ namespace PortableCompiler
                 if (depth < needed) return -1;
                 byte type = stack[depth - needed];
                 byte top = stack[depth - 1];
-                if (type >= FirstClass || top >= FirstClass)
+                if (type == String || top == String)
+                    return kind == Conditional && needed == 1 ? depth - 1 : -1;
+                if (IsObjectReference(type) || IsObjectReference(top))
                 {
-                    if (type != top) return -1;
+                    if (!Assignable(type, top) && !Assignable(top, type)) return -1;
                     if (kind == Conditional)
                         return needed == 1 || extra == 0x46 || extra == 0x47 ? depth - needed : -1;
                     return operand == 0x46 ? Push(stack, depth - 2, I32) : -1;
@@ -147,7 +168,7 @@ namespace PortableCompiler
                 if (start < 0)
                     return -1;
                 for (int i = receiver; i < count; i++)
-                    if (stack[start + i - receiver] != signatures[offset + 1 + i])
+                    if (!Assignable(stack[start + i - receiver], signatures[offset + 1 + i]))
                         return -1;
                 byte result = kind == NewObject ? signatures[offset + 1] : signatures[offset];
                 return result == Void ? start : Push(stack, start, result);
@@ -161,8 +182,8 @@ namespace PortableCompiler
                 return depth;
             }
             if (kind == SetField)
-                return Match(stack, depth, unchecked((byte)extra)) &&
-                    Match(stack, depth - 1, (byte)(extra >> 8)) ? depth - 2 : -1;
+                return Match(stack, depth - 1, (byte)(extra >> 8)) &&
+                    Assignable(stack[depth - 1], unchecked((byte)extra)) ? depth - 2 : -1;
             if (kind == NewArray)
             {
                 if (!Match(stack, depth, I32)) return -1;

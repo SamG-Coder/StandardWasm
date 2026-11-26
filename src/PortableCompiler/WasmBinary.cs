@@ -6,11 +6,12 @@ namespace PortableCompiler
 {
     internal static class WasmBinary
     {
-        private const int WideArrayHeap = 6, FirstClassHeap = WideArrayHeap + 1;
+        internal const int ScalarThunkType = 2, EventThunkType = 8, EventEntryHeap = 9, EventHandlerHeap = 10;
+        private const int WideArrayHeap = 6, EventArgsHeap = 7, FirstClassHeap = EventHandlerHeap + 1;
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize)
+            byte[] literals, int literalSize, bool eventArgsEmpty)
         {
             int typeOffset = objects[0] + FirstClassHeap;
             int totalFunctions = functions + thunks[0];
@@ -35,8 +36,9 @@ namespace PortableCompiler
             }
             // A recursive group is one type-section entry but its member
             // types retain individual indices for fields and function signatures.
-            int typeEntries = recursive ? functions + FirstClassHeap + 1 : functions + typeOffset;
-            int prefix = UnsignedSize(typeEntries) + 28 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+            // The entry and invocation list also share one fixed recursive type group.
+            int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 1;
+            int prefix = UnsignedSize(typeEntries) + 57 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;
             int functionSize = UnsignedSize(totalFunctions) + thunks[0];
@@ -74,7 +76,7 @@ namespace PortableCompiler
             {
                 int function = thunks[i + 1];
                 int receiver = types[offsets[function] + 1];
-                int thunkSize = ThunkSize(receiver, function);
+                int thunkSize = ThunkSize(receiver, function, arities[function]);
                 if (1 + thunkSize > output.Length - codeSize ||
                     UnsignedSize(functions + i) > output.Length - elementSize)
                     return -3;
@@ -87,6 +89,8 @@ namespace PortableCompiler
             remaining = Reserve(remaining, functionSize);
             if (thunks[0] != 0)
                 remaining = Reserve(remaining, tableSize);
+            if (eventArgsEmpty)
+                remaining = Reserve(remaining, 8);
             remaining = Reserve(remaining, exportSize);
             if (thunks[0] != 0)
                 remaining = Reserve(remaining, elementSize);
@@ -137,6 +141,39 @@ namespace PortableCompiler
             output[cursor++] = 0x5e; // array of i64
             output[cursor++] = 0x7e;
             output[cursor++] = 1;
+            // The immutable marker gives EventArgs a distinct GC shape from user classes.
+            output[cursor++] = 0x5f;
+            output[cursor++] = 1;
+            output[cursor++] = 0x7f;
+            output[cursor++] = 0;
+            // Event thunk: (target eqref, sender eqref, EventArgs?) -> void.
+            output[cursor++] = 0x60;
+            output[cursor++] = 3;
+            output[cursor++] = 0x6d;
+            output[cursor++] = 0x6d;
+            cursor = ValueType(output, cursor, EventArgsReference);
+            output[cursor++] = 0;
+            // Entry and invocation list refer to each other. The back-reference
+            // is set once at construction and retains the original singleton.
+            output[cursor++] = 0x4e;
+            output[cursor++] = 2;
+            output[cursor++] = 0x5f;
+            output[cursor++] = 4;
+            output[cursor++] = 0x6d;
+            output[cursor++] = 0;
+            output[cursor++] = 0x63;
+            output[cursor++] = EventThunkType;
+            output[cursor++] = 0;
+            output[cursor++] = 0x7f; // method identity, independent of the receiver
+            output[cursor++] = 0;
+            output[cursor++] = 0x63;
+            output[cursor++] = EventHandlerHeap;
+            output[cursor++] = 1;
+            // Private array of callbacks. Generated code writes only fresh arrays.
+            output[cursor++] = 0x5e;
+            output[cursor++] = 0x63;
+            output[cursor++] = EventEntryHeap;
+            output[cursor++] = 1;
             if (recursive)
             {
                 output[cursor++] = 0x4e;
@@ -177,7 +214,7 @@ namespace PortableCompiler
             for (int i = 0; i < functions; i++)
                 cursor = Unsigned(output, cursor, i + typeOffset);
             for (int i = 0; i < thunks[0]; i++)
-                output[cursor++] = 2;
+                output[cursor++] = arities[thunks[i + 1]] == 3 ? (byte)EventThunkType : (byte)ScalarThunkType;
             if (thunks[0] != 0)
             {
                 cursor = Section(output, cursor, 4, tableSize);
@@ -187,6 +224,17 @@ namespace PortableCompiler
                 cursor = Unsigned(output, cursor, thunks[0]);
             }
 
+            if (eventArgsEmpty)
+            {
+                cursor = Section(output, cursor, 6, 8);
+                output[cursor++] = 1;
+                cursor = ValueType(output, cursor, EventArgsReference);
+                output[cursor++] = 0; // immutable global, initialized once per module instance
+                output[cursor++] = 0xfb;
+                output[cursor++] = 1; // struct.new_default
+                output[cursor++] = EventArgsHeap;
+                output[cursor++] = 0x0b;
+            }
             cursor = Section(output, cursor, 7, exportSize);
             cursor = Unsigned(output, cursor, exports.Length);
             for (int i = 0; i < exports.Length; i++)
@@ -233,13 +281,19 @@ namespace PortableCompiler
             for (int i = 0; i < thunks[0]; i++)
             {
                 int function = thunks[i + 1], receiver = types[offsets[function] + 1];
-                cursor = Unsigned(output, cursor, ThunkSize(receiver, function));
+                int arity = arities[function];
+                cursor = Unsigned(output, cursor, ThunkSize(receiver, function, arity));
                 output[cursor++] = 0; // local declarations
                 output[cursor++] = 0x20;
                 output[cursor++] = 0;
                 output[cursor++] = 0xfb;
                 output[cursor++] = 22; // ref.cast to the target's concrete receiver
                 cursor = Signed(output, cursor, HeapType((byte)receiver));
+                for (int argument = 1; argument < arity; argument++)
+                {
+                    output[cursor++] = 0x20;
+                    output[cursor++] = (byte)argument;
+                }
                 output[cursor++] = 0x10;
                 cursor = Unsigned(output, cursor, function);
                 output[cursor++] = 0x0b;
@@ -257,7 +311,7 @@ namespace PortableCompiler
         }
 
         private static int ValueWidth(byte type) =>
-            type == Void ? 0 : IsScalar(type) || type == MethodPointer ? 1 :
+            type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference ? 1 :
                 HeapType(type) <= 63 ? 2 : 3;
 
         internal static int ValueType(byte[] output, int cursor, byte type)
@@ -268,6 +322,8 @@ namespace PortableCompiler
                 output[cursor++] = 0x7e;
             else if (IsFloat(type))
                 output[cursor++] = type == F32 ? (byte)0x7d : (byte)0x7c;
+            else if (type == ObjectReference)
+                output[cursor++] = 0x6d; // eqref, the supertype of the managed class structs
             else
             {
                 output[cursor++] = 0x63; // ref null
@@ -278,10 +334,12 @@ namespace PortableCompiler
 
         internal static int HeapType(byte type) =>
             type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
+                type == EventArgsReference ? EventArgsHeap :
+                type == EventHandlerReference ? EventHandlerHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;
 
-        private static int ThunkSize(int receiver, int function) =>
-            7 + (HeapType((byte)receiver) <= 63 ? 1 : 2) + UnsignedSize(function);
+        private static int ThunkSize(int receiver, int function, int arity) =>
+            7 + (HeapType((byte)receiver) <= 63 ? 1 : 2) + 2 * (arity - 1) + UnsignedSize(function);
 
         private static int Reserve(int remaining, int size)
         {
