@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Host-side analysis tool. It is not part of the compiler or the browser
+       runtime; it only reads metadata and calls the portable compiler sources
+       (through the bootstrap library) to record their own verdicts. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../stage-13-complete-bootstrap/BootstrapLibrary.csproj" />
+  </ItemGroup>
+</Project>
