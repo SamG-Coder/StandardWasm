@@ -50,5 +50,6 @@
     <ProjectReference Include="../demos/stage-52-array-bounds-exceptions/ArrayBounds.csproj" />
     <ProjectReference Include="../demos/stage-53-typed-null-access/NullAccess.csproj" />
     <ProjectReference Include="../demos/stage-54-finally/FinallyLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-55-allocation-delegates/AllocationDelegates.csproj" />
   </ItemGroup>
 </Project>

@@ -82,4 +82,5 @@ RethrowCases.Add(cases);
 ArrayBoundsCases.Add(cases);
 NullAccessCases.Add(cases);
 FinallyCases.Add(cases);
+AllocationDelegateCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

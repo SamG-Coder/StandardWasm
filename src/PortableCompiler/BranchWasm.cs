@@ -219,13 +219,16 @@ namespace PortableCompiler
                 }
                 else if (kind == InvokeDelegate && operand == EventHandlerReference)
                 {
-                    used = EventWasm.Invoke(code, used, Spill(spills, maximum, EventHandlerReference, top - 2),
+                    int callback = Spill(spills, maximum, EventHandlerReference, top - 2);
+                    used = GuardNull(code, used, callback);
+                    used = EventWasm.Invoke(code, used, callback,
                         Spill(spills, maximum, states[state + top - 1], top - 1),
                         Spill(spills, maximum, EventArgsReference, top), eventLocals);
                 }
                 else if (kind == InvokeDelegate)
                 {
                     int closure = Spill(spills, maximum, Delegate, top);
+                    used = GuardNull(code, used, closure);
                     used = Local(code, used, 0x20, closure);
                     used = Gc(code, used, 2, Delegate); // struct.get receiver
                     code[used++] = 0;
@@ -397,6 +400,15 @@ namespace PortableCompiler
                 {
                     if (kind == InitializedArray)
                         used = Const(code, used, records[slot + 3]);
+                    else
+                    {
+                        // Wasm allocation interprets its length as unsigned. The CLI
+                        // raises overflow for a negative length before allocation.
+                        used = Local(code, used, 0x20, spills + top);
+                        used = Const(code, used, 0);
+                        code[used++] = 0x48; // i32.lt_s
+                        used = ExceptionTagsWasm.ThrowIf(code, used);
+                    }
                     used = Local(code, used, 0x20, spills + top);
                     used = Gc(code, used, kind == NewArray ? 7 : 9, operand); // default or passive data
                     if (kind == InitializedArray) code[used++] = 0; // shared data segment index

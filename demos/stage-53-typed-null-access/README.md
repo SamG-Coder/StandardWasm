@@ -12,5 +12,6 @@ bounds. The fixtures cover normal access, nested rethrow, and string
 concatenation where the CLR accepts null.
 
 Run `npm test` for CLR, Node and Edge comparisons and generated-compiler
-replay. Other null-sensitive operations, including delegate invocation
-and general virtual calls, require separate lowering.
+replay. [Stage 55](../stage-55-allocation-delegates/README.md) adds typed null
+failures for supported delegate invocations. General virtual calls require
+separate lowering.

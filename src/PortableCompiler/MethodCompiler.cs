@@ -285,12 +285,12 @@ namespace PortableCompiler
                                 capacity += unwindBytes;
                             }
                             int tags = 0;
-                            if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion)
+                            if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion || kind == BranchIl.NewArray)
                                 tags = ExceptionTypes.Overflow;
                             else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet || kind == BranchIl.StringCharacter)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
-                                kind == BranchIl.SetField || kind == BranchIl.StringLength)
+                                kind == BranchIl.SetField || kind == BranchIl.StringLength || kind == BranchIl.InvokeDelegate)
                                 tags = ExceptionTypes.NullReference;
                             else if (kind == BranchIl.Binary)
                             {
