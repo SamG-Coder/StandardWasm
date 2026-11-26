@@ -42,23 +42,24 @@ internal static class SkipLocalsInitCases
 
         void Reject(string method)
         {
-            // The pointer local is optimized away in Release, so pin the localloc opcode itself:
-            // the -2 must come from stackalloc, not from the old InitLocals rule.
+            // The -2 must be reported at the decoded localloc instruction itself, so it cannot
+            // come from the old InitLocals rule (IL -1) or from an unrelated construct. The pointer
+            // local is optimized away in Release, so the offset is the anchor, not the locals.
             int row = typeof(Kernels).GetMethod(method)!.MetadataToken & 0xffffff;
             int rva = metadata.GetMethodDefinition(MetadataTokens.MethodDefinitionHandle(row)).RelativeVirtualAddress;
-            byte[] il = pe.GetMethodBody(rva).GetILBytes()!;
-            if (!il.Zip(il.Skip(1)).Any(pair => pair.First == 0xfe && pair.Second == 0x0f))
-                throw new InvalidOperationException($"{method} must contain localloc");
-            var output = new byte[capacity];
-            Array.Fill(output, (byte)0xa5);
-            int status = CompilerExports.Compile(image, row, output);
-            if (status != -2 || output.Any(value => value != 0xa5))
-                throw new InvalidOperationException($"{method} (stackalloc) returned {status}; expected an explicit -2");
+            int localloc = IlOffsets.Find(pe.GetMethodBody(rva).GetILBytes()!, System.Reflection.Emit.OpCodes.Localloc);
+            if (localloc < 0) throw new InvalidOperationException($"{method} must contain localloc");
+            byte[] output = Enumerable.Repeat((byte)0xa5, capacity).ToArray();
+            int[] diagnostic = CompilerExports.CreateDiagnostic();
+            int status = CompilerExports.CompileDetailed(image, row, output, diagnostic);
+            if (status != -2 || output.Any(value => value != 0xa5) || !diagnostic.SequenceEqual(new[] { 0, row, localloc }))
+                throw new InvalidOperationException(
+                    $"{method} (stackalloc) returned {status} at [{string.Join(", ", diagnostic)}]; expected -2 at [0, {row}, {localloc}]");
             cases.Add(new
             {
                 module = "BootstrapLibrary", method = "Compile", fixture = "skip-locals-init " + method,
                 inputs = new[] { encoded, row },
-                generated = new { capacity, arguments = Array.Empty<int>(), reject = true },
+                generated = new { capacity, arguments = Array.Empty<int>(), reject = true, diagnostic },
                 expected = status
             });
         }

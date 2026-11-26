@@ -22,10 +22,15 @@ starts zeroed, whether or not the IL asks for it:
 - **Value-type locals** start null, which the compiler already treats as the
   zeroed aggregate (as `newobj` on a value type does).
 
-ECMA-335 II.25.4.4 leaves local contents unspecified when the flag is clear.
-Zeroing is one permitted outcome, so it refines the CLI semantics rather than
-approximating them. C# reads only definitely assigned locals, so ordinary
-compiled code cannot observe the difference.
+When the flag is set, ECMA-335 II.13.2 guarantees zeroed locals, and that is
+exactly what the compiler produces. When it is clear, II.25.4.4 leaves local
+contents unspecified. Zeroing is one permitted outcome, so it refines the CLI
+semantics rather than approximating them. Code that reads only definitely
+assigned locals, like this stage's fixtures and ordinary safe C#, sees the same
+values either way. Code that deliberately reads a slot before writing it can
+observe the difference: `Unsafe.SkipInit`, unsafe pointer reads of a local, or
+hand-written IL. On the CLR such code sees whatever the stack held, which no
+program can rely on, and here it consistently sees zero.
 
 `localloc` (`stackalloc`) memory is not a Wasm local. It is not decoded, and a
 body that uses it still returns an explicit -2, whatever its header flag says.
