@@ -5,7 +5,7 @@ namespace PortableCompiler
 {
     internal static class ValueOperands
     {
-        internal static int LowerLocal(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps,
+        internal static int LowerLocal(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int[] records, int slot, int[] frame, int[] objects, int[] clauses)
         {
             int local = records[slot + 1], type = frame[local];
@@ -14,7 +14,7 @@ namespace PortableCompiler
             if (next >= records.Length || Entry(records, next / Width, clauses)) return -2;
             int kind = records[next];
             if (kind == InitializeValue)
-                return Clear(main, bundle, ranges, image, layout, heaps, owner, records, slot, next, type, objects);
+                return Clear(bundle, image, layout, heaps, owner, records, slot, next, type, objects);
             if (kind == GetField)
             {
                 records[slot] = Load;
@@ -32,7 +32,7 @@ namespace PortableCompiler
         // (decision 0049). Its address may only feed ldfld or a call on the
         // same address, so initobj, stfld and a chained constructor stay
         // diagnosed and the callee never writes the caller's location.
-        internal static int LowerReceiver(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps,
+        internal static int LowerReceiver(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int[] records, int slot, int[] frame, int[] objects, int[] clauses, bool readOnly = false)
         {
             int next = records[slot + 2] * Width;
@@ -41,12 +41,12 @@ namespace PortableCompiler
             // [&this] -> ldfld -> [field]. The load already pushes the current value.
             if (kind == GetField) return 0;
             if (kind == InitializeValue)
-                return readOnly ? -2 : Clear(main, bundle, ranges, image, layout, heaps, owner, records, slot, next, frame[0], objects);
+                return readOnly ? -2 : Clear(bundle, image, layout, heaps, owner, records, slot, next, frame[0], objects);
             return LowerAddressUse(records, slot, 0, clauses, readOnly);
         }
 
         // ldloca/ldarg.0 followed by initobj of the same type clears the location.
-        private static int Clear(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps,
+        private static int Clear(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int[] records, int slot, int next, int type, int[] objects)
         {
             uint token = unchecked((uint)records[next + 1]);
@@ -57,14 +57,14 @@ namespace PortableCompiler
             {
                 int blob = AssemblyReferences.TypeSpecBlob(image, heaps, layout, row);
                 if (blob < 0) return blob;
-                initialized = ManagedReferenceSignatures.ReadInstantiation(main, bundle, ranges, image, layout, heaps,
+                initialized = ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps,
                     owner, blob, objects);
             }
             else
             {
                 if (table != 1 && table != 2) return -2;
                 int coded = row << 2 | (table == 1 ? 1 : 0);
-                initialized = BundleLayouts.RegisterType(main, bundle, ranges, image, layout, heaps, owner, coded, objects, true);
+                initialized = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true);
             }
             if (initialized < 0 || initialized != type) return -2;
             // The operand stays the frame index: the local, or argument 0.

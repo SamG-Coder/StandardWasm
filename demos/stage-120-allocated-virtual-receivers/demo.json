@@ -1,0 +1,1 @@
+{"assembly":"AllocatedReceiverDemo","exportType":"AllocatedReceiverDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":[]},{"name":"Initializer"}],"generated":{"bundle":true,"capacity":65536,"arguments":[5]},"expected":25}
