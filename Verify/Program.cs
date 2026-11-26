@@ -114,4 +114,5 @@ SwitchCases.Add(cases);
 RemainderCases.Add(cases);
 MathCases.Add(cases);
 ArrayCases.Add(cases);
+CultureProbe.Write(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args.Single()))!, "culture-probe", "MathIntrinsics.dll"));
 File.WriteAllText(args.Single(), JsonSerializer.Serialize(cases));

@@ -4,8 +4,9 @@ using Mono.Cecil;
 // type: any assembly can define one, either in the input module or in a dependency reached through an extern alias.
 // Cecil also reports MetadataType.Int16 for a third-party TypeRef named System.Int16, so MetadataType alone is not
 // enough either. A type counts as a CLI primitive, and a method as a BCL intrinsic, only when its declaring scope is
-// a platform BCL assembly: the assembly name plus its Microsoft public key token. That covers the netstandard facade,
-// .NET Framework, the .NET Core contract assemblies and CoreLib. Signature primitives (ELEMENT_TYPE_I2 and so on)
+// a platform BCL assembly: a culture-neutral reference with the assembly name plus its Microsoft public key token.
+// A reference with a culture names a different, satellite-style assembly that the CLR does not bind to the BCL (#141).
+// That covers the netstandard facade, .NET Framework, the .NET Core contract assemblies and CoreLib. Signature primitives (ELEMENT_TYPE_I2 and so on)
 // resolve to the module's core library reference, so they pass the same check.
 internal static class PlatformTypes
 {
@@ -19,7 +20,8 @@ internal static class PlatformTypes
     ];
 
     internal static bool IsPlatformAssembly(IMetadataScope scope) =>
-        scope is AssemblyNameReference assembly && assembly.PublicKeyToken is { Length: 8 } token &&
+        scope is AssemblyNameReference assembly && string.IsNullOrEmpty(assembly.Culture) &&
+        assembly.PublicKeyToken is { Length: 8 } token &&
         PlatformAssemblies.Contains((assembly.Name, Convert.ToHexString(token).ToLowerInvariant()));
 
     // The CLI primitive kind of a type, or MetadataType.Class for anything that is not a platform type
