@@ -7,7 +7,7 @@ namespace PortableCompiler
     {
         internal const byte Void = 0, I32 = 1, Bytes = ArrayTypeRefs.Bytes, Ints = ArrayTypeRefs.Ints, Delegate = 4,
             MethodPointer = 5, String = 6, Chars = ArrayTypeRefs.Packed16, I64 = WideStorage.Scalar, Longs = WideStorage.Array,
-            F32 = 10, F64 = 11, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles, Native = NativeStorage.Scalar;
+            F32 = FloatStorage.Single, F64 = FloatStorage.Double, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles, Native = NativeStorage.Scalar;
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
 
         // Signature and frame tags keep the CLI storage width. Narrow types
@@ -130,7 +130,7 @@ namespace PortableCompiler
                     types[target] = storage;
                 }
                 else if (element == 0x0c || element == 0x0d)
-                    types[target] = element == 0x0c ? F32 : F64;
+                    types[target] = FloatStorage.FromElement(element);
                 else if (element == 0x0e)
                     types[target] = String;
                 else if (element == 0x1c)

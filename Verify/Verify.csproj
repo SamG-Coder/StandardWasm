@@ -82,6 +82,7 @@
     <ProjectReference Include="../demos/stage-91-embedded-value-types/EmbeddedValueDemo.csproj" />
     <ProjectReference Include="../demos/stage-92-nominal-enums/EnumFieldDemo.csproj" />
     <ProjectReference Include="../demos/stage-93-typed-pointer-fields/TypedPointerDemo.csproj" />
+    <ProjectReference Include="../demos/stage-94-floating-point-fields/FloatFieldDemo.csproj" />
     <ProjectReference Include="../demos/stage-78-strong-names/Alternate/Alternate.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />
     <Compile Remove="Fixtures/**/*.cs" />

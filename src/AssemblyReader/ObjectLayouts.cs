@@ -163,6 +163,8 @@ namespace PeLibrary
             if (size == 2 && element == 0x1c) return ObjectReference;
             if (size == 2 && WideStorage.IsIntegerElement(element)) return WideStorage.Scalar;
             if (size == 2 && NativeStorage.IsIntegerElement(element)) return NativeStorage.Scalar;
+            byte floating = FloatStorage.FromElement(element);
+            if (size == 2 && floating != 0) return floating;
             if (size == 3 && element == 0x1d)
             {
                 byte type = ArrayTypeRefs.Storage(image[blob + 2]);
