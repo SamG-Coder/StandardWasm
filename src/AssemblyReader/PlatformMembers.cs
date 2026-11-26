@@ -6,8 +6,8 @@ namespace PeLibrary
     // not an identity: any assembly can define System.Math, for example a dependency reached through an extern alias.
     // So a MemberRef qualifies only when:
     //   - its parent is a TypeRef named System.Math,
-    //   - that TypeRef's resolution scope is an AssemblyRef whose name and 8-byte public key token are those of a
-    //     platform BCL assembly (netstandard, mscorlib, System.Runtime, System.Runtime.Extensions or
+    //   - that TypeRef's resolution scope is a culture-neutral AssemblyRef whose name and 8-byte public key token are
+    //     those of a platform BCL assembly (netstandard, mscorlib, System.Runtime, System.Runtime.Extensions or
     //     System.Private.CoreLib, the same set as Compiler/PlatformTypes.cs),
     //   - and its signature blob is the exact static signature of a mapped overload.
     // References that carry a full public key instead of a token are not recognized, because computing the token
@@ -68,6 +68,10 @@ namespace PeLibrary
             if (image[token] != 8) return false; // compressed length of an 8-byte token
             uint low = U32(image, token + 1), high = U32(image, token + 5);
             uint name = Index(image, assembly + (uint)(12 + blobs), strings);
+            // The platform assemblies are culture-neutral. A reference with the same name and token but a culture
+            // such as "fr" names a different (satellite) assembly that the CLR fails to bind, so it is not the BCL.
+            uint culture = Index(image, assembly + (uint)(12 + blobs + strings), strings);
+            if (!Text(image, streams, culture, 0, 0, 0, 0, 0, 0, 0, 0)) return false;
             if (low == 0xff137bcc && high == 0x51dd2dcd) // cc7b13ffcd2ddd51
                 return Text(image, streams, name, 11, 0x7374656e, 0x646e6174, 0x647261, 0, 0, 0, 0); // netstandard
             if (low == 0x565c7ab7 && high == 0x89e03419) // b77a5c561934e089

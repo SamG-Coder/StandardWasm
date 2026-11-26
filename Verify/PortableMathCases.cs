@@ -3,6 +3,9 @@
 using System.Globalization;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
+using System.Reflection.PortableExecutable;
 using BootstrapLibrary;
 using PortableMath;
 
@@ -77,6 +80,10 @@ internal static class PortableMathCases
         var probe = Assembly.LoadFile(Path.GetFullPath(probePath));
         Reject("third-party System.Math.Sqrt", File.ReadAllBytes(probe.Location),
             probe.GetType("MathIdentityProbe.Probe")!.GetMethod("Compute")!);
+        // Same platform name, version and token, but a non-neutral culture: the CLR fails to bind it (a satellite
+        // assembly is a different identity), so the compiler must not treat it as the BCL.
+        Reject("non-neutral platform AssemblyRef", WithCulture(image),
+            typeof(Measures).GetMethod(nameof(Measures.Hypotenuse))!);
 
         void Check(string method, object[] arguments, Func<object> evaluate)
         {
@@ -117,6 +124,44 @@ internal static class PortableMathCases
                 expected = -2
             });
         }
+    }
+
+    // Points the Culture column of every platform AssemblyRef at a non-empty #Strings entry (the module's own name),
+    // leaving name, version, flags and token unchanged.
+    private static byte[] WithCulture(byte[] image)
+    {
+        byte[] patched = (byte[])image.Clone();
+        using var pe = new PEReader(new MemoryStream(image));
+        var reader = pe.GetMetadataReader();
+        int metadata = pe.PEHeaders.MetadataStartOffset;
+        int strings = reader.GetHeapSize(HeapIndex.String) < 65536 ? 2 : 4;
+        int blobs = reader.GetHeapSize(HeapIndex.Blob) < 65536 ? 2 : 4;
+        if (reader.GetTableRowSize(TableIndex.AssemblyRef) != 12 + 2 * strings + 2 * blobs)
+            throw new InvalidOperationException("Unexpected AssemblyRef row layout");
+        int culture = MetadataTokens.GetHeapOffset(reader.GetModuleDefinition().Name);
+        int patchedRows = 0;
+        foreach (var handle in reader.AssemblyReferences)
+        {
+            var reference = reader.GetAssemblyReference(handle);
+            string name = reader.GetString(reference.Name);
+            if (name is not ("netstandard" or "mscorlib" or "System.Runtime")) continue;
+            int row = metadata + reader.GetTableMetadataOffset(TableIndex.AssemblyRef) +
+                (MetadataTokens.GetRowNumber(handle) - 1) * reader.GetTableRowSize(TableIndex.AssemblyRef);
+            int column = row + 12 + blobs + strings;
+            if (strings == 2) BitConverter.TryWriteBytes(patched.AsSpan(column, 2), (ushort)culture);
+            else BitConverter.TryWriteBytes(patched.AsSpan(column, 4), culture);
+            patchedRows++;
+        }
+        if (patchedRows == 0) throw new InvalidOperationException("No platform AssemblyRef to patch");
+        using var check = new PEReader(new MemoryStream(patched));
+        foreach (var handle in check.GetMetadataReader().AssemblyReferences)
+        {
+            var reference = check.GetMetadataReader().GetAssemblyReference(handle);
+            string name = check.GetMetadataReader().GetString(reference.Name);
+            if ((name is "netstandard" or "mscorlib" or "System.Runtime") && reference.Culture.IsNil)
+                throw new InvalidOperationException("Culture patch did not apply");
+        }
+        return patched;
     }
 
     private static object EncodeBytes(byte[] bytes) => new { bytes = Array.ConvertAll(bytes, value => (int)value) };
