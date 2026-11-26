@@ -44,6 +44,21 @@ embedded in its declaring assembly. Linked resource files and forwarded
 resources remain explicit diagnostics. The reader exposes the validated
 bytes for the runtime stream to consume.
 
+The catalog keeps each resource's UTF-8 name and payload range separate.
+This supports ordinal lookup before any payload is copied and preserves
+empty embedded resources. The original WinForms x86 DLL contains 199
+embedded resources totaling 3,170,595 bytes. Resource discovery therefore
+does not put a second copy of every resource into the generated module.
+
+[CoreCLR 10.0.10](https://github.com/dotnet/runtime/blob/v10.0.10/src/coreclr/System.Private.CoreLib/src/System/Reflection/RuntimeAssembly.cs)
+gets the payload through its native resource lookup and returns a read-only
+manifest stream. Keep the embedded image alive while a stream owns its
+bytes. The CLR oracle covers independent stream positions, seek, end of
+stream, CopyTo, disposal, missing resources and argument exceptions.
+[WinForms 10.0.10](https://github.com/dotnet/winforms/blob/v10.0.10/src/System.Windows.Forms.Primitives/src/System/Windows/Forms/Internals/ThemingScope.cs)
+consumes the manifest through CopyTo before creating the Windows activation
+context. Preserve that managed call path as the platform adapter develops.
+
 The loader envelope and embedded reader are implemented. Type.Module, Type.Assembly,
 Module.Assembly and Module.Name lower against the canonical descriptors. Resource
 stream behavior and full-stage verification are still required.
