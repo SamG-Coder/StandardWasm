@@ -38,7 +38,7 @@ namespace PortableCompiler
         internal static int Resolve(byte[] main, byte[] bundle, int[] ranges, byte[] caller,
             int[] layout, int[] heaps, int owner, int member, int opcode, bool baseCall, int[] symbol)
         {
-            var reference = new int[6];
+            var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference);
             if (status < 0) return status;
             int matched = FindOwner(main, bundle, ranges, caller, heaps, reference);
@@ -88,7 +88,7 @@ namespace PortableCompiler
         internal static int ResolveField(byte[] main, byte[] bundle, int[] ranges, byte[] caller,
             int[] layout, int[] heaps, int owner, int member, bool write, int[] objects, int[] field)
         {
-            var reference = new int[6];
+            var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference);
             if (status < 0) return status;
             int matched = FindOwner(main, bundle, ranges, caller, heaps, reference);
@@ -142,7 +142,7 @@ namespace PortableCompiler
                 return 0;
             }
             if ((coded & 3) != 1 || bundle.Length == 0) return -2;
-            var reference = new int[4];
+            var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadType(image, heaps, layout, row, reference);
             if (status < 0) return status;
             int matched = FindOwner(main, bundle, ranges, image, heaps, reference);

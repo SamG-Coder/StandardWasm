@@ -1,0 +1,1 @@
+{"assembly":"StrongNameDemo","exportType":"StrongNameDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["SignedDependency.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":16384,"arguments":[5]},"expected":27}
