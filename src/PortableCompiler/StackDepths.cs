@@ -160,6 +160,8 @@ namespace PortableCompiler
                 if (depth < 1 || (!IsNativeInteger(stack[depth - 1]) && stack[depth - 1] != I32)) return -2;
                 return Push(stack, allocated, depth - 1, Native);
             }
+            if (kind == LoadInlineStorage)
+                return Push(stack, allocated, depth, extra);
             if (kind == ObjectElementAddress)
             {
                 if (depth < 2 || !ArrayIndex(stack, depth)) return -1;

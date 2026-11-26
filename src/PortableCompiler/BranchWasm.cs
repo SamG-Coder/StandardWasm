@@ -9,7 +9,7 @@ namespace PortableCompiler
         private const int ObjectLocationBank = PeLibrary.ConsoleStorage.Writer + 1;
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection)
+            byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection, int[] inlineLocations)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -56,7 +56,8 @@ namespace PortableCompiler
             for (int i = arguments; i < arguments + locals; i++)
             {
                 code[used++] = 1;
-                used = WasmBinary.ValueType(code, used, Representation(objects, frame[i]));
+                int type = inlineLocations[i] == 0 ? frame[i] : inlineLocations[i];
+                used = WasmBinary.ValueType(code, used, Representation(objects, type));
             }
             if (hasNull)
             {
@@ -136,6 +137,9 @@ namespace PortableCompiler
                 used = NormalizeSlot(code, used, frame[i]);
                 used = Local(code, used, 0x21, i);
             }
+            for (int local = arguments; local < inlineLocations.Length; local++)
+                if (inlineLocations[local] != 0)
+                    used = InlineObjectStorageWasm.Allocate(code, used, inlineLocations[local], local, FieldCount(objects, frame[local]));
             if (prologue >= 0)
             {
                 code[used++] = 0x10; // call the initializer after the caller evaluated the arguments
@@ -173,8 +177,9 @@ namespace PortableCompiler
                     int pushed = I32;
                     if (kind == Load)
                     {
-                        used = Local(code, used, 0x20, operand);
                         pushed = StackType(frame[operand]);
+                        used = inlineLocations[operand] == 0 ? Local(code, used, 0x20, operand) :
+                            InlineObjectStorageWasm.Snapshot(code, used, pushed, inlineLocations[operand], operand, FieldCount(objects, pushed));
                     }
                     else if (kind == Dup)
                     {
@@ -360,9 +365,16 @@ namespace PortableCompiler
                 else if (kind == Store)
                 {
                     int source = states[state + top];
-                    used = LoadOperand(code, used, Spill(spills, maximum, source, top), source, frame[operand]);
-                    used = NormalizeSlot(code, used, frame[operand]);
-                    used = Local(code, used, 0x21, operand);
+                    int spilled = Spill(spills, maximum, source, top);
+                    int type = frame[operand], backing = inlineLocations[operand];
+                    if (backing != 0)
+                        used = InlineObjectStorageWasm.Store(code, used, type, backing, operand, spilled, FieldCount(objects, type));
+                    else
+                    {
+                        used = LoadOperand(code, used, spilled, source, type);
+                        used = NormalizeSlot(code, used, type);
+                        used = Local(code, used, 0x21, operand);
+                    }
                 }
                 else if (kind == BoxValue || kind == UnboxValue || kind == TestBox)
                 {
@@ -541,7 +553,9 @@ namespace PortableCompiler
                     int arity = arities[operand], shape = offsets[operand];
                     int first = depth - arity;
                     int target = records[slot + 3];
-                    used = Local(code, used, 0x20, target);
+                    int type = frame[target], backing = inlineLocations[target];
+                    used = backing == 0 ? Local(code, used, 0x20, target) :
+                        InlineObjectStorageWasm.Snapshot(code, used, type, backing, target, FieldCount(objects, type));
                     for (int i = 1; i < arity; i++)
                     {
                         int argument = first + i;
@@ -550,7 +564,10 @@ namespace PortableCompiler
                     }
                     code[used++] = 0x10;
                     used = WasmBinary.Unsigned(code, used, hostImports + operand);
-                    used = Local(code, used, 0x21, target);
+                    int temporary = backing == 0 ? target : temporaries + type - FirstClass;
+                    used = Local(code, used, 0x21, temporary);
+                    if (backing != 0)
+                        used = InlineObjectStorageWasm.Store(code, used, type, backing, target, temporary, FieldCount(objects, type));
                 }
                 else if (kind == MathCall)
                 {
@@ -587,6 +604,11 @@ namespace PortableCompiler
                     int size = Spill(spills, maximum, states[state + top], top);
                     used = StackAllocationWasm.Allocate(code, used, stackPointer, stackBase, stackLimit, size,
                         Spill(spills, maximum, Native, top), pcLocal);
+                }
+                else if (kind == LoadInlineStorage)
+                {
+                    used = Local(code, used, 0x20, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, records[slot + 3], depth));
                 }
                 else if (kind == ObjectElementAddress)
                 {
@@ -719,7 +741,9 @@ namespace PortableCompiler
                 }
                 else if (kind == ClearValue)
                 {
-                    if (frame[operand] == PeLibrary.RuntimeTypeMetadata.Handle)
+                    if (inlineLocations[operand] != 0)
+                        used = InlineObjectStorageWasm.Clear(code, used, inlineLocations[operand], operand, FieldCount(objects, frame[operand]));
+                    else if (frame[operand] == PeLibrary.RuntimeTypeMetadata.Handle)
                     {
                         code[used++] = 0xd0; // ref.null eq
                         code[used++] = 0x6d;
@@ -734,7 +758,9 @@ namespace PortableCompiler
                     int local = kind == UpdateConstructorField ? 0 : records[slot + BranchIl.Width + 1] - 1;
                     int source = states[state + top];
                     int replacement = Spill(spills, maximum, source, top);
-                    if (IsExplicitValue(objects, type))
+                    if (inlineLocations[local] != 0)
+                        used = InlineObjectStorageWasm.Set(code, used, inlineLocations[local], local, operand, replacement);
+                    else if (IsExplicitValue(objects, type))
                         used = ExplicitValueWasm.Update(code, used, objects, type, local, operand, FieldAccess.Storage(descriptor), replacement, source);
                     else
                         used = ValueFieldsWasm.Update(code, used, objects, type, local, temporaries + type - FirstClass,

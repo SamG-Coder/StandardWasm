@@ -159,6 +159,7 @@ TypeInitializerCases.Add(cases);
 FieldlessValueCases.Add(cases);
 InlineArrayLayoutCases.Add(cases);
 ManagedObjectByrefCases.Add(cases);
+InlineObjectAddressCases.Add(cases);
 GenericBaseCases.Add(cases);
 RuntimeTypeCases.Add(cases);
 StringVectorCases.Add(cases);

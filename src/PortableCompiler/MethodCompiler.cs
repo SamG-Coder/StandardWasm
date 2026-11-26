@@ -334,10 +334,11 @@ namespace PortableCompiler
                     if (status < 0)
                         return status;
                     virtualUsed[0] = 0;
+                    var inlineLocations = new int[parameters + locals];
                     functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
                         parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
-                        initializers, reflection, instantiations, methodArguments);
+                        initializers, reflection, instantiations, methodArguments, inlineLocations, parameters);
                     if (functions < 0)
                         return functions;
 
@@ -378,6 +379,12 @@ namespace PortableCompiler
 
                     if (location.Length != 0) location[2] = -1;
                     int capacity = body[1] * 64 + 32;
+                    for (int local = parameters; local < inlineLocations.Length; local++)
+                    {
+                        if (inlineLocations[local] == 0) continue;
+                        if (capacity > int.MaxValue - 24) return -3;
+                        capacity += 24;
+                    }
                     if (catchRegion.Length != 0)
                     {
                         // One dispatch per fixed tag plus the object dispatch, whose clause arms add a
@@ -480,6 +487,14 @@ namespace PortableCompiler
                                 if (bytes < 0) return bytes;
                                 capacity += bytes;
                             }
+                            int inlineLocal = kind == BranchIl.Load || kind == BranchIl.Store ? operation :
+                                kind == BranchIl.ConstructValue ? records[slot + 3] : -1;
+                            if (inlineLocal >= 0 && inlineLocations[inlineLocal] != 0)
+                            {
+                                int cells = ObjectLayouts.FieldCount(objects, frame[inlineLocal]);
+                                if (cells > (int.MaxValue - capacity) / 40) return -3;
+                                capacity += cells * 40;
+                            }
                             int tags = 0;
                             if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion || kind == BranchIl.NewArray ||
                                 (kind == BranchIl.MathCall && MathWasm.CanOverflow(operation)))
@@ -555,7 +570,7 @@ namespace PortableCompiler
                     }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
-                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers, reflection);
+                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers, reflection, inlineLocations);
                 }
 
                 if (used < 0) return used;
@@ -605,7 +620,8 @@ namespace PortableCompiler
         private static int LinkOperands(BundleImages bundle, byte[] image, int[] layout,
             int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, bool valueConstructor, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed,
-            TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, MethodInstantiations instantiations, int[] methodArguments)
+            TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, MethodInstantiations instantiations, int[] methodArguments,
+            int[] inlineLocations, int parameterCount)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
@@ -661,6 +677,8 @@ namespace PortableCompiler
                 }
                 if (kind == BranchIl.ObjectElementAddress || kind == BranchIl.LoadObjectIndirect || kind == BranchIl.StoreObjectIndirect)
                 {
+                    if (kind == BranchIl.ObjectElementAddress && records[slot + 3] == BranchIl.BoundObjectElement)
+                        continue;
                     if (kind == BranchIl.ObjectElementAddress &&
                         BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, records[slot + 1], objects) != ObjectReference)
                         return -2;
@@ -702,6 +720,13 @@ namespace PortableCompiler
                     // The value-type this argument is already a managed address.
                     // ldarga.0 would instead take the address of that argument slot.
                     if (valueReceiver && records[slot + 1] == 0) return -2;
+                    if (records[slot + 1] >= parameterCount)
+                    {
+                        int stable = InlineObjectAddresses.Bind(bundle, image, layout, heaps, owner, context,
+                            methodArguments, records, slot, frame, inlineLocations, objects, clauses);
+                        if (stable < 0) return stable;
+                        if (stable != 0) continue;
+                    }
                     int lowered = ValueOperands.LowerFrame(bundle, image, layout, heaps,
                         owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses);
                     if (lowered < 0) return lowered;
