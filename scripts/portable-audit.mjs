@@ -110,6 +110,8 @@ const evidence = {
 mkdirSync(dirname(resolve(options.output)), { recursive: true });
 writeFileSync(options.output, JSON.stringify(evidence, null, 2) + "\n");
 console.log(`Direct CLR comparisons passed: Node ${nodeResult.passed}/${direct}, browser ${browserResult.passed}/${direct}`);
+for (const [engine, result] of [["Node", nodeResult], ["browser", browserResult]])
+    console.log(`  ${engine}: ${result.matchedReturns} matching returns, ${result.matchedManagedExceptions} matching typed exceptions, ${result.acceptedLegacyTraps} accepted legacy traps`);
 console.log(`Existing npm test fixtures outside this audit: ${generated} generated-code cases, ${bootstrap} bootstrap case`);
 console.log("Wrote " + options.output);
 if (options["require-complete"] && (nodeResult.passed !== direct || browserResult.passed !== direct))

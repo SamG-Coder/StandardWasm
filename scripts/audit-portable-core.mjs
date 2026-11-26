@@ -33,7 +33,8 @@ export async function auditPortable(compilerBytes, fixtures, loadDll) {
     for (const fixture of fixtures) {
         const dll = { bytes: Array.from(new Uint8Array(await loadDll(fixture.assembly))) };
         for (const { name, cases, transport } of fixture.methods) {
-            const report = { assembly: fixture.assembly, method: name, cases: cases.length, passed: 0 };
+            const report = { assembly: fixture.assembly, method: name, cases: cases.length, passed: 0,
+                matchedReturns: 0, matchedManagedExceptions: 0, acceptedLegacyTraps: 0 };
             methods.push(report);
             // Isolate each method so one unsupported export cannot hide the rest.
             const names = transport ? [...new Set([name, "CreateBytes", "SetByte"])] : [name];
@@ -70,25 +71,42 @@ export async function auditPortable(compilerBytes, fixtures, loadDll) {
                 continue;
             }
             for (const test of cases) {
-                let actual, trap;
+                let actual, failure, managed;
+                let threw = false, runtimeTrap = false;
                 try { actual = invoke(exports, name, test.inputs); }
                 catch (error) {
-                    const managed = managedExceptionType(exports, error);
-                    trap = managed ?? error.message;
-                    if (error instanceof WebAssembly.RuntimeError || managed !== null && managed === test.exception)
-                        actual = null;
+                    threw = true;
+                    runtimeTrap = error instanceof WebAssembly.RuntimeError;
+                    managed = managedExceptionType(exports, error);
+                    failure = error?.message ?? String(error);
                 }
-                if (Object.is(actual, decode(test.expected))) {
-                    report.passed++;
+                if (!threw && test.exception == null && Object.is(actual, decode(test.expected))) {
+                    report.matchedReturns++;
+                } else if (threw && test.expected === null && test.exception != null && managed === test.exception) {
+                    report.matchedManagedExceptions++;
+                } else if (runtimeTrap && test.expected === null && test.exception != null) {
+                    // Preserve the legacy comparison count while exposing the missing CLR exception type.
+                    report.acceptedLegacyTraps++;
                 } else if (!report.firstMismatch) {
                     report.firstMismatch = {
                         inputs: test.inputs.map(input => input?.bytes ? { byteLength: input.bytes.length } : input),
-                        expected: test.expected, actual: encode(actual) ?? null, trap
+                        expected: test.expected, actual: encode(actual) ?? null,
+                        expectedException: test.exception, actualException: managed ?? undefined,
+                        trap: runtimeTrap ? failure : undefined,
+                        error: threw && !runtimeTrap && managed === null ? failure : undefined
                     };
                 }
             }
+            report.passed = report.matchedReturns + report.matchedManagedExceptions + report.acceptedLegacyTraps;
             report.status = report.passed === cases.length ? "pass" : "behavior mismatch";
         }
     }
-    return { passed: methods.reduce((total, method) => total + method.passed, 0), methods };
+    const result = { passed: 0, matchedReturns: 0, matchedManagedExceptions: 0, acceptedLegacyTraps: 0, methods };
+    for (const method of methods) {
+        result.passed += method.passed;
+        result.matchedReturns += method.matchedReturns;
+        result.matchedManagedExceptions += method.matchedManagedExceptions;
+        result.acceptedLegacyTraps += method.acceptedLegacyTraps;
+    }
+    return result;
 }

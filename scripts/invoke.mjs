@@ -5,10 +5,21 @@
 export const decode = value =>
     value?.i64 !== undefined ? BigInt(value.i64) : value?.f64 !== undefined ? Number(value.f64) : value;
 
+const managedTags = [
+    ["\0overflow", "System.OverflowException"],
+    ["\0divideByZero", "System.DivideByZeroException"],
+    ["\0indexOutOfRange", "System.IndexOutOfRangeException"],
+    ["\0nullReference", "System.NullReferenceException"],
+    ["\0invalidCast", "System.InvalidCastException"]
+];
+
 export function managedExceptionType(exports, error) {
-    const overflow = exports["\0overflow"];
-    return overflow instanceof WebAssembly.Tag && error instanceof WebAssembly.Exception && error.is(overflow)
-        ? "System.OverflowException" : null;
+    if (!(error instanceof WebAssembly.Exception)) return null;
+    for (const [name, type] of managedTags) {
+        const tag = exports[name];
+        if (tag instanceof WebAssembly.Tag && error.is(tag)) return type;
+    }
+    return null;
 }
 
 export function invoke(exports, method, inputs) {
