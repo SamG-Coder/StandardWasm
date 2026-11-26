@@ -3,7 +3,7 @@ using static PeLibrary.ImageBytes;
 
 namespace PortableCompiler
 {
-    // Stage 140 (decision 0066). The CLR's 32-bit `sizeof` of a sequential, blittable value type:
+    // Stage 143 (decision 0071). The CLR's 32-bit `sizeof` of a sequential, blittable value type:
     // natural alignment (8-byte fields align to 8 even on x86), the size rounded up to the
     // largest alignment, and an empty struct of size 1. Read from field signatures, because
     // the value-type registry stores bool as I32.
