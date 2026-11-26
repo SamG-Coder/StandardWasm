@@ -14,9 +14,12 @@ namespace PortableCompiler
         internal const int CheckedInteger = 48, CheckedConversion = 49, Leave = 50, Rethrow = 51, EndFinally = 52;
         internal const int CastClass = 53, TestClass = 54, ThrowNull = 55;
         internal const int LocalAddress = 56, InitializeValue = 57, UpdateValue = 58, ClearValue = 59;
+        // Console.Out/Error push a host stream; the operand is the stream number.
+        // ConsoleWrite consumes a stream and, unless writing an empty line, a String.
+        internal const int ConsoleWriter = 61, ConsoleWrite = 62;
+        internal const int LoadStaticField = 63, StoreStaticField = 64;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
-        // #139 used 46 before integration with the stack, which assigned 46 through 59; kinds must stay unique.
         internal const int MathCall = 60;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
@@ -163,7 +166,7 @@ namespace PortableCompiler
                     operand = pc + delta;
                     kind = Leave;
                 }
-                else if (op == 0x28 || op == 0x6f || op == 0x73 || op == 0x7b || op == 0x7c || op == 0x7d || op == 0x7e)
+                else if (op == 0x28 || op == 0x6f || op == 0x73 || op == 0x7b || op == 0x7c || op == 0x7d || op == 0x7e || op == 0x80)
                 {
                     if (length - pc < 4) return -1;
                     uint token = ImageBytes.U32(image, (uint)(start + pc));
@@ -177,6 +180,12 @@ namespace PortableCompiler
                         kind = op == 0x7b ? GetField : op == 0x7c ? FieldAddress : SetField;
                         comparison = table == 0x0a ? 1 : 0;
                     }
+                    else if (op == 0x7e || op == 0x80)
+                    {
+                        if (table != 4 && table != 0x0a) return -2;
+                        kind = op == 0x7e ? LoadStaticField : StoreStaticField;
+                        comparison = table == 0x0a ? 1 : 0;
+                    }
                     else if (table == 0x2b && op == 0x28)
                     {
                         kind = MethodSpecCall;
@@ -188,7 +197,7 @@ namespace PortableCompiler
                     }
                     else
                     {
-                        if (table != 6 || op == 0x7e) return -2;
+                        if (table != 6) return -2;
                         kind = op == 0x73 ? NewObject : Call;
                         comparison = op == 0x6f ? 1 : 0;
                     }
@@ -409,10 +418,10 @@ namespace PortableCompiler
 
         internal static bool IsComparison(int instruction) => instruction >= 0x46 && instruction <= 0x4f;
 
-        internal static bool IsIntegerDivision(int instruction, byte type) =>
+        internal static bool IsIntegerDivision(int instruction, int type) =>
             instruction >= 0x6d && instruction <= 0x70 && SignatureTypes.IsInteger(type);
 
-        internal static bool IsSignedIntegerDivision(int instruction, byte type) =>
+        internal static bool IsSignedIntegerDivision(int instruction, int type) =>
             (instruction == 0x6d || instruction == 0x6f) && SignatureTypes.IsInteger(type);
 
 

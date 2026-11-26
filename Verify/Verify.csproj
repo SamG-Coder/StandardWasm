@@ -101,7 +101,11 @@
     <ProjectReference Include="../demos/stage-94-floating-point-fields/FloatFieldDemo.csproj" />
     <ProjectReference Include="../demos/stage-96-primitive-generic-layouts/PrimitiveGenericDemo.csproj" />
     <ProjectReference Include="../demos/stage-97-byref-like-permission/ByRefPermissionFixture.csproj" />
+    <ProjectReference Include="../demos/stage-104-wide-layout-ids/WideLayoutDemo.csproj" />
+    <ProjectReference Include="../demos/stage-106-static-field-storage/StaticStorageDemo.csproj" />
+    <ProjectReference Include="../demos/stage-108-beforefieldinit-calls/BeforeFieldInitDemo.csproj" />
     <ProjectReference Include="../demos/stage-103-handle-generic-constraints/HandleConstraintDemo.csproj" />
+    <ProjectReference Include="../demos/stage-105-generic-method-bodies/GenericBodyDemo.csproj" />
     <ProjectReference Include="../demos/stage-102-nominal-enum-arguments/EnumArgumentDemo.csproj" />
     <ProjectReference Include="../demos/stage-101-nested-overlay-views/NestedOverlayDemo.csproj" />
     <ProjectReference Include="../demos/stage-100-explicit-scalar-layouts/ScalarOverlayDemo.csproj" />
@@ -110,6 +114,7 @@
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
     <ProjectReference Include="../demos/stage-78-strong-names/Alternate/Alternate.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />
+    <ProjectReference Include="../demos/stage-110-console-arguments/Vectors/StringVectors.csproj" />
   </ItemGroup>
   <Target Name="CopyStrongNameAlternate" AfterTargets="Build">
     <Copy SourceFiles="$(MSBuildThisFileDirectory)../demos/stage-78-strong-names/Alternate/bin/$(Configuration)/netstandard2.0/SignedDependency.dll"

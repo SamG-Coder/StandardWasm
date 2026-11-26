@@ -11,8 +11,10 @@ namespace PortableCompiler
             ObjectLayouts.SignatureStorage(objects, Read(main, bundle, ranges, image, layout, heaps, owner, next, end, context, objects, 0));
 
         internal static int ReadInstantiation(byte[] main, byte[] bundle, int[] ranges, byte[] image,
-            int[] layout, int[] heaps, int owner, int blob, int[] objects)
+            int[] layout, int[] heaps, int owner, int blob, int[] objects, int context = 0)
         {
+            // context is the closed layout whose arguments substitute VAR in
+            // the TypeSpec, such as Holder<!0> referenced from Holder<int>.
             int limit = heaps[0] + heaps[1];
             var next = new int[1];
             int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
@@ -20,7 +22,7 @@ namespace PortableCompiler
             if (size < 1 || size > limit - start) return -1;
             if (image[start] != 0x15) return -2;
             int end = start + size;
-            int type = Read(main, bundle, ranges, image, layout, heaps, owner, next, end, 0, objects, 0);
+            int type = Read(main, bundle, ranges, image, layout, heaps, owner, next, end, context, objects, 0);
             return type < 0 || next[0] == end ? type : -1;
         }
 
@@ -29,7 +31,7 @@ namespace PortableCompiler
         {
             int at = next[0];
             if (at >= end) return -1;
-            if (depth >= ObjectLayouts.MaxClasses) return -2;
+            if (depth >= ObjectLayouts.MaxTypeDepth) return -2;
             int element = image[at];
             next[0] = at + 1;
             int scalar = GenericScalar.Key(element);

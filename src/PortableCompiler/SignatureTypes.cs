@@ -11,12 +11,12 @@ namespace PortableCompiler
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
 
         // Signature and frame tags keep the CLI storage width. Narrow types
-        // live above the byte range reserved for evaluation stack types.
+        // are distinct from evaluation-stack types.
         internal const int Signed8 = NarrowStorage.Signed8, Unsigned8 = NarrowStorage.Unsigned8,
             Signed16 = NarrowStorage.Signed16, Unsigned16 = NarrowStorage.Unsigned16, Character = NarrowStorage.Character;
 
         internal static bool IsNarrow(int type) => type >= Signed8 && type <= Character;
-        internal static byte StackType(int type) => IsNarrow(type) ? I32 : unchecked((byte)type);
+        internal static int StackType(int type) => IsNarrow(type) ? I32 : type;
         internal static bool IsInteger(int type) => type == I32 || type == I64 || IsNarrow(type);
 
         internal static bool IsFloat(int type) => type == F32 || type == F64;
@@ -30,25 +30,25 @@ namespace PortableCompiler
 
         // Widen supported class references without allocating or losing sender identity.
         // Boxing and other CLR reference conversions use separate IL operations.
-        internal static bool IsObjectReference(byte type) =>
+        internal static bool IsObjectReference(int type) =>
             type >= ObjectLayouts.FirstClass ||
             type >= ObjectLayouts.ObjectReference && type <= ObjectLayouts.EventHandlerReference;
 
         // Zero denotes the CLI null literal in a live stack slot and void in a method signature.
         internal const byte NullValue = 0;
 
-        internal static bool IsReference(byte type) =>
+        internal static bool IsReference(int type) =>
             type == String || type == Delegate || IsArray(type) || IsObjectReference(type);
 
-        internal static bool ReferenceComparison(byte left, byte right, int[] objects) =>
+        internal static bool ReferenceComparison(int left, int right, int[] objects) =>
             (left == NullValue && (right == NullValue || IsReference(right))) ||
             (right == NullValue && IsReference(left)) ||
             (IsObjectReference(left) && IsObjectReference(right) &&
                 (Assignable(left, right, objects) || Assignable(right, left, objects)));
 
-        internal static bool Assignable(byte source, int target, int[] objects)
+        internal static bool Assignable(int source, int target, int[] objects)
         {
-            byte expected = StackType(target);
+            int expected = StackType(target);
             if (source == expected) return true;
             if (ObjectLayouts.IsValueType(objects, source) || ObjectLayouts.IsValueType(objects, expected)) return false;
             return source == NullValue && IsReference(expected) ||
@@ -57,12 +57,12 @@ namespace PortableCompiler
                 ObjectLayouts.Inherits(objects, source, expected) || ObjectLayouts.Implements(objects, source, expected);
         }
 
-        internal static byte FloatWidth(byte left, byte right) => left == F64 || right == F64 ? F64 : F32;
+        internal static byte FloatWidth(int left, int right) => left == F64 || right == F64 ? F64 : F32;
 
-        internal static bool IsArray(byte type) =>
+        internal static bool IsArray(int type) =>
             type == Bytes || type == Ints || type == Chars || type == Longs || type == Singles || type == Doubles;
 
-        internal static byte ArrayValueType(byte array) =>
+        internal static byte ArrayValueType(int array) =>
             array == Longs ? I64 : array == Singles ? F32 : array == Doubles ? F64 : I32;
 
         internal static byte ArrayLoadType(int opcode)
@@ -85,7 +85,9 @@ namespace PortableCompiler
 
         // Destination for a method is [result, parameters...]. Local signatures
         // write only their slots. Stack values normalize CLI small integers to i32.
-        internal static int Read(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly)
+        // context is the closed declaring layout that supplies VAR arguments,
+        // or zero when the declaring type is not generic.
+        internal static int Read(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context)
         {
             if (index <= 0 || index >= heap[1])
                 return -2;
@@ -142,7 +144,7 @@ namespace PortableCompiler
                     {
                         next[0] = cursor - 1;
                         storage = ManagedReferenceSignatures.ReadStorage(main, bundle, ranges, image, methods, heap,
-                            assembly, next, end, receiver, objects);
+                            assembly, next, end, context, objects);
                         if (storage < 0) return storage;
                         cursor = next[0];
                     }
@@ -161,11 +163,23 @@ namespace PortableCompiler
                     {
                         next[0] = cursor - 1;
                         int type = ManagedReferenceSignatures.ReadStorage(main, bundle, ranges, image, methods, heap,
-                            assembly, next, end, receiver, objects);
+                            assembly, next, end, context, objects);
                         if (type < 0) return type;
                         cursor = next[0];
                         types[target] = type;
                     }
+                }
+                else if (element == 0x13)
+                {
+                    // A class type parameter takes the storage of the closed
+                    // argument. int and uint share i32 storage here; their
+                    // signed and unsigned semantics stay in the caller's IL.
+                    int number = CompressedUnsigned(image, cursor, end, next);
+                    if (number < 0) return -2;
+                    cursor = next[0];
+                    int argument = ObjectLayouts.Argument(objects, context, number);
+                    if (argument < 0) return argument;
+                    types[target] = ObjectLayouts.SignatureStorage(objects, argument);
                 }
                 else if (element == 0x12 || element == 0x11)
                 {

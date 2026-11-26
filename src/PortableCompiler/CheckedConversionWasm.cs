@@ -7,13 +7,13 @@ namespace PortableCompiler
     {
         internal static byte Result(int opcode) => NativeTarget(opcode) ? Native : TargetWidth(opcode) == 64 ? I64 : I32;
 
-        internal static int Emit(byte[] code, int used, int opcode, byte source, int input, int output)
+        internal static int Emit(byte[] code, int used, int opcode, int source, int input, int output)
         {
             bool unsignedSource = opcode <= 0x8b;
             bool unsignedTarget = NativeTarget(opcode) ? (opcode & 1) != 0 :
                 unsignedSource ? opcode >= 0x86 : (opcode & 1) == 0;
             int width = TargetWidth(opcode);
-            byte target = Result(opcode);
+            int target = Result(opcode);
             if (IsFloat(source))
             {
                 used = GuardFloat(code, used, input, source, width, unsignedTarget);
@@ -33,7 +33,7 @@ namespace PortableCompiler
             return Local(code, used, 0x21, output);
         }
 
-        private static int Guard(byte[] code, int used, int input, byte source, bool unsignedSource, int width, bool unsignedTarget)
+        private static int Guard(byte[] code, int used, int input, int source, bool unsignedSource, int width, bool unsignedTarget)
         {
             int sourceWidth = source == I64 ? 64 : 32;
             if (!unsignedSource && (unsignedTarget || width < sourceWidth))
@@ -53,7 +53,7 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int Bound(byte[] code, int used, int input, byte source, int low, int high, int comparison)
+        private static int Bound(byte[] code, int used, int input, int source, int low, int high, int comparison)
         {
             used = Local(code, used, 0x20, input);
             used = source == I64
@@ -63,7 +63,7 @@ namespace PortableCompiler
             return ExceptionTagsWasm.ThrowIf(code, used);
         }
 
-        private static int GuardFloat(byte[] code, int used, int input, byte source, int width, bool unsigned)
+        private static int GuardFloat(byte[] code, int used, int input, int source, int width, bool unsigned)
         {
             // Test the truncated value in its original float width. Powers of
             // two are exact bounds even at i64/u64 limits. NaN fails both tests.
@@ -81,7 +81,7 @@ namespace PortableCompiler
             return ExceptionTagsWasm.ThrowIf(code, used);
         }
 
-        private static int PowerOfTwo(byte[] code, int used, byte source, int exponent, int sign) =>
+        private static int PowerOfTwo(byte[] code, int used, int source, int exponent, int sign) =>
             source == F32
                 ? FloatWasm.Literal(code, used, source, sign | ((127 + exponent) << 23), 0)
                 : FloatWasm.Literal(code, used, source, 0, sign | ((1023 + exponent) << 20));

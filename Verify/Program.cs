@@ -144,6 +144,11 @@ ExplicitScalarCases.Add(cases);
 NestedOverlayCases.Add(cases);
 EnumArgumentCases.Add(cases);
 HandleConstraintCases.Add(cases);
+WideLayoutCases.Add(cases);
+StaticStorageCases.Add(cases);
+BeforeFieldInitCases.Add(cases);
+StringVectorCases.Add(cases);
+GenericBodyCases.Add(cases);
 
 // Integer division (stage 08). The grid crosses every signed boundary with every divisor boundary.
 // The unsigned high-bit patterns (0x80000000, 0x80000001, 0xFFFFFFFE, 0xFFFFFFFF) are the same values

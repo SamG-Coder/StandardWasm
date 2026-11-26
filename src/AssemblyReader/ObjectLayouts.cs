@@ -5,13 +5,14 @@ namespace PeLibrary
     internal static class ObjectLayouts
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
-        internal const int FirstClass = PointerStorage.NativeZero + 1, MaxClasses = 256 - FirstClass;
+        // Keep layout IDs above primitive, packed storage and generic scalar keys.
+        internal const int FirstClass = 0x400, MaxClasses = 4096, MaxTypeDepth = 236;
         private const int Header = 4, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         private const int Arguments = 10, Arity = 11, Element = 12;
         private const int ValueShape = 0x40000000, NullableShape = 0x20000000;
-        private const int FieldStorageBits = 9, FieldStorageMask = (1 << FieldStorageBits) - 1;
-        private const int EnumHead = 3, EnumKeyBase = 0x300;
+        private const int FieldStorageBits = 16, FieldStorageMask = (1 << FieldStorageBits) - 1;
+        private const int EnumHead = 3, EnumKeyBase = 0x100000;
         internal const int FieldMapStart = Header + MaxClasses * Width;
 
         // The header stores the type count, occupied field and auxiliary slots,
@@ -170,14 +171,14 @@ namespace PeLibrary
 
         // Return storage directly for known types. A class signature yields
         // its image-local TypeDefOrRef code for the linker to resolve.
-        internal static int ReadStorage(byte[] image, int[] streams, int[] methods, int table, int row, int[] reference)
+        internal static int ReadStorage(byte[] image, int[] streams, int[] methods, int table, int row, int[] reference, bool staticField)
         {
             reference[0] = 0;
             reference[1] = 0;
             int strings = methods[2], blobs = methods[3];
             uint at = (uint)(table + (row - 1) * (2 + strings + blobs));
             uint flags = U16(image, at);
-            if ((flags & 0x10) != 0) return 0; // Static fields have no instance storage.
+            if (!staticField && (flags & 0x10) != 0) return 0; // Static fields have no instance storage.
             uint sig = ReadIndex(image, at + (uint)(2 + strings), blobs);
             if (sig == 0 || sig >= (uint)streams[1]) return -1;
             int limit = streams[0] + streams[1];
@@ -305,6 +306,27 @@ namespace PeLibrary
                 previous = index;
             }
             return owner;
+        }
+
+        // Publish the half-open MethodDef rows [range[0], range[1]) owned by a TypeDef.
+        internal static int MethodRange(byte[] image, int[] streams, int[] methods, int typeRow, int[] range)
+        {
+            var counts = new int[45];
+            int start = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
+            if (start < 0 || typeRow < 1 || typeRow > counts[2]) return -1;
+            int strings = methods[2];
+            int refs = TypeRefStart(image, streams, counts, start, strings);
+            int defs = refs + counts[1] * (ResolutionWidth(counts) + 2 * strings);
+            int fieldIndex = IndexWidth(counts[4]), methodIndex = IndexWidth(counts[6]);
+            int column = 4 + 2 * strings + CodedWidth(counts[2], counts[1], counts[27]) + fieldIndex;
+            int width = column + methodIndex;
+            uint first = ReadIndex(image, (uint)(defs + (typeRow - 1) * width + column), methodIndex);
+            uint end = typeRow == counts[2] ? (uint)(counts[6] + 1) :
+                ReadIndex(image, (uint)(defs + typeRow * width + column), methodIndex);
+            if (first == 0 || end < first || end > (uint)(counts[6] + 1)) return -1;
+            range[0] = (int)first;
+            range[1] = (int)end;
+            return 0;
         }
 
         private static int Slot(int type) => Header + (type - FirstClass) * Width;

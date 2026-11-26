@@ -36,26 +36,58 @@ namespace PortableCompiler
             return image;
         }
 
+        // symbol receives [owner, MethodDef, constructor declaring TypeDef or 0,
+        // closed declaring layout or 0]. context is the caller's own closed
+        // declaring layout, which substitutes VAR in a TypeSpec parent.
         internal static int Resolve(byte[] main, byte[] bundle, int[] ranges, byte[] caller,
-            int[] layout, int[] heaps, int owner, int member, int opcode, bool baseCall, int[] objects, int[] symbol)
+            int[] layout, int[] heaps, int owner, int member, int opcode, bool baseCall, int[] objects, int[] symbol, int context, int callerType)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
-            int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference);
+            int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedParent: true);
             if (status < 0) return status;
             var binding = new int[2];
             var targetLayout = new int[4];
             var targetHeaps = new int[8];
             var range = new int[2];
-            byte[] target = ResolveType(main, bundle, ranges, caller, heaps, layout, reference, false,
-                binding, targetLayout, targetHeaps, range);
-            int matched = binding[0], declaring = binding[1];
-            if (declaring < 0) return declaring;
+            byte[] target;
+            int matched, declaring, closed = 0;
+            int parent = reference[AssemblyReferences.GenericParent];
+            if (parent != 0)
+            {
+                // The closed layout already proved the definition's identity,
+                // type accessibility and argument constraints.
+                closed = ManagedReferenceSignatures.ReadInstantiation(main, bundle, ranges, caller, layout, heaps,
+                    owner, parent, objects, context);
+                if (closed < ObjectLayouts.FirstClass) return closed < 0 ? closed : -2;
+                // Value receivers are managed pointers, and interface members
+                // need dispatch. Both are outside direct specialization.
+                if (ObjectLayouts.IsValueType(objects, closed) || ObjectLayouts.IsInterface(objects, closed)) return -2;
+                matched = ObjectLayouts.AssemblyOf(objects, closed);
+                declaring = ObjectLayouts.TypeDef(objects, closed);
+                target = Load(main, bundle, ranges, matched);
+                if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
+                status = ObjectLayouts.MethodRange(target, targetHeaps, targetLayout, declaring, range);
+                if (status < 0) return status;
+            }
+            else
+            {
+                target = ResolveType(main, bundle, ranges, caller, heaps, layout, reference, false,
+                    binding, targetLayout, targetHeaps, range);
+                matched = binding[0];
+                declaring = binding[1];
+                if (declaring < 0) return declaring;
+            }
             int row = 0;
             for (int candidate = range[0]; candidate < range[1]; candidate++)
             {
                 int flags = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 2);
                 int access = flags & 7;
-                if (access != 6 && !(baseCall && opcode == 0x28 && (access == 4 || access == 5))) continue;
+                // A closed parent in the caller's own assembly may name assembly
+                // members, and private members of the caller's own definition.
+                // Nested-type and friend access are not modeled and stay unbound.
+                bool local = closed != 0 && matched == owner &&
+                    (access == 3 || access == 5 || access == 1 && callerType == declaring);
+                if (access != 6 && !local && !(baseCall && opcode == 0x28 && (access == 4 || access == 5))) continue;
                 bool isStatic = (flags & 0x10) != 0;
                 if (isStatic && opcode != 0x28) continue;
                 int name = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 3);
@@ -63,7 +95,7 @@ namespace PortableCompiler
                     continue;
                 int signature = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 4);
                 int match = BundleSignatures.Match(main, bundle, ranges, caller, layout, heaps, owner, reference[5],
-                    target, targetLayout, targetHeaps, matched, signature, false, objects);
+                    target, targetLayout, targetHeaps, matched, signature, false, objects, closed);
                 if (match < 0) return match;
                 if (match == 0) continue;
                 // Direct calls can bind a known body. callvirt additionally
@@ -73,7 +105,7 @@ namespace PortableCompiler
                 {
                     if (!constructor || (flags & 0x1800) != 0x1800) return -2;
                 }
-                else if (constructor ? !baseCall || opcode != 0x28 : access != 6) return -2;
+                else if (constructor ? !baseCall || opcode != 0x28 : access != 6 && !local) return -2;
                 if (opcode == 0x6f && (flags & 0x40) != 0) return -2;
                 if (row != 0) return -5;
                 row = candidate;
@@ -82,14 +114,15 @@ namespace PortableCompiler
             if (row == 0) return -6;
             symbol[0] = matched;
             symbol[1] = row;
+            symbol[3] = closed;
             return 0;
         }
 
         internal static int ResolveField(byte[] main, byte[] bundle, int[] ranges, byte[] caller,
-            int[] layout, int[] heaps, int owner, int member, bool write, int[] objects, int[] field)
+            int[] layout, int[] heaps, int owner, int member, bool write, bool staticField, int[] objects, int[] globals, int[] field, int context, int callerType)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
-            int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedField: true);
+            int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedParent: true);
             if (status < 0) return status;
             var binding = new int[2];
             var targetLayout = new int[4];
@@ -100,8 +133,9 @@ namespace PortableCompiler
             int parent = reference[AssemblyReferences.GenericParent];
             if (parent != 0)
             {
+                if (staticField) return -2;
                 type = ManagedReferenceSignatures.ReadInstantiation(main, bundle, ranges, caller, layout, heaps,
-                    owner, parent, objects);
+                    owner, parent, objects, context);
                 if (type < ObjectLayouts.FirstClass) return type < 0 ? type : -2;
                 matched = ObjectLayouts.AssemblyOf(objects, type);
                 declaringType = ObjectLayouts.TypeDef(objects, type);
@@ -122,7 +156,7 @@ namespace PortableCompiler
             int table = AssemblyReferences.FieldTable(target, targetHeaps, targetLayout);
             if (table < 0) return table;
             var definition = new int[3];
-            int row = 0;
+            int row = 0, flags = 0;
             for (int candidate = range[0]; candidate < range[1]; candidate++)
             {
                 AssemblyReferences.ReadField(target, targetLayout, table, candidate, definition);
@@ -132,11 +166,22 @@ namespace PortableCompiler
                     target, targetLayout, targetHeaps, matched, definition[2], true, objects, type);
                 if (match < 0) return match;
                 if (match == 0) continue;
-                if ((definition[0] & 0x17) != 6 || (write && (definition[0] & 0x20) != 0)) return -2;
+                // Closed parents in the caller's assembly follow the same rule
+                // as methods: assembly members, and private members of the
+                // caller's own definition.
+                flags = definition[0];
+                int access = flags & 7;
+                bool local = parent != 0 && matched == owner &&
+                    (access == 3 || access == 5 || access == 1 && callerType == declaringType);
+                if (((flags & 0x10) != 0) != staticField || (access != 6 && !local) ||
+                    (write && (flags & 0x20) != 0)) return -2;
                 if (row != 0) return -5;
                 row = candidate;
             }
             if (row == 0) return -6;
+            if (staticField)
+                return StaticFields.Bind(main, bundle, ranges, target, targetLayout, targetHeaps, matched, declaringType,
+                    row, table, flags, write, objects, globals, field);
             if (type == 0) type = ObjectLayouts.Find(objects, matched, declaringType, new int[0]);
             if (type == 0)
                 type = BundleLayouts.Register(main, bundle, ranges, target, targetLayout, targetHeaps, matched, declaringType, objects);
@@ -190,7 +235,7 @@ namespace PortableCompiler
             int[] heaps, int[] layout, int[] reference, bool fields, int[] binding, int[] targetLayout,
             int[] targetHeaps, int[] range)
         {
-            int owner = FindOwner(main, bundle, ranges, caller, heaps, reference);
+            int owner = FindOwner(main, bundle, ranges, caller, heaps, layout, reference);
             int status = owner;
             for (int hop = 0; owner >= 0 && hop <= ranges.Length / 2; hop++)
             {
@@ -213,7 +258,7 @@ namespace PortableCompiler
                 var next = new int[AssemblyReferences.SymbolWidth];
                 status = AssemblyReferences.ReadAssembly(target, targetHeaps, targetLayout, forward, next);
                 if (status < 0) break;
-                owner = FindOwner(main, bundle, ranges, target, targetHeaps, next);
+                owner = FindOwner(main, bundle, ranges, target, targetHeaps, targetLayout, next);
                 // A fixed type name can visit each bundled owner only once.
                 status = owner < 0 ? owner : -1;
             }
@@ -221,7 +266,7 @@ namespace PortableCompiler
             return main;
         }
 
-        private static int FindOwner(byte[] main, byte[] bundle, int[] ranges, byte[] caller, int[] heaps, int[] reference)
+        private static int FindOwner(byte[] main, byte[] bundle, int[] ranges, byte[] caller, int[] heaps, int[] layout, int[] reference)
         {
             int matched = -1;
             var candidateLayout = new int[4];
@@ -231,7 +276,7 @@ namespace PortableCompiler
                 byte[] candidate = Load(main, bundle, ranges, owner);
                 if (CompressedTables.FindWithHeaps(candidate, candidateLayout, candidateHeaps) < 0)
                     return -1;
-                int match = AssemblyReferences.Matches(caller, heaps, reference, candidate, candidateHeaps, candidateLayout);
+                int match = AssemblyReferences.Matches(caller, heaps, layout, reference, candidate, candidateHeaps, candidateLayout);
                 if (match < 0) return match;
                 if (match == 0) continue;
                 if (matched >= 0) return -5;

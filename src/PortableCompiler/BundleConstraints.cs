@@ -59,7 +59,7 @@ namespace PortableCompiler
         private static int Search(byte[] main, byte[] bundle, int[] ranges, int[] objects, int[] required,
             int owner, int row, int[] substitutions, int context, int depth)
         {
-            if (depth >= ObjectLayouts.MaxClasses) return -2;
+            if (depth >= ObjectLayouts.MaxTypeDepth) return -2;
             byte[] image = AssemblyBundle.Load(main, bundle, ranges, owner);
             var layout = new int[4];
             var heaps = new int[8];

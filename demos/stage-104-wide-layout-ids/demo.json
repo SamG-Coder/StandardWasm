@@ -1,0 +1,1 @@
+{"assembly":"WideLayoutDemo","exportType":"WideLayoutDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["WideLayoutDependency.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":65536,"arguments":[5,0]},"expected":24}

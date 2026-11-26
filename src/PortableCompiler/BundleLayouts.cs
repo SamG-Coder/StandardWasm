@@ -24,7 +24,7 @@ namespace PortableCompiler
         {
             int known = ObjectLayouts.Find(objects, owner, row, arguments);
             if (known != 0) return ObjectLayouts.IsValueType(objects, known) == valueType ? known : -2;
-            if (depth >= ObjectLayouts.MaxClasses) return -2;
+            if (depth >= ObjectLayouts.MaxTypeDepth) return -2;
             var shape = new int[5];
             var deferred = new int[8];
             int status = GenericParameters.Check(image, heaps, layout, row, arguments, objects, deferred);
@@ -100,22 +100,8 @@ namespace PortableCompiler
             if (limit < 0) return limit;
             for (int offset = 0; offset < fields; offset++)
             {
-                int storage = ObjectLayouts.ReadStorage(image, heaps, layout, table, first + offset, reference);
-                if (storage < 0) return storage;
-                if (reference[0] < 0)
-                {
-                    int end = reference[1];
-                    reference[0] = -reference[0];
-                    if (image[reference[0]] == PointerStorage.Element)
-                        storage = PointerSignatures.ReadStorage(main, bundle, ranges, image, layout, heaps,
-                            owner, reference[0] + 1, end, reference);
-                    else
-                        storage = ManagedReferenceSignatures.ReadStorage(main, bundle, ranges, image, layout, heaps,
-                            owner, reference, end, type, objects);
-                    if (storage >= 0 && reference[0] != end) return -1;
-                }
-                else if (reference[0] != 0)
-                    storage = RegisterType(main, bundle, ranges, image, layout, heaps, owner, reference[0], objects, reference[1] == 1);
+                int storage = ReadFieldStorage(main, bundle, ranges, image, layout, heaps, owner,
+                    table, first + offset, type, objects, reference, false);
                 if (storage < 0) return storage;
                 if (overlay && storage != 0)
                 {
@@ -128,6 +114,30 @@ namespace PortableCompiler
                 else ObjectLayouts.SetFieldType(objects, type, offset, storage);
             }
             return type;
+        }
+
+        internal static int ReadFieldStorage(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+            int[] layout, int[] heaps, int owner, int table, int row, int receiver, int[] objects,
+            int[] reference, bool staticField)
+        {
+            int storage = ObjectLayouts.ReadStorage(image, heaps, layout, table, row, reference, staticField);
+            if (storage < 0) return storage;
+            if (reference[0] < 0)
+            {
+                int end = reference[1];
+                reference[0] = -reference[0];
+                if (image[reference[0]] == PointerStorage.Element)
+                    storage = PointerSignatures.ReadStorage(main, bundle, ranges, image, layout, heaps,
+                        owner, reference[0] + 1, end, reference);
+                else
+                    storage = ManagedReferenceSignatures.ReadStorage(main, bundle, ranges, image, layout, heaps,
+                        owner, reference, end, receiver, objects);
+                if (storage >= 0 && reference[0] != end) return -1;
+            }
+            else if (reference[0] != 0)
+                storage = RegisterType(main, bundle, ranges, image, layout, heaps, owner,
+                    reference[0], objects, reference[1] == 1);
+            return storage;
         }
 
         private static int RegisterInterfaces(byte[] main, byte[] bundle, int[] ranges, byte[] image,

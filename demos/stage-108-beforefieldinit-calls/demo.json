@@ -1,0 +1,1 @@
+{"assembly":"BeforeFieldInitDemo","exportType":"BeforeFieldInitDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["BeforeFieldInitDependency.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":65536,"arguments":[5]},"expected":11}

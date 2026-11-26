@@ -11,7 +11,7 @@ export async function verifyBootstrap(initial, fixture, cases, saveCompiler) {
             return array;
         }
 
-        const capacity = 1 << 20;
+        const capacity = fixture.capacity ?? (1 << 20);
         const output = compiler.CreateBytes(capacity);
         const length = compiler.CompileModule(upload(dll), upload(manifest), output);
         if (length <= 0 || length > capacity)

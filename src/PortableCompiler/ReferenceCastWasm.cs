@@ -4,7 +4,7 @@ namespace PortableCompiler
 {
     internal static class ReferenceCastWasm
     {
-        internal static int Emit(byte[] code, int used, int source, int target, byte type, bool cast)
+        internal static int Emit(byte[] code, int used, int source, int target, int type, bool cast)
         {
             int heap = WasmBinary.HeapType(type);
             // The nullable test accepts a null cast and keeps an isinst result

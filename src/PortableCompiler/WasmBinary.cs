@@ -12,8 +12,11 @@ namespace PortableCompiler
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup, int exceptionTags)
+            byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostImports)
         {
+            // Imported functions precede defined functions in the Wasm index
+            // space. Emitted bodies already include this offset in their calls.
+            int argumentArray = EntryArgumentsWasm.ArgumentArray(exports, arities, offsets, types, objects);
             if (!ValueFieldsWasm.CheckLayouts(objects)) return -2;
             int typeOffset = objects[0] + FirstClassHeap;
             bool hasRemainder = remainderFixup != 0;
@@ -27,8 +30,9 @@ namespace PortableCompiler
             int tagCount = argumentException ? ExceptionTagsWasm.Count : invalidCast ? ExceptionTagsWasm.InvalidCastTag + 1 :
                 nullReference ? ExceptionTagsWasm.NullTag + 1 :
                 bounds ? ExceptionTagsWasm.IndexTag + 1 : divide ? ExceptionTagsWasm.DivideTag + 1 : overflow ? 1 : 0;
-            int remainderIndex = functions + thunks[0];
-            int totalFunctions = remainderIndex + (hasRemainder ? 1 : 0);
+            int remainderIndex = hostImports + functions + thunks[0];
+            int builderIndex = remainderIndex + (hasRemainder ? 1 : 0);
+            int totalFunctions = builderIndex - hostImports + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0);
             var remainderBody = new byte[hasRemainder ? FloatRemainderWasm.BodyCapacity : 0];
             int remainderSize = hasRemainder ? FloatRemainderWasm.WriteBody(remainderBody) : 0;
             int classBytes = 0;
@@ -46,7 +50,7 @@ namespace PortableCompiler
                     continue;
                 }
                 int size = 1, stored = 0, parent = Parent(objects, classType);
-                if (parent != 0) size += 2 + UnsignedSize(HeapType((byte)parent));
+                if (parent != 0) size += 2 + UnsignedSize(HeapType(parent));
                 else if (!IsSealed(objects, classType) && !IsInterface(objects, classType)) size += 2;
                 for (int field = 0; field < fields; field++)
                 {
@@ -65,9 +69,13 @@ namespace PortableCompiler
             int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 1;
             if (hasRemainder) typeEntries++;
             if (tagCount != 0) typeEntries++;
+            if (hostImports != 0) typeEntries += ConsoleWasm.ImportCount;
+            if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
             int prefix = UnsignedSize(typeEntries) + 63 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (tagCount != 0) prefix += 3; // () -> () exception payload
+            if (hostImports != 0) prefix += ConsoleWasm.TypeBytes;
+            if (argumentArray != 0) prefix += EntryArgumentsWasm.TypeBytes(argumentArray);
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;
             int functionSize = UnsignedSize(totalFunctions) + thunks[0];
@@ -76,6 +84,16 @@ namespace PortableCompiler
             {
                 functionSize += UnsignedSize(typeOffset + functions);
                 codeSize += UnsignedSize(remainderSize) + remainderSize;
+            }
+            int tagType = typeOffset + functions + (hasRemainder ? 1 : 0);
+            // Host import and argument builder types follow every existing type.
+            int importType = tagType + (tagCount != 0 ? 1 : 0);
+            int builderType = importType + (hostImports != 0 ? ConsoleWasm.ImportCount : 0);
+            if (argumentArray != 0)
+            {
+                for (int i = 0; i < EntryArgumentsWasm.FunctionCount; i++)
+                    functionSize += UnsignedSize(builderType + i);
+                codeSize += EntryArgumentsWasm.CodeBytes(argumentArray);
             }
             // Use one type per function in discovery order. Accumulate against
             // destination capacity before any writes, guarding size arithmetic.
@@ -95,18 +113,19 @@ namespace PortableCompiler
                 codeSize += code;
                 functionSize += index;
             }
-            int exportCount = exports.Length + (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) +
+            int exportCount = exports.Length + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0) +
+                (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) +
                 (nullReference ? 1 : 0) + (invalidCast ? 1 : 0) + (argumentException ? 1 : 0);
             int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
                 (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
                 (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0) +
                 (argumentException ? ExceptionTagsWasm.ArgumentExportSize : 0);
-            int tagType = typeOffset + functions + (hasRemainder ? 1 : 0);
+            if (argumentArray != 0) exportSize += EntryArgumentsWasm.ExportBytes(builderIndex);
             int tagSize = 1 + tagCount * (1 + UnsignedSize(tagType));
             for (int i = 0; i < exports.Length; i++)
             {
                 int name = (int)ImageBytes.U32(names, (uint)entryOffsets[i] + 4);
-                int metadata = UnsignedSize(name) + 1 + UnsignedSize(exports[i]);
+                int metadata = UnsignedSize(name) + 1 + UnsignedSize(hostImports + exports[i]);
                 if (metadata > output.Length - exportSize || name > output.Length - exportSize - metadata)
                     return -3;
                 exportSize += metadata + name;
@@ -117,23 +136,27 @@ namespace PortableCompiler
             {
                 int function = thunks[i + 1];
                 int receiver = types[offsets[function] + 1];
-                int thunkSize = ThunkSize(receiver, function, arities[function]);
+                int thunkSize = ThunkSize(receiver, hostImports + function, arities[function]);
                 if (1 + thunkSize > output.Length - codeSize ||
-                    UnsignedSize(functions + i) > output.Length - elementSize)
+                    UnsignedSize(hostImports + functions + i) > output.Length - elementSize)
                     return -3;
                 codeSize += 1 + thunkSize;
-                elementSize += UnsignedSize(functions + i);
+                elementSize += UnsignedSize(hostImports + functions + i);
             }
 
             int remaining = output.Length - 8;
             remaining = Reserve(remaining, typeSize);
+            int importSize = hostImports != 0 ? ConsoleWasm.SectionSize(importType) : 0;
+            if (hostImports != 0)
+                remaining = Reserve(remaining, importSize);
             remaining = Reserve(remaining, functionSize);
             if (thunks[0] != 0)
                 remaining = Reserve(remaining, tableSize);
             if (tagCount != 0)
                 remaining = Reserve(remaining, tagSize);
-            if (eventArgsEmpty)
-                remaining = Reserve(remaining, 8);
+            int globalSize = WasmGlobals.Size(globals, objects);
+            if (globalSize != 0)
+                remaining = Reserve(remaining, globalSize);
             remaining = Reserve(remaining, exportSize);
             if (thunks[0] != 0)
                 remaining = Reserve(remaining, elementSize);
@@ -249,7 +272,7 @@ namespace PortableCompiler
                 {
                     output[cursor++] = final ? (byte)0x4f : (byte)0x50;
                     output[cursor++] = parent == 0 ? (byte)0 : (byte)1;
-                    if (parent != 0) cursor = Unsigned(output, cursor, HeapType((byte)parent));
+                    if (parent != 0) cursor = Unsigned(output, cursor, HeapType(parent));
                 }
                 output[cursor++] = 0x5f; // struct
                 int stored = 0;
@@ -286,6 +309,13 @@ namespace PortableCompiler
                 output[cursor++] = 0;
                 output[cursor++] = 0;
             }
+            if (hostImports != 0) cursor = ConsoleWasm.WriteTypes(output, cursor);
+            if (argumentArray != 0) cursor = EntryArgumentsWasm.WriteTypes(output, cursor, argumentArray);
+            if (hostImports != 0)
+            {
+                cursor = Section(output, cursor, 2, importSize);
+                cursor = ConsoleWasm.WriteImports(output, cursor, importType);
+            }
 
             cursor = Section(output, cursor, 3, functionSize);
             cursor = Unsigned(output, cursor, totalFunctions);
@@ -294,6 +324,9 @@ namespace PortableCompiler
             for (int i = 0; i < thunks[0]; i++)
                 output[cursor++] = arities[thunks[i + 1]] == 3 ? (byte)EventThunkType : (byte)ScalarThunkType;
             if (hasRemainder) cursor = Unsigned(output, cursor, typeOffset + functions);
+            if (argumentArray != 0)
+                for (int i = 0; i < EntryArgumentsWasm.FunctionCount; i++)
+                    cursor = Unsigned(output, cursor, builderType + i);
             if (thunks[0] != 0)
             {
                 cursor = Section(output, cursor, 4, tableSize);
@@ -314,16 +347,10 @@ namespace PortableCompiler
                 }
             }
 
-            if (eventArgsEmpty)
+            if (globalSize != 0)
             {
-                cursor = Section(output, cursor, 6, 8);
-                output[cursor++] = 1;
-                cursor = ValueType(output, cursor, EventArgsReference);
-                output[cursor++] = 0; // immutable global, initialized once per module instance
-                output[cursor++] = 0xfb;
-                output[cursor++] = 1; // struct.new_default
-                output[cursor++] = EventArgsHeap;
-                output[cursor++] = 0x0b;
+                cursor = Section(output, cursor, 6, globalSize);
+                cursor = WasmGlobals.Write(output, cursor, globals, objects);
             }
             cursor = Section(output, cursor, 7, exportSize);
             cursor = Unsigned(output, cursor, exportCount);
@@ -335,8 +362,9 @@ namespace PortableCompiler
                 for (int j = 0; j < name; j++)
                     output[cursor++] = names[source + 8 + j];
                 output[cursor++] = 0;
-                cursor = Unsigned(output, cursor, exports[i]);
+                cursor = Unsigned(output, cursor, hostImports + exports[i]);
             }
+            if (argumentArray != 0) cursor = EntryArgumentsWasm.WriteExports(output, cursor, builderIndex);
             if (overflow) cursor = ExceptionTagsWasm.WriteOverflowExport(output, cursor);
             if (divide) cursor = ExceptionTagsWasm.WriteDivideExport(output, cursor);
             if (bounds) cursor = ExceptionTagsWasm.WriteIndexExport(output, cursor);
@@ -354,7 +382,7 @@ namespace PortableCompiler
                 output[cursor++] = 0x0b;
                 cursor = Unsigned(output, cursor, thunks[0]);
                 for (int i = 0; i < thunks[0]; i++)
-                    cursor = Unsigned(output, cursor, functions + i);
+                    cursor = Unsigned(output, cursor, hostImports + functions + i);
             }
 
             if (literalSize != 0)
@@ -378,20 +406,20 @@ namespace PortableCompiler
             {
                 int function = thunks[i + 1], receiver = types[offsets[function] + 1];
                 int arity = arities[function];
-                cursor = Unsigned(output, cursor, ThunkSize(receiver, function, arity));
+                cursor = Unsigned(output, cursor, ThunkSize(receiver, hostImports + function, arity));
                 output[cursor++] = 0; // local declarations
                 output[cursor++] = 0x20;
                 output[cursor++] = 0;
                 output[cursor++] = 0xfb;
                 output[cursor++] = 22; // ref.cast to the target's concrete receiver
-                cursor = Signed(output, cursor, HeapType((byte)receiver));
+                cursor = Signed(output, cursor, HeapType(receiver));
                 for (int argument = 1; argument < arity; argument++)
                 {
                     output[cursor++] = 0x20;
                     output[cursor++] = (byte)argument;
                 }
                 output[cursor++] = 0x10;
-                cursor = Unsigned(output, cursor, function);
+                cursor = Unsigned(output, cursor, hostImports + function);
                 output[cursor++] = 0x0b;
             }
             if (hasRemainder)
@@ -399,6 +427,7 @@ namespace PortableCompiler
                 cursor = Unsigned(output, cursor, remainderSize);
                 for (int i = 0; i < remainderSize; i++) output[cursor++] = remainderBody[i];
             }
+            if (argumentArray != 0) cursor = EntryArgumentsWasm.WriteBodies(output, cursor, argumentArray);
             if (literalSize != 0)
             {
                 cursor = Section(output, cursor, 11, dataOverhead + literalSize);
@@ -411,15 +440,15 @@ namespace PortableCompiler
             return cursor;
         }
 
-        private static int ValueWidth(int type) =>
-            type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference || type == NullPointer ? 1 :
-                HeapType(StackType(type)) <= 63 ? 2 : 3;
+        internal static int ValueWidth(int type) =>
+            type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference || type == NullPointer || type == ConsoleStorage.Writer ? 1 :
+                1 + HeapTypeSize(HeapType(StackType(type)));
 
         internal static int ValueType(byte[] output, int cursor, int slot)
         {
-            byte type = StackType(slot);
-            if (type == I32 || type == MethodPointer || IsNativeInteger(type))
-                output[cursor++] = 0x7f;
+            int type = StackType(slot);
+            if (type == I32 || type == MethodPointer || IsNativeInteger(type) || type == ConsoleStorage.Writer)
+                output[cursor++] = 0x7f; // Console writers store their host stream number.
             else if (type == NullPointer)
                 output[cursor++] = NullSpillWasm.NullRef; // Only the null pointer inhabits the browser storage type.
             else if (type == I64)
@@ -436,15 +465,19 @@ namespace PortableCompiler
             return cursor;
         }
 
-        internal static int HeapType(byte type) =>
+        internal static int HeapType(int type) =>
             type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
                 type == EventArgsReference ? EventArgsHeap :
                 type == EventHandlerReference ? EventHandlerHeap :
                 type == Singles ? SingleArrayHeap : type == Doubles ? DoubleArrayHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;
 
+        // Positive heap indices are encoded as signed LEB values. The sign
+        // bit reserves one additional bit compared with an unsigned index.
+        internal static int HeapTypeSize(int index) => UnsignedSize(index * 2);
+
         private static int ThunkSize(int receiver, int function, int arity) =>
-            7 + (HeapType((byte)receiver) <= 63 ? 1 : 2) + 2 * (arity - 1) + UnsignedSize(function);
+            7 + HeapTypeSize(HeapType(receiver)) + 2 * (arity - 1) + UnsignedSize(function);
 
         private static int Reserve(int remaining, int size)
         {
@@ -459,7 +492,7 @@ namespace PortableCompiler
             return Unsigned(bytes, cursor, payload);
         }
 
-        private static int UnsignedSize(int value)
+        internal static int UnsignedSize(int value)
         {
             int count = 1;
             while (value >= 128)
