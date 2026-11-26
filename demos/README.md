@@ -120,6 +120,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [115 · Sequential reference layouts](stage-115-sequential-reference-layouts/README.md) | `npm run demo -- stage-115-sequential-reference-layouts` | Compile sequential classes like the browser CoreLib `Delegate` and `Type`; diagnose explicit, packed and auto-based shapes |
 | [116 · Native integer vectors](stage-116-native-integer-vectors/README.md) | `npm run demo -- stage-116-native-integer-vectors` | wasm32 native vector storage, loads and stores on original managed DLLs |
 | [118 · Bundle image reuse](stage-118-bundle-image-reuse/README.md) | `npm run demo -- stage-118-bundle-image-reuse` | Measure unchanged WinForms compilation in Node and Edge |
+| [120 · Virtual calls on newly allocated objects](stage-120-allocated-virtual-receivers/README.md) | `npm run demo -- stage-120-allocated-virtual-receivers` | Bind unsealed virtual receivers when the evaluation stack proves their class |
 
 ## Adding a stage
 

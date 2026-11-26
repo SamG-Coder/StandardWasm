@@ -7,10 +7,11 @@ namespace PortableCompiler
     internal static class VirtualSlots
     {
         internal static int SelectVirtualBody(BundleImages bundle, int[] objects,
-            int actual, int declared, int owner, int row, int[] symbol)
+            int actual, bool allocated, int declared, int owner, int row, int[] symbol)
         {
             int receiver = actual == NullValue ? declared : actual;
-            if (receiver < FirstClass || receiver - FirstClass >= objects[0] || !IsSealed(objects, receiver) ||
+            if (receiver < FirstClass || receiver - FirstClass >= objects[0] ||
+                (!allocated && !IsSealed(objects, receiver)) ||
                 IsValueType(objects, receiver) || IsInterface(objects, receiver)) return -2;
 
             var ancestors = new int[objects[0]];
