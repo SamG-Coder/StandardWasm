@@ -50,6 +50,12 @@ namespace PortableCompiler
                     continue;
                 }
 
+                if (kind == ThrowNull)
+                {
+                    if (depth == 0) return -1;
+                    if (stack[depth - 1] != NullValue) return -2;
+                    continue; // throw has no normal successor and clears the evaluation stack.
+                }
                 if (kind == Rethrow || kind == EndFinally) continue; // Unwinding drops the evaluation stack.
 
                 int next;

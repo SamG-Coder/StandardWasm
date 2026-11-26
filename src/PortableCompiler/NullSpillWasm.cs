@@ -12,7 +12,7 @@ namespace PortableCompiler
         {
             int slot = pc * BranchIl.Width;
             int kind = records[slot];
-            if (kind == Return || kind == Leave || kind == Rethrow || kind == EndFinally)
+            if (kind == Return || kind == Leave || kind == Rethrow || kind == EndFinally || kind == ThrowNull)
                 return used;
 
             int operand = records[slot + 1];

@@ -12,7 +12,7 @@ namespace PortableCompiler
         internal const int FieldAddress = 43, MethodSpecCall = 44, ExchangeHandlerField = 45;
         internal const int FieldToken = 46, InitializedArray = 47;
         internal const int CheckedInteger = 48, CheckedConversion = 49, Leave = 50, Rethrow = 51, EndFinally = 52;
-        internal const int CastClass = 53, TestClass = 54;
+        internal const int CastClass = 53, TestClass = 54, ThrowNull = 55;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
@@ -191,6 +191,7 @@ namespace PortableCompiler
                     operand = (row << 2) | (table == 1 ? 1 : 0);
                 }
                 else if (op == 0x14) kind = NullLiteral;
+                else if (op == 0x7a) kind = ThrowNull; // Stack analysis verifies the operand.
                 else if (op == 0x72)
                 {
                     if (length - pc < 4) return -1;

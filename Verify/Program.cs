@@ -95,4 +95,5 @@ LinkedFieldCases.Add(cases);
 ForeignFieldTypeCases.Add(cases);
 NominalCastCases.Add(cases);
 BaseExceptionCases.Add(cases);
+NullThrowCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

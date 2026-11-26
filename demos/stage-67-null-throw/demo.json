@@ -1,0 +1,1 @@
+{"assembly":"NullThrow","exportType":"NullThrow.ThrowDemo","method":"Compile","inputs":[{"file":"self"},{"name":"Cleanup"}],"generated":{"capacity":8192,"arguments":[0]},"expected":113}

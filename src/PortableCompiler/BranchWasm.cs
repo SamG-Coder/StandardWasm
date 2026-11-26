@@ -479,6 +479,8 @@ namespace PortableCompiler
                     }
                     code[used++] = 0x0f;
                 }
+                else if (kind == ThrowNull)
+                    used = ExceptionTagsWasm.Throw(code, used, ExceptionTagsWasm.NullTag);
                 else if (kind == Rethrow)
                     used = ExceptionDispatchWasm.ThrowReference(code, used, pcLocal + 2 + operand);
                 else
