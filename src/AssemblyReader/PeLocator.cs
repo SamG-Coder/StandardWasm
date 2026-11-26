@@ -8,8 +8,12 @@ namespace PeLibrary
 
         public static int LocateMetadata(byte[] image, int[] location)
         {
+            if (location.Length < 2)
+                return Invalid;
+            if (WebcilLocator.HasSignature(image))
+                return WebcilLocator.LocateMetadata(image, location);
             int peStart = ReadPeStart(image);
-            if (location.Length < 2 || peStart < 0)
+            if (peStart < 0)
                 return Invalid;
             uint pe = (uint)peStart;
             uint sectionCount = U16(image, pe + 6);
@@ -42,7 +46,7 @@ namespace PeLibrary
             uint headerSize = U32(image, optional + 60);
             if (cliRva < headerSize)
                 return Unsupported;
-            int cli = MapRange(image, sections, sectionCount, cliRva, cliSize);
+            int cli = MapRange(image, sections + 8, sectionCount, 40, 0, cliRva, cliSize);
             if (cli < 0)
                 return Invalid;
             uint declaredCliHeaderSize = U32(image, (uint)cli);
@@ -55,7 +59,7 @@ namespace PeLibrary
                 return Invalid;
             if (metadataRva < headerSize)
                 return Unsupported;
-            int metadata = MapRange(image, sections, sectionCount, metadataRva, metadataSize);
+            int metadata = MapRange(image, sections + 8, sectionCount, 40, 0, metadataRva, metadataSize);
             if (metadata < 0 || U32(image, (uint)metadata) != 0x424a5342)
                 return Invalid;
 
@@ -67,6 +71,8 @@ namespace PeLibrary
 
         internal static int MapImageRange(byte[] image, uint rva, uint size)
         {
+            if (WebcilLocator.HasSignature(image))
+                return WebcilLocator.MapImageRange(image, rva, size);
             int peStart = ReadPeStart(image);
             if (peStart < 0)
                 return -1;
@@ -78,7 +84,7 @@ namespace PeLibrary
             if (optionalSize < 64 || (magic != 0x10b && magic != 0x20b) ||
                 rva < U32(image, optional + 60))
                 return -1;
-            return MapRange(image, optional + optionalSize, count, rva, size);
+            return MapRange(image, optional + optionalSize + 8, count, 40, 0, rva, size);
         }
 
         private static int ReadPeStart(byte[] image)
@@ -98,7 +104,7 @@ namespace PeLibrary
             return (int)pe;
         }
 
-        private static int MapRange(byte[] image, uint sections, uint count, uint rva, uint size)
+        internal static int MapRange(byte[] image, uint sections, uint count, uint stride, uint minimumRawOffset, uint rva, uint size)
         {
             // A requested image range must stay inside the 32-bit RVA space.
             if (size == 0 || size - 1 > uint.MaxValue - rva)
@@ -107,18 +113,18 @@ namespace PeLibrary
             int result = -1;
             for (uint index = 0; index < count; index++)
             {
-                uint section = sections + index * 40;
-                uint virtualSize = U32(image, section + 8);
-                uint virtualAddress = U32(image, section + 12);
-                uint rawSize = U32(image, section + 16);
-                uint rawOffset = U32(image, section + 20);
+                uint section = sections + index * stride;
+                uint virtualSize = U32(image, section);
+                uint virtualAddress = U32(image, section + 4);
+                uint rawSize = U32(image, section + 8);
+                uint rawOffset = U32(image, section + 12);
                 if (rva < virtualAddress || rva - virtualAddress >= virtualSize)
                     continue;
                 if (result >= 0)
                     return -1;
                 uint delta = rva - virtualAddress;
                 // The section can have a virtual tail. Only its file-backed bytes are readable.
-                if (!Fits(delta, size, virtualSize) || !Fits(delta, size, rawSize) || !Fits(rawOffset, rawSize, (uint)image.Length))
+                if (rawOffset < minimumRawOffset || !Fits(delta, size, virtualSize) || !Fits(delta, size, rawSize) || !Fits(rawOffset, rawSize, (uint)image.Length))
                     return -1;
                 result = (int)(rawOffset + delta);
             }
