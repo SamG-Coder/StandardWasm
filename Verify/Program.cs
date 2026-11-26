@@ -74,6 +74,10 @@ FormattingCases.Add(cases);
 DynamicControlsCases.Add(cases);
 BundleCases.Add(cases);
 PortableWideCases.Add(cases);
+PortableSwitchCases.Add(cases);
+DiagnosticCases.Add(cases);
+WideStorageCases.Add(cases);
+PortableFloatCases.Add(cases);
 
 // Integer division (stage 08). The grid crosses every signed boundary with every divisor boundary.
 // The unsigned high-bit patterns (0x80000000, 0x80000001, 0xFFFFFFFE, 0xFFFFFFFF) are the same values

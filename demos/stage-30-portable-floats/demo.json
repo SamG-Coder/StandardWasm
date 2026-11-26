@@ -1,0 +1,1 @@
+{"assembly":"PortableReals","exportType":"PortableReals.RealDemo","method":"Compile","inputs":[{"file":"self"},{"name":"Filter"}],"generated":{"capacity":16384,"arguments":[{"f64":"9"},3]},"expected":8}

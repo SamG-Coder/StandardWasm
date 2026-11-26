@@ -13,6 +13,8 @@ The demo compiles BootstrapKernel from BootstrapLibrary.dll and returns 43 for i
 
 The Node test writes the verified final module to artifacts/StandardWasm.Compiler.wasm. The manifest accepted by CompileModule consists of consecutive descriptors with a little-endian u32 MethodDef row, little-endian u32 byte length, and printable ASCII export name bytes. Export aliases share a function. The compiler diagnoses duplicate names, invalid rows, and truncated records before touching the caller's output.
 
+The [stage 27 diagnostics API](../stage-27-portable-diagnostics/README.md) is also available from the generated compiler. The bootstrap suite verifies those exports and replays their failure and success cases.
+
 The generated compiler supports the IL subset documented by stages 09 through 12 and 15. The older CLI and legacy tests still exercise additional features. The WinForms and WebGPU demo is verified separately with npm run test:winforms.
 
 ## Audit library coverage

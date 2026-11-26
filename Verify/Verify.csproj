@@ -26,6 +26,10 @@
     <ProjectReference Include="../demos/stage-22-dynamic-controls/DynamicControlsLibrary.csproj" />
     <ProjectReference Include="../demos/stage-23-assembly-linking/BundleLibrary.csproj" />
     <ProjectReference Include="../demos/stage-24-portable-i64/WideLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-26-portable-switch/SwitchLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-27-portable-diagnostics/DiagnosticLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-28-wide-storage/WideStorageLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-30-portable-floats/PortableReals.csproj" />
     <ProjectReference Include="../demos/stage-21-managed-formatting/identity/ThirdPartyText/ThirdPartyText.csproj" Aliases="ThirdParty" />
     <ProjectReference Include="../demos/stage-21-managed-formatting/identity/TextIdentityProbe/TextIdentityProbe.csproj" />
     <ProjectReference Include="../demos/stage-15-managed-instances/identity/ObjectIdentityProbe/ObjectIdentityProbe.csproj" />

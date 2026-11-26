@@ -41,6 +41,11 @@ namespace PeLibrary
                 return 3; // Int32
             if (prefix == 0x72616843 && image[entry + 4] == 0)
                 return 7; // Char
+            if (prefix == 0x36746e49 && Fits(name, 6, heapSize) && U16(image, entry + 4) == 0x34)
+                return WideStorage.Array; // Int64
+            if (prefix == 0x746e4955 && Fits(name, 7, heapSize) && U16(image, entry + 4) == 0x3436 &&
+                image[entry + 6] == 0)
+                return WideStorage.Array; // UInt64
             return -2;
         }
 

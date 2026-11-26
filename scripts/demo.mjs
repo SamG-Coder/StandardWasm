@@ -19,7 +19,11 @@ run("dotnet", ["build", "-c", "Release", demo.project]);
 compile(demo.dll, demo.exportType, demo.wasm);
 const { instance } = await WebAssembly.instantiate(readFileSync(demo.wasm));
 const result = (demo.generated
-        ? await invokeGenerated(instance.exports, demoInputs(demo), demo.generated)
+        ? await invokeGenerated(instance.exports, demoInputs(demo), demo.generated,
+            ([module, method, offset]) => {
+                const il = offset < 0 ? "" : " IL_" + offset.toString(16).padStart(4, "0");
+                console.log("Diagnostic: assembly " + module + ", MethodDef row " + method + il);
+            })
         : invoke(instance.exports, demo.method, demoInputs(demo)));
 assert.equal(result, decode(demo.expected));
 const displayedInputs = demo.inputs.map(input => {
