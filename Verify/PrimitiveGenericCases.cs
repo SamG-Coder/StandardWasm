@@ -34,6 +34,11 @@ internal static class PrimitiveGenericCases
         RejectChangedField(nameof(Kernels.ReadVector), vector: true);
         int namedLoad = FieldOffset(nameof(Kernels.Read), OpCodes.Ldfld);
         RejectFieldImage(EncodeNamedArgument(image), nameof(Kernels.Read), namedLoad, "named primitive encoding");
+        string constrained = nameof(Kernels.ReadReferenceSlot);
+        Check(constrained, [null], () => Kernels.ReadReferenceSlot(null));
+        byte[] invalidConstraint = EncodeInvalidConstraint(image);
+        AssertClrConstraintFailure(invalidConstraint, dependency);
+        RejectImage(invalidConstraint, constrained, -1, -2, "reference constraint");
 
         void Check(string name, object[] arguments, Func<object> oracle)
         {
@@ -69,11 +74,16 @@ internal static class PrimitiveGenericCases
         void RejectFieldImage(byte[] changed, string name, int load, string label)
         {
             AssertClrFieldMismatch(changed, dependency, name);
+            RejectImage(changed, name, load, -6, label);
+        }
+
+        void RejectImage(byte[] changed, string name, int load, int expected, string label)
+        {
             byte[] input = BundleCases.Pack(changed, dependency), entries = Manifest(name);
             int[] diagnostic = [0, Row(name), load];
             Array.Fill(output, (byte)0xa5);
             int status = CompilerExports.CompileBundleDetailed(input, entries, output, location);
-            if (status != -6 || !location.SequenceEqual(diagnostic) || output.Any(value => value != 0xa5))
+            if (status != expected || !location.SequenceEqual(diagnostic) || output.Any(value => value != 0xa5))
                 throw new InvalidOperationException($"{name} mismatch returned {status} at [{string.Join(", ", location)}].");
             cases.Add(new
             {
@@ -104,6 +114,35 @@ internal static class PrimitiveGenericCases
         using var output = new MemoryStream();
         assembly.Write(output);
         return output.ToArray();
+    }
+
+    private static byte[] EncodeInvalidConstraint(byte[] image)
+    {
+        using var assembly = Cecil.AssemblyDefinition.ReadAssembly(new MemoryStream(image));
+        var module = assembly.MainModule;
+        var kernel = module.GetType(typeof(Kernels).FullName).Methods.Single(method =>
+            method.Name == nameof(Kernels.ReadReferenceSlot));
+        var type = (Cecil.GenericInstanceType)kernel.Parameters[0].ParameterType;
+        type.GenericArguments[0] = module.TypeSystem.Int32;
+        using var output = new MemoryStream();
+        assembly.Write(output);
+        return output.ToArray();
+    }
+
+    private static void AssertClrConstraintFailure(byte[] image, byte[] dependency)
+    {
+        var context = new AssemblyLoadContext("Generic reference constraint oracle", isCollectible: true);
+        try
+        {
+            context.LoadFromStream(new MemoryStream(dependency));
+            var kernel = context.LoadFromStream(new MemoryStream(image)).GetType(typeof(Kernels).FullName!)!
+                .GetMethod(nameof(Kernels.ReadReferenceSlot))!;
+            kernel.Invoke(null, [null]);
+            throw new InvalidOperationException("The CLR accepted an Int32 argument for a reference constraint.");
+        }
+        catch (TypeLoadException) { }
+        catch (TargetInvocationException error) when (error.InnerException is TypeLoadException) { }
+        finally { context.Unload(); }
     }
 
     private static byte[] ChangeArgument(byte[] image, int token, bool vector)

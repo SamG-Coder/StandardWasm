@@ -47,6 +47,7 @@ namespace PrimitiveGenericDemo
             return item.Key;
         }
 
+        public static int ReadReferenceSlot(ReferenceSlot<Label> slot) => slot == null ? 1 : 0;
         public static int ReadVector(Frame frame) => frame.SignedVectors.Key == null ? 1 : 0;
     }
 

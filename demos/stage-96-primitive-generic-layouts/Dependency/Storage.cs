@@ -14,6 +14,8 @@ namespace PrimitiveGenericDependency
         public TValue[] Values;
     }
 
+    public sealed class ReferenceSlot<T> where T : class { }
+
     public sealed class Frame
     {
         public Pair<int, Label> Signed;

@@ -4,8 +4,9 @@ namespace PeLibrary
 {
     internal static class GenericParameters
     {
-        internal static int Check(byte[] image, int[] heaps, int[] methods, int typeRow, int arity)
+        internal static int Check(byte[] image, int[] heaps, int[] methods, int typeRow, int[] arguments, int[] objects)
         {
+            int arity = arguments.Length;
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;
             if (counts[42] == 0) return arity == 0 ? 0 : -2;
@@ -28,7 +29,13 @@ namespace PeLibrary
                 uint at = (uint)(table + low * width);
                 if (Index(image, at + 4, ownerWidth) != owner) break;
                 if (low - first >= arity || (int)U16(image, at) != low - first) return -2;
-                if ((U16(image, at + 2) & ~7u) != 0) return -2; // Variance and reference constraint only.
+                uint flags = U16(image, at + 2);
+                if ((flags & ~7u) != 0) return -2; // Variance and reference constraint only.
+                if ((flags & 4) != 0)
+                {
+                    int argument = arguments[low - first];
+                    if (GenericScalar.IsScalar(argument) || ObjectLayouts.IsValueType(objects, argument)) return -2;
+                }
                 low++;
             }
             if (low - first != arity) return -2;
