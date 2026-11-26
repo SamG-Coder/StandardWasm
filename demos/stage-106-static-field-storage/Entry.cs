@@ -7,6 +7,9 @@ namespace StaticStorageDemo
     {
         public static int Counter;
 
+        [ThreadStatic]
+        private static object threadKey;
+
         public static int Defaults() =>
             Counter == 0 && Storage.Counter == 0 && Storage.Narrow == 0 && Storage.Wide == 0 &&
             Storage.Single == 0f && Storage.Double == 0d && Storage.Key == null && Storage.Token == null ? 1 : -1;
@@ -46,7 +49,21 @@ namespace StaticStorageDemo
         public static int ReadAnnotatedKey() => AnnotatedKeys.Read();
 
         public static int RejectInitialized() => Initialized.Counter;
-        public static int RejectThreadStatic() => Storage.ThreadCounter;
+        public static int ThreadState(int delta)
+        {
+            int firstAccess = threadKey == null ? 1000 : 0;
+            if (threadKey == null) threadKey = new object();
+            Storage.ThreadCounter = unchecked(Storage.ThreadCounter + delta);
+            return unchecked(firstAccess + Storage.ThreadCounter);
+        }
+
+        public static int ReadUnsupportedAttribute() => AttributedStorage.Counter;
+    }
+
+    internal static class AttributedStorage
+    {
+        [System.Runtime.CompilerServices.CompilerGenerated]
+        internal static int Counter = 0;
     }
 
     public static class AnnotatedKeys
