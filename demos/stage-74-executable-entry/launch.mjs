@@ -1,4 +1,5 @@
 import { packEntry, readManagedCompanions } from "./companions.mjs";
+import { instantiateManagedModule } from "./resource-host.mjs";
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -50,9 +51,7 @@ export async function runManagedEntry(compilerBytes, selection) {
 
     const code = Uint8Array.from({ length }, (_, i) => compiler.ReadByte(output, i));
     const module = await WebAssembly.compile(code);
-    if (WebAssembly.Module.imports(module).length)
-        throw Error("This entry host does not provide runtime imports yet.");
-    const { exports } = await WebAssembly.instantiate(module);
+    const { exports } = await instantiateManagedModule(module, compiler, [selection.entry, ...companions]);
     if (typeof exports.run !== "function" || exports.run.length !== 0)
         throw Error("This entry host supports a parameterless managed entry point.");
     const exitCode = exports.run();

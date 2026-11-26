@@ -1,5 +1,6 @@
 import { packEntry, readManagedCompanions } from "../../stage-74-executable-entry/companions.mjs";
-import { buildArguments, consoleImportModule, createConsoleHost, hex } from "./console-host.mjs";
+import { instantiateManagedModule } from "../../stage-74-executable-entry/resource-host.mjs";
+import { buildArguments, createConsoleHost, hex } from "./console-host.mjs";
 
 // Compiles a dropped .NET entry with the self-hosted compiler and runs it
 // with the console host of decision 0039. The compile half follows the
@@ -56,12 +57,9 @@ export async function runConsoleEntry(compilerBytes, selection) {
 
     const code = Uint8Array.from({ length }, (_, i) => compiler.ReadByte(output, i));
     const module = await WebAssembly.compile(code);
-    // Only the console contract is provided to generated code.
     const imports = WebAssembly.Module.imports(module);
-    if (imports.some(entry => entry.module !== consoleImportModule || entry.kind !== "function"))
-        throw Error("The generated module requests a runtime import outside the console host contract.");
     const host = createConsoleHost(selection.console);
-    const { exports } = await WebAssembly.instantiate(module, imports.length ? host.imports : {});
+    const { exports } = await instantiateManagedModule(module, compiler, [selection.entry, ...companions], host.imports);
     if (typeof exports.run !== "function" || exports.run.length > 1)
         throw Error("This entry host supports Main() and Main(string[]).");
     const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", code));

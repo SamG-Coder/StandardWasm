@@ -65,6 +65,14 @@ count and returns the byte length and stable address packed into an
 i64. Negative results identify a lookup diagnostic. The compiler keeps
 console function indices stable when both import groups are present,
 and the memory entry does not occupy a function index.
+The executable and console loaders supply the resource imports together
+when requested. The original images stay in bundle order so the owner
+index identifies the same assembly at compile time and runtime. The host
+appends pages for its scratch space and resource bytes. It keeps each
+published resource address stable until its Wasm instance is released.
+At the lookup boundary, -8 denotes a null name and -9 denotes an empty
+name after applying Windows termination rules. The managed binding must
+translate these results to the corresponding CLR exceptions.
 
 [CoreCLR 10.0.10](https://github.com/dotnet/runtime/blob/v10.0.10/src/coreclr/System.Private.CoreLib/src/System/Reflection/RuntimeAssembly.cs)
 gets the payload through its native resource lookup and returns a read-only
