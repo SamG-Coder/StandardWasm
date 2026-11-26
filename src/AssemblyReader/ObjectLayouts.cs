@@ -114,7 +114,8 @@ namespace PeLibrary
                 if (attributed < 0) return attributed;
                 if (layout != 0x10)
                 {
-                    int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]));
+                    int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]),
+                        layout == 0x08 ? fields : 0, first, end);
                     if (supported < 0) return supported;
                 }
                 baseType = 0;
@@ -657,7 +658,8 @@ namespace PeLibrary
             return platform ? kind : 0;
         }
 
-        private static int DefaultPacking(byte[] image, int[] heaps, int[] methods, int[] counts, int row, int typeIndex)
+        private static int DefaultPacking(byte[] image, int[] heaps, int[] methods, int[] counts,
+            int row, int typeIndex, int fields = 0, uint first = 0, uint end = 0)
         {
             if (counts[15] == 0) return 0;
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 15);
@@ -666,8 +668,16 @@ namespace PeLibrary
             for (int i = 0; i < counts[15]; i++)
             {
                 uint at = (uint)(table + i * width);
-                if (ReadIndex(image, at + 6, typeIndex) == (uint)row &&
-                    (U16(image, at) != 0 || U32(image, at + 2) != 0)) return -2;
+                if (ReadIndex(image, at + 6, typeIndex) != (uint)row) continue;
+                if (U16(image, at) != 0) return -2;
+                uint size = U32(image, at + 2);
+                if (size == 0) continue;
+                // A managed empty sequential value may declare one byte of
+                // nominal size. The value still has no managed fields.
+                if (size != 1 || fields == 0) return -2;
+                int fieldWidth = 2 + methods[2] + methods[3];
+                for (uint field = first; field < end; field++)
+                    if ((U16(image, (uint)fields + (field - 1) * (uint)fieldWidth) & 0x10) == 0) return -2;
             }
             return 0;
         }
