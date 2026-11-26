@@ -229,7 +229,7 @@ namespace PortableCompiler
             int[] heaps, int[] layout, int[] reference, bool fields, int[] binding, int[] targetLayout,
             int[] targetHeaps, int[] range)
         {
-            int owner = FindOwner(main, bundle, ranges, caller, heaps, reference);
+            int owner = FindOwner(main, bundle, ranges, caller, heaps, layout, reference);
             int status = owner;
             for (int hop = 0; owner >= 0 && hop <= ranges.Length / 2; hop++)
             {
@@ -252,7 +252,7 @@ namespace PortableCompiler
                 var next = new int[AssemblyReferences.SymbolWidth];
                 status = AssemblyReferences.ReadAssembly(target, targetHeaps, targetLayout, forward, next);
                 if (status < 0) break;
-                owner = FindOwner(main, bundle, ranges, target, targetHeaps, next);
+                owner = FindOwner(main, bundle, ranges, target, targetHeaps, targetLayout, next);
                 // A fixed type name can visit each bundled owner only once.
                 status = owner < 0 ? owner : -1;
             }
@@ -260,7 +260,7 @@ namespace PortableCompiler
             return main;
         }
 
-        private static int FindOwner(byte[] main, byte[] bundle, int[] ranges, byte[] caller, int[] heaps, int[] reference)
+        private static int FindOwner(byte[] main, byte[] bundle, int[] ranges, byte[] caller, int[] heaps, int[] layout, int[] reference)
         {
             int matched = -1;
             var candidateLayout = new int[4];
@@ -270,7 +270,7 @@ namespace PortableCompiler
                 byte[] candidate = Load(main, bundle, ranges, owner);
                 if (CompressedTables.FindWithHeaps(candidate, candidateLayout, candidateHeaps) < 0)
                     return -1;
-                int match = AssemblyReferences.Matches(caller, heaps, reference, candidate, candidateHeaps, candidateLayout);
+                int match = AssemblyReferences.Matches(caller, heaps, layout, reference, candidate, candidateHeaps, candidateLayout);
                 if (match < 0) return match;
                 if (match == 0) continue;
                 if (matched >= 0) return -5;

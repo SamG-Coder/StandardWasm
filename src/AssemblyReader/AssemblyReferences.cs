@@ -130,7 +130,7 @@ namespace PeLibrary
             return 0;
         }
 
-        internal static int Matches(byte[] source, int[] sourceHeaps, int[] reference,
+        internal static int Matches(byte[] source, int[] sourceHeaps, int[] sourceMethods, int[] reference,
             byte[] candidate, int[] heaps, int[] methods)
         {
             var counts = new int[45];
@@ -144,7 +144,9 @@ namespace PeLibrary
             if (!SameString(source, sourceHeaps, reference[1], candidate, heaps, name))
                 return 0;
             uint version = (uint)reference[0];
-            if (U32(candidate, row + 4) != U32(source, version) || U32(candidate, row + 8) != U32(source, version + 4))
+            if ((U32(candidate, row + 4) != U32(source, version) || U32(candidate, row + 8) != U32(source, version + 4)) &&
+                !FrameworkFacadeVersions.AllowsNetStandard(source, sourceHeaps, sourceMethods, reference,
+                    candidate, row, counts))
                 return 0;
             uint flags = U32(candidate, row + 12);
             uint key = Index(candidate, row + 16, blobs);

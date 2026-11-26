@@ -91,6 +91,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [102 · Nominal enum arguments](stage-102-nominal-enum-arguments/README.md) | `npm run demo -- stage-102-nominal-enum-arguments` | Closed generic layouts retain enum identity and scalar storage |
 | [103 · Handle generic constraints](stage-103-handle-generic-constraints/README.md) | `npm run demo -- stage-103-handle-generic-constraints` | Compiled unmanaged marker and closed nominal interface constraints |
 | [105 Â· Generic method bodies](stage-105-generic-method-bodies/README.md) | `npm run demo -- stage-105-generic-method-bodies` | Run(-128) = -122103 with distinct bodies per closed declaring type |
+| [107 · Framework facades](stage-107-framework-facades/README.md) | `npm run demo -- stage-107-framework-facades` | Run original .NET Standard libraries through the runtime facade |
 
 ## Adding a stage
 
