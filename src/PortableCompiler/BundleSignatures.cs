@@ -7,22 +7,28 @@ namespace PortableCompiler
     {
         internal static int Match(byte[] main, byte[] bundle, int[] ranges,
             byte[] caller, int[] callerLayout, int[] callerHeaps, int callerOwner, int callerSignature,
-            byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner, int targetSignature)
+            byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner, int targetSignature, bool field)
         {
             var next = new int[1];
-            int left = Start(caller, callerHeaps, callerSignature, next);
+            int left = Start(caller, callerHeaps, callerSignature, next, field);
             if (left < 0) return left;
             int leftEnd = next[0];
-            int right = Start(target, targetHeaps, targetSignature, next);
+            int right = Start(target, targetHeaps, targetSignature, next, field);
             if (right < 0) return 0;
             int rightEnd = next[0];
+            if (caller[left - 1] != target[right - 1]) return 0;
 
-            int count = CompressedUnsigned(caller, left, leftEnd, next);
-            left = next[0];
-            int candidateCount = CompressedUnsigned(target, right, rightEnd, next);
-            right = next[0];
-            if (count < 0 || count >= leftEnd - left) return -1;
-            if (count != candidateCount || count >= rightEnd - right) return 0;
+            // A field has exactly one type, without a parameter count.
+            int count = 0;
+            if (!field)
+            {
+                count = CompressedUnsigned(caller, left, leftEnd, next);
+                left = next[0];
+                int candidateCount = CompressedUnsigned(target, right, rightEnd, next);
+                right = next[0];
+                if (count < 0 || count >= leftEnd - left) return -1;
+                if (count != candidateCount || count >= rightEnd - right) return 0;
+            }
 
             var leftClass = new int[2];
             var rightClass = new int[2];
@@ -60,13 +66,16 @@ namespace PortableCompiler
             return left == leftEnd && right == rightEnd ? 1 : 0;
         }
 
-        private static int Start(byte[] image, int[] heaps, int index, int[] next)
+        private static int Start(byte[] image, int[] heaps, int index, int[] next, bool field)
         {
             if (index < 1 || index >= heaps[1]) return -1;
             int limit = heaps[0] + heaps[1];
             int size = CompressedUnsigned(image, heaps[0] + index, limit, next);
             int first = next[0];
-            if (size < 3 || size > limit - first || image[first] != 0) return -1;
+            // Ordinary methods use default calling convention with optional
+            // implicit this. The receiver is outside the parameter list.
+            if (size < (field ? 2 : 3) || size > limit - first) return -1;
+            if (field ? image[first] != 6 : (image[first] & ~0x20) != 0) return -1;
             next[0] = first + size;
             return first + 1;
         }

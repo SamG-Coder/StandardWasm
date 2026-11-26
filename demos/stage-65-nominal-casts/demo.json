@@ -1,0 +1,1 @@
+{"assembly":"NominalCasts","exportType":"NominalCasts.LinkDemo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["CastControls.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":32768,"arguments":[7]},"expected":13}
