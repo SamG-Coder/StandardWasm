@@ -8,7 +8,7 @@ namespace PeLibrary
     //   - its parent is a TypeRef named System.Math,
     //   - that TypeRef's resolution scope is a culture-neutral AssemblyRef whose name and 8-byte public key token are
     //     those of a platform BCL assembly (netstandard, mscorlib, System.Runtime, System.Runtime.Extensions or
-    //     System.Private.CoreLib, the same set as Compiler/PlatformTypes.cs),
+    //     System.Private.CoreLib),
     //   - and its signature blob is the exact static signature of a mapped overload.
     // References that carry a full public key instead of a token are not recognized, because computing the token
     // would need SHA-1. Compilers emit tokens in AssemblyRef rows.

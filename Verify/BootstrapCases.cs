@@ -23,13 +23,13 @@ internal static class BootstrapCases
         });
 
         int kernel = Row(nameof(CompilerExports.BootstrapKernel));
-        byte[] aliases = Manifest([("first", kernel), ("second", kernel)]);
+        byte[] aliases = Manifest([("first", kernel), ("Café東京𐐀", kernel)]);
         var module = new byte[capacity];
         int size = CompilerExports.CompileModule(dll, aliases, module);
         if (size <= 0)
             throw new InvalidOperationException($"Alias module compilation returned {size}");
         string hex = Convert.ToHexString(module.AsSpan(0, size)).ToLowerInvariant();
-        foreach (string name in new[] { "first", "second" })
+        foreach (string name in new[] { "first", "Café東京𐐀" })
         {
             cases.Add(new
             {
@@ -44,6 +44,12 @@ internal static class BootstrapCases
         Reject("truncated export name", aliases[..^1], -1);
         Reject("missing method definition", Manifest([("missing", 0)]), -1);
         Reject("unsupported name bytes", Manifest([("line\nbreak", kernel)]), -2);
+        foreach (byte[] name in new byte[][] { [0xc0, 0x80], [0xed, 0xa0, 0x80], [0xf0, 0x90, 0x80] })
+        {
+            byte[] invalid = Manifest([(new string('x', name.Length), kernel)]);
+            name.CopyTo(invalid, 8);
+            Reject("malformed UTF-8 export name", invalid, -2);
+        }
         Reject("reserved overflow export", Manifest([("\0overflow", kernel)]), -2);
 
         int Row(string name) => type.GetMethod(name)!.MetadataToken & 0xffffff;
@@ -69,7 +75,7 @@ internal static class BootstrapCases
         using var writer = new BinaryWriter(buffer);
         foreach (var (name, row) in entries)
         {
-            byte[] bytes = Encoding.ASCII.GetBytes(name);
+            byte[] bytes = Encoding.UTF8.GetBytes(name);
             writer.Write(row);
             writer.Write(bytes.Length);
             writer.Write(bytes);

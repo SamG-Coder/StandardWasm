@@ -4,10 +4,21 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const root = fileURLToPath(new URL("../", import.meta.url));
+const driverProject = "tools/PortableCompiler.Driver";
+const driver = join(root, driverProject, "bin/Release/net10.0/PortableCompiler.Driver.dll");
+let driverReady = false;
 export function run(command, args) {
     const result = spawnSync(command, args, { stdio: "inherit", cwd: root });
     if (result.error) throw result.error;
     if (result.status !== 0) throw Error(command + " exited with " + result.status);
+}
+
+export function invokeCompiler(dll, exportType, output, options = {}) {
+    if (!driverReady) {
+        run("dotnet", ["build", driverProject, "-c", "Release"]);
+        driverReady = true;
+    }
+    return spawnSync("dotnet", [driver, resolve(dll), exportType, resolve(output)], { ...options, cwd: root });
 }
 
 export function compile(dll, exportType, output) {
@@ -15,16 +26,13 @@ export function compile(dll, exportType, output) {
     mkdirSync(dirname(target), { recursive: true });
     const work = mkdtempSync(join(dirname(target), ".compile-"));
     try {
-        const wat = join(work, "module.wat");
-        run("dotnet", ["run", "--project", "Compiler", "-c", "Release", "--", resolve(dll), exportType, wat]);
         const wasm = join(work, "module.wasm");
-        run(process.execPath, ["node_modules/binaryen/bin/wasm-as", wat,
-            "--enable-gc", "--enable-reference-types", "--enable-tail-call",
-            // trunc_sat (Wasm 2.0) gives the saturating float-to-int conversions that .NET 9+ defines.
-            "--enable-nontrapping-float-to-int", "-o", wasm]);
+        const result = invokeCompiler(dll, exportType, wasm, { stdio: "inherit" });
+        if (result.error) throw result.error;
+        if (result.status !== 0) throw Error(`Portable compiler exited with ${result.status}`);
         const binary = readFileSync(wasm);
         if (!WebAssembly.validate(binary)) throw Error("Host engine rejected the module");
-        // Publish only after both the assembler and the executing engine have validated the module.
+        // Publish only after the executing engine has validated the module.
         renameSync(wasm, target);
     } finally {
         rmSync(work, { recursive: true, force: true });
