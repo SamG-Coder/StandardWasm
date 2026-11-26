@@ -9,6 +9,8 @@ namespace PeLibrary
         internal static int Key(int element) =>
             element >= 2 && element <= 0x0d || NativeStorage.IsIntegerElement(element) ? ScalarBase + element : 0;
 
+        internal static int Element(int key) => key & ElementMask;
+
         internal static bool IsScalar(int key) => (key & ~ElementMask) == ScalarBase;
 
         internal static int VectorKey(int scalar)

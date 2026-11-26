@@ -38,5 +38,9 @@ MethodDef and MemberRef targets, and argument slices containing the
 declaring and method parameter encodings. The compiler also executes
 static MethodDef and MemberRef calls with closed arguments, including
 recursive calls, method-typed locals, overload selection and fields of
-constructed generic types. Interface constraints remain open before
-the CoreLib guard can execute.
+constructed generic types. Method interface constraints use the actual
+implementation edges. Primitive arguments keep scalar storage and use
+their nominal CoreLib definitions to verify those edges. A bound that
+recurs on the same closed interface requires proof of that exact edge.
+The original CoreLib range guard binds and its body reaches a
+constrained static call, which needs dispatch support.

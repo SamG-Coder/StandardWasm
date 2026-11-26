@@ -643,9 +643,16 @@ namespace PortableCompiler
                     status = MethodInstantiations.ReadArguments(bundle, image, layout, heaps, owner,
                         context, objects, methodArguments, spec, types);
                     if (status < 0) return status;
+                    var deferred = new int[8];
                     int constraints = GenericParameters.Check(targetImage, targetHeaps, targetLayout, row,
-                        types, objects, new int[8], method: true);
-                    if (constraints != 0) return constraints < 0 ? constraints : -2;
+                        types, objects, deferred, method: true);
+                    if (constraints < 0) return constraints;
+                    if (constraints != 0)
+                    {
+                        constraints = BundleConstraints.Check(bundle, targetImage, targetLayout, targetHeaps,
+                            targetOwner, objects, types, deferred, method: true, context: targetContext);
+                        if (constraints < 0) return constraints;
+                    }
 
                     int function = instantiations.Find(owners, rows, contexts, functions, targetOwner, row, targetContext, types);
                     if (function < 0)

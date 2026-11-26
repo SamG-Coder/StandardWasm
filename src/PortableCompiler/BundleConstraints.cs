@@ -6,17 +6,23 @@ namespace PortableCompiler
     internal static class BundleConstraints
     {
         internal static int Check(BundleImages bundle, byte[] image, int[] layout,
-            int[] heaps, int owner, int[] objects, int[] arguments, int[] table)
+            int[] heaps, int owner, int[] objects, int[] arguments, int[] table,
+            bool method = false, int context = 0)
         {
             var parameter = new int[2];
             var cursor = new int[1];
             for (int i = 0; i < table[3]; i++)
             {
-                int spec = GenericParameters.ReadDeferred(image, table, i, parameter);
-                if (spec == 0) continue;
-                int end = Signature(image, layout, heaps, spec, cursor);
-                if (end < 0) return end;
-                if (image[cursor[0]] == 0x1f) // modreq
+                int coded = GenericParameters.ReadDeferred(image, table, i, parameter, nominal: method);
+                if (coded == 0) continue;
+                if (parameter[1] != 0 && ConstraintMarkers.IsValueType(image, layout, heaps, coded)) continue;
+                int end = 0;
+                if ((coded & 3) == 2)
+                {
+                    end = Signature(image, layout, heaps, coded >> 2, cursor);
+                    if (end < 0) return end;
+                }
+                if (end != 0 && image[cursor[0]] == 0x1f) // modreq
                 {
                     int marker = CompressedUnsigned(image, cursor[0] + 1, end, cursor);
                     if (marker < 1 || cursor[0] >= end) return -1;
@@ -28,30 +34,49 @@ namespace PortableCompiler
                     continue;
                 }
 
-                int[] required = ReadInterface(bundle, image, layout, heaps,
-                    owner, objects, spec << 2 | 2, arguments, 0);
+                int[] required = ReadInterface(bundle, image, layout, heaps, owner, objects, coded,
+                    method ? null : arguments, context, method ? arguments : null);
                 if (required[0] < 0) return required[0];
-                int argument = arguments[parameter[0]];
-                if (argument < ObjectLayouts.FirstClass || argument - ObjectLayouts.FirstClass >= objects[0])
-                    return -2;
-                int valid = ValidateInterface(bundle, objects, required);
-                if (valid < 0) return valid;
-                if (valid == 0) return -2;
+                int valid = ValidateInterface(bundle, objects, required, 0);
+                if (valid <= 0) return valid < 0 ? valid : -2;
+                int implemented = Implements(bundle, objects, arguments[parameter[0]], required, 0);
+                if (implemented <= 0) return implemented < 0 ? implemented : -2;
+            }
+            return 0;
+        }
 
-                bool matched = false;
-                for (int source = argument; source != 0; source = ObjectLayouts.Parent(objects, source))
+        private static int Implements(BundleImages bundle, int[] objects, int argument, int[] required, int depth)
+        {
+            var noParameters = new int[0];
+            if (GenericScalar.IsScalar(argument))
+            {
+                // The primitive keeps its Wasm scalar storage. Read the
+                // actual interface edges from the selected CoreLib instead.
+                int definitionOwner = -1, definitionRow = 0;
+                for (int owner = 0; owner < bundle.Count; owner++)
                 {
-                    int definitionOwner = ObjectLayouts.AssemblyOf(objects, source);
-                    int definitionRow = ObjectLayouts.TypeDef(objects, source);
-                    if (definitionRow <= 0) break;
-                    int status = Search(bundle, objects, required,
-                        definitionOwner, definitionRow, new int[0], source, 0);
-                    if (status < 0) return status;
-                    if (status == 0) continue;
-                    matched = true;
-                    break;
+                    byte[] image = bundle.Get(owner);
+                    var layout = new int[4];
+                    var heaps = new int[8];
+                    if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+                    int row = ArrayTypeRefs.CoreDefinition(image, heaps, layout, GenericScalar.Element(argument));
+                    if (row < 0) return row;
+                    if (row == 0) continue;
+                    if (definitionOwner >= 0) return -5;
+                    definitionOwner = owner;
+                    definitionRow = row;
                 }
-                if (!matched) return -2;
+                return definitionOwner < 0 ? 0 :
+                    Search(bundle, objects, required, definitionOwner, definitionRow, noParameters, 0, depth);
+            }
+            if (argument < ObjectLayouts.FirstClass || argument - ObjectLayouts.FirstClass >= objects[0]) return 0;
+            for (int source = argument; source != 0; source = ObjectLayouts.Parent(objects, source))
+            {
+                int row = ObjectLayouts.TypeDef(objects, source);
+                if (row <= 0) break;
+                int status = Search(bundle, objects, required, ObjectLayouts.AssemblyOf(objects, source),
+                    row, noParameters, source, depth);
+                if (status != 0) return status;
             }
             return 0;
         }
@@ -81,7 +106,7 @@ namespace PortableCompiler
                     if (edge[0] < 0) continue;
                     if (Same(edge, required)) return 1;
                     if (pass == 0) continue;
-                    int valid = ValidateInterface(bundle, objects, edge);
+                    int valid = ValidateInterface(bundle, objects, edge, depth + 1);
                     if (valid == -1) return -1;
                     if (valid <= 0) continue;
                     var args = new int[edge.Length - 2];
@@ -92,8 +117,9 @@ namespace PortableCompiler
             return 0;
         }
 
-        private static int ValidateInterface(BundleImages bundle, int[] objects, int[] identity)
+        private static int ValidateInterface(BundleImages bundle, int[] objects, int[] identity, int depth)
         {
+            if (depth >= ObjectLayouts.MaxTypeDepth) return -2;
             if (identity[0] < 0 || identity[1] < 1) return 0;
             byte[] image = bundle.Get(identity[0]);
             var layout = new int[4];
@@ -106,14 +132,28 @@ namespace PortableCompiler
 
             var args = new int[identity.Length - 2];
             for (int i = 0; i < args.Length; i++) args[i] = identity[i + 2];
-            status = GenericParameters.Check(image, heaps, layout, identity[1], args, objects, new int[8]);
-            if (status < 0) return status;
-            // Obligations on the interface itself need recursive validation.
-            return status == 0 ? 1 : 0;
+            var deferred = new int[8];
+            status = GenericParameters.Check(image, heaps, layout, identity[1], args, objects, deferred);
+            if (status <= 0) return status == 0 ? 1 : status;
+            // A recursive bound such as INumberBase<TSelf> requires the
+            // argument to implement this exact closed interface. Prove that
+            // metadata edge directly instead of expanding the bound again.
+            var parameter = new int[2];
+            for (int i = 0; i < deferred[3]; i++)
+            {
+                int coded = GenericParameters.ReadDeferred(image, deferred, i, parameter);
+                if (coded == 0) continue;
+                int[] required = ReadInterface(bundle, image, layout, heaps, identity[0], objects, coded, args, 0);
+                if (required[0] < 0) return required[0];
+                if (!Same(required, identity)) return 0;
+                int proof = Implements(bundle, objects, args[parameter[0]], identity, depth + 1);
+                if (proof <= 0) return proof;
+            }
+            return 1;
         }
 
         private static int[] ReadInterface(BundleImages bundle, byte[] image, int[] layout,
-            int[] heaps, int owner, int[] objects, int coded, int[] substitutions, int context)
+            int[] heaps, int owner, int[] objects, int coded, int[] substitutions, int context, int[] methodArguments = null)
         {
             var symbol = new int[2];
             if ((coded & 3) != 2)
@@ -140,7 +180,7 @@ namespace PortableCompiler
             {
                 // This phase verifies the nominal edge without recursively
                 // registering another layout in the middle of its constraints.
-                int item = Argument(bundle, image, layout, heaps, owner, objects, cursor, end, substitutions, context);
+                int item = Argument(bundle, image, layout, heaps, owner, objects, cursor, end, substitutions, context, methodArguments);
                 if (item < 0) return Failure(item);
                 result[i + 2] = item;
             }
@@ -148,7 +188,7 @@ namespace PortableCompiler
         }
 
         private static int Argument(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
-            int owner, int[] objects, int[] cursor, int end, int[] substitutions, int context)
+            int owner, int[] objects, int[] cursor, int end, int[] substitutions, int context, int[] methodArguments)
         {
             int at = cursor[0];
             if (at >= end) return -1;
@@ -158,12 +198,14 @@ namespace PortableCompiler
             if (scalar != 0) return scalar;
             if (element == 0x1c) return ObjectLayouts.ObjectReference;
             if (element == 0x0e) return SignatureTypes.String;
-            if (element != 0x11 && element != 0x12 && element != 0x13) return -2;
+            if (element != 0x11 && element != 0x12 && element != 0x13 && element != 0x1e) return -2;
             int item = CompressedUnsigned(image, at + 1, end, cursor);
             if (item < 0) return item;
+            if (element == 0x1e)
+                return methodArguments != null && item < methodArguments.Length ? methodArguments[item] : -2;
             if (element == 0x13)
                 return context != 0 ? ObjectLayouts.Argument(objects, context, item) :
-                    item < substitutions.Length ? substitutions[item] : -2;
+                    substitutions != null && item < substitutions.Length ? substitutions[item] : -2;
             if (item == 0) return -1;
             if (element == 0x11)
             {

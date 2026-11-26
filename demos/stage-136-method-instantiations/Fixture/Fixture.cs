@@ -32,6 +32,9 @@ public static class Execution
     public static int LinkedDeclaringType(int value) => Box<int>.Forward<long>(value, 3L);
     public static int LinkedParentVariable(int value) => MethodsFromAnotherAssembly.Forward(value);
     public static int LinkedConstructed(int value) => MethodsFromAnotherAssembly.Unwrap(new Box<int>(value));
+    public static int NominalConstraint(int value) => MethodsFromAnotherAssembly.Nominal(new Marker(value)).Value;
+    public static int SelfConstraint(int value) => MethodsFromAnotherAssembly.Self(new Marker(value)).Value;
+    public static int MixedConstraint(int value) => Box<int>.Require(new Marker(value)).Value;
 
     private static T Reference<T>(T value) where T : class => value;
     private static T Structure<T>(T value) where T : struct => value;

@@ -45,7 +45,8 @@ if (!pick.GetMethodBody()!.LocalVariables.Any(local => local.LocalType.IsGeneric
 var methods = new[]
 {
     "Integer", "Wide", "Text", "Recurse", "Value", "Array",
-    "LinkedArray", "LinkedOverloads", "LinkedDeclaringType", "LinkedParentVariable", "LinkedConstructed"
+    "LinkedArray", "LinkedOverloads", "LinkedDeclaringType", "LinkedParentVariable", "LinkedConstructed",
+    "NominalConstraint", "SelfConstraint", "MixedConstraint"
 }
     .Select(name => execution.GetMethod(name)!).ToArray();
 var entries = methods.Select(method => new { name = method.Name, row = method.MetadataToken & 0xffffff });

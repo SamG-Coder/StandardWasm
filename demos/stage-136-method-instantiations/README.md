@@ -14,4 +14,6 @@ referenced by MethodDef or MemberRef tokens, covering recursion,
 method-typed locals and arrays, class and struct constraints, and
 generic methods on closed declaring types. It verifies overloads with
 the same Wasm parameter types and field access through a constructed
-type. Interface-based method constraints are still diagnosed.
+type. The fixture also verifies nominal, constructed and recursive
+interface constraints. A check against the original .NET 10 CoreLib
+reaches constrained static dispatch inside its generic range guard.
