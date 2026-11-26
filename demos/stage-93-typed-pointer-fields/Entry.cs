@@ -22,6 +22,11 @@ namespace TypedPointerDemo
 
         public static int Read(DrawingSlot slot) => slot.Font == null ? 1 : -1;
 
+        public static int PickPrimitive() =>
+            DrawingSlot.Pick((int*)null) + 10 * DrawingSlot.Pick((uint*)null) + 100 * DrawingSlot.Pick((long*)null);
+
+        public static int ReadPrimitive(DrawingSlot slot) => slot.ReadSigned(null);
+
         public static int RejectAddress(DrawingSlot slot)
         {
             slot.Font = (NativeFont*)1;

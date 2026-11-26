@@ -21,29 +21,48 @@ internal static class TypedPointerCases
         int[] location = CompilerExports.CreateDiagnostic();
 
         byte[] run = Manifest(nameof(Kernels.Run));
-        int size = CompilerExports.CompileBundleDetailed(bundle, run, output, location);
-        if (size <= 0)
-            throw new InvalidOperationException($"Typed pointer run returned {size} at [{string.Join(", ", location)}].");
-        string hex = Convert.ToHexString(output.AsSpan(0, size)).ToLowerInvariant();
+        string runHex = Compile(nameof(Kernels.Run), run);
         foreach (int value in new[] { int.MinValue, -1, 0, 1, int.MaxValue })
-            cases.Add(new
-            {
-                module = "BootstrapLibrary", method = "CompileBundle", fixture = "typed pointer round trip",
-                inputs = new[] { Encode(bundle), Encode(run) },
-                generated = new { capacity, bundle = true, arguments = new[] { value }, hex },
-                expected = Kernels.Run(value)
-            });
+            Check("round trip", run, runHex, [value], Kernels.Run(value));
+
+        string pick = nameof(Kernels.PickPrimitive);
+        byte[] pickEntries = Manifest(pick);
+        Check("primitive overloads", pickEntries, Compile(pick, pickEntries), [], Kernels.PickPrimitive());
 
         string read = nameof(Kernels.Read);
         int load = Offset(read, OpCodes.Ldfld);
         byte[] mismatch = ReplacePointee(image, read, load);
-        VerifyClrMismatch(mismatch, dependency);
+        VerifyClrMismatch<MissingFieldException>(mismatch, dependency, read);
         Reject("distinct named pointee", BundleCases.Pack(mismatch, dependency), read, load, -6);
+        string readPrimitive = nameof(Kernels.ReadPrimitive);
+        int call = Offset(readPrimitive, OpCodes.Callvirt);
+        byte[] primitiveMismatch = ReplacePrimitiveParameter(image, readPrimitive, call);
+        VerifyClrMismatch<MissingMethodException>(primitiveMismatch, dependency, readPrimitive);
+        Reject("distinct primitive pointee", BundleCases.Pack(primitiveMismatch, dependency), readPrimitive, call, -6);
         Reject("nonzero native address", bundle, nameof(Kernels.RejectAddress),
             Offset(nameof(Kernels.RejectAddress), OpCodes.Stfld), -1);
         Reject("indirect load", bundle, nameof(Kernels.RejectDereference),
             Offset(nameof(Kernels.RejectDereference), OpCodes.Ldind_I4), -2);
         Reject("exported pointer", bundle, nameof(Kernels.RejectExport), -1, -2);
+
+        string Compile(string name, byte[] entries)
+        {
+            int size = CompilerExports.CompileBundleDetailed(bundle, entries, output, location);
+            if (size <= 0)
+                throw new InvalidOperationException($"{name} returned {size} at [{string.Join(", ", location)}].");
+            return Convert.ToHexString(output.AsSpan(0, size)).ToLowerInvariant();
+        }
+
+        void Check(string label, byte[] entries, string hex, int[] arguments, int expected)
+        {
+            cases.Add(new
+            {
+                module = "BootstrapLibrary", method = "CompileBundle", fixture = "typed pointer " + label,
+                inputs = new[] { Encode(bundle), Encode(entries) },
+                generated = new { capacity, bundle = true, arguments, hex },
+                expected
+            });
+        }
 
         void Reject(string label, byte[] input, string method, int il, int expected)
         {
@@ -87,18 +106,38 @@ internal static class TypedPointerCases
         return mismatch;
     }
 
-    private static void VerifyClrMismatch(byte[] image, byte[] dependency)
+    private static byte[] ReplacePrimitiveParameter(byte[] image, string method, int call)
     {
-        var context = new AssemblyLoadContext("Typed pointer field oracle", isCollectible: true);
+        using var pe = new PEReader(new MemoryStream(image));
+        var metadata = pe.GetMetadataReader();
+        int token = BinaryPrimitives.ReadInt32LittleEndian(Il(method).AsSpan(call + 1));
+        var member = metadata.GetMemberReference((MemberReferenceHandle)MetadataTokens.Handle(token));
+        // Instance method with one parameter: int32 ReadSigned(int32*).
+        byte[] signature = [0x20, 1, 8, 0x0f, 8];
+        if (!metadata.GetBlobBytes(member.Signature).AsSpan().SequenceEqual(signature))
+            throw new InvalidOperationException("Missing linked int32 pointer parameter.");
+        int offset = pe.PEHeaders.MetadataStartOffset + metadata.GetHeapMetadataOffset(HeapIndex.Blob) +
+            MetadataTokens.GetHeapOffset(member.Signature);
+        if (image[offset] != signature.Length)
+            throw new InvalidOperationException("The fixture needs a one-byte blob size.");
+        byte[] mismatch = (byte[])image.Clone();
+        mismatch[offset + signature.Length] = 9; // ELEMENT_TYPE_U4
+        return mismatch;
+    }
+
+    private static void VerifyClrMismatch<TException>(byte[] image, byte[] dependency, string name)
+        where TException : Exception
+    {
+        var context = new AssemblyLoadContext("Typed pointer oracle", isCollectible: true);
         try
         {
             var slot = context.LoadFromStream(new MemoryStream(dependency)).GetType(typeof(DrawingSlot).FullName!)!;
             var method = context.LoadFromStream(new MemoryStream(image)).GetType(typeof(Kernels).FullName!)!
-                .GetMethod(nameof(Kernels.Read))!;
+                .GetMethod(name)!;
             method.Invoke(null, [Activator.CreateInstance(slot)]);
-            throw new InvalidOperationException("The CLR accepted a different pointer pointee in the field signature.");
+            throw new InvalidOperationException($"The CLR accepted a different pointer pointee in {name}.");
         }
-        catch (TargetInvocationException error) when (error.InnerException is MissingFieldException) { }
+        catch (TargetInvocationException error) when (error.InnerException is TException) { }
         finally { context.Unload(); }
     }
 

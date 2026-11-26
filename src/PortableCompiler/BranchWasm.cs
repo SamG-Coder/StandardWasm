@@ -16,8 +16,9 @@ namespace PortableCompiler
             bool stringScratch = frameShape[5] != 0;
             bool eventScratch = frameShape[6] != 0;
             int exceptionLocals = frameShape[8], continuations = frameShape[9];
+            int hostImports = frameShape[10];
             bool hasNull = outgoingNulls.Length != 0;
-            int spillKinds = NativeZero + classes;
+            int spillKinds = PeLibrary.ConsoleStorage.Writer + classes;
             // V8 counts parameters together with function locals. Reject
             // before emitting a body that Node and Edge cannot instantiate.
             const int MaxLocals = 50000;
@@ -53,7 +54,7 @@ namespace PortableCompiler
                 for (int kind = I32; kind <= spillKinds; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
-                    used = WasmBinary.ValueType(code, used, Representation(objects, kind <= NativeZero ? kind : FirstClass + kind - NativeZero - 1));
+                    used = WasmBinary.ValueType(code, used, Representation(objects, kind <= PeLibrary.ConsoleStorage.Writer ? kind : FirstClass + kind - PeLibrary.ConsoleStorage.Writer - 1));
                 }
             }
             for (int i = 0; i < classes; i++)
@@ -196,6 +197,21 @@ namespace PortableCompiler
                     }
                     used = Local(code, used, 0x21, spills + at);
                 }
+                else if (kind == ConsoleWriter)
+                {
+                    used = Const(code, used, operand); // host stream number
+                    used = Local(code, used, 0x21, Spill(spills, maximum, PeLibrary.ConsoleStorage.Writer, depth));
+                }
+                else if (kind == ConsoleWrite)
+                {
+                    bool text = operand != PeLibrary.ConsoleMetadata.WriteEmptyLine;
+                    int writer = text ? top - 1 : top;
+                    // The String scratch bank supplies a Char[] and two i32 locals.
+                    used = ConsoleWasm.Write(code, used, operand,
+                        Spill(spills, maximum, PeLibrary.ConsoleStorage.Writer, writer),
+                        text ? Spill(spills, maximum, states[state + top], top) : 0,
+                        scratch, scratch + 3, scratch + 4);
+                }
                 else if (kind == LoadFunction)
                 {
                     used = Const(code, used, operand);
@@ -205,7 +221,10 @@ namespace PortableCompiler
                 {
                     int receiver = records[slot + 3];
                     int closureType = operand;
-                    used = Local(code, used, 0x20, Spill(spills, maximum, receiver, top - 1));
+                    int target = Spill(spills, maximum, receiver, top - 1);
+                    // CLR rejects binding an instance delegate to a null target.
+                    used = GuardNull(code, used, target, ExceptionTagsWasm.ArgumentTag);
+                    used = Local(code, used, 0x20, target);
                     code[used++] = 0xd4;
                     int pointer = Spill(spills, maximum, MethodPointer, top);
                     int destination = Spill(spills, maximum, closureType, top - 1);
@@ -385,7 +404,7 @@ namespace PortableCompiler
                         used = LoadOperand(code, used, Spill(spills, maximum, source, argument), source, signatures[shape + 1 + i]);
                     }
                     code[used++] = 0x10;
-                    used = WasmBinary.Unsigned(code, used, operand);
+                    used = WasmBinary.Unsigned(code, used, hostImports + operand);
                     int returned = signatures[shape];
                     if (kind == NewObject)
                     {
@@ -394,6 +413,13 @@ namespace PortableCompiler
                     }
                     if (returned != Void)
                         used = Local(code, used, 0x21, Spill(spills, maximum, StackType(returned), first));
+                }
+                else if (kind == MathCall)
+                {
+                    byte type = MathWasm.Type(operand);
+                    int first = top - MathWasm.Arity(operand) + 1;
+                    used = MathWasm.Emit(code, used, operand, Spill(spills, maximum, type, first), Spill(spills, maximum, type, top));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, type, first));
                 }
                 else if (kind == ExchangeHandlerField)
                 {
@@ -610,11 +636,11 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int GuardNull(byte[] code, int used, int reference)
+        private static int GuardNull(byte[] code, int used, int reference, int tag = ExceptionTagsWasm.NullTag)
         {
             used = Local(code, used, 0x20, reference);
             code[used++] = 0xd1; // ref.is_null
-            return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.NullTag);
+            return ExceptionTagsWasm.ThrowIf(code, used, tag);
         }
 
         private static int GuardArrayIndex(byte[] code, int used, int reference, int index, bool wrapped)
@@ -688,7 +714,7 @@ namespace PortableCompiler
 
         // The gap between primitive tags and layout IDs has no Wasm locals.
         private static int SpillBank(int type) =>
-            type >= FirstClass ? NativeZero + type - FirstClass : (type == NativeZero ? Native : type) - 1;
+            type >= FirstClass ? PeLibrary.ConsoleStorage.Writer + type - FirstClass : (type == NativeZero ? Native : type) - 1;
 
         internal static int LoadOperand(byte[] code, int used, int local, int source, int target)
         {

@@ -5,14 +5,22 @@ internal static class BootstrapCases
 {
     internal static void Add(List<object> cases)
     {
-        const int capacity = 1 << 20;
+        const int capacity = 2 << 20;
         var type = typeof(CompilerExports);
         byte[] dll = File.ReadAllBytes(type.Assembly.Location);
         string[] exports = ["CompileModule", "CompileBundle", "Compile", "CreateBytes", "SetByte", "ReadByte", "FindRow",
             "CreateDiagnostic", "ReadDiagnostic", "CompileDetailed", "CompileModuleDetailed", "CompileBundleDetailed"];
         byte[] manifest = Manifest(exports.Select(name => (name, Row(name))));
         var image = Encode(dll);
-        cases.Add(new { module = "BootstrapLibrary", bootstrap = true, inputs = new[] { image, Encode(manifest) }, exports });
+        var compiler = new byte[capacity];
+        int compilerSize = CompilerExports.CompileModule(dll, manifest, compiler);
+        if (compilerSize <= 0)
+            throw new InvalidOperationException($"CLR self-compilation returned {compilerSize}");
+        cases.Add(new
+        {
+            module = "BootstrapLibrary", bootstrap = true, inputs = new[] { image, Encode(manifest) }, exports, capacity,
+            expectedHex = Convert.ToHexString(compiler.AsSpan(0, compilerSize)).ToLowerInvariant()
+        });
 
         int kernel = Row(nameof(CompilerExports.BootstrapKernel));
         byte[] aliases = Manifest([("first", kernel), ("second", kernel)]);

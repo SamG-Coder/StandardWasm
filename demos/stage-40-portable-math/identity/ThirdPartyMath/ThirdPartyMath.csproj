@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Defines its own System.Math so the compiler must tell it apart from the platform type. -->
+  <PropertyGroup><TargetFramework>netstandard2.0</TargetFramework><NoWarn>CS0436</NoWarn></PropertyGroup>
+</Project>
