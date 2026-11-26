@@ -4,6 +4,37 @@ const status = document.querySelector("#status");
 const drop = document.querySelector("#drop");
 const staged = new Map();
 let revision = 0;
+const run = document.querySelector("#run");
+run.hidden = !new URLSearchParams(location.search).has("run");
+let selection, active;
+run.addEventListener("click", () => {
+    if (!selection) return;
+    const current = revision;
+    const worker = new Worker("/launch/launch-worker.mjs", { type: "module" });
+    run.disabled = true;
+    status.dataset.state = "running";
+    status.textContent = "Compiling and running locally…";
+    function finish(state, message) {
+        if (current !== revision || active !== cancel) return;
+        cancel();
+        status.dataset.state = state;
+        status.textContent = message;
+        run.disabled = false;
+    }
+    const deadline = setTimeout(() => finish("error", "The local entry did not finish within 15 seconds."), 15000);
+    const cancel = () => {
+        clearTimeout(deadline);
+        worker.terminate();
+        active = undefined;
+    };
+    active = cancel;
+    worker.onmessage = ({ data }) => data.error
+        ? finish("error", data.error)
+        : finish(data.result.state, JSON.stringify(data.result, null, 2));
+    worker.onerror = () => finish("error", "The local launch worker failed.");
+    const { entry, entryToken, config, deps } = selection;
+    worker.postMessage({ entry, entryToken, config, deps });
+});
 drop.style.cssText = "border: 2px dashed; padding: 2rem; max-width: 28rem";
 drop.addEventListener("dragover", event => event.preventDefault());
 drop.addEventListener("drop", event => {
@@ -15,6 +46,9 @@ for (const name of ["files", "folder"])
 
 async function inspect(sources) {
     const current = ++revision;
+    active?.();
+    selection = undefined;
+    run.disabled = true;
     // Dropping a new executable starts a fresh launch. A follow-up drop of
     // companion files completes the current launch without reselecting it.
     if (sources.some(file => /\.exe$/i.test(file.name) || file.webkitRelativePath)) staged.clear();
@@ -44,6 +78,8 @@ async function inspect(sources) {
             configSha256: await digest(result.config)
         }, null, 2);
         if (current !== revision) return;
+        selection = result;
+        run.disabled = false;
         status.textContent = summary;
         status.dataset.state = "ready";
     } catch (error) {
