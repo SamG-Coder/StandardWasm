@@ -205,29 +205,7 @@ namespace PortableCompiler
                 else if (kind == LoadString)
                 {
                     int global = records[slot + BranchIl.Width + 1];
-                    // The passive data segment survives for the lifetime of
-                    // this module. Allocate each immutable literal on demand.
-                    code[used++] = 0x23; // global.get
-                    used = WasmBinary.Unsigned(code, used, global);
-                    code[used++] = 0xd1; // ref.is_null
-                    code[used++] = 0x04;
-                    code[used++] = 0x40;
-                    int characters = records[slot + 3];
-                    if (characters != 0)
-                    {
-                        used = Const(code, used, operand);
-                        used = Const(code, used, characters);
-                    }
-                    code[used++] = 0xfb;
-                    code[used++] = characters == 0 ? (byte)8 : (byte)9; // fixed empty or passive data
-                    code[used++] = 4;
-                    code[used++] = 0;
-                    used = StringWasm.Wrap(code, used);
-                    code[used++] = 0x24; // global.set
-                    used = WasmBinary.Unsigned(code, used, global);
-                    code[used++] = 0x0b; // end if
-                    code[used++] = 0x23; // global.get
-                    used = WasmBinary.Unsigned(code, used, global);
+                    used = StringWasm.LoadLiteral(code, used, global, operand, records[slot + 3]);
                     used = Local(code, used, 0x21, Spill(spills, maximum, String, depth));
                 }
                 else if (kind == NewRootObject)
@@ -260,7 +238,7 @@ namespace PortableCompiler
                     bool join = kind == JoinStrings;
                     int at = top - (join ? 1 : 0);
                     used = StringWasm.Copy(code, used, Spill(spills, maximum, states[state + at], at),
-                        Spill(spills, maximum, states[state + top], top), scratch, join);
+                        Spill(spills, maximum, states[state + top], top), scratch, join, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, String, at));
                 }
                 else if (kind == StringLength || kind == StringCharacter)

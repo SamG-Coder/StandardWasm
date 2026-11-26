@@ -29,17 +29,17 @@ namespace PortableCompiler
         internal static byte IntegerConversionType(int opcode) =>
             opcode == 0x6a || opcode == 0x6e ? I64 : opcode == 0xd3 || opcode == 0xe0 ? Native : I32;
 
-        // Widen classes and primitive GC vectors without allocating or losing identity.
+        // Widen classes, strings, and primitive GC vectors without allocating or losing identity.
         // Boxing and other CLR reference conversions use separate IL operations.
         internal static bool IsObjectReference(int type) =>
-            RuntimeTypeMetadata.IsReference(type) || IsArray(type) || type >= ObjectLayouts.FirstClass ||
+            type == String || RuntimeTypeMetadata.IsReference(type) || IsArray(type) || type >= ObjectLayouts.FirstClass ||
             type >= ObjectLayouts.ObjectReference && type <= ObjectLayouts.EventHandlerReference;
 
         // Zero denotes the CLI null literal in a live stack slot and void in a method signature.
         internal const byte NullValue = 0;
 
         internal static bool IsReference(int type) =>
-            type == String || type == Delegate || IsObjectReference(type);
+            type == Delegate || IsObjectReference(type);
 
         internal static bool ReferenceComparison(int left, int right, int[] objects) =>
             (left == NullValue && (right == NullValue || IsReference(right))) ||

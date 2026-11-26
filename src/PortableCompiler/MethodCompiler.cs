@@ -603,13 +603,14 @@ namespace PortableCompiler
                     // A descriptor is a Type on the CLR, even after widening to Object.
                     // These targets need reflection-aware casts before ordinary layout matching applies.
                     if (RuntimeTypeMetadata.RequiresReflectionCast(image, heaps, layout, records[slot + 1])) return -2;
-                    int type = BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner,
-                        records[slot + 1], objects);
+                    int coded = records[slot + 1];
+                    int type = PlatformTypeReferences.IsString(image, heaps, layout, coded) ? String :
+                        BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
                     if (type < 0) return type;
                     if (kind == BranchIl.CastClass && type == EventHandlerReference)
                         records[slot] = BranchIl.CastHandler;
-                    else if (type < ObjectLayouts.FirstClass || ObjectLayouts.IsInterface(objects, type) ||
-                        ObjectLayouts.ArrayElement(objects, type) != 0) return -2;
+                    else if (type != String && (type < ObjectLayouts.FirstClass || ObjectLayouts.IsInterface(objects, type) ||
+                        ObjectLayouts.ArrayElement(objects, type) != 0)) return -2;
                     records[slot + 1] = type;
                     continue;
                 }
@@ -694,6 +695,14 @@ namespace PortableCompiler
                         if (eventGlobal < 0) return eventGlobal;
                         records[slot] = BranchIl.LoadEventArgsEmpty;
                         records[slot + 1] = eventGlobal;
+                        continue;
+                    }
+
+                    if (linked && StringMetadata.Member(image, heaps, layout, field) == StringMetadata.Empty)
+                    {
+                        if (write) return -2;
+                        int empty = StringLiterals.LowerEmpty(records, slot, globals);
+                        if (empty < 0) return empty;
                         continue;
                     }
 
@@ -832,14 +841,13 @@ namespace PortableCompiler
                         records[slot] = BranchIl.StringEquals;
                         continue;
                     }
-                    if (stringMember == StringMetadata.Concat && opcode == 0x28)
+                    bool joinStrings = stringMember == StringMetadata.Concat && opcode == 0x28;
+                    if (joinStrings || stringMember == StringMetadata.FromChars && opcode == 0x73)
                     {
-                        records[slot] = BranchIl.JoinStrings;
-                        continue;
-                    }
-                    if (stringMember == StringMetadata.FromChars && opcode == 0x73)
-                    {
-                        records[slot] = BranchIl.StringFromChars;
+                        int empty = StringLiterals.Empty(globals);
+                        if (empty < 0) return empty;
+                        records[slot] = joinStrings ? BranchIl.JoinStrings : BranchIl.StringFromChars;
+                        records[slot + 1] = empty;
                         continue;
                     }
                     if ((stringMember == StringMetadata.Length || stringMember == StringMetadata.Character) &&

@@ -4,7 +4,7 @@ namespace PeLibrary
 {
     internal static class StringMetadata
     {
-        internal const int Length = 1, Character = 2, Concat = 3, FromChars = 4, OrdinalEquals = 5;
+        internal const int Length = 1, Character = 2, Concat = 3, FromChars = 4, OrdinalEquals = 5, Empty = 6;
 
         internal static int CopyLiteral(byte[] image, int[] streams, int tokenOffset, byte[] bytes, int used)
         {
@@ -63,9 +63,13 @@ namespace PeLibrary
 
             uint name = Index(image, at + (uint)parentWidth, strings);
             uint sig = Index(image, at + (uint)(parentWidth + strings), blobs);
-            if (!Fits(name, 6, (uint)streams[3]) || !Fits(sig, 4, (uint)streams[1])) return 0;
-            n = (uint)streams[2] + name;
+            if (!Fits(name, 6, (uint)streams[3]) || !Fits(sig, 3, (uint)streams[1])) return 0;
             uint signature = (uint)streams[0] + sig;
+            if (PlatformTypeReferences.Named(image, (uint)streams[2], (uint)streams[3], name, 5,
+                0x74706d45, 0x79, 0) && U16(image, signature) == 0x0602 && image[signature + 2] == 0x0e)
+                return Empty;
+            if (!Fits(sig, 4, (uint)streams[1])) return 0;
+            n = (uint)streams[2] + name;
             if (Fits(name, 7, (uint)streams[3]) && U32(image, n) == 0x636e6f43 &&
                 U16(image, n + 4) == 0x7461 && image[n + 6] == 0 &&
                 Fits(sig, 6, (uint)streams[1]) && U32(image, signature) == 0x0e020005 &&

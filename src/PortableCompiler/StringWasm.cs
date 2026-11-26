@@ -2,9 +2,35 @@ namespace PortableCompiler
 {
     internal static class StringWasm
     {
+        internal static int LoadLiteral(byte[] code, int used, int global, int offset, int length)
+        {
+            // The passive data segment survives for the lifetime of
+            // this module. Allocate each immutable literal on demand.
+            code[used++] = 0x23; // global.get
+            used = WasmBinary.Unsigned(code, used, global);
+            code[used++] = 0xd1; // ref.is_null
+            code[used++] = 0x04;
+            code[used++] = 0x40;
+            if (length != 0)
+            {
+                used = BranchWasm.Const(code, used, offset);
+                used = BranchWasm.Const(code, used, length);
+            }
+            code[used++] = 0xfb;
+            code[used++] = length == 0 ? (byte)8 : (byte)9; // fixed empty or passive data
+            code[used++] = 4;
+            code[used++] = 0;
+            used = Wrap(code, used);
+            code[used++] = 0x24; // global.set
+            used = WasmBinary.Unsigned(code, used, global);
+            code[used++] = 0x0b;
+            code[used++] = 0x23; // global.get
+            return WasmBinary.Unsigned(code, used, global);
+        }
+
         // Three private Char[] scratch locals followed by two lengths. The
         // published String only exposes its immutable reference to a fresh copy.
-        internal static int Copy(byte[] code, int used, int left, int right, int scratch, bool join)
+        internal static int Copy(byte[] code, int used, int left, int right, int scratch, bool join, int empty)
         {
             int a = scratch, b = scratch + 1, output = scratch + 2;
             int aLength = scratch + 3, bLength = scratch + 4;
@@ -18,6 +44,28 @@ namespace PortableCompiler
                 used = Local(code, used, 0x21, b);
                 used = Length(code, used, b);
                 used = Local(code, used, 0x21, bLength);
+            }
+
+            code[used++] = 0x02; // block (result String)
+            used = WasmBinary.ValueType(code, used, SignatureTypes.String);
+            used = IfEmpty(code, used, aLength);
+            if (join)
+            {
+                // Concat returns the other nonempty argument as-is.
+                used = Local(code, used, 0x20, bLength);
+                code[used++] = 0x04; // if (result String)
+                used = WasmBinary.ValueType(code, used, SignatureTypes.String);
+                used = Local(code, used, 0x20, right);
+                code[used++] = 0x05; // else
+            }
+            used = LoadLiteral(code, used, empty, 0, 0);
+            if (join) code[used++] = 0x0b;
+            used = ReturnString(code, used);
+            if (join)
+            {
+                used = IfEmpty(code, used, bLength);
+                used = Local(code, used, 0x20, left);
+                used = ReturnString(code, used);
             }
 
             used = Local(code, used, 0x20, aLength);
@@ -34,7 +82,26 @@ namespace PortableCompiler
             if (join)
                 used = CopyArray(code, used, output, aLength, b, bLength);
             used = Local(code, used, 0x20, output);
-            return Wrap(code, used);
+            used = Wrap(code, used);
+            code[used++] = 0x0b; // end result block
+            return used;
+        }
+
+        private static int IfEmpty(byte[] code, int used, int length)
+        {
+            used = Local(code, used, 0x20, length);
+            code[used++] = 0x45; // i32.eqz
+            code[used++] = 0x04; // if
+            code[used++] = 0x40;
+            return used;
+        }
+
+        private static int ReturnString(byte[] code, int used)
+        {
+            code[used++] = 0x0c; // br to the outer result block with a String
+            code[used++] = 1;
+            code[used++] = 0x0b; // end if
+            return used;
         }
 
         // Compare the UTF-16 code units exactly. Equal references include

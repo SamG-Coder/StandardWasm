@@ -46,11 +46,14 @@ async function execute(entries, get) {
     const { instance } = await WebAssembly.instantiate(code);
     const values = entries.map(({ name }) => instance.exports[name]());
     const repeated = entries.map(({ name }) => instance.exports[name]());
-    return values.map(left => repeated.map(right => left === right));
+    return {
+        identities: values.map(left => repeated.map(right => left === right)),
+        nulls: values.map(value => value === null)
+    };
 }
 
 const node = await execute(oracle.entries, url => assets.get(url));
-assert.deepEqual(node, oracle.identities);
+assert.deepEqual(node, { identities: oracle.identities, nulls: oracle.nulls });
 const browser = await chromium.launch({ channel: "msedge" });
 try {
     const page = await browser.newPage();
@@ -64,8 +67,8 @@ try {
         const run = (0, eval)("(" + code + ")");
         return run(entries, async path => new Uint8Array(await (await fetch(path, { signal: AbortSignal.timeout(15000) })).arrayBuffer()));
     }, { entries: oracle.entries, code: execute.toString() });
-    assert.deepEqual(edge, oracle.identities);
-    const results = { node: process.version, edge: browser.version(), identities: oracle.identities };
+    assert.deepEqual(edge, node);
+    const results = { node: process.version, edge: browser.version(), ...node };
     writeFileSync(join(evidence, "results.json"), JSON.stringify(results, null, 2));
     console.log("Node and Edge matched " + oracle.entries.length ** 2 + " CLR string reference comparisons.");
 } finally {
