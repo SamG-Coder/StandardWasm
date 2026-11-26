@@ -1,0 +1,1 @@
+{"assembly":"HierarchyDemo","exportType":"HierarchyDemo.LinkDemo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["HierarchyBase.dll","HierarchyMiddle.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":32768,"arguments":[5]},"expected":216}

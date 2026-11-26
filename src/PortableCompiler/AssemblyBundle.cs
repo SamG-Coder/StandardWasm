@@ -36,7 +36,7 @@ namespace PortableCompiler
         }
 
         internal static int Resolve(byte[] main, byte[] bundle, int[] ranges, byte[] caller,
-            int[] layout, int[] heaps, int owner, int member, int opcode, int[] symbol)
+            int[] layout, int[] heaps, int owner, int member, int opcode, bool baseCall, int[] symbol)
         {
             var reference = new int[6];
             int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference);
@@ -48,13 +48,14 @@ namespace PortableCompiler
             var targetHeaps = new int[8];
             if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
             var range = new int[2];
-            status = AssemblyReferences.FindType(caller, heaps, reference, target, targetHeaps, targetLayout, range, false);
-            if (status < 0) return status;
+            int declaring = AssemblyReferences.FindType(caller, heaps, reference, target, targetHeaps, targetLayout, range, false);
+            if (declaring < 0) return declaring;
             int row = 0;
             for (int candidate = range[0]; candidate < range[1]; candidate++)
             {
                 int flags = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 2);
-                if ((flags & 7) != 6) continue; // Public.
+                int access = flags & 7;
+                if (access != 6 && !(baseCall && opcode == 0x28 && (access == 4 || access == 5))) continue;
                 bool isStatic = (flags & 0x10) != 0;
                 if (isStatic && opcode != 0x28) continue;
                 int name = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 3);
@@ -72,10 +73,11 @@ namespace PortableCompiler
                 {
                     if (!constructor || (flags & 0x1800) != 0x1800) return -2;
                 }
-                else if (constructor) return -2;
+                else if (constructor ? !baseCall || opcode != 0x28 : access != 6) return -2;
                 if (opcode == 0x6f && (flags & 0x40) != 0) return -2;
                 if (row != 0) return -5;
                 row = candidate;
+                symbol[2] = constructor ? declaring : 0;
             }
             if (row == 0) return -6;
             symbol[0] = matched;

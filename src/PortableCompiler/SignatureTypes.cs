@@ -33,15 +33,16 @@ namespace PortableCompiler
         internal static bool IsReference(byte type) =>
             type == String || type == Delegate || IsArray(type) || IsObjectReference(type);
 
-        internal static bool ReferenceComparison(byte left, byte right) =>
+        internal static bool ReferenceComparison(byte left, byte right, int[] objects) =>
             (left == NullValue && (right == NullValue || IsReference(right))) ||
             (right == NullValue && IsReference(left)) ||
             (IsObjectReference(left) && IsObjectReference(right) &&
-                (Assignable(left, right) || Assignable(right, left)));
+                (Assignable(left, right, objects) || Assignable(right, left, objects)));
 
-        internal static bool Assignable(byte source, int target) =>
+        internal static bool Assignable(byte source, int target, int[] objects) =>
             source == StackType(target) || source == NullValue && IsReference(StackType(target)) ||
-            target == ObjectLayouts.ObjectReference && IsObjectReference(source);
+            target == ObjectLayouts.ObjectReference && IsObjectReference(source) ||
+            ObjectLayouts.Inherits(objects, source, StackType(target));
 
         internal static byte FloatWidth(byte left, byte right) => left == F64 || right == F64 ? F64 : F32;
 
