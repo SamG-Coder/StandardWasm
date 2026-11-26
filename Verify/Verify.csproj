@@ -23,6 +23,7 @@
     <ProjectReference Include="../demos/stage-19-runtime-controls/ControlStorageLibrary.csproj" />
     <ProjectReference Include="../demos/stage-20-managed-strings/StringLibrary.csproj" />
     <ProjectReference Include="../demos/stage-21-managed-formatting/FormattingLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-22-dynamic-controls/DynamicControlsLibrary.csproj" />
     <ProjectReference Include="../demos/stage-21-managed-formatting/identity/ThirdPartyText/ThirdPartyText.csproj" Aliases="ThirdParty" />
     <ProjectReference Include="../demos/stage-21-managed-formatting/identity/TextIdentityProbe/TextIdentityProbe.csproj" />
     <ProjectReference Include="../demos/stage-15-managed-instances/identity/ObjectIdentityProbe/ObjectIdentityProbe.csproj" />

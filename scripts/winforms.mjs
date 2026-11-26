@@ -58,39 +58,79 @@ if (verify) {
         const labelLeft = async () => Number(await form.getAttribute("data-label-left"));
         assert.equal(await form.getAttribute("data-control-count"), "2");
         assert.deepEqual(await page.locator("#surface").evaluate(canvas => [canvas.width, canvas.height]), [420, 240]);
-        const positions = [await labelLeft()];
+        const positions = [], sequence = [], controlCounts = [];
+        async function record() {
+            positions.push(await labelLeft());
+            sequence.push(await label.textContent());
+            controlCounts.push(Number(await form.getAttribute("data-control-count")));
+        }
         const capture = () => page.locator("#surface").screenshot();
-        assert.equal(await label.textContent(), "Count: 0");
+        const original = page.getByRole("button", { name: "Add one", exact: true });
+        const additional = page.getByRole("button", { name: "Add one again", exact: true });
+        const originalNode = await original.elementHandle();
+        await record();
+        assert.equal(await additional.count(), 0);
         const before = await capture();
-        await page.getByRole("button", { name: "Add one" }).click();
-        assert.equal(await label.textContent(), "Count: 1");
-        positions.push(await labelLeft());
+        await original.click();
+        await record();
+        assert.equal(await additional.count(), 1);
+        const canvasBox = await page.locator("#surface").boundingBox();
+        const extraBox = await additional.boundingBox();
+        const dynamicBounds = [extraBox.x - canvasBox.x, extraBox.y - canvasBox.y, extraBox.width, extraBox.height]
+            .map(Math.round);
         const moved = await capture();
         await page.screenshot({ path: artifacts + "/browser-moved.png" });
-        await page.locator("button").evaluate(button => button.blur());
+
+        await additional.focus();
         await page.keyboard.press("Enter");
-        assert.equal(await label.textContent(), "Count: 2");
-        positions.push(await labelLeft());
-        assert.deepEqual(positions, [32, 56, 32]);
+        await record();
+        assert.equal(await additional.count(), 0);
+        assert.equal(await original.evaluate(node => node === document.activeElement), true);
         const after = await capture();
-        const { changed, bright, movedEdge } = await page.evaluate(async ({ before, moved, after }) => {
-            async function read(bytes) {
+
+        await original.click();
+        await record();
+        await additional.click();
+        await record();
+        assert.equal(await additional.count(), 0);
+        assert.equal(await original.evaluate((node, retained) => node === retained && node === document.activeElement,
+            originalNode), true);
+        // The removed control's former screen rectangle must no longer dispatch.
+        await page.mouse.click(canvasBox.x + 250, canvasBox.y + 175);
+        assert.equal(await label.textContent(), "Count: 4");
+
+        const desktop = JSON.parse(readFileSync(join(artifacts, "desktop.json"), "utf8"));
+        assert.deepEqual({ sequence, labelLeft: positions, controlCounts, dynamicBounds }, {
+            sequence: desktop.sequence, labelLeft: desktop.labelLeft, controlCounts: desktop.controlCounts,
+            dynamicBounds: desktop.dynamicBounds
+        });
+        const { changed, bright, movedEdge, inserted } = await page.evaluate(async ({ before, moved, after }) => {
+            async function read(bytes, x, y, width, height) {
                 const image = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: "image/png" }));
                 const context = new OffscreenCanvas(image.width, image.height).getContext("2d");
                 context.drawImage(image, 0, 0);
-                return context.getImageData(37, 50, 250, 66).data;
+                return context.getImageData(x, y, width, height).data;
             }
-            const a = await read(before), m = await read(moved), b = await read(after);
+            const a = await read(before, 37, 50, 250, 66);
+            const m = await read(moved, 37, 50, 250, 66);
+            const b = await read(after, 37, 50, 250, 66);
+            const absent = await read(before, 204, 151, 184, 48);
+            const added = await read(moved, 204, 151, 184, 48);
+            const removed = await read(after, 204, 151, 184, 48);
             let changed = 0, bright = 0, movedEdge = 0;
             for (let i = 0; i < a.length; i += 4) {
                 if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) changed++;
                 if ((i / 4) % 250 < 15 && (a[i] !== m[i] || a[i + 1] !== m[i + 1] || a[i + 2] !== m[i + 2])) movedEdge++;
                 if (b[i] > 180 && b[i + 1] > 180 && b[i + 2] > 180) bright++;
             }
-            return { changed, bright, movedEdge };
+            let inserted = 0;
+            for (let i = 0; i < absent.length; i += 4)
+                if (absent[i + 1] !== added[i + 1] && absent[i + 1] === removed[i + 1]) inserted++;
+            return { changed, bright, movedEdge, inserted };
         }, { before: Array.from(before), moved: Array.from(moved), after: Array.from(after) });
         assert.ok(changed > 30 && bright > 100, "The rendered count glyphs must visibly change.");
         assert.ok(movedEdge > 300, "The label panel must visibly move with its managed bounds.");
+        assert.ok(inserted > 5000, "The dynamic control must appear and clear its WebGPU rectangle.");
         const instances = await page.evaluate(async () => {
             const { module, instance } = await WebAssembly.instantiateStreaming(fetch("./Handlers.wasm"));
             const { Create, Bind, Dispatch, Read, BuildTree } = instance.exports;
@@ -108,8 +148,8 @@ if (verify) {
         const timing = await page.evaluate(() => window.measureRendering());
         assert.deepEqual(errors, []);
         const evidence = {
-            engine: browser.version(), sequence: ["Count: 0", "Count: 1", "Count: 2"],
-            labelLeft: positions, movedEdgePixels: movedEdge, changedLabelPixels: changed, instances, ...timing
+            engine: browser.version(), sequence, controlCounts, dynamicBounds,
+            labelLeft: positions, movedEdgePixels: movedEdge, changedLabelPixels: changed, insertedPixels: inserted, instances, ...timing
         };
         await page.screenshot({ path: artifacts + "/browser.png" });
         writeFileSync(artifacts + "/timing.json", JSON.stringify(evidence, null, 2) + "\n");
