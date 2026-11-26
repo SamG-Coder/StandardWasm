@@ -12,9 +12,11 @@ const generated = process.argv.includes("--generated");
 const compiler = "artifacts/StandardWasm.Compiler.wasm";
 const artifacts = generated ? "artifacts/profile-generated" : "artifacts/profile";
 const benchmark = process.argv.includes("--benchmark");
-const regional = process.argv.includes("--regional");
+const redraw = process.argv.includes("--region-redraw");
+const regional = redraw || process.argv.includes("--regional");
 const verify = benchmark || process.argv.includes("--verify");
-const timingOutput = regional ? "artifacts/profile-text-uploads" : "artifacts/profile-rendering";
+const timingOutput = redraw ? "artifacts/profile-caption-redraw" :
+    regional ? "artifacts/profile-text-uploads" : "artifacts/profile-rendering";
 mkdirSync(artifacts, { recursive: true });
 const browserModel = ["run", "-c", "Release", "--project", stage + "/BrowserModel", "--"];
 const reference = artifacts + "/Profile.wasm";
@@ -63,6 +65,7 @@ const url = new URL("http://127.0.0.1:" + server.address().port);
 if (generated) url.searchParams.set("generated", "");
 if (benchmark) url.searchParams.set("benchmark", "");
 if (regional) url.searchParams.set("regional", "");
+if (redraw) url.searchParams.set("region-redraw", "");
 console.log("Profile form at " + url.href);
 
 if (verify) {

@@ -12,6 +12,28 @@ function rgb(color) {
 export function createTextLayer(model) {
     const canvas = new OffscreenCanvas(model.width, model.height);
     const paint = canvas.getContext("2d");
+
+    function drawCaption(control, caption) {
+        const button = control.kind === "button";
+        const fontSize = control.fontSize ?? (button ? 16 : 34);
+        const inset = control.textInset ?? (button ? 6 : 20);
+        paint.font = "700 " + fontSize + "px system-ui";
+        paint.fillStyle = button ? "#10212b" : "#f1f6ff";
+        paint.textAlign = button ? "center" : "left";
+        paint.textBaseline = "middle";
+        if (control.clipText) {
+            paint.save();
+            paint.beginPath();
+            paint.rect(control.x, control.y, control.width, control.height);
+            paint.clip();
+        }
+        paint.fillText(caption,
+            control.x + (button ? control.width * 0.5 : inset),
+            control.y + control.height * 0.5,
+            control.width - inset * 2);
+        if (control.clipText) paint.restore();
+    }
+
     return {
         canvas,
         resize() {
@@ -20,26 +42,14 @@ export function createTextLayer(model) {
         },
         update(texts) {
             paint.clearRect(0, 0, model.width, model.height);
-            for (const control of model.controls) {
-                const button = control.kind === "button";
-                const fontSize = control.fontSize ?? (button ? 16 : 34);
-                const inset = control.textInset ?? (button ? 6 : 20);
-                paint.font = "700 " + fontSize + "px system-ui";
-                paint.fillStyle = button ? "#10212b" : "#f1f6ff";
-                paint.textAlign = button ? "center" : "left";
-                paint.textBaseline = "middle";
-                if (control.clipText) {
-                    paint.save();
-                    paint.beginPath();
-                    paint.rect(control.x, control.y, control.width, control.height);
-                    paint.clip();
-                }
-                paint.fillText(texts.get(control.name),
-                    control.x + (button ? control.width * 0.5 : inset),
-                    control.y + control.height * 0.5,
-                    control.width - inset * 2);
-                if (control.clipText) paint.restore();
-            }
+            for (const control of model.controls)
+                drawCaption(control, texts.get(control.name));
+        },
+        updateClippedCaption(control, caption) {
+            // The caller owns this region exclusively. Clear before painting
+            // so pixels from a longer previous caption cannot survive.
+            paint.clearRect(control.x, control.y, control.width, control.height);
+            drawCaption(control, caption);
         }
     };
 }
