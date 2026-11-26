@@ -92,6 +92,35 @@ async function runCases(compiler, fixture, oracle) {
     if (sequence.join() !== expected.join()) throw Error("exhaustion sequence " + sequence + ", expected " + expected);
     // The shadow stack is reserved once per instance: 1 initial page + 16.
     results.push({ name: "ExhaustionRecovery", sequence, pages: memory.buffer.byteLength / 65536 });
+
+    // A host memory that cannot grow: a zero-sized stackalloc never reserves the region,
+    // so it succeeds (null); the first real allocation is an engine trap (failed grow).
+    const fixed = new WebAssembly.Memory({ initial: 1, maximum: 1 });
+    const zero = await WebAssembly.instantiate(await compile([[oracle.zero, "run"]]), { "standardwasm:resources": { memory: fixed } });
+    const zeroResult = String(zero.exports.run(0));
+    if (zeroResult !== "1") throw Error("zero-sized stackalloc on a fixed memory returned " + zeroResult);
+    let grew;
+    try { grew = "returned " + zero.exports.run(1); }
+    catch (error) {
+        if (error instanceof WebAssembly.Exception || !(error instanceof WebAssembly.RuntimeError))
+            throw Error("fixed memory raised " + error + " instead of an engine trap");
+        grew = "trap";
+    }
+    if (grew !== "trap") throw Error("allocation on a fixed memory " + grew);
+    results.push({ name: "FixedMemory", zero: zeroResult, nonzero: grew, pages: fixed.buffer.byteLength / 65536 });
+
+    // An untaken allocation never grows a one-page memory.
+    const untaken = await WebAssembly.instantiate(await compile([[oracle.untaken, "run"]]),
+        { "standardwasm:resources": { memory: new WebAssembly.Memory({ initial: 1, maximum: 1 }) } });
+    if (String(untaken.exports.run(0)) !== "79") throw Error("untaken stackalloc did not return 79");
+
+    // Room for exactly one reservation: a second memory.grow after the callee reserved
+    // the region would trap. Three calls on one instance must all match the CLR.
+    const bounded = new WebAssembly.Memory({ initial: 1, maximum: 1 + 16 });
+    const outer = await WebAssembly.instantiate(await compile([[oracle.outer, "run"]]), { "standardwasm:resources": { memory: bounded } });
+    const outerValues = [4, 4, 4].map(n => String(outer.exports.run(n)));
+    if (outerValues.some(v => v !== oracle.outerValue)) throw Error("outer-after-inner returned " + outerValues + ", CLR " + oracle.outerValue);
+    results.push({ name: "Reservation", untaken: "79", outer: outerValues, pages: bounded.buffer.byteLength / 65536 });
     return results;
 }
 

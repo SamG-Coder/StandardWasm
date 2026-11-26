@@ -150,7 +150,8 @@ namespace PortableCompiler
             if (kind == LocalAllocate)
             {
                 // ECMA-335 III.3.47: the size is a native unsigned int (an int32 is accepted).
-                if (depth < 1 || (stack[depth - 1] != Native && stack[depth - 1] != I32)) return -2;
+                // A constant zero (ldc.i4.0; conv.u) is a proven NativeZero, which spills as Native.
+                if (depth < 1 || (!IsNativeInteger(stack[depth - 1]) && stack[depth - 1] != I32)) return -2;
                 return Push(stack, allocated, depth - 1, Native);
             }
             if (kind == LoadIndirect)

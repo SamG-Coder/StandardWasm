@@ -23,12 +23,19 @@ Run("AfterException", 100);
 Run("Uninitialized", 64);
 Run("OversizedCount");
 Run("Large");
+Run("ZeroIsNull", 0);
+Run("ZeroIsNull", 1);
+Run("ConstantZeroIsNull");
+Run("Untaken", 0);
+Run("OuterAfterInner", 4);
 
 MethodInfo exhaust = kernels.GetMethod("ExhaustAfterPartial")!, bytes = kernels.GetMethod("Large")!;
 File.WriteAllText(Path.Combine(evidence, "oracle.json"), JsonSerializer.Serialize(new
 {
     cases, runtime = Environment.Version.ToString(), process = RuntimeInformation.ProcessArchitecture.ToString(),
-    exhaust = new { row = Row(exhaust), after = Row(bytes), afterValue = ((int)bytes.Invoke(null, null)!).ToString() }
+    exhaust = new { row = Row(exhaust), after = Row(bytes), afterValue = ((int)bytes.Invoke(null, null)!).ToString() },
+    zero = Row(kernels.GetMethod("ZeroIsNull")!), untaken = Row(kernels.GetMethod("Untaken")!),
+    outer = Row(kernels.GetMethod("OuterAfterInner")!), outerValue = ((int)kernels.GetMethod("OuterAfterInner")!.Invoke(null, [4])!).ToString()
 }));
 
 void Run(string name, params int[] arguments)

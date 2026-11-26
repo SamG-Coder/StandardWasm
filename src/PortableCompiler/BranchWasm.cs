@@ -130,7 +130,7 @@ namespace PortableCompiler
             if (guard >= 0) used = TypeInitializerWasm.Begin(code, used, guard, epoch, activeInitializers, pcLocal);
             if (stackPointer >= 0)
             {
-                used = StackAllocationWasm.Begin(code, used, stackPointer, stackBase, stackLimit, stackFrame, pcLocal);
+                used = StackAllocationWasm.Begin(code, used, stackPointer, stackFrame);
                 // An exception leaving this frame releases its allocations, then continues.
                 code[used++] = 0x02; code[used++] = ExceptionDispatchWasm.ExceptionReference; // block (result exnref)
                 code[used++] = 0x1f; code[used++] = 0x40; code[used++] = 1;                  // try_table
@@ -543,7 +543,7 @@ namespace PortableCompiler
                 else if (kind == LocalAllocate)
                 {
                     int size = Spill(spills, maximum, states[state + top], top);
-                    used = StackAllocationWasm.Allocate(code, used, stackPointer, stackBase, size,
+                    used = StackAllocationWasm.Allocate(code, used, stackPointer, stackBase, stackLimit, size,
                         Spill(spills, maximum, Native, top), pcLocal);
                 }
                 else if (kind == LoadIndirect)
@@ -742,7 +742,7 @@ namespace PortableCompiler
                         used = NormalizeSlot(code, used, result);
                     }
                     if (guard >= 0) used = TypeInitializerWasm.Complete(code, used, guard, activeInitializers);
-                    if (stackPointer >= 0) used = StackAllocationWasm.Release(code, used, stackPointer, stackFrame);
+                    if (stackPointer >= 0) used = StackAllocationWasm.Release(code, used, stackPointer, stackLimit, stackFrame);
                     code[used++] = 0x0f;
                 }
                 else if (kind == ThrowNull)
@@ -823,7 +823,7 @@ namespace PortableCompiler
                 code[used++] = 0x0b; // end try_table
                 code[used++] = 0x00;
                 code[used++] = 0x0b; // end block: the caught exnref is on the stack
-                used = StackAllocationWasm.Release(code, used, stackPointer, stackFrame);
+                used = StackAllocationWasm.Release(code, used, stackPointer, stackLimit, stackFrame);
                 code[used++] = 0x0a; // throw_ref
             }
             code[used++] = 0x0b;

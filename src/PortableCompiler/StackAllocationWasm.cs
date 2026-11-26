@@ -10,8 +10,17 @@ namespace PortableCompiler
     {
         internal const int Pages = 16, Capacity = 160;
 
-        // Function prologue: initialize the region once, then save $sp.
-        internal static int Begin(byte[] code, int used, int sp, int @base, int limit, int frame, int scratch)
+        // Function prologue: save $sp. The region is reserved lazily by the first nonzero
+        // allocation, so a frame that never needs stack storage never grows memory: a host
+        // memory that cannot grow only fails when the CLR would really use the stack.
+        internal static int Begin(byte[] code, int used, int sp, int frame)
+        {
+            used = Global(code, used, 0x23, sp);
+            return BranchWasm.Local(code, used, 0x21, frame);
+        }
+
+        // Reserve the region once: $sp == 0 means not yet reserved.
+        private static int Reserve(byte[] code, int used, int sp, int @base, int limit, int scratch)
         {
             used = Global(code, used, 0x23, sp);
             code[used++] = 0x45; // i32.eqz
@@ -33,17 +42,22 @@ namespace PortableCompiler
             used = Global(code, used, 0x23, limit);
             used = Global(code, used, 0x24, sp);
             code[used++] = 0x0b;
-            used = BranchWasm.Const(code, used, 0);
-            used = BranchWasm.Local(code, used, 0x21, scratch);
-            used = Global(code, used, 0x23, sp);
-            return BranchWasm.Local(code, used, 0x21, frame);
+            return used;
         }
 
         // [size] -> [address]. Traps on exhaustion (the CLR raises StackOverflowException,
         // which ends the process). The block is zeroed: ECMA-335 requires it with
         // InitLocals, and without it the contents are unspecified (decision 0051).
-        internal static int Allocate(byte[] code, int used, int sp, int @base, int size, int result, int scratch)
+        internal static int Allocate(byte[] code, int used, int sp, int @base, int limit, int size, int result, int scratch)
         {
+            // CoreCLR returns null for a zero-sized localloc and reserves nothing.
+            used = BranchWasm.Local(code, used, 0x20, size);
+            code[used++] = 0x45; // i32.eqz
+            code[used++] = 0x04; code[used++] = 0x40;
+            used = BranchWasm.Const(code, used, 0);
+            used = BranchWasm.Local(code, used, 0x21, result);
+            code[used++] = 0x05; // else
+            used = Reserve(code, used, sp, @base, limit, scratch);
             used = BranchWasm.Local(code, used, 0x20, size);
             used = Global(code, used, 0x23, sp);
             used = Global(code, used, 0x23, @base);
@@ -68,15 +82,21 @@ namespace PortableCompiler
             used = BranchWasm.Local(code, used, 0x20, size);
             code[used++] = 0xfc; code[used++] = 0x0b; code[used++] = 0; // memory.fill 0
             used = BranchWasm.Local(code, used, 0x20, scratch);
-            return BranchWasm.Local(code, used, 0x21, result);
+            used = BranchWasm.Local(code, used, 0x21, result);
+            code[used++] = 0x0b; // end if
+            return used;
         }
 
-        // Before each ret: release this frame's allocations.
-        internal static int Release(byte[] code, int used, int sp, int frame)
+        // Before each ret and on exceptional exit: release this frame's allocations. A frame
+        // entered before the region existed saved 0; it releases to the empty stack (limit),
+        // so the region stays reserved. limit is 0 too if nothing was ever reserved.
+        internal static int Release(byte[] code, int used, int sp, int limit, int frame)
         {
             used = BranchWasm.Local(code, used, 0x20, frame);
-            used = Global(code, used, 0x24, sp);
-            return used;
+            used = Global(code, used, 0x23, limit);
+            used = BranchWasm.Local(code, used, 0x20, frame);
+            code[used++] = 0x1b; // select: frame != 0 ? frame : limit
+            return Global(code, used, 0x24, sp);
         }
 
         // No ref parameters: the compiler must compile itself, and managed byrefs (#273)
