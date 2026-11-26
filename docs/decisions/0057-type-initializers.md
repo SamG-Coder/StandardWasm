@@ -38,7 +38,10 @@ it must observe its callees' failures.
 - **Precise types** (no beforefieldinit). Every static method and instance
   constructor calls the guard on entry, after the caller has evaluated the
   arguments. The CLR logs `argument,initializer`. Entry placement also covers
-  delegates and constructor chaining.
+  `this(...)` and `base(...)` constructor chaining. A delegate to a static
+  method of a precise type is still rejected at its `ldftn` by the delegate
+  binder (Stage 119). If that binder accepts it later, the entry guard already
+  covers the call.
 - **beforefieldinit.** The type waits for its first static field access. A
   static call alone does not trigger it, which keeps Stage 108's rule. The CLR
   may run such an initializer earlier, so fixtures check only "once, before
