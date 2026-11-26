@@ -7,7 +7,7 @@ namespace PortableCompiler
     internal static class Win32ErrorWasm
     {
         internal const int FunctionCount = 4, TypeBytes = FunctionCount * 4;
-        private const string Module = "standardwasm:win32";
+        internal const string Module = "standardwasm:win32";
 
         private static string Name(int member) =>
             member == MarshalErrorMetadata.GetSystem ? "getLastSystemError" :
@@ -55,7 +55,7 @@ namespace PortableCompiler
             return cursor;
         }
 
-        private static int WriteName(byte[] output, int cursor, string name)
+        internal static int WriteName(byte[] output, int cursor, string name)
         {
             output[cursor++] = (byte)name.Length;
             for (int i = 0; i < name.Length; i++) output[cursor++] = (byte)name[i];

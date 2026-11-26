@@ -19,7 +19,9 @@ Marshal.SetLastSystemError(19);
 int system = Marshal.GetLastSystemError();
 int pinvoke = Marshal.GetLastPInvokeError();
 Marshal.SetLastPInvokeError(0);
-int[] compiledFixture = [Win32ErrorProbe.Exchange(19), Win32ErrorProbe.Exchange(-13), Win32ErrorProbe.Read()];
+int[] compiledFixture = [Win32ErrorProbe.Exchange(19), Win32ErrorProbe.Exchange(-13), Win32ErrorProbe.Read(),
+    Win32ErrorProbe.LookupModule(0), Win32ErrorProbe.LookupModule(1),
+    Win32ErrorProbe.LookupModule(2), Win32ErrorProbe.LookupModule(3)];
 Console.WriteLine(JsonSerializer.Serialize(new { executable, results, errors = new[] { system, pinvoke }, compiledFixture }));
 
 [DllImport("KERNEL32.dll", EntryPoint = "GetModuleHandleW", ExactSpelling = true,

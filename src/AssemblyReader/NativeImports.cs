@@ -6,7 +6,7 @@ namespace PeLibrary
     {
         // Return the unique MethodDef imported under this module and entry name.
         // The managed method name can differ, particularly in generated stubs.
-        internal static int Find(byte[] image, int[] heaps, int[] methods, int[] counts, string module, string entry)
+        internal static int Find(byte[] image, int[] heaps, int[] methods, int[] counts, string module, string entry, int method = 0, int attributes = -1)
         {
             if (counts[28] == 0) return 0;
             int map = MetadataTableRows.TableStart(heaps, methods, counts, 28);
@@ -29,6 +29,8 @@ namespace PeLibrary
 
                 uint member = Index(image, at + 2, memberWidth);
                 int row = (int)(member >> 1);
+                if (method != 0 && (row != method || (member & 1) != 1)) continue;
+                if (attributes >= 0 && U16(image, at) != (uint)attributes) continue;
                 // MemberForwarded tag 1 identifies MethodDef. A matching field
                 // or duplicate mapping cannot identify the managed call target.
                 if ((member & 1) != 1 || row < 1 || row > counts[6] || found != 0) return -1;

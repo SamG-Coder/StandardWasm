@@ -30,5 +30,6 @@ Run `node demos/stage-74-executable-entry/verify-win32-host.mjs` on Windows to
 compare the host import contract in Node and Edge against native .NET calls.
 The probe invokes the imports through Wasm. Pass the path to the self-hosted
 compiler as the first argument to also compile the managed Marshal fixture
-and compare its error exchange with the CLR. The original Windows SDK's
-GetModuleHandleW call still needs compiler binding.
+and compare module lookup and error transfer with the CLR. It covers a native
+pointer signature and the SDK's one-field PCWSTR and HMODULE value shape.
+The original WinForms call still needs support for its pinned-string wrapper.

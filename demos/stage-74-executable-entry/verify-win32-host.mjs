@@ -87,7 +87,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes) {
 
     const fixture = upload(fixtureBytes);
     const encoder = new TextEncoder();
-    const names = ["Exchange", "Read"].map(name => encoder.encode(name));
+    const names = ["Exchange", "Read", "LookupModule"].map(name => encoder.encode(name));
     const manifest = new Uint8Array(names.reduce((size, name) => size + 8 + name.length, 0));
     const view = new DataView(manifest.buffer);
     let offset = 0;
@@ -107,7 +107,8 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes) {
         [0, 1, 2].map(index => compiler.ReadDiagnostic(location, index)));
     const code = Uint8Array.from({ length }, (_, i) => compiler.ReadByte(output, i));
     const { exports } = await instantiate(await WebAssembly.compile(code), compiler, []);
-    return [exports.Exchange(19), exports.Exchange(-13), exports.Read()];
+    return [exports.Exchange(19), exports.Exchange(-13), exports.Read(),
+        exports.LookupModule(0), exports.LookupModule(1), exports.LookupModule(2), exports.LookupModule(3)];
 }
 
 const oracle = JSON.parse(execFileSync("dotnet", ["run", "--file",
@@ -150,7 +151,7 @@ try {
             return (0, eval)("(" + source + ")")(instantiateManagedModule, compilerBytes, fixtureBytes);
         }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes] });
         assert.deepEqual(compiled, oracle.compiledFixture);
-        console.log("The self-hosted compiler matched the CLR Marshal error exchange in Node and Edge.");
+        console.log("The self-hosted compiler matched CLR module lookups and Marshal error exchange in Node and Edge.");
     }
     console.log("Node and Edge matched 5 CLR module lookups and both last-error slots. Memory growth and host isolation passed.");
 } finally {
