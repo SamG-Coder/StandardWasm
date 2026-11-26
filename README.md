@@ -10,7 +10,7 @@ StandardWasm is an experimental ahead-of-time compiler for .NET Standard assembl
 - [Shared agent workflow](AGENTS.md) and [Claude entry point](CLAUDE.md)
 - Architecture decisions: [0001 staged demos](docs/decisions/0001-staged-demos.md), [0002 assembly reader boundary](docs/decisions/0002-assembly-reader-boundary.md), [0003 BCL intrinsics](docs/decisions/0003-bcl-intrinsics.md)
 
-.NET Standard specifies an API contract. Each supported API needs either a compatible implementation compiled into the module or an explicitly documented host import. Windows services and UI controls require additional browser implementations. Blazor is outside this project's architecture.
+.NET Standard specifies an API contract. Each supported API needs either a compatible implementation compiled into the module or an explicitly documented host import. The desktop compatibility track runs existing application binaries on an upstream-based .NET and WinForms framework. It adapts Windows platform services and uses WebGPU for drawing. Console and Blazor are additional application inputs. The launcher and WinForms host do not require Blazor. See the [upstream framework decision](docs/decisions/0024-upstream-winforms-binary-compatibility.md) and [dependency roadmap](docs/upstream-winforms-roadmap.md).
 
 ## Engineering approach
 
@@ -53,7 +53,7 @@ instance.exports.SumSquares(10); // 385
 
 ## Self-recompilation
 
-Stage 13 compares the portable compiler's CLR output with three Wasm generations built from the same DLL and export manifest. Each generated compiler provides its own byte transport. The second generation replays the portable generated-code fixtures in Node and Edge. See the [Stage 13 instructions](demos/stage-13-complete-bootstrap/README.md).
+Stage 13 compares the portable compiler's CLR output with three Wasm generations built from the same DLL and export manifest. Each generated compiler provides its own byte transport. The second generation replays the portable generated-code fixtures in Node and Edge. See the [Stage 13 instructions](demos/stage-13-complete-bootstrap/README.md). Stage 23 adds [portable assembly bundle linking](demos/stage-23-assembly-linking/README.md).
 
 After `npm test`, run `npm run audit:portable` to compile the direct CLR fixtures with the saved Wasm compiler. Use `--compiler path/to/compiler.wasm` after the npm argument separator to audit another compiler against the same fixture DLLs. The JSON report separates matching returns, matching typed managed exceptions, and accepted legacy traps. A legacy trap counts toward the historical pass total only when the CLR fixture expected an exception. Use `--require-complete` to fail the run if either engine misses any case in that total.
 

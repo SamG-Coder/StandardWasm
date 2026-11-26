@@ -14,8 +14,8 @@ async function start() {
         return chars.join("");
     }
     const title = readText(exports.Title());
-    const buttonCaption = readText(exports.ButtonCaption());
-    const resultPrefix = readText(exports.ResultPrefix());
+    const captions = new Map();
+    const state = exports.Create(0);
     const tree = exports.BuildTree();
     const { columns, keys, kinds } = resources;
     function describe(index) {
@@ -24,15 +24,18 @@ async function start() {
         const kind = field(columns.kind);
         if (kind !== kinds.button && kind !== kinds.label)
             throw Error("Unsupported runtime control kind " + kind);
+        if (kind === kinds.button && !captions.has(key))
+            captions.set(key, readText(exports.Caption(key)));
         return {
             name: key, kind: kind === kinds.button ? "button" : "label",
-            text: key === keys.increment ? buttonCaption : resultPrefix + "0",
+            text: captions.get(key) ?? "",
             x: field(columns.x), y: field(columns.y),
             width: field(columns.width), height: field(columns.height)
         };
     }
     const model = {
         width: exports.ClientWidth(tree), height: exports.ClientHeight(tree),
+        capacity: exports.ControlCapacity(tree),
         controls: Array.from({ length: exports.ControlCount(tree) }, (_, index) => describe(index))
     };
 
@@ -56,30 +59,10 @@ async function start() {
     result.className = "sr-only";
     result.setAttribute("aria-live", "polite");
     form.append(result);
-    const state = exports.Create(0);
     const clickBinding = exports.Bind(state);
-    function repaint() {
-        if (exports.ControlCount(tree) !== model.controls.length)
-            throw Error("This renderer supports property changes on its existing controls.");
-        for (const [index, control] of model.controls.entries()) {
-            const updated = describe(index);
-            if (updated.name !== control.name || updated.kind !== control.kind)
-                throw Error("Control identity changed after startup.");
-            if (updated.x !== control.x || updated.y !== control.y ||
-                updated.width !== control.width || updated.height !== control.height) {
-                Object.assign(control, updated);
-                gpu.updateBounds(index, control);
-                const button = buttons.get(control.name);
-                if (button) place(button, control);
-            }
-        }
-        form.dataset.labelLeft = String(model.controls.find(control => control.name === keys.result).x);
-        form.dataset.controlCount = String(model.controls.length);
-        result.value = resultPrefix + exports.Read(state);
-        texts.set(keys.result, result.value);
-        text.update(texts);
-        gpu.upload();
-        gpu.draw();
+    function activate() {
+        exports.Dispatch(clickBinding, tree);
+        repaint();
     }
 
     function place(button, c) {
@@ -89,17 +72,62 @@ async function start() {
         button.style.height = 100 * c.height / model.height + "%";
     }
 
-    for (const c of model.controls.filter(control => control.kind === "button")) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "native-input";
-        button.textContent = c.text;
-        place(button, c);
-        if (c.name === keys.increment)
-            button.addEventListener("click", () => { exports.Dispatch(clickBinding, tree); repaint(); });
-        buttons.set(c.name, button);
-        form.append(button);
+    function repaint() {
+        const count = exports.ControlCount(tree);
+        if (count > model.capacity)
+            throw Error("The managed tree exceeded the renderer capacity.");
+        const next = Array.from({ length: count }, (_, index) => describe(index));
+        const present = new Set();
+        for (const [index, control] of next.entries()) {
+            const previous = model.controls[index];
+            const changedSlot = previous?.name !== control.name || previous.kind !== control.kind;
+            const moved = changedSlot || previous.x !== control.x || previous.y !== control.y ||
+                previous.width !== control.width || previous.height !== control.height;
+            if (changedSlot) {
+                gpu.updateControl(index, control);
+                baseline.updateControl(index, control);
+            } else if (moved) {
+                gpu.updateBounds(index, control);
+            }
+            if (control.kind !== "button") continue;
+            present.add(control.name);
+            texts.set(control.name, control.text);
+            let button = buttons.get(control.name);
+            if (!button) {
+                button = document.createElement("button");
+                button.type = "button";
+                button.className = "native-input";
+                button.textContent = control.text;
+                button.addEventListener("click", activate);
+                buttons.set(control.name, button);
+                form.append(button);
+                place(button, control);
+            } else if (moved) {
+                place(button, control);
+            }
+        }
+
+        let restoreFocus = false;
+        for (const [key, button] of buttons) {
+            if (present.has(key)) continue;
+            if (document.activeElement === button) restoreFocus = true;
+            button.remove();
+            buttons.delete(key);
+            texts.delete(key);
+        }
+        if (restoreFocus)
+            buttons.get(exports.DefaultButton(tree))?.focus();
+
+        model.controls = next;
+        form.dataset.labelLeft = String(next.find(control => control.name === keys.result).x);
+        form.dataset.controlCount = String(next.length);
+        result.value = readText(exports.LabelText(state));
+        texts.set(keys.result, result.value);
+        text.update(texts);
+        gpu.upload();
+        gpu.draw();
     }
+
     document.addEventListener("keydown", event => {
         if (event.key === "Enter" && !event.repeat && event.target === document.body) {
             const button = buttons.get(exports.DefaultButton(tree));

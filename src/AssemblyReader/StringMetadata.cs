@@ -4,7 +4,7 @@ namespace PeLibrary
 {
     internal static class StringMetadata
     {
-        internal const int Length = 1, Character = 2;
+        internal const int Length = 1, Character = 2, Concat = 3, FromChars = 4;
 
         internal static int CopyLiteral(byte[] image, int[] streams, int tokenOffset, byte[] bytes, int used)
         {
@@ -34,7 +34,7 @@ namespace PeLibrary
             int first = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
             if (first < 0 || row < 1 || row > counts[10])
                 return 0;
-            int table = DelegateMetadata.TableStart(streams, methods, counts, 10);
+            int table = MetadataTableRows.TableStart(streams, methods, counts, 10);
             if (table < 0) return 0;
             int strings = methods[2], blobs = methods[3];
             int width = StandaloneSignatures.Width(counts, 10, strings, blobs);
@@ -63,9 +63,19 @@ namespace PeLibrary
 
             uint name = Index(image, at + (uint)parentWidth, strings);
             uint sig = Index(image, at + (uint)(parentWidth + strings), blobs);
-            if (!Fits(name, 10, (uint)streams[3]) || !Fits(sig, 4, (uint)streams[1])) return 0;
+            if (!Fits(name, 6, (uint)streams[3]) || !Fits(sig, 4, (uint)streams[1])) return 0;
             n = (uint)streams[2] + name;
             uint signature = (uint)streams[0] + sig;
+            if (Fits(name, 7, (uint)streams[3]) && U32(image, n) == 0x636e6f43 &&
+                U16(image, n + 4) == 0x7461 && image[n + 6] == 0 &&
+                Fits(sig, 6, (uint)streams[1]) && U32(image, signature) == 0x0e020005 &&
+                U16(image, signature + 4) == 0x0e0e)
+                return Concat;
+            if (U32(image, n) == 0x6f74632e && U16(image, n + 4) == 0x72 &&
+                Fits(sig, 6, (uint)streams[1]) && U32(image, signature) == 0x01012005 &&
+                U16(image, signature + 4) == 0x031d)
+                return FromChars;
+            if (!Fits(name, 10, (uint)streams[3])) return 0;
             if (U32(image, n) != 0x5f746567) return 0; // get_
             if (Fits(name, 11, (uint)streams[3]) && U32(image, n + 4) == 0x676e654c &&
                 U16(image, n + 8) == 0x6874 && image[n + 10] == 0 &&

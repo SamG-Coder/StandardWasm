@@ -5,37 +5,58 @@ namespace CounterExample;
 
 internal class CounterForm : Form
 {
-    internal readonly Button Increment = new() { Name = "increment", Text = CounterText.Increment };
+    internal readonly Button Increment = new() { Name = "increment" };
     internal readonly Label Result = new() { Name = "result" };
+    internal Button? Additional { get; private set; }
+
+    private readonly ControlTree layout;
+    private readonly CounterState state;
+    private readonly Func<int> click;
 
     internal CounterForm()
     {
         Name = "counter";
-        Text = CounterText.Title;
-        var layout = CounterHandlers.BuildTree();
+        Text = CounterHandlers.Title();
+        layout = CounterHandlers.BuildTree();
+        state = CounterHandlers.Create(0);
+        click = CounterHandlers.Bind(state);
         ClientSize = new Size(CounterHandlers.ClientWidth(layout), CounterHandlers.ClientHeight(layout));
-        ApplyLayout(layout);
-        AcceptButton = Increment;
-        var state = CounterHandlers.Create(0);
-        var click = CounterHandlers.Bind(state);
         Result.Font = new Font("Segoe UI", 24, FontStyle.Bold);
-        ShowValue(CounterHandlers.Read(state));
-        Increment.Click += (_, _) =>
-        {
-            ShowValue(CounterHandlers.Dispatch(click, layout));
-            ApplyLayout(layout);
-        };
+        Result.Text = CounterHandlers.LabelText(state);
+        Increment.Text = CounterHandlers.Caption(CounterLayout.Increment);
+        Increment.Click += Activate;
+        ApplyLayout();
+        AcceptButton = Increment;
     }
 
-    private void ShowValue(int value) =>
-        Result.Text = CounterText.ResultPrefix + value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-    private void ApplyLayout(ControlTree layout)
+    private void Activate(object? sender, EventArgs args)
     {
+        CounterHandlers.Dispatch(click, layout);
+        Result.Text = CounterHandlers.LabelText(state);
+        ApplyLayout();
+    }
+
+    private void ApplyLayout()
+    {
+        bool hasAdditional = false;
         for (int index = 0; index < CounterHandlers.ControlCount(layout); index++)
         {
             int key = CounterHandlers.ControlValue(layout, index, ControlTree.Key);
-            Control control = key == CounterLayout.Increment ? Increment : Result;
+            Control control;
+            if (key == CounterLayout.Additional)
+            {
+                hasAdditional = true;
+                if (Additional == null)
+                {
+                    Additional = new Button { Name = "additional", Text = CounterHandlers.Caption(key) };
+                    Additional.Click += Activate;
+                }
+                control = Additional;
+            }
+            else
+            {
+                control = key == CounterLayout.Increment ? Increment : Result;
+            }
             control.Bounds = new Rectangle(
                 CounterHandlers.ControlValue(layout, index, ControlTree.X),
                 CounterHandlers.ControlValue(layout, index, ControlTree.Y),
@@ -43,6 +64,14 @@ internal class CounterForm : Form
                 CounterHandlers.ControlValue(layout, index, ControlTree.Height));
             if (!Controls.Contains(control))
                 Controls.Add(control);
+        }
+        if (!hasAdditional && Additional is { } removed)
+        {
+            if (ActiveControl == removed)
+                ActiveControl = Increment;
+            Controls.Remove(removed);
+            removed.Dispose();
+            Additional = null;
         }
     }
 }

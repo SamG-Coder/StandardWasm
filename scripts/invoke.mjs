@@ -40,7 +40,22 @@ export async function invokeGenerated(exports, inputs, generated) {
     // The host only moves bytes and asks the engine to validate and execute the result.
     const [image, selection] = inputs;
     let length;
-    if (generated.multiExport) {
+    if (generated.bundle) {
+        let entries = selection;
+        if (Array.isArray(selection?.name)) {
+            const bundle = Uint8Array.from(image.bytes);
+            const length = new DataView(bundle.buffer).getUint32(0, true);
+            const primary = { bytes: Array.from(bundle.subarray(4, 4 + length)) };
+            const row = invoke(exports, "FindRow", [primary, { bytes: selection.name }]);
+            if (row < 1) throw Error("Bundle fixture method was not found");
+            const manifest = new Uint8Array(11);
+            new DataView(manifest.buffer).setUint32(0, row, true);
+            manifest[4] = 3;
+            manifest.set([114, 117, 110], 8);
+            entries = { bytes: Array.from(manifest) };
+        }
+        length = invoke(exports, "CompileBundle", [image, entries, output]);
+    } else if (generated.multiExport) {
         length = invoke(exports, "CompileModule", [image, selection, output]);
     } else {
         const row = Array.isArray(selection?.name)
@@ -65,7 +80,14 @@ export async function invokeGenerated(exports, inputs, generated) {
     const { instance, module } = await WebAssembly.instantiate(bytes);
     if (WebAssembly.Module.imports(module).length) throw Error("Generated module has runtime imports");
     try {
-        return instance.exports[generated.export ?? "run"](...generated.arguments);
+        const exports = instance.exports;
+        const value = exports[generated.export ?? "run"](...generated.arguments);
+        if (generated.resultType !== "string") return value;
+        const count = exports.TextLength(value);
+        const units = new Array(count);
+        for (let index = 0; index < count; index++)
+            units[index] = String.fromCharCode(exports.TextCodeUnit(value, index));
+        return units.join("");
     } catch (error) {
         if (!(error instanceof WebAssembly.RuntimeError)) throw error;
         return null;

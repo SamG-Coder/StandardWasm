@@ -12,7 +12,7 @@ namespace PeLibrary
             int first = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
             if (first < 0 || row < 1 || row > counts[10]) return 0;
             int strings = methods[2], blobs = methods[3];
-            int starts = TableStart(streams, methods, counts, 10);
+            int starts = MetadataTableRows.TableStart(streams, methods, counts, 10);
             if (starts < 0) return 0;
             int width = StandaloneSignatures.Width(counts, 10, strings, blobs);
             uint at = (uint)(starts + (row - 1) * width);
@@ -20,7 +20,7 @@ namespace PeLibrary
             uint parent = Index(image, at, parentWidth);
             int typeSpec = (int)(parent >> 3);
             if ((parent & 7) != 4 || typeSpec < 1 || typeSpec > counts[27]) return 0;
-            int specs = TableStart(streams, methods, counts, 27);
+            int specs = MetadataTableRows.TableStart(streams, methods, counts, 27);
             if (specs < 0) return 0;
             uint typeSig = Index(image, (uint)(specs + (typeSpec - 1) * blobs), blobs);
             int heapEnd = streams[0] + streams[1];
@@ -79,36 +79,6 @@ namespace PeLibrary
             return args + 2;
         }
 
-        internal static int TableStart(int[] streams, int[] methods, int[] counts, int table)
-        {
-            int cursor = methods[0] + counts[6] * methods[1];
-            int end = streams[4] + streams[5];
-            for (int i = 8; i <= table; i++)
-            {
-                if (counts[i] == 0) continue;
-                int width;
-                if (i < 17) width = StandaloneSignatures.Width(counts, i, methods[2], methods[3]);
-                else width = LaterWidth(counts, i, methods[2], methods[3]);
-                if (width == 0 || counts[i] > (end - cursor) / width) return -1;
-                if (i == table) return cursor;
-                cursor += counts[i] * width;
-            }
-            return -1;
-        }
-
-        private static int LaterWidth(int[] counts, int table, int strings, int blobs)
-        {
-            if (table == 17 || table == 27) return blobs;
-            if (table == 18) return Width(counts[2]) + Width(counts[20]);
-            if (table == 20) return 2 + strings + (counts[2] < 16384 && counts[1] < 16384 && counts[27] < 16384 ? 2 : 4);
-            if (table == 21) return Width(counts[2]) + Width(counts[23]);
-            if (table == 23) return 2 + strings + blobs;
-            if (table == 24) return 2 + Width(counts[6]) + (counts[20] < 32768 && counts[23] < 32768 ? 2 : 4);
-            if (table == 25) return Width(counts[2]) + 2 * (counts[6] < 32768 && counts[10] < 32768 ? 2 : 4);
-            return table == 26 ? strings : 0;
-        }
-
-        private static int Width(int count) => count < 65536 ? 2 : 4;
         private static uint Index(byte[] image, uint at, int width) => width == 2 ? U16(image, at) : U32(image, at);
     }
 }

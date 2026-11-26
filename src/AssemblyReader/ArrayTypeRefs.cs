@@ -20,8 +20,9 @@ namespace PeLibrary
             // MethodDef discovery already validated every preceding row.
             uint type = (uint)(first + counts[0] * moduleWidth + (row - 1) * (scope + 2 * strings));
             uint resolution = Index(image, type, scope);
-            if ((resolution & 3) != 2 || resolution >> 2 == 0 || resolution >> 2 > (uint)counts[35])
-                return -2; // Only AssemblyRef-scoped primitive TypeRefs.
+            if ((resolution & 3) != 2 ||
+                !PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, (int)(resolution >> 2)))
+                return -2; // Only primitive TypeRefs from platform assemblies.
             uint name = Index(image, type + (uint)scope, strings);
             uint ns = Index(image, type + (uint)(scope + strings), strings);
             uint heapSize = (uint)streams[3];
@@ -38,6 +39,8 @@ namespace PeLibrary
                 return 2; // Byte
             if (prefix == 0x33746e49 && Fits(name, 6, heapSize) && U16(image, entry + 4) == 0x32)
                 return 3; // Int32
+            if (prefix == 0x72616843 && image[entry + 4] == 0)
+                return 7; // Char
             return -2;
         }
 
