@@ -6,8 +6,8 @@ async function start() {
         WebAssembly.instantiateStreaming(fetch("./Handlers.wasm"))
     ]);
     const exports = compiled.instance.exports;
-    const click = exports[model.binding.export];
-    if (typeof click !== "function") throw Error("The form's C# click handler was not exported.");
+    const bind = exports[model.binding.export];
+    if (typeof bind !== "function") throw Error("The form's C# binding factory was not exported.");
 
     const form = document.querySelector("#form");
     const canvas = document.querySelector("#surface");
@@ -30,6 +30,7 @@ async function start() {
     result.setAttribute("aria-live", "polite");
     form.append(result);
     const state = exports.Create(0);
+    const clickBinding = bind(state);
     function repaint() {
         result.value = model.binding.prefix + exports.Read(state);
         texts.set(model.binding.label, result.value);
@@ -48,7 +49,7 @@ async function start() {
         button.style.width = 100 * c.width / model.width + "%";
         button.style.height = 100 * c.height / model.height + "%";
         if (c.name === model.binding.button)
-            button.addEventListener("click", () => { click(state); repaint(); });
+            button.addEventListener("click", () => { exports.Dispatch(clickBinding); repaint(); });
         buttons.set(c.name, button);
         form.append(button);
     }

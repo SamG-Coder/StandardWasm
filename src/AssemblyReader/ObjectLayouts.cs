@@ -4,7 +4,7 @@ namespace PeLibrary
 {
     internal static class ObjectLayouts
     {
-        internal const int FirstClass = 4, MaxClasses = 256 - FirstClass, Width = 3;
+        internal const int FirstClass = 6, MaxClasses = 256 - FirstClass, Width = 3;
 
         // Registry: count followed by triples of TypeDef row, first Field row, field count.
         internal static int Register(byte[] image, int[] streams, int[] methods, int[] registry, int row)

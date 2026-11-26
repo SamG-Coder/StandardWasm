@@ -40,6 +40,7 @@ namespace PortableCompiler
             var arities = new int[count];
             var offsets = new int[count];
             var sizes = new int[count];
+            var thunks = new int[count + 1];
             var signatures = new byte[output.Length];
             var frame = new byte[output.Length];
             var moduleCode = new byte[output.Length];
@@ -106,7 +107,7 @@ namespace PortableCompiler
                     if (status < 0)
                         return status;
                     functions = LinkOperands(image, layout, heaps, records, rows, indices,
-                        arities, offsets, signatures, objects, functions);
+                        arities, offsets, signatures, objects, thunks, functions);
                     if (functions < 0)
                         return functions;
 
@@ -154,11 +155,11 @@ namespace PortableCompiler
                 length += used;
             }
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, functions,
-                moduleCode, entries, entryOffsets, exports, objects);
+                moduleCode, entries, entryOffsets, exports, objects, thunks);
         }
 
         private static int LinkOperands(byte[] image, int[] layout, int[] heaps, int[] records,
-            int[] rows, int[] indices, int[] arities, int[] offsets, byte[] signatures, int[] objects, int functions)
+            int[] rows, int[] indices, int[] arities, int[] offsets, byte[] signatures, int[] objects, int[] thunks, int functions)
         {
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
             {
@@ -182,13 +183,29 @@ namespace PortableCompiler
                     records[slot + 3] = type;
                     continue;
                 }
-                if (kind == BranchIl.BaseCtor)
+                if (kind == BranchIl.MemberCall)
                 {
-                    if (!ObjectLayouts.IsObjectConstructor(image, heaps, layout, records[slot + 1]))
+                    int member = records[slot + 1], opcode = records[slot + 3];
+                    if (opcode == 0x28 && ObjectLayouts.IsObjectConstructor(image, heaps, layout, member))
+                    {
+                        records[slot] = BranchIl.BaseCtor;
+                        continue;
+                    }
+                    int delegateMember = DelegateMetadata.Member(image, heaps, layout, member);
+                    if (delegateMember == DelegateMetadata.Invoke && opcode == 0x6f)
+                    {
+                        records[slot] = BranchIl.InvokeDelegate;
+                        continue;
+                    }
+                    int pointer = slot - 6 * BranchIl.Width;
+                    if (delegateMember != DelegateMetadata.Construct || opcode != 0x73 || pointer < 0 ||
+                        records[pointer] != BranchIl.LoadFunction || records[pointer + 2] != slot / BranchIl.Width)
                         return -2;
+                    records[slot] = BranchIl.NewDelegate;
+                    records[slot + 3] = records[pointer + 3];
                     continue;
                 }
-                if (kind != BranchIl.Call && kind != BranchIl.NewObject)
+                if (kind != BranchIl.Call && kind != BranchIl.NewObject && kind != BranchIl.LoadFunction)
                     continue;
                 int target = records[slot + 1];
                 if (target == 0 || target >= indices.Length)
@@ -203,6 +220,25 @@ namespace PortableCompiler
                 }
                 int signature = offsets[index];
                 bool hasReceiver = arities[index] > 0 && signatures[signature + 1] >= ObjectLayouts.FirstClass;
+                if (kind == BranchIl.LoadFunction)
+                {
+                    if (!hasReceiver || arities[index] != 1 || signatures[signature] != I32 ||
+                        (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) != 0)
+                        return -2;
+                    int next = records[slot + 2] * BranchIl.Width;
+                    if (next >= records.Length || records[next] != BranchIl.MemberCall || records[next + 3] != 0x73)
+                        return -2;
+                    int thunk = 0;
+                    while (thunk < thunks[0] && thunks[thunk + 1] != index) thunk++;
+                    if (thunk == thunks[0])
+                    {
+                        thunks[thunk + 1] = index;
+                        thunks[0] = thunk + 1;
+                    }
+                    records[slot + 1] = thunk;
+                    records[slot + 3] = signatures[signature + 1];
+                    continue;
+                }
                 if (kind == BranchIl.NewObject)
                 {
                     if (!hasReceiver || signatures[signature] != Void ||
@@ -215,6 +251,13 @@ namespace PortableCompiler
                         return -2;
                 }
                 records[slot + 1] = index;
+            }
+            for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
+            {
+                int kind = records[slot];
+                if ((kind == BranchIl.Branch || kind == BranchIl.Conditional) &&
+                    records[records[slot + 1] * BranchIl.Width] == BranchIl.NewDelegate)
+                    return -1;
             }
             return functions;
         }
