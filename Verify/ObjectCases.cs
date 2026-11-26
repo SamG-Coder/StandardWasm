@@ -32,6 +32,8 @@ internal static class ObjectCases
             });
         }
 
+        AddThirdPartyBaseCase(cases, output);
+
         Reject("wrong field owner", read, 0x7b, field);
         Reject("wrong direct call signature", isolated, 0x6f, wrongMethod);
 
@@ -58,6 +60,33 @@ internal static class ObjectCases
                 generated = new { capacity, arguments = Array.Empty<int>(), reject = true }, expected = status
             });
         }
+    }
+
+    private static void AddThirdPartyBaseCase(List<object> cases, byte[] output)
+    {
+        try
+        {
+            ObjectIdentityProbe.Probe.Make(7);
+            throw new InvalidOperationException("Expected the third-party base constructor to run.");
+        }
+        catch (InvalidOperationException error) when (error.Message == "The third-party base constructor ran.")
+        {
+        }
+
+        var method = typeof(ObjectIdentityProbe.Probe).GetMethod(nameof(ObjectIdentityProbe.Probe.Make))!;
+        int row = method.MetadataToken & 0xffffff;
+        byte[] image = File.ReadAllBytes(method.Module.Assembly.Location);
+        Array.Fill(output, (byte)0xa5);
+        int status = ObjectDemo.Compile(image, row, output);
+        if (status != -2 || output.Any(value => value != 0xa5))
+            throw new InvalidOperationException($"Third-party System.Object must be rejected before emission. Status: {status}.");
+        cases.Add(new
+        {
+            module = "ObjectLibrary", method = "Compile", fixture = "third-party System.Object base",
+            inputs = new object[] { Encode(image), row },
+            generated = new { capacity = output.Length, arguments = Array.Empty<int>(), reject = true },
+            expected = status
+        });
     }
 
     private static object Encode(byte[] bytes) => new { bytes = Array.ConvertAll(bytes, value => (int)value) };
