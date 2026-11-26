@@ -4,11 +4,11 @@ using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
-    internal static class ReadOnlySpanMetadata
+    internal static class SpanMetadata
     {
-        internal static bool IsDefinition(byte[] image, int[] layout, int[] heaps, int coded)
+        internal static bool IsDefinition(byte[] image, int[] layout, int[] heaps, int coded, bool writable = false)
         {
-            return IsPlatformType(image, layout, heaps, coded, "System", "ReadOnlySpan`1");
+            return IsPlatformType(image, layout, heaps, coded, "System", writable ? "Span`1" : "ReadOnlySpan`1");
         }
 
         internal static bool IsPlatformType(byte[] image, int[] layout, int[] heaps,
@@ -105,6 +105,56 @@ namespace PortableCompiler
                 image[at + 2] == 0x0e && IsDefinition(image, layout, heaps, span);
         }
 
+        internal static int ClassifyCharacterSpanCall(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int member, int context, int[] methodArguments, int[] objects)
+        {
+            var reference = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadMember(image, heaps, layout, member, reference, allowClosedParent: true) < 0)
+                return 0;
+            int parent = reference[AssemblyReferences.GenericParent];
+            if (parent == 0) return 0;
+            uint name = (uint)reference[4];
+            bool constructor = MatchesAscii(image, heaps, name, ".ctor");
+            if (!constructor && !MatchesAscii(image, heaps, name, "op_Implicit")) return 0;
+            if (ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps,
+                owner, parent, objects, context, methodArguments) != WritableCharacterSpan) return 0;
+
+            int blob = reference[5];
+            if (blob < 1 || blob >= heaps[1]) return 0;
+            int limit = heaps[0] + heaps[1];
+            var next = new int[1];
+            int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
+            int start = next[0];
+            if (size < 3 || size > limit - start) return 0;
+            if (constructor)
+            {
+                // instance void .ctor(!0[]).
+                return size == 6 && U32(image, (uint)start) == 0x1d010120 &&
+                    U16(image, (uint)(start + 4)) == 0x0013 ? BranchIl.CharacterArrayAsSpan : 0;
+            }
+
+            if (image[start] != 0 || image[start + 1] != 1) return 0;
+            int end = start + size;
+            int parameter = OpenCharacterSpan(image, layout, heaps, start + 2, end, next, false);
+            if (parameter < 0) return 0;
+            return OpenCharacterSpan(image, layout, heaps, parameter, end, next, true) == end
+                ? BranchIl.SpanAsReadOnly : 0;
+        }
+
+        // The MemberRef signature uses the declaring Span<T> argument. Its
+        // TypeSpec parent has already proved that this argument is char.
+        private static int OpenCharacterSpan(byte[] image, int[] layout, int[] heaps,
+            int at, int end, int[] next, bool writable)
+        {
+            if (end - at < 6 || image[at] != 0x15 || image[at + 1] != 0x11) return -2;
+            int span = CompressedUnsigned(image, at + 2, end, next);
+            at = next[0];
+            if (span <= 0 || end - at < 3 || image[at] != 1 ||
+                image[at + 1] != 0x13 || image[at + 2] != 0 || !IsDefinition(image, layout, heaps, span, writable))
+                return -2;
+            return at + 3;
+        }
+
         internal static int Accessor(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int member, int context, int[] methodArguments, int spanType, int[] objects)
         {
@@ -126,6 +176,9 @@ namespace PortableCompiler
             int at = next[0];
             if (size < 3 || size > limit - at || image[at] != 0x20) return 0;
             if (length) return size == 3 && image[at + 1] == 0 && image[at + 2] == 8 ? BranchIl.SpanLength : 0;
+            if (spanType == WritableCharacterSpan)
+                return size == 6 && U32(image, (uint)at) == 0x13100120 &&
+                    U16(image, (uint)(at + 4)) == 0x0800 ? BranchIl.SpanAddress : 0;
             if (image[at + 1] != 1 || image[at + 2] != 0x1f) return 0;
             int end = at + size;
             int modifier = CompressedUnsigned(image, at + 3, end, next);

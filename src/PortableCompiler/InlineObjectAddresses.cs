@@ -61,7 +61,7 @@ namespace PortableCompiler
             bool span = MatchesAscii(image, heaps, name, "InlineArrayAsReadOnlySpan");
             if (span)
             {
-                if (!ReadOnlySpanMetadata.MatchesFactorySignature(image, layout, heaps, signature, 2, 1, 0))
+                if (!SpanMetadata.MatchesFactorySignature(image, layout, heaps, signature, 2, 1, 0))
                     return 0;
             }
             else if (!MatchesAscii(image, heaps, name, "InlineArrayElementRef") ||
@@ -98,7 +98,7 @@ namespace PortableCompiler
             {
                 int create = PlatformSpec(image, layout, heaps, counts, first, start + 7,
                     "System.Runtime.InteropServices", "MemoryMarshal", "CreateReadOnlySpan", 1);
-                return ReadOnlySpanMetadata.MatchesFactorySignature(image, layout, heaps, create, 1, 0, 0)
+                return SpanMetadata.MatchesFactorySignature(image, layout, heaps, create, 1, 0, 0)
                     ? NewObjectSpan : 0;
             }
             int add = PlatformSpec(image, layout, heaps, counts, first, start + 7,
@@ -138,7 +138,7 @@ namespace PortableCompiler
             {
                 var reference = new int[AssemblyReferences.SymbolWidth];
                 if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference) < 0 ||
-                    !ReadOnlySpanMetadata.MatchReference(image, layout, heaps, counts, reference, space, type)) return 0;
+                    !SpanMetadata.MatchReference(image, layout, heaps, counts, reference, space, type)) return 0;
                 name = reference[4];
                 signature = reference[5];
             }

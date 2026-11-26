@@ -5,7 +5,7 @@ namespace PortableCompiler
 {
     // The pair keeps the target alive and reads/writes its current contents.
     // It names the original location even when copied or passed to a callee.
-    internal static class ManagedObjectLocationWasm
+    internal static class ManagedLocationWasm
     {
         internal const int TypeBytes = 6;
 

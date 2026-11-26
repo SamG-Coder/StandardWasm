@@ -180,7 +180,7 @@ namespace PortableCompiler
             else if (reference[0] != 0)
                 storage = RegisterType(bundle, image, layout, heaps, owner,
                     reference[0], objects, reference[1] == 1);
-            return SignatureTypes.IsReadOnlySpan(storage) ? -2 : storage;
+            return SignatureTypes.IsSpan(storage) ? -2 : storage;
         }
 
         private static int RegisterInterfaces(BundleImages bundle, byte[] image,

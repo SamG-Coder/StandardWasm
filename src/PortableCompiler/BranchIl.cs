@@ -39,6 +39,7 @@ namespace PortableCompiler
         internal const int ObjectElementAddress = 100, LoadObjectIndirect = 101, StoreObjectIndirect = 102;
         internal const int LoadInlineStorage = 103, BoundObjectElement = 1;
         internal const int NewObjectSpan = 104, SpanLength = 105, SpanRead = 106, StringAsSpan = 108;
+        internal const int CharacterArrayAsSpan = 109, SpanAddress = 110, SpanAsReadOnly = 111;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;

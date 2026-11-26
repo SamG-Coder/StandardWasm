@@ -12,7 +12,9 @@ namespace PortableCompiler
         // A location is a traced alias with invariant element type, outside
         // the ordinary Object/reference conversion lattice.
         internal const int ObjectLocation = 0x80, ObjectSpan = 0x81, CharacterSpan = 0x82;
-        internal static bool IsReadOnlySpan(int type) => type == ObjectSpan || type == CharacterSpan;
+        internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84;
+        internal static bool IsManagedLocation(int type) => type == ObjectLocation || type == CharacterLocation;
+        internal static bool IsSpan(int type) => type == ObjectSpan || type == CharacterSpan || type == WritableCharacterSpan;
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
         // Keep the located CLI type in the verifier even though all cells share a Wasm heap.
         private const int ValueLocationBase = 65536;
@@ -162,10 +164,10 @@ namespace PortableCompiler
                     types[target] = String;
                 else if (element == 0x1c)
                     types[target] = ObjectLayouts.ObjectReference;
-                else if (element == 0x10 && (locals || i > 0) && cursor < end && image[cursor] == 0x1c)
+                else if (element == 0x10 && (locals || i > 0) && cursor < end &&
+                    (image[cursor] == 0x1c || image[cursor] == 3))
                 {
-                    cursor++;
-                    types[target] = ObjectLocation;
+                    types[target] = image[cursor++] == 0x1c ? ObjectLocation : CharacterLocation;
                 }
                 else if (element == 0x1d && cursor < end)
                 {

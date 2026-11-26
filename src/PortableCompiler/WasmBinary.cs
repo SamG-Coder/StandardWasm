@@ -95,7 +95,7 @@ namespace PortableCompiler
             if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
             if (hasDescriptors) typeEntries++;
             int prefix = UnsignedSize(typeEntries) + 70 + ManagedValueLocationWasm.TypeBytes +
-                ManagedObjectLocationWasm.TypeBytes + ReadOnlySpanWasm.TypeBytes + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+                ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (tagCount != 0) prefix += 3; // () -> () exception payload
             if (objectTag) prefix += ExceptionTagsWasm.ObjectTagTypeBytes; // (eqref) -> () managed object payload
@@ -290,8 +290,8 @@ namespace PortableCompiler
             output[cursor++] = 0x5f;
             output[cursor++] = 0;
             cursor = ManagedValueLocationWasm.WriteType(output, cursor);
-            cursor = ManagedObjectLocationWasm.WriteType(output, cursor);
-            cursor = ReadOnlySpanWasm.WriteType(output, cursor);
+            cursor = ManagedLocationWasm.WriteType(output, cursor);
+            cursor = SpanWasm.WriteType(output, cursor);
             if (recursive)
             {
                 output[cursor++] = 0x4e;
@@ -525,7 +525,7 @@ namespace PortableCompiler
                 type == EventArgsReference ? EventArgsHeap :
                 type == EventHandlerReference ? EventHandlerHeap :
                 type == Singles ? SingleArrayHeap : type == Doubles ? DoubleArrayHeap :
-                type == NativeVector ? NativeArrayHeap : type == ObjectLocation ? ObjectLocationHeap : IsReadOnlySpan(type) ? ReadOnlySpanHeap :
+                type == NativeVector ? NativeArrayHeap : IsManagedLocation(type) ? ObjectLocationHeap : IsSpan(type) ? ReadOnlySpanHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;
 
         // Positive heap indices are encoded as signed LEB values. The sign

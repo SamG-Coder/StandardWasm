@@ -1,0 +1,8 @@
+{
+  "assembly": "WritableCharacterSpansFixture",
+  "targetFramework": "net10.0",
+  "exportType": "WritableCharacterSpansFixture.Kernels",
+  "method": "BufferAliasing",
+  "inputs": [1, 65535],
+  "expected": 65535
+}

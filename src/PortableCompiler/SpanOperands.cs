@@ -3,10 +3,10 @@ using static PortableCompiler.BranchIl;
 
 namespace PortableCompiler
 {
-    internal static class ReadOnlySpanOperands
+    internal static class SpanOperands
     {
-        // The readonly receiver has no observable address identity. A load can
-        // supply its immutable descriptor when followed by the known accessor.
+        // Neither accessor mutates the descriptor itself. A load can supply
+        // its current value. A constructor initializes the destination slot.
         internal static int Bind(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
             int context, int[] methodArguments, int[] records, int address, int spanType, int[] objects, int[] clauses)
         {
@@ -19,11 +19,22 @@ namespace PortableCompiler
                 if (call >= records.Length || ValueOperands.Entry(records, call / Width, clauses)) return 0;
             }
             if (records[call] != MemberCall || records[call + 3] != 0x28) return 0;
-            int accessor = ReadOnlySpanMetadata.Accessor(bundle, image, layout, heaps, owner,
-                records[call + 1], context, methodArguments, spanType, objects);
-            if (accessor != (indexed ? SpanRead : SpanLength)) return 0;
+            if (indexed && spanType == SignatureTypes.WritableCharacterSpan &&
+                SpanMetadata.ClassifyCharacterSpanCall(bundle, image, layout, heaps, owner,
+                    records[call + 1], context, methodArguments, objects) == CharacterArrayAsSpan)
+            {
+                records[address] = Nop;
+                records[call] = CharacterArrayAsSpan;
+                records[call + 3] = records[address + 1] + 1;
+                return 1;
+            }
 
-            if (indexed)
+            int accessor = SpanMetadata.Accessor(bundle, image, layout, heaps, owner,
+                records[call + 1], context, methodArguments, spanType, objects);
+            int element = spanType == SignatureTypes.WritableCharacterSpan ? SpanAddress : SpanRead;
+            if (accessor != (indexed ? element : SpanLength)) return 0;
+
+            if (accessor == SpanRead)
             {
                 // ReadOnlySpan<T>.get_Item returns a readonly reference. Fuse
                 // its immediate read so it never becomes a writable location.

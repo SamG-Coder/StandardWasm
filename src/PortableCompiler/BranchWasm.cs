@@ -615,26 +615,43 @@ namespace PortableCompiler
                     int vector = Spill(spills, maximum, operand, top - 1);
                     int count = Spill(spills, maximum, I32, top);
                     int resultSpill = Spill(spills, maximum, ObjectSpan, top - 1);
-                    used = ReadOnlySpanWasm.Create(code, used, vector, count, resultSpill);
+                    used = SpanWasm.Create(code, used, vector, count, resultSpill);
                 }
                 else if (kind == StringAsSpan)
                 {
                     int source = Spill(spills, maximum, states[state + top], top);
-                    used = ReadOnlySpanWasm.FromString(code, used, source);
+                    used = SpanWasm.FromOwner(code, used, source, true);
                     used = Local(code, used, 0x21, Spill(spills, maximum, CharacterSpan, top));
                 }
+                else if (kind == CharacterArrayAsSpan)
+                {
+                    int source = Spill(spills, maximum, states[state + top], top);
+                    int target = records[slot + 3] - 1;
+                    used = SpanWasm.FromOwner(code, used, source, false);
+                    used = Local(code, used, 0x21, target >= 0 ? target : Spill(spills, maximum, WritableCharacterSpan, top));
+                }
+                // A SpanAsReadOnly operation only changes the logical type.
+                // Both descriptors occupy the same Wasm spill bank.
                 else if (kind == SpanLength)
                 {
                     int type = records[slot + 3];
-                    used = ReadOnlySpanWasm.Length(code, used, Spill(spills, maximum, type, top));
+                    used = SpanWasm.Length(code, used, Spill(spills, maximum, type, top));
                     used = Local(code, used, 0x21, Spill(spills, maximum, I32, top));
+                }
+                else if (kind == SpanAddress)
+                {
+                    int view = Spill(spills, maximum, WritableCharacterSpan, top - 1);
+                    int index = Spill(spills, maximum, I32, top);
+                    used = SpanWasm.Address(code, used, Chars, view, index);
+                    used = Gc(code, used, 0, CharacterLocation); // struct.new traced location
+                    used = Local(code, used, 0x21, Spill(spills, maximum, CharacterLocation, top - 1));
                 }
                 else if (kind == SpanRead)
                 {
                     int type = records[slot + 3];
                     int view = Spill(spills, maximum, type, top - 1);
                     int index = Spill(spills, maximum, I32, top);
-                    used = ReadOnlySpanWasm.Read(code, used, operand, view, index);
+                    used = SpanWasm.Read(code, used, operand, view, index);
                     int resultType = type == CharacterSpan ? I32 : ObjectReference;
                     used = Local(code, used, 0x21, Spill(spills, maximum, resultType, top - 1));
                 }
@@ -643,41 +660,61 @@ namespace PortableCompiler
                     int array = Spill(spills, maximum, states[state + top - 1], top - 1);
                     int index = Spill(spills, maximum, states[state + top], top);
                     int resultSpill = Spill(spills, maximum, ObjectLocation, top - 1);
-                    used = ManagedObjectLocationWasm.TakeElement(code, used, array, index, resultSpill);
+                    used = ManagedLocationWasm.TakeElement(code, used, array, index, resultSpill);
                 }
                 else if (kind == LoadObjectIndirect)
                 {
                     int address = Spill(spills, maximum, ObjectLocation, top);
-                    used = ManagedObjectLocationWasm.AccessElement(code, used, address, operand);
+                    used = ManagedLocationWasm.AccessElement(code, used, address, operand);
                     used = Gc(code, used, 0x0b, operand); // array.get
                     used = Local(code, used, 0x21, Spill(spills, maximum, ObjectReference, top));
                 }
                 else if (kind == StoreObjectIndirect)
                 {
                     int address = Spill(spills, maximum, ObjectLocation, top - 1);
-                    used = ManagedObjectLocationWasm.AccessElement(code, used, address, operand);
+                    used = ManagedLocationWasm.AccessElement(code, used, address, operand);
                     used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
                     used = Gc(code, used, 0x0e, operand); // array.set
                 }
                 else if (kind == LoadIndirect)
                 {
-                    int address = Spill(spills, maximum, Native, top);
-                    used = LinearMemoryWasm.GuardNull(code, used, address);
-                    used = Local(code, used, 0x20, address);
-                    used = LinearMemoryWasm.Load(code, used, operand);
+                    int type = states[state + top];
+                    int address = Spill(spills, maximum, type, top);
+                    if (type == CharacterLocation)
+                    {
+                        used = ManagedLocationWasm.AccessElement(code, used, address, Chars);
+                        used = Gc(code, used, 0x0d, Chars); // array.get_u
+                    }
+                    else
+                    {
+                        used = LinearMemoryWasm.GuardNull(code, used, address);
+                        used = Local(code, used, 0x20, address);
+                        used = LinearMemoryWasm.Load(code, used, operand);
+                    }
                     used = Local(code, used, 0x21, Spill(spills, maximum, StackDepths.IndirectType(operand), top));
                 }
                 else if (kind == StoreIndirect)
                 {
                     // CLI order: the address and the value are both evaluated, then the
                     // store raises NullReferenceException for address 0.
-                    int address = Spill(spills, maximum, Native, top - 1), value = states[state + top];
-                    used = LinearMemoryWasm.GuardNull(code, used, address);
-                    used = Local(code, used, 0x20, address);
-                    used = Local(code, used, 0x20, Spill(spills, maximum, value, top));
-                    if (operand == 0x56 && value == F64) code[used++] = 0xb6; // f32.demote_f64
-                    if (operand == 0x57 && value == F32) code[used++] = 0xbb; // f64.promote_f32
-                    used = LinearMemoryWasm.Store(code, used, operand);
+                    int type = states[state + top - 1], value = states[state + top];
+                    int address = Spill(spills, maximum, type, top - 1);
+                    int source = Spill(spills, maximum, value, top);
+                    if (type == CharacterLocation)
+                    {
+                        used = ManagedLocationWasm.AccessElement(code, used, address, Chars);
+                        used = Local(code, used, 0x20, source);
+                        used = Gc(code, used, 0x0e, Chars); // array.set truncates to i16
+                    }
+                    else
+                    {
+                        used = LinearMemoryWasm.GuardNull(code, used, address);
+                        used = Local(code, used, 0x20, address);
+                        used = Local(code, used, 0x20, source);
+                        if (operand == 0x56 && value == F64) code[used++] = 0xb6; // f32.demote_f64
+                        if (operand == 0x57 && value == F32) code[used++] = 0xbb; // f64.promote_f32
+                        used = LinearMemoryWasm.Store(code, used, operand);
+                    }
                 }
                 else if (kind == LoadStaticField)
                 {
@@ -1034,7 +1071,7 @@ namespace PortableCompiler
             // for native arrays without increasing the engine's local pressure.
             type == ConstructorAddress ? I32 - 1 :
             PeLibrary.RuntimeTypeMetadata.IsStorage(type) || IsValueLocation(type) ? ObjectReference - 1 :
-            type == ObjectLocation ? ObjectLocationBank - 1 : IsReadOnlySpan(type) ? ReadOnlySpanBank - 1 :
+            IsManagedLocation(type) ? ObjectLocationBank - 1 : IsSpan(type) ? ReadOnlySpanBank - 1 :
             type >= FirstClass ? ReadOnlySpanBank + type - FirstClass :
                 (type == NativeZero ? Native : type == NativeVector ? NativeZero : type) - 1;
 

@@ -167,6 +167,16 @@ namespace PortableCompiler
                     ? Push(stack, allocated, depth - 2, ObjectSpan) : -2;
             if (kind == StringAsSpan)
                 return Match(stack, depth, String) ? Push(stack, allocated, depth - 1, CharacterSpan) : -2;
+            if (kind == CharacterArrayAsSpan)
+            {
+                if (!Match(stack, depth, Chars)) return -2;
+                return extra == 0 ? Push(stack, allocated, depth - 1, WritableCharacterSpan) : depth - 1;
+            }
+            if (kind == SpanAsReadOnly)
+                return Match(stack, depth, WritableCharacterSpan) ? Push(stack, allocated, depth - 1, CharacterSpan) : -2;
+            if (kind == SpanAddress)
+                return Match(stack, depth - 1, WritableCharacterSpan) && Match(stack, depth, I32)
+                    ? Push(stack, allocated, depth - 2, CharacterLocation) : -2;
             if (kind == SpanLength)
                 return Match(stack, depth, extra) ? Push(stack, allocated, depth - 1, I32) : -2;
             if (kind == SpanRead)
@@ -186,12 +196,16 @@ namespace PortableCompiler
                     Assignable(stack[depth - 1], ObjectReference, objects) ? depth - 2 : -2;
             if (kind == LoadIndirect)
             {
-                if (depth < 1 || !IsNativeInteger(stack[depth - 1])) return -2;
+                if (depth < 1) return -2;
+                int address = stack[depth - 1];
+                if (!IsNativeInteger(address) && (address != CharacterLocation || operand != 0x49)) return -2;
                 return Push(stack, allocated, depth - 1, IndirectType(operand));
             }
             if (kind == StoreIndirect)
             {
-                if (depth < 2 || !IsNativeInteger(stack[depth - 2]) || !IndirectValue(operand, stack[depth - 1])) return -2;
+                if (depth < 2 || !IndirectValue(operand, stack[depth - 1])) return -2;
+                int address = stack[depth - 2];
+                if (!IsNativeInteger(address) && (address != CharacterLocation || operand != 0x53)) return -2;
                 return depth - 2;
             }
             if (kind == TypeFromHandle)

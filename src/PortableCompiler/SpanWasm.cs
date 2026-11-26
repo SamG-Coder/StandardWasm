@@ -3,7 +3,7 @@ using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
-    internal static class ReadOnlySpanWasm
+    internal static class SpanWasm
     {
         internal const int TypeBytes = 8;
 
@@ -29,9 +29,9 @@ namespace PortableCompiler
             return Local(code, used, 0x21, target);
         }
 
-        // String.AsSpan views the original packed UTF-16 array. Null yields
-        // the same empty descriptor as default(ReadOnlySpan<char>).
-        internal static int FromString(byte[] code, int used, int source)
+        // Both views retain their original packed UTF-16 owner. A string
+        // contributes its backing array. A null source produces an empty view.
+        internal static int FromOwner(byte[] code, int used, int source, bool wrapped)
         {
             used = Local(code, used, 0x20, source);
             code[used++] = 0xd1; // ref.is_null
@@ -41,10 +41,10 @@ namespace PortableCompiler
             used = WasmBinary.Signed(code, used, WasmBinary.HeapType(CharacterSpan));
             code[used++] = 0x05;
             used = Local(code, used, 0x20, source);
-            used = StringWasm.Unwrap(code, used);
+            if (wrapped) used = StringWasm.Unwrap(code, used);
             used = Const(code, used, 0);
             used = Local(code, used, 0x20, source);
-            used = StringWasm.Unwrap(code, used);
+            if (wrapped) used = StringWasm.Unwrap(code, used);
             code[used++] = 0xfb;
             code[used++] = 0x0f; // array.len
             used = Gc(code, used, 0, CharacterSpan);
@@ -68,6 +68,12 @@ namespace PortableCompiler
 
         internal static int Read(byte[] code, int used, int vector, int view, int index)
         {
+            used = Address(code, used, vector, view, index);
+            return Gc(code, used, vector == Chars ? 0x0d : 0x0b, vector); // array.get_u for packed UTF-16
+        }
+
+        internal static int Address(byte[] code, int used, int vector, int view, int index)
+        {
             used = Local(code, used, 0x20, index);
             used = Length(code, used, view);
             code[used++] = 0x4f; // i32.ge_u rejects negative indices too
@@ -79,7 +85,7 @@ namespace PortableCompiler
             used = LoadField(code, used, view, 1);
             used = Local(code, used, 0x20, index);
             code[used++] = 0x6a; // i32.add
-            return Gc(code, used, vector == Chars ? 0x0d : 0x0b, vector); // array.get_u for packed UTF-16
+            return used;
         }
 
         private static int LoadField(byte[] code, int used, int view, byte field)
