@@ -107,6 +107,12 @@ namespace PortableCompiler
                     ? depth - 1 : -1;
             // The supported delegate operations already proved the result's concrete type.
             if (kind == CastHandler) return Match(stack, depth, EventHandlerReference) ? depth : -1;
+            if (kind == CastClass || kind == TestClass)
+            {
+                if (depth < 1 || (stack[depth - 1] != NullValue && !IsReference(stack[depth - 1]))) return -1;
+                stack[depth - 1] = (byte)operand;
+                return depth;
+            }
             if (kind == JoinStrings)
                 return Match(stack, depth, String) && Match(stack, depth - 1, String)
                     ? Push(stack, depth - 2, String) : -1;

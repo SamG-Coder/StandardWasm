@@ -249,6 +249,12 @@ namespace PortableCompiler
                     used = NormalizeSlot(code, used, frame[operand]);
                     used = Local(code, used, 0x21, operand);
                 }
+                else if (kind == CastClass || kind == TestClass)
+                {
+                    byte type = (byte)operand;
+                    used = ReferenceCastWasm.Emit(code, used, Spill(spills, maximum, states[state + top], top),
+                        Spill(spills, maximum, type, top), type, kind == CastClass);
+                }
                 else if (kind == Unary || kind == Narrow || kind == ConvertInteger || kind == ConvertFloat)
                 {
                     byte source = states[state + top];

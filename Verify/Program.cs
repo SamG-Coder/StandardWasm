@@ -92,4 +92,5 @@ LinkedInstanceCases.Add(cases);
 NullStackCases.Add(cases);
 LinkedFieldCases.Add(cases);
 ForeignFieldTypeCases.Add(cases);
+NominalCastCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

@@ -60,5 +60,6 @@
     <ProjectReference Include="../demos/stage-62-null-stack/NullStack.csproj" />
     <ProjectReference Include="../demos/stage-63-linked-fields/LinkedFields.csproj" />
     <ProjectReference Include="../demos/stage-64-foreign-field-types/ForeignFieldTypes.csproj" />
+    <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />
   </ItemGroup>
 </Project>
