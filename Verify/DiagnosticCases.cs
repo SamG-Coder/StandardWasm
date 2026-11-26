@@ -115,7 +115,8 @@ internal static class DiagnosticCases
             {
                 module = "BootstrapLibrary", method = bundled ? "CompileBundle" : multiExport ? "CompileModule" : "Compile", fixture,
                 inputs = new[] { Encode(file), selection is byte[] entries ? Encode(entries) : selection },
-                generated = new { capacity, arguments, diagnostic = location, hex, reject, bundle = bundled, multiExport },
+                generated = new { capacity, arguments, diagnostic = location, hex, reject, bundle = bundled, multiExport,
+                    exceptionType = exception },
                 expected, exception
             });
     }

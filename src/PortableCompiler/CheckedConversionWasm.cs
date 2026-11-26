@@ -15,15 +15,13 @@ namespace PortableCompiler
             byte target = Result(opcode);
             if (IsFloat(source))
             {
-                // Wasm checks the truncated value and traps on NaN or infinity.
-                // A narrow target needs a second check after truncation to i32.
+                used = GuardFloat(code, used, input, source, width, unsignedTarget);
                 used = Local(code, used, 0x20, input);
                 int operation = target == I64 ? 0xae : 0xa8;
                 if (source == F64) operation += 2;
                 if (unsignedTarget) operation++;
                 code[used++] = unchecked((byte)operation);
-                used = Local(code, used, 0x21, output);
-                return Guard(code, used, output, target, unsignedTarget, width, unsignedTarget);
+                return Local(code, used, 0x21, output);
             }
 
             used = Guard(code, used, input, source, unsignedSource, width, unsignedTarget);
@@ -61,8 +59,31 @@ namespace PortableCompiler
                 ? WideConst(code, used, low, high)
                 : Const(code, used, low);
             code[used++] = NumericOpcode(comparison, source);
-            return TrapIf(code, used);
+            return ExceptionTagsWasm.ThrowIf(code, used);
         }
+
+        private static int GuardFloat(byte[] code, int used, int input, byte source, int width, bool unsigned)
+        {
+            // Test the truncated value in its original float width. Powers of
+            // two are exact bounds even at i64/u64 limits. NaN fails both tests.
+            used = Local(code, used, 0x20, input);
+            code[used++] = source == F32 ? (byte)0x8f : (byte)0x9d; // trunc
+            used = Local(code, used, 0x22, input);
+            used = unsigned ? FloatWasm.Literal(code, used, source, 0, 0)
+                : PowerOfTwo(code, used, source, width - 1, int.MinValue);
+            code[used++] = source == F32 ? (byte)0x60 : (byte)0x66; // ge
+            used = Local(code, used, 0x20, input);
+            used = PowerOfTwo(code, used, source, unsigned ? width : width - 1, 0);
+            code[used++] = source == F32 ? (byte)0x5d : (byte)0x63; // lt
+            code[used++] = 0x71; // and
+            code[used++] = 0x45; // eqz
+            return ExceptionTagsWasm.ThrowIf(code, used);
+        }
+
+        private static int PowerOfTwo(byte[] code, int used, byte source, int exponent, int sign) =>
+            source == F32
+                ? FloatWasm.Literal(code, used, source, sign | ((127 + exponent) << 23), 0)
+                : FloatWasm.Literal(code, used, source, 0, sign | ((1023 + exponent) << 20));
 
         private static int TargetWidth(int opcode) =>
             8 << (opcode <= 0x89 ? (opcode - 0x82) & 3 : (opcode - 0xb3) >> 1);

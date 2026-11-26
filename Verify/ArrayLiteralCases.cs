@@ -102,7 +102,7 @@ internal static class ArrayLiteralCases
                 cases.Add(new
                 {
                     module = "BootstrapLibrary", method = "Compile", fixture = name,
-                    inputs = new object[] { encoded, methodRow }, generated = new { capacity, arguments, hex }, expected, exception
+                    inputs = new object[] { encoded, methodRow }, generated = new { capacity, arguments, hex, exceptionType = exception }, expected, exception
                 });
             }
         }

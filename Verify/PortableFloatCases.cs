@@ -110,7 +110,8 @@ internal static class PortableFloatCases
             {
                 module = "BootstrapLibrary", method = linked ? "CompileBundle" : "Compile", fixture = method,
                 inputs = fixture.Inputs,
-                generated = new { capacity, arguments = Array.ConvertAll(arguments, Encode), hex = fixture.Hex, bundle = linked },
+                generated = new { capacity, arguments = Array.ConvertAll(arguments, Encode), hex = fixture.Hex,
+                    bundle = linked, exceptionType = exception },
                 expected, exception
             });
         }
