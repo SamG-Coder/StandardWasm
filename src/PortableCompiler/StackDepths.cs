@@ -175,6 +175,9 @@ namespace PortableCompiler
                     (stack[depth - 1] != NullValue && !IsReference(stack[depth - 1]))) return -1;
                 return Push(stack, allocated, depth - 1, operand);
             }
+            if (kind == StringEquals)
+                return Match(stack, depth, String) && Match(stack, depth - 1, String)
+                    ? Push(stack, allocated, depth - 2, I32) : -1;
             if (kind == JoinStrings)
                 return Match(stack, depth, String) && Match(stack, depth - 1, String)
                     ? Push(stack, allocated, depth - 2, String) : -1;

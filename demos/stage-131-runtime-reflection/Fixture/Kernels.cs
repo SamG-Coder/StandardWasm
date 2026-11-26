@@ -36,6 +36,39 @@ namespace ReflectionFixture
             return (own == moduleOwner ? 4 : 0) + (own == other ? 8 : 0);
         }
 
+        public static int OrdinalResourceNames()
+        {
+            string name = "Resource.é.東京.𐐀";
+            int result = OperatorEquals(name, "Resource.é.東京.𐐀") ? 1 : 0;
+            if (OperatorEquals(name, "Resource.é.東京.𐐁")) result |= 2;
+            if (StaticEquals(name, "resource.é.東京.𐐀")) result |= 4;
+            if (StaticEquals(name, "Resource.e\u0301.東京.𐐀")) result |= 8;
+            if (StaticEquals(name, "Resource.é.東京.𐐀\0")) result |= 16;
+            return result;
+        }
+
+        public static int OrdinalNullAndEmpty()
+        {
+            int result = OperatorEquals(null, null) ? 1 : 0;
+            if (OperatorEquals(null, "")) result |= 2;
+            if (StaticEquals("", "")) result |= 4;
+            if (StaticEquals("", null)) result |= 8;
+            return result;
+        }
+
+        public static int OrdinalSeparateStrings()
+        {
+            var units = new char[2];
+            units[0] = 'é';
+            units[1] = '京';
+            var first = new string(units);
+            var second = new string(units);
+            return OperatorEquals(first, second) ? 1 : 0;
+        }
+
+        private static bool OperatorEquals(string left, string right) => left == right;
+        private static bool StaticEquals(string left, string right) => string.Equals(left, right);
+
         public static int NullModule()
         {
             Module module = null;

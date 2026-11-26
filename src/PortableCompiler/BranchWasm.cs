@@ -194,6 +194,12 @@ namespace PortableCompiler
                     else used = Gc(code, used, 1, EventArgsReference); // struct.new_default
                     used = Local(code, used, 0x21, Spill(spills, maximum, EventArgsReference, depth));
                 }
+                else if (kind == StringEquals)
+                {
+                    int left = Spill(spills, maximum, states[state + top - 1], top - 1);
+                    int right = Spill(spills, maximum, states[state + top], top);
+                    used = StringWasm.OrdinalEquals(code, used, left, right, spills + top - 1, scratch);
+                }
                 else if (kind == JoinStrings || kind == StringFromChars)
                 {
                     bool join = kind == JoinStrings;

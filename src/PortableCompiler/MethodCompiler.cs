@@ -448,7 +448,7 @@ namespace PortableCompiler
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
-                        if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars ||
+                        if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals ||
                             kind == BranchIl.ConsoleWrite) frameShape[5] = 1;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
@@ -706,6 +706,11 @@ namespace PortableCompiler
                         continue;
                     }
                     int stringMember = addressed ? 0 : StringMetadata.Member(image, heaps, layout, member);
+                    if (stringMember == StringMetadata.OrdinalEquals && opcode == 0x28)
+                    {
+                        records[slot] = BranchIl.StringEquals;
+                        continue;
+                    }
                     if (stringMember == StringMetadata.Concat && opcode == 0x28)
                     {
                         records[slot] = BranchIl.JoinStrings;

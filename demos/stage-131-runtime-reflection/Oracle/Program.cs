@@ -23,7 +23,7 @@ foreach (string mode in modes)
 
     Load(dependency);
     var type = Load(fixture).GetType("ReflectionFixture.Kernels")!;
-    foreach (string method in new[] { "ModuleName", "DependencyModuleName", "ModuleIdentity", "AssemblyIdentity", "NullModule" })
+    foreach (string method in new[] { "ModuleName", "DependencyModuleName", "ModuleIdentity", "AssemblyIdentity", "NullModule", "OrdinalResourceNames", "OrdinalNullAndEmpty", "OrdinalSeparateStrings" })
     {
         MethodInfo info = type.GetMethod(method)!;
         results.Add(new { mode, method, row = info.MetadataToken & 0xffffff, expected = (int)info.Invoke(null, null)! });

@@ -44,6 +44,15 @@ namespace PeLibrary
             return 0;
         }
 
+        // Runtime Strings use UTF-16 code units. Keep resource-name lookup
+        // ordinal across the metadata encoding boundary.
+        internal static int CopyName(byte[] image, int[] catalog, int row, byte[] output, int offset)
+        {
+            var range = new int[2];
+            int status = Name(image, catalog, row, range);
+            return status < 0 ? status : Utf8Scalars.CopyUtf16(image, range[0], range[1], output, offset);
+        }
+
         // Only embedded entries have a file-backed payload in this image.
         // The caller can share a previously validated directory across rows.
         internal static int Data(byte[] image, int[] catalog, int row, int[] directory, int[] range)
