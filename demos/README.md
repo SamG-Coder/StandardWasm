@@ -74,6 +74,11 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [83 · Interface references](stage-83-interface-references/README.md) | `npm run demo -- stage-83-interface-references` | Linked interface fields preserve reference identity and null |
 | [84 · Native-sized storage](stage-84-native-sized-storage/README.md) | `npm run demo -- stage-84-native-sized-storage` | Linked native-sized fields use wasm32 width |
 | [85 · Nested type references](stage-85-nested-references/README.md) | `npm run demo -- stage-85-nested-references` | Nested identities survive cross-DLL binding and forwarding |
+| [86 · Closed generic layouts](stage-86-closed-generic-layouts/README.md) | `npm run demo -- stage-86-closed-generic-layouts` | Closed reference arguments specialize instance and array storage |
+| [87 · Packed integer instance fields](stage-87-packed-integer-fields/README.md) | `npm run demo -- stage-87-packed-integer-fields` | Packed field loads preserve CLI width and signedness |
+| [90 · Volatile instance fields](stage-90-volatile-field-signatures/README.md) | `npm run demo -- stage-90-volatile-field-signatures` | Linked volatile fields retain metadata identity and single-agent order |
+| [91 · Embedded sequential value types](stage-91-embedded-value-types/README.md) | `npm run demo -- stage-91-embedded-value-types` | Embedded values retain defaults and independent copies |
+| [89 · Unmanaged null pointer fields](stage-89-unmanaged-pointer-fields/README.md) | `npm run demo -- stage-89-unmanaged-pointer-fields` | Linked void pointer fields preserve safe null flows |
 
 ## Adding a stage
 
