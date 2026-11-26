@@ -14,7 +14,8 @@ namespace PortableCompiler
             int[] layout, int[] heaps, int owner, int row, int[] objects, int[] arguments, bool valueType = false)
         {
             int type = ReserveTree(main, bundle, ranges, image, layout, heaps, owner, row, objects, arguments, new int[0], 0, valueType);
-            return type < 0 ? type : Complete(main, bundle, ranges, image, layout, heaps, owner, type, objects);
+            if (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0]) return type;
+            return Complete(main, bundle, ranges, image, layout, heaps, owner, type, objects);
         }
 
         private static int ReserveTree(byte[] main, byte[] bundle, int[] ranges, byte[] image,
@@ -27,7 +28,7 @@ namespace PortableCompiler
             int status = GenericParameters.Check(image, heaps, layout, row, arguments.Length);
             if (status < 0) return status;
             status = ObjectLayouts.ReadShape(image, heaps, layout, row, shape, valueType);
-            if (status < 0) return status;
+            if (status != 0) return status;
             int parent = 0;
             if (shape[3] != 0)
             {

@@ -29,6 +29,8 @@ namespace PeLibrary
             return 0;
         }
 
+        // Aggregate shapes fill the descriptor. An enum instead returns its
+        // scalar storage tag and never reserves a GC aggregate.
         internal static int ReadShape(byte[] image, int[] streams, int[] methods, int row, int[] shape, bool valueType = false)
         {
             var counts = new int[45];
@@ -45,31 +47,36 @@ namespace PeLibrary
             uint def = (uint)(defs + (row - 1) * defWidth);
             uint flags = U32(image, def);
             bool isInterface = (flags & 0x20) != 0;
-            if ((flags & 0x18) != (valueType ? 8u : 0u)) return -2;
             uint baseType = ReadIndex(image, def + (uint)(4 + 2 * strings), extends);
             if (isInterface ? baseType != 0 : baseType == 0 || (baseType & 3) > 1) return -2;
+            int valueBase = baseType == 0 ? 0 : ValueBase(image, streams, methods, counts, refs, baseType);
+            uint first = ReadIndex(image, def + (uint)fieldColumn, fieldIndex);
+            uint end = row == counts[2] ? (uint)(counts[4] + 1) :
+                ReadIndex(image, def + (uint)(defWidth + fieldColumn), fieldIndex);
+            if (first < 1 || end < first || end > (uint)(counts[4] + 1)) return -1;
+            int fields = defs + counts[2] * defWidth;
+            if (valueBase == 2)
+                return valueType && (flags & 0x138) == 0x100
+                    ? EnumStorage.Read(image, streams, methods, fields, (int)first, (int)end) : -2;
+            if ((flags & 0x18) != (valueType ? 8u : 0u)) return -2;
             if (valueType)
             {
                 // Managed field access uses the declared value shape. Raw
                 // packing and explicit layout require a separate memory ABI.
-                if ((flags & 0x120) != 0x100 || !IsValueTypeBase(image, streams, methods, counts, refs, baseType))
+                if ((flags & 0x120) != 0x100 || valueBase != 1)
                     return -2;
                 int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]));
                 if (supported < 0) return supported;
                 baseType = 0;
                 flags |= ValueShape;
             }
-            else if (baseType != 0 && IsValueTypeBase(image, streams, methods, counts, refs, baseType))
+            else if (valueBase != 0)
                 return -2; // A value definition cannot enter a class slot.
             else if ((baseType & 3) == 1 && IsObjectRef(image, streams, methods, counts, refs, (int)(baseType >> 2)))
                 baseType = 0;
 
-            uint first = ReadIndex(image, def + (uint)fieldColumn, fieldIndex);
-            uint end = row == counts[2] ? (uint)(counts[4] + 1) :
-                ReadIndex(image, def + (uint)(defWidth + fieldColumn), fieldIndex);
-            if (first < 1 || end < first || end > (uint)(counts[4] + 1)) return -1;
             if (isInterface) end = first; // Interfaces have no instance fields.
-            shape[0] = defs + counts[2] * defWidth;
+            shape[0] = fields;
             shape[1] = (int)first;
             shape[2] = (int)(end - first);
             shape[3] = (int)baseType;
@@ -483,38 +490,42 @@ namespace PeLibrary
                 U32(image, s) == 0x74737953 && U16(image, s + 4) == 0x6d65 && image[s + 6] == 0;
         }
 
-        private static bool IsValueTypeBase(byte[] image, int[] streams, int[] methods, int[] counts, int refs, uint coded)
+        private static int ValueBase(byte[] image, int[] streams, int[] methods, int[] counts, int refs, uint coded)
         {
             int row = (int)(coded >> 2);
             int tag = (int)(coded & 3), strings = methods[2], scope = ResolutionWidth(counts);
             int refWidth = scope + 2 * strings;
-            if (row < 1 || row > counts[tag == 1 ? 1 : 2]) return false;
+            if (row < 1 || row > counts[tag == 1 ? 1 : 2]) return 0;
             uint name, space, resolution = 0;
             if (tag == 1)
             {
                 uint at = (uint)(refs + (row - 1) * refWidth);
                 resolution = ReadIndex(image, at, scope);
-                if ((resolution & 3) != 2) return false;
+                if ((resolution & 3) != 2) return 0;
                 name = ReadIndex(image, at + (uint)scope, strings);
                 space = ReadIndex(image, at + (uint)(scope + strings), strings);
             }
             else
             {
-                if (row > counts[2]) return false;
                 int width = 4 + 2 * strings + CodedWidth(counts[2], counts[1], counts[27]) +
                     IndexWidth(counts[4]) + IndexWidth(counts[6]);
                 uint at = (uint)(refs + counts[1] * refWidth + (row - 1) * width);
                 name = ReadIndex(image, at + 4, strings);
                 space = ReadIndex(image, at + (uint)(4 + strings), strings);
             }
-            if (!Fits(name, 10, (uint)streams[3]) || !Fits(space, 7, (uint)streams[3])) return false;
+            if (!Fits(name, 5, (uint)streams[3]) || !Fits(space, 7, (uint)streams[3])) return 0;
             uint n = (uint)streams[2] + name, s = (uint)streams[2] + space;
-            if (U32(image, n) != 0x756c6156 || U32(image, n + 4) != 0x70795465 || U16(image, n + 8) != 0x65 ||
-                U32(image, s) != 0x74737953 || U16(image, s + 4) != 0x6d65 || image[s + 6] != 0) return false;
-            return tag == 1
+            if (U32(image, s) != 0x74737953 || U16(image, s + 4) != 0x6d65 || image[s + 6] != 0) return 0;
+            int kind = 0;
+            if (U32(image, n) == 0x6d756e45 && image[n + 4] == 0) kind = 2; // Enum
+            else if (Fits(name, 10, (uint)streams[3]) && U32(image, n) == 0x756c6156 &&
+                U32(image, n + 4) == 0x70795465 && U16(image, n + 8) == 0x65) kind = 1; // ValueType
+            if (kind == 0) return 0;
+            bool platform = tag == 1
                 ? PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts,
                     (int)(resolution >> 2), includeRuntimeExtensions: false)
                 : PlatformAssemblyIdentity.IsCoreLibDefinition(image, streams, methods, counts);
+            return platform ? kind : 0;
         }
 
         private static int DefaultPacking(byte[] image, int[] heaps, int[] methods, int[] counts, int row, int typeIndex)
