@@ -16,7 +16,7 @@ const oracle = JSON.parse(readFileSync(oraclePath, "utf8"));
 const routes = ["/compiler", "/app", "/facade", "/core"];
 const files = [compiler, oracle.app, oracle.facade, oracle.core].map(path => readFileSync(path));
 
-async function check(compiler, images, entry, inputs) {
+async function check(compiler, images, entry, inline, inputs) {
     const { instance: { exports: build } } = await WebAssembly.instantiate(compiler);
     const parts = images.map(image => new Uint8Array(image));
     const bytes = new Uint8Array(parts.reduce((length, part) => length + 4 + part.length, 0));
@@ -38,15 +38,21 @@ async function check(compiler, images, entry, inputs) {
     const capacity = 65536;
     const output = build.CreateBytes(capacity);
     const diagnostic = build.CreateDiagnostic();
-    const status = build.CompileBundleDetailed(upload(bytes), upload(manifest), output, diagnostic);
+    const bundle = upload(bytes);
+    const locate = () => [0, 1, 2].map(i => build.ReadDiagnostic(diagnostic, i));
+    const status = build.CompileBundleDetailed(bundle, upload(manifest), output, diagnostic);
     if (status < 1 || status > capacity)
-        throw Error("Compiler returned " + status + " at " + [0, 1, 2].map(i => build.ReadDiagnostic(diagnostic, i)));
+        throw Error("Compiler returned " + status + " at " + locate());
     const code = Uint8Array.from({ length: status }, (_, index) => build.ReadByte(output, index));
     const { instance } = await WebAssembly.instantiate(code);
-    return { bytes: Array.from(code), actual: inputs.map(input => instance.exports.run(BigInt(input)).toString()) };
+    new DataView(manifest.buffer).setUint32(0, inline, true);
+    const inlineStatus = build.CompileBundleDetailed(bundle, upload(manifest), output, diagnostic);
+    if (inlineStatus !== -2 || locate().join(",") !== [0, inline, -1].join(","))
+        throw Error("Unexpected inline-array diagnostic " + inlineStatus + " at " + locate());
+    return { bytes: Array.from(code), inlineStatus, actual: inputs.map(input => instance.exports.run(BigInt(input)).toString()) };
 }
 
-const node = await check(files[0], files.slice(1), oracle.entry, oracle.inputs);
+const node = await check(files[0], files.slice(1), oracle.entry, oracle.inline, oracle.inputs);
 assert.deepEqual(node.actual, oracle.expected);
 const browser = await chromium.launch({ channel: "msedge" });
 try {
@@ -57,16 +63,16 @@ try {
             route.fulfill({ contentType: "application/octet-stream", body: files[index] });
     });
     await page.goto("http://127.0.0.1/");
-    const edge = await page.evaluate(async ({ routes, entry, inputs, source }) => {
+    const edge = await page.evaluate(async ({ routes, entry, inline, inputs, source }) => {
         const [compiler, ...images] = await Promise.all(routes.map(async path => (await fetch(path)).arrayBuffer()));
-        return (0, eval)("(" + source + ")")(compiler, images, entry, inputs);
-    }, { routes, entry: oracle.entry, inputs: oracle.inputs, source: check.toString() });
+        return (0, eval)("(" + source + ")")(compiler, images, entry, inline, inputs);
+    }, { routes, entry: oracle.entry, inline: oracle.inline, inputs: oracle.inputs, source: check.toString() });
     assert.deepEqual(edge, node);
     writeFileSync(join(evidence, "overlay.wasm"), Uint8Array.from(node.bytes));
     writeFileSync(join(evidence, "results.json"), JSON.stringify({
-        runtime: oracle.runtime, node: process.version, edge: browser.version(), results: node.actual, bytes: node.bytes.length
+        runtime: oracle.runtime, node: process.version, edge: browser.version(), results: node.actual, inlineStatus: node.inlineStatus, bytes: node.bytes.length
     }, null, 2) + "\n");
-    console.log("Node and Edge matched " + node.actual.length + " installed CoreLib DateTime overlays on " + oracle.runtime + ".");
+    console.log("Node and Edge matched " + node.actual.length + " installed CoreLib DateTime overlays on " + oracle.runtime + " and diagnosed the inline-array fixture.");
 } finally {
     await browser.close();
 }
