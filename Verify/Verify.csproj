@@ -56,5 +56,6 @@
     <ProjectReference Include="../demos/stage-58-linked-references/LinkedReferences.csproj" />
     <ProjectReference Include="../demos/stage-59-linked-objects/LinkedObjects.csproj" />
     <ProjectReference Include="../demos/stage-60-nominal-linking/LinkedNominal.csproj" />
+    <ProjectReference Include="../demos/stage-61-linked-instances/LinkedInstances.csproj" />
   </ItemGroup>
 </Project>

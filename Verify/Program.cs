@@ -88,4 +88,5 @@ LinkedExceptionCases.Add(cases);
 LinkedReferenceCases.Add(cases);
 LinkedObjectCases.Add(cases);
 LinkedNominalCases.Add(cases);
+LinkedInstanceCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

@@ -16,6 +16,7 @@ namespace PortableCompiler
             int right = Start(target, targetHeaps, targetSignature, next);
             if (right < 0) return 0;
             int rightEnd = next[0];
+            if (caller[left - 1] != target[right - 1]) return 0;
 
             int count = CompressedUnsigned(caller, left, leftEnd, next);
             left = next[0];
@@ -66,7 +67,9 @@ namespace PortableCompiler
             int limit = heaps[0] + heaps[1];
             int size = CompressedUnsigned(image, heaps[0] + index, limit, next);
             int first = next[0];
-            if (size < 3 || size > limit - first || image[first] != 0) return -1;
+            // Ordinary methods use default calling convention with optional
+            // implicit this. The receiver is outside the parameter list.
+            if (size < 3 || size > limit - first || (image[first] & ~0x20) != 0) return -1;
             next[0] = first + size;
             return first + 1;
         }

@@ -459,10 +459,10 @@ namespace PortableCompiler
                         records[slot + 1] = Delegate;
                         continue;
                     }
-                    if (delegateMember == 0 && stringMember == 0 && opcode == 0x28 && bundle.Length != 0)
+                    if (delegateMember == 0 && stringMember == 0 && constructorType == Delegate && bundle.Length != 0)
                     {
                         var symbol = new int[2];
-                        int resolved = AssemblyBundle.Resolve(main, bundle, ranges, image, layout, heaps, owner, member, symbol);
+                        int resolved = AssemblyBundle.Resolve(main, bundle, ranges, image, layout, heaps, owner, member, opcode, symbol);
                         if (resolved < 0) return resolved;
                         int targetOwner = symbol[0], targetRow = symbol[1];
                         int linked = indices[bases[targetOwner] + targetRow] - 1;
@@ -480,9 +480,11 @@ namespace PortableCompiler
                         }
                         if (!IsSharedBundleSignature(signatures, offsets[linked], arities[linked]))
                             return -2;
-                        records[slot] = BranchIl.Call;
+                        if (opcode == 0x73 && signatures[offsets[linked]] != Void)
+                            return -2;
+                        records[slot] = opcode == 0x73 ? BranchIl.NewObject : BranchIl.Call;
                         records[slot + 1] = linked;
-                        records[slot + 3] = 0;
+                        records[slot + 3] = opcode == 0x6f ? 1 : 0;
                         continue;
                     }
                     int pointer = slot - 6 * BranchIl.Width;
