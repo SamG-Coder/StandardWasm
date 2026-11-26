@@ -175,6 +175,15 @@ namespace PortableCompiler
                     used = StringWasm.Wrap(code, used);
                     used = Local(code, used, 0x21, Spill(spills, maximum, String, depth));
                 }
+                else if (kind == NewRootObject)
+                {
+                    // A fresh, identity-bearing plain object. It has no fields and no
+                    // virtual members; Object member calls on it stay diagnosed.
+                    code[used++] = 0xfb;
+                    code[used++] = 1; // struct.new_default
+                    used = WasmBinary.Unsigned(code, used, WasmBinary.RootObjectHeap);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, ObjectReference, depth));
+                }
                 else if (kind == LoadEventArgsEmpty || kind == NewEventArgs)
                 {
                     if (kind == LoadEventArgsEmpty)

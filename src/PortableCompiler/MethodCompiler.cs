@@ -684,9 +684,12 @@ namespace PortableCompiler
                         hostUse[0] = 1;
                         continue;
                     }
-                    if (opcode == 0x28 && !addressed && ObjectLayouts.IsObjectConstructor(image, heaps, layout, member))
+                    // call Object::.ctor runs the empty base constructor; newobj allocates a
+                    // fresh plain object of the canonical root (decision 0057).
+                    if ((opcode == 0x28 || opcode == 0x73) && !addressed &&
+                        ObjectLayouts.IsObjectConstructor(image, heaps, layout, member))
                     {
-                        records[slot] = BranchIl.BaseCtor;
+                        records[slot] = opcode == 0x73 ? BranchIl.NewRootObject : BranchIl.BaseCtor;
                         continue;
                     }
                     int stringMember = addressed ? 0 : StringMetadata.Member(image, heaps, layout, member);
@@ -790,10 +793,10 @@ namespace PortableCompiler
                 int target = records[slot + 1];
                 if (target < 1 || target > bases[owner + 1] - bases[owner])
                     return -1;
-                if (kind == BranchIl.Call && records[slot + 3] == 0 &&
+                if ((kind == BranchIl.NewObject || kind == BranchIl.Call && records[slot + 3] == 0) &&
                     ObjectLayouts.IsCoreObjectConstructor(image, heaps, layout, target))
                 {
-                    records[slot] = BranchIl.BaseCtor;
+                    records[slot] = kind == BranchIl.NewObject ? BranchIl.NewRootObject : BranchIl.BaseCtor;
                     continue;
                 }
                 bool virtualMethodLocal = (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x40) != 0;
