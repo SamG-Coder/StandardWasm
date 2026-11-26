@@ -7,7 +7,8 @@ namespace PortableCompiler
     {
         internal const byte Void = 0, I32 = 1, Bytes = ArrayTypeRefs.Bytes, Ints = ArrayTypeRefs.Ints, Delegate = 4,
             MethodPointer = 5, String = 6, Chars = ArrayTypeRefs.Packed16, I64 = WideStorage.Scalar, Longs = WideStorage.Array,
-            F32 = FloatStorage.Single, F64 = FloatStorage.Double, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles, Native = NativeStorage.Scalar;
+            F32 = FloatStorage.Single, F64 = FloatStorage.Double, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles, Native = NativeStorage.Scalar,
+            NativeVector = NativeStorage.Vector;
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
 
         // Signature and frame tags keep the CLI storage width. Narrow types
@@ -60,10 +61,10 @@ namespace PortableCompiler
         internal static byte FloatWidth(int left, int right) => left == F64 || right == F64 ? F64 : F32;
 
         internal static bool IsArray(int type) =>
-            type == Bytes || type == Ints || type == Chars || type == Longs || type == Singles || type == Doubles;
+            type == Bytes || type == Ints || type == Chars || type == Longs || type == Singles || type == Doubles || type == NativeVector;
 
         internal static byte ArrayValueType(int array) =>
-            array == Longs ? I64 : array == Singles ? F32 : array == Doubles ? F64 : I32;
+            array == Longs ? I64 : array == Singles ? F32 : array == Doubles ? F64 : array == NativeVector ? Native : I32;
 
         internal static byte ArrayLoadType(int opcode)
         {
@@ -71,11 +72,13 @@ namespace PortableCompiler
             if (opcode <= 0x93) return Chars;
             if (opcode <= 0x95) return Ints;
             if (opcode == 0x96) return Longs;
+            if (opcode == 0x97) return NativeVector;
             return opcode == 0x98 ? Singles : Doubles;
         }
 
         internal static byte ArrayStoreType(int opcode)
         {
+            if (opcode == 0x9b) return NativeVector;
             if (opcode == 0x9c) return Bytes;
             if (opcode == 0x9d) return Chars;
             if (opcode == 0x9e) return Ints;

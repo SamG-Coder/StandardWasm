@@ -48,7 +48,7 @@ const node = await inspectStandaloneEntry(compilerBytes, selection);
 assert.equal(node.entryToken, reference.token);
 assert.ok(node.managedAssemblies > 1);
 assert.equal(node.compilerStatus, -2);
-assert.deepEqual(node.diagnostic, [0, reference.token & 0xffffff, -1]);
+assert.deepEqual(node.diagnostic, [0, reference.token & 0xffffff, 12]);
 assert.equal(node.diagnosticAssembly, node.entry);
 
 const pages = new Map();
