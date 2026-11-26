@@ -75,7 +75,7 @@ internal static class PortablePrimitiveCases
                 cases.Add(new
                 {
                     module = "BootstrapLibrary", method = "Compile", fixture = method,
-                    inputs = new object[] { input, methodRow }, generated = new { capacity, arguments, hex },
+                    inputs = new object[] { input, methodRow }, generated = new { capacity, arguments, hex, exceptionType = exception },
                     expected, exception
                 });
             }

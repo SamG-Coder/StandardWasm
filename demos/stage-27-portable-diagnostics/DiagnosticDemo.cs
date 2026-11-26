@@ -15,10 +15,18 @@ namespace DiagnosticLibrary
     public static class Estimates
     {
         public static int CheckedIncrement(int value) => checked(value + 1);
+        public static int CheckedByte(int value) => checked((byte)value);
+        public static object BoxedValue(int value) => value;
         public static int ViaHelper(int value) => ClampCost(value) + 1;
         private static int ClampCost(int value) => checked(value * 3);
+        public static int ViaConversionHelper(int value) => ConvertCost(value) + 1;
+        private static int ConvertCost(int value) => checked((byte)value);
+        public static object ViaBoxingHelper(int value) => BoxCost(value);
+        private static object BoxCost(int value) => value;
 
         public static int ViaDependency(int value) => DiagnosticDependency.Costs.Estimate(value) + 1;
+        public static int ViaUnsupportedDependency(int value) => DiagnosticDependency.Costs.ConvertHours(value) + 1;
+        public static int ViaBoxedDependency(int value) => DiagnosticDependency.Costs.BoxHours(value) + 1;
         public static int LinkedRate(int value) => DiagnosticDependency.Costs.FlatRate(value) + 1;
 
         public static int Absolute(int value) => System.Math.Abs(value);
