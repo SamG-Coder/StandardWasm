@@ -157,8 +157,9 @@ namespace PortableCompiler
                     if (operand == 0) return -1;
                     if (op == 0x7b || op == 0x7c || op == 0x7d)
                     {
-                        if (table != 4) return -2;
+                        if (table != 4 && (table != 0x0a || op == 0x7c)) return -2;
                         kind = op == 0x7b ? GetField : op == 0x7c ? FieldAddress : SetField;
+                        comparison = table == 0x0a ? 1 : 0;
                     }
                     else if (table == 0x2b && op == 0x28)
                     {

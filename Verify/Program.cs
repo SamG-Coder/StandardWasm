@@ -90,4 +90,5 @@ LinkedObjectCases.Add(cases);
 LinkedNominalCases.Add(cases);
 LinkedInstanceCases.Add(cases);
 NullStackCases.Add(cases);
+LinkedFieldCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

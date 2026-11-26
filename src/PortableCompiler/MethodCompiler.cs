@@ -387,6 +387,17 @@ namespace PortableCompiler
                 if (kind == BranchIl.GetField || kind == BranchIl.SetField || kind == BranchIl.FieldAddress)
                 {
                     int field = records[slot + 1];
+                    if (records[slot + 3] != 0)
+                    {
+                        if (bundle.Length == 0) return -2;
+                        var linkedField = new int[2];
+                        int status = AssemblyBundle.ResolveField(main, bundle, ranges, image, layout, heaps, owner,
+                            field, kind == BranchIl.SetField, objects, linkedField);
+                        if (status < 0) return status;
+                        records[slot + 1] = linkedField[0];
+                        records[slot + 3] = linkedField[1];
+                        continue;
+                    }
                     int fieldOwner = ObjectLayouts.Owner(image, heaps, layout, field, true);
                     if (fieldOwner < 0) return -1;
                     int type = ObjectLayouts.Register(image, heaps, layout, objects, owner, fieldOwner);

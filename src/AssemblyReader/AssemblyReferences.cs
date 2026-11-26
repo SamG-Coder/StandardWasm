@@ -43,8 +43,8 @@ namespace PeLibrary
                 U32(image, n + 16) == 0x4c65726f && U16(image, n + 20) == 0x6269 && image[n + 22] == 0;
         }
 
-        // Reference descriptor: version byte offset, assembly/name/namespace/method string indexes, signature blob index.
-        internal static int ReadMethod(byte[] image, int[] streams, int[] methods, int row, int[] reference)
+        // Version byte offset, assembly/type/namespace/member string indexes, signature blob index.
+        internal static int ReadMember(byte[] image, int[] streams, int[] methods, int row, int[] reference)
         {
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
@@ -125,7 +125,7 @@ namespace PeLibrary
         }
 
         internal static int FindType(byte[] source, int[] sourceHeaps, int[] reference,
-            byte[] candidate, int[] heaps, int[] methods, int[] range)
+            byte[] candidate, int[] heaps, int[] methods, int[] range, bool fields)
         {
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(candidate, heaps[4], heaps[5], counts);
@@ -137,6 +137,9 @@ namespace PeLibrary
             int methodColumn = 4 + 2 * strings + fieldIndex +
                 (counts[2] < 16384 && counts[1] < 16384 && counts[27] < 16384 ? 2 : 4);
             int rowWidth = methodColumn + methodIndex;
+            int memberColumn = fields ? methodColumn - fieldIndex : methodColumn;
+            int memberWidth = fields ? fieldIndex : methodIndex;
+            int limit = fields ? counts[4] : counts[6];
             int match = 0;
             for (int i = 0; i < counts[2]; i++)
             {
@@ -148,16 +151,35 @@ namespace PeLibrary
                     !SameString(source, sourceHeaps, reference[3], candidate, heaps, ns))
                     continue;
 
-                uint start = Index(candidate, at + (uint)methodColumn, methodIndex);
-                uint end = i == counts[2] - 1 ? (uint)(counts[6] + 1) :
-                    Index(candidate, at + (uint)(rowWidth + methodColumn), methodIndex);
-                if (start == 0 || end < start || end > (uint)(counts[6] + 1)) return -1;
+                uint start = Index(candidate, at + (uint)memberColumn, memberWidth);
+                uint end = i == counts[2] - 1 ? (uint)(limit + 1) :
+                    Index(candidate, at + (uint)(rowWidth + memberColumn), memberWidth);
+                if (start == 0 || end < start || end > (uint)(limit + 1)) return -1;
                 if (match != 0) return -5;
                 match = i + 1;
                 range[0] = (int)start;
                 range[1] = (int)end;
             }
             return match == 0 ? -6 : match;
+        }
+
+        internal static int FieldTable(byte[] image, int[] streams, int[] methods)
+        {
+            var counts = new int[45];
+            if (MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts) < 0) return -1;
+            // Field rows immediately precede MethodDef in compressed tables.
+            // ReadCounts has already rejected MethodPtr.
+            int start = methods[0] - counts[4] * (2 + methods[2] + methods[3]);
+            return start < streams[4] ? -1 : start;
+        }
+
+        internal static void ReadField(byte[] image, int[] methods, int table, int row, int[] definition)
+        {
+            int strings = methods[2], blobs = methods[3];
+            uint at = (uint)(table + (row - 1) * (2 + strings + blobs));
+            definition[0] = (int)U16(image, at);
+            definition[1] = (int)Index(image, at + 2, strings);
+            definition[2] = (int)Index(image, at + (uint)(2 + strings), blobs);
         }
 
         internal static bool SameString(byte[] source, int[] sourceHeaps, int a, byte[] target, int[] targetHeaps, int b)
