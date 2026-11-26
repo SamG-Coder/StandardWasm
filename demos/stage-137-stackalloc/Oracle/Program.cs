@@ -25,6 +25,7 @@ Run("OversizedCount");
 Run("Large");
 Run("ZeroIsNull", 0);
 Run("ZeroIsNull", 1);
+Run("ConstantZeroIsNull");
 Run("Untaken", 0);
 Run("OuterAfterInner", 4);
 

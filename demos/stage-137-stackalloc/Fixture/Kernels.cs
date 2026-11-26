@@ -112,6 +112,15 @@ namespace StackAllocFixture
             return block[0];
         }
 
+        // C# lowers a constant zero-length stackalloc to null without localloc. The IL form
+        // `ldc.i4.0; conv.u; localloc` (a proven native zero) is covered by Codex's
+        // persisted-IL probe (handoff 106); both must return null.
+        public static int ConstantZeroIsNull()
+        {
+            byte* block = stackalloc byte[0];
+            return block == null ? 1 : 0;
+        }
+
         // The allocation is never reached: no memory is reserved.
         public static int Untaken(int flag)
         {
