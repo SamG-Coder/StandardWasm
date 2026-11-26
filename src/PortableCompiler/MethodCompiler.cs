@@ -169,7 +169,7 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[20];
+            var frameShape = new int[21];
             var shadowStack = new int[3]; // $sp, base, limit globals + 1
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * 3];
@@ -568,6 +568,7 @@ namespace PortableCompiler
                     frameShape[8] = exceptionLocals;
                     frameShape[9] = hasFinally ? catchRegion.Length / ExceptionClauses.Width : 0;
                     frameShape[10] = hostImports;
+                    frameShape[20] = WasmImports.Win32ErrorBase(hostFeatures);
                     frameShape[11] = valueConstructor ? 1 : 0;
                     frameShape[12] = initializerPrologue + 1;
                     frameShape[13] = initializerGuard + 1;
@@ -1075,6 +1076,15 @@ namespace PortableCompiler
                     if (objectTypeMember == 2 && opcode == 0x28)
                     {
                         records[slot] = BranchIl.EqualRuntimeTypes;
+                        continue;
+                    }
+                    int marshalError = !addressed && opcode == 0x28
+                        ? MarshalErrorMetadata.Identify(image, heaps, layout, member) : 0;
+                    if (marshalError != 0)
+                    {
+                        records[slot] = BranchIl.Win32Error;
+                        records[slot + 1] = marshalError;
+                        hostUse[0] = hostUse[0] | WasmImports.Win32Errors;
                         continue;
                     }
                     int reflectionMember = !addressed && (opcode == 0x28 || opcode == 0x6f)

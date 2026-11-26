@@ -77,8 +77,50 @@ async function exercise(instantiate, bytes, executable) {
         otherPath, pathError, invalidAddress, pointerError: host.getLastSystemError(), nonzeroProcessHandle: processHandle !== 0 };
 }
 
+async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes) {
+    const { instance: { exports: compiler } } = await WebAssembly.instantiate(new Uint8Array(compilerBytes));
+    function upload(bytes) {
+        const result = compiler.CreateBytes(bytes.length);
+        for (let i = 0; i < bytes.length; i++) compiler.SetByte(result, i, bytes[i]);
+        return result;
+    }
+
+    const fixture = upload(fixtureBytes);
+    const encoder = new TextEncoder();
+    const names = ["Exchange", "Read"].map(name => encoder.encode(name));
+    const manifest = new Uint8Array(names.reduce((size, name) => size + 8 + name.length, 0));
+    const view = new DataView(manifest.buffer);
+    let offset = 0;
+    for (const name of names) {
+        const row = compiler.FindRow(fixture, upload(name));
+        if (row <= 0) throw Error("Missing Marshal fixture export");
+        view.setInt32(offset, row, true);
+        view.setInt32(offset + 4, name.length, true);
+        manifest.set(name, offset + 8);
+        offset += 8 + name.length;
+    }
+
+    const output = compiler.CreateBytes(65536);
+    const location = compiler.CreateDiagnostic();
+    const length = compiler.CompileModuleDetailed(fixture, upload(manifest), output, location);
+    if (length <= 0) throw Error("Marshal fixture failed to compile at " +
+        [0, 1, 2].map(index => compiler.ReadDiagnostic(location, index)));
+    const code = Uint8Array.from({ length }, (_, i) => compiler.ReadByte(output, i));
+    const { exports } = await instantiate(await WebAssembly.compile(code), compiler, []);
+    return [exports.Exchange(19), exports.Exchange(-13), exports.Read()];
+}
+
 const oracle = JSON.parse(execFileSync("dotnet", ["run", "--file",
     fileURLToPath(new URL("./Win32HostOracle.cs", import.meta.url))], { encoding: "utf8" }));
+const compilerPath = process.argv[2];
+let compilerBytes, fixtureBytes;
+if (compilerPath) {
+    execFileSync("dotnet", ["build", fileURLToPath(new URL("./Win32Fixture", import.meta.url)), "-c", "Release"],
+        { stdio: "inherit" });
+    compilerBytes = readFileSync(compilerPath);
+    fixtureBytes = readFileSync(new URL("./Win32Fixture/bin/Release/net10.0/Win32Fixture.dll", import.meta.url));
+    assert.deepEqual(await exerciseCompiler(instantiateManagedModule, compilerBytes, fixtureBytes), oracle.compiledFixture);
+}
 const bytes = probeModule();
 const node = await exercise(instantiateManagedModule, bytes, oracle.executable);
 assert.deepEqual(node, { results: oracle.results, errors: oracle.errors,
@@ -102,6 +144,14 @@ try {
         return (0, eval)("(" + source + ")")(instantiateManagedModule, bytes, executable);
     }, { source: exercise.toString(), bytes: [...bytes], executable: oracle.executable });
     assert.deepEqual(edge, node);
+    if (compilerBytes) {
+        const compiled = await page.evaluate(async ({ source, compilerBytes, fixtureBytes }) => {
+            const { instantiateManagedModule } = await import("/resource-host.mjs");
+            return (0, eval)("(" + source + ")")(instantiateManagedModule, compilerBytes, fixtureBytes);
+        }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes] });
+        assert.deepEqual(compiled, oracle.compiledFixture);
+        console.log("The self-hosted compiler matched the CLR Marshal error exchange in Node and Edge.");
+    }
     console.log("Node and Edge matched 5 CLR module lookups and both last-error slots. Memory growth and host isolation passed.");
 } finally {
     await browser.close();

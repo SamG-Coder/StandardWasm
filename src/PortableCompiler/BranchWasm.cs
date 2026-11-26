@@ -629,6 +629,14 @@ namespace PortableCompiler
                     used = WasmBinary.Unsigned(code, used, operand);
                     code[used++] = 0x0b;
                 }
+                else if (kind == Win32Error)
+                {
+                    bool setter = PeLibrary.MarshalErrorMetadata.IsSetter(operand);
+                    if (setter) used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, I32, top));
+                    code[used++] = 0x10;
+                    used = WasmBinary.Unsigned(code, used, frameShape[20] + operand - 1);
+                    if (!setter) used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, depth));
+                }
                 else if (kind == PinString)
                 {
                     used = Utf16MemoryWasm.Pin(code, used, operand, scratch,

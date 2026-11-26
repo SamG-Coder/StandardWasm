@@ -92,6 +92,10 @@ namespace PeLibrary
                 0x74737953, 0x522e6d65, 0x656c6665, 0x6f697463, 0x6e); // System.Reflection
         }
 
+        internal static bool IsMarshalAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row) =>
+            IsPlatformAssembly(image, heaps, methods, counts, row, includeRuntimeExtensions: false) ||
+            MatchesAscii(image, heaps, MicrosoftFacadeName(image, heaps, methods, counts, row), "System.Runtime.InteropServices");
+
         private static uint MicrosoftFacadeName(byte[] image, int[] heaps, int[] methods, int[] counts, int row)
         {
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 35);

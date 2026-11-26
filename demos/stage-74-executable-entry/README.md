@@ -28,5 +28,7 @@ occupy separate slots, and lookup uses the same linear memory as other imports.
 
 Run `node demos/stage-74-executable-entry/verify-win32-host.mjs` on Windows to
 compare the host import contract in Node and Edge against native .NET calls.
-The probe invokes the imports through Wasm. Binding the compiler's native-call
-sites to this contract is a separate compiler step.
+The probe invokes the imports through Wasm. Pass the path to the self-hosted
+compiler as the first argument to also compile the managed Marshal fixture
+and compare its error exchange with the CLR. The original Windows SDK's
+GetModuleHandleW call still needs compiler binding.
