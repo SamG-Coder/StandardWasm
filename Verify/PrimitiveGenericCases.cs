@@ -9,6 +9,7 @@ using System.Runtime.Loader;
 using BootstrapLibrary;
 using PrimitiveGenericDependency;
 using PrimitiveGenericDemo;
+using Cecil = Mono.Cecil;
 
 internal static class PrimitiveGenericCases
 {
@@ -31,6 +32,8 @@ internal static class PrimitiveGenericCases
         Check(nameof(Kernels.Read), [null], () => Kernels.Read(null));
         RejectChangedField(nameof(Kernels.Read), vector: false);
         RejectChangedField(nameof(Kernels.ReadVector), vector: true);
+        int namedLoad = FieldOffset(nameof(Kernels.Read), OpCodes.Ldfld);
+        RejectFieldImage(EncodeNamedArgument(image), nameof(Kernels.Read), namedLoad, "named primitive encoding");
 
         void Check(string name, object[] arguments, Func<object> oracle)
         {
@@ -57,15 +60,15 @@ internal static class PrimitiveGenericCases
 
         void RejectChangedField(string name, bool vector)
         {
-            var kernel = typeof(Kernels).GetMethod(name)!;
-            byte[] il = kernel.GetMethodBody()!.GetILAsByteArray()!;
-            OpCode opcode = vector ? OpCodes.Ldflda : OpCodes.Ldfld;
-            int load = IlOffsets.Find(il, opcode);
-            if (load < 0) throw new InvalidOperationException($"Missing field access in {name}.");
+            int load = FieldOffset(name, vector ? OpCodes.Ldflda : OpCodes.Ldfld);
+            byte[] il = typeof(Kernels).GetMethod(name)!.GetMethodBody()!.GetILAsByteArray()!;
             int token = BinaryPrimitives.ReadInt32LittleEndian(il.AsSpan(load + 1));
-            byte[] changed = ChangeArgument(image, token, vector);
-            AssertClrFieldMismatch(changed, dependency, name);
+            RejectFieldImage(ChangeArgument(image, token, vector), name, load, "wrong identity");
+        }
 
+        void RejectFieldImage(byte[] changed, string name, int load, string label)
+        {
+            AssertClrFieldMismatch(changed, dependency, name);
             byte[] input = BundleCases.Pack(changed, dependency), entries = Manifest(name);
             int[] diagnostic = [0, Row(name), load];
             Array.Fill(output, (byte)0xa5);
@@ -74,12 +77,33 @@ internal static class PrimitiveGenericCases
                 throw new InvalidOperationException($"{name} mismatch returned {status} at [{string.Join(", ", location)}].");
             cases.Add(new
             {
-                module = "BootstrapLibrary", method = "CompileBundle", fixture = "primitive generic wrong identity " + name,
+                module = "BootstrapLibrary", method = "CompileBundle", fixture = "primitive generic " + label + " " + name,
                 inputs = new[] { Encode(input), Encode(entries) },
                 generated = new { capacity, bundle = true, arguments = Array.Empty<int>(), reject = true, diagnostic },
                 expected = status
             });
         }
+    }
+
+    private static int FieldOffset(string name, OpCode opcode)
+    {
+        byte[] il = typeof(Kernels).GetMethod(name)!.GetMethodBody()!.GetILAsByteArray()!;
+        int offset = IlOffsets.Find(il, opcode);
+        return offset >= 0 ? offset : throw new InvalidOperationException($"Missing field access in {name}.");
+    }
+
+    private static byte[] EncodeNamedArgument(byte[] image)
+    {
+        using var assembly = Cecil.AssemblyDefinition.ReadAssembly(new MemoryStream(image));
+        var module = assembly.MainModule;
+        var kernel = module.GetType(typeof(Kernels).FullName).Methods.Single(method => method.Name == nameof(Kernels.Read));
+        var field = (Cecil.FieldReference)kernel.Body.Instructions.First(instruction =>
+            instruction.OpCode.Code == Cecil.Cil.Code.Ldfld).Operand;
+        var type = (Cecil.GenericInstanceType)field.FieldType;
+        type.GenericArguments[0] = new Cecil.TypeReference("System", "Int32", module, module.TypeSystem.CoreLibrary, true);
+        using var output = new MemoryStream();
+        assembly.Write(output);
+        return output.ToArray();
     }
 
     private static byte[] ChangeArgument(byte[] image, int token, bool vector)

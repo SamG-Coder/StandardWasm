@@ -11,6 +11,8 @@ example returns 28.
 The CLR oracle checks signed and unsigned scalar and vector argument
 identities, packed signed storage, floating-point values and a null receiver.
 It also changes the signed field signature to its unsigned equivalent
-and verifies that both runtimes reject the field binding.
+and verifies that both runtimes reject the field binding. A separate
+fixture checks the CLR's distinction between a named primitive in a field
+signature and its short encoding.
 
 See [primitive generic argument layout](../../docs/decisions/0036-primitive-generic-layouts.md).

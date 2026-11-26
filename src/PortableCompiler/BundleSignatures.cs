@@ -128,6 +128,7 @@ namespace PortableCompiler
             int[] callerHeaps, int callerOwner, byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner,
             int left, int leftEnd, int right, int rightEnd, int[] objects, int[] next, int context)
         {
+            int leftStart = left, rightStart = right;
             next[0] = left;
             int leftType = ManagedReferenceSignatures.Read(main, bundle, ranges, caller, callerLayout, callerHeaps,
                 callerOwner, next, leftEnd, context, objects, 0);
@@ -138,7 +139,43 @@ namespace PortableCompiler
                 targetOwner, next, rightEnd, context, objects, 0);
             right = next[0];
             next[0] = left;
-            return leftType == rightType ? right : 0;
+            if (leftType != rightType) return 0;
+
+            // Layout canonicalizes named primitives. Member linkage still
+            // requires the primitive spelling used by the definition.
+            if (!SamePrimitiveEncoding(caller, target, leftStart, left, rightStart, right)) return 0;
+            return right;
+        }
+
+        private static bool SamePrimitiveEncoding(byte[] left, byte[] right, int l, int leftEnd, int r, int rightEnd)
+        {
+            var cursor = new int[1];
+            while (l < leftEnd && r < rightEnd)
+            {
+                int a = left[l++], b = right[r++];
+                if ((a == 0x11 && GenericScalar.Key(b) != 0) || (b == 0x11 && GenericScalar.Key(a) != 0))
+                    return false;
+                l = NextTypeNode(left, l, leftEnd, a, cursor);
+                r = NextTypeNode(right, r, rightEnd, b, cursor);
+            }
+            return l == leftEnd && r == rightEnd;
+        }
+
+        private static int NextTypeNode(byte[] image, int at, int end, int kind, int[] cursor)
+        {
+            // The signature reader already validated these tokens and counts.
+            if (kind == 0x15)
+            {
+                CompressedUnsigned(image, at + 1, end, cursor); // Declaring TypeDefOrRef.
+                CompressedUnsigned(image, cursor[0], end, cursor); // Argument count.
+                return cursor[0];
+            }
+            if (kind == 0x11 || kind == 0x12 || kind == 0x13)
+            {
+                CompressedUnsigned(image, at, end, cursor);
+                return cursor[0];
+            }
+            return at;
         }
 
         private static int ObjectIdentity(byte[] main, byte[] bundle, int[] ranges, byte[] image,

@@ -6,7 +6,9 @@ the argument into its Wasm field representation only when that field,
 local or parameter needs storage. As a result, `Pair<int, Label>` and
 `Pair<uint, Label>` share a field width and retain distinct type identities.
 A primitive vector argument also keeps its exact element identity.
-Named primitive types bind through recognized platform metadata.
+Named primitive types resolve through recognized platform metadata. The
+layout can share the same primitive representation, while field linkage
+preserves the CLR distinction between a named argument and its short encoding.
 
 Start closed value-type instances with the existing value default
 representation. Resolve field MemberRefs whose parent is a closed

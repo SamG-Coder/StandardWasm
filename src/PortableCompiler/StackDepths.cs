@@ -282,7 +282,7 @@ namespace PortableCompiler
                 {
                     if (depth < 2 || !ArrayIndex(stack, depth)) return -1;
                     int element = ArrayElement(objects, stack[depth - 2]);
-                    if (element == 0) return -2;
+                    if (element == 0 || IsValueType(objects, element)) return -2;
                     stack[depth - 2] = (byte)element;
                     return depth - 1;
                 }
@@ -297,7 +297,7 @@ namespace PortableCompiler
                 {
                     if (depth < 3 || !ArrayIndex(stack, depth - 1)) return -1;
                     int element = ArrayElement(objects, stack[depth - 3]);
-                    if (element == 0) return -2;
+                    if (element == 0 || IsValueType(objects, element)) return -2;
                     return Assignable(stack[depth - 1], element, objects) ? depth - 3 : -1;
                 }
                 byte array = ArrayStoreType(operand);
