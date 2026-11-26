@@ -146,6 +146,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [140 · Inline object addresses](stage-140-inline-object-addresses/README.md) | `npm run demo -- stage-140-inline-object-addresses` | A managed alias sees whole-value writes to its inline-array local |
 | [141 · Read-only object spans](stage-141-object-readonly-spans/README.md) | `npm run demo -- stage-141-object-readonly-spans` | Retain the live inline storage owner and match CLR bounds checks |
 | [142 · Read-only character spans](stage-142-character-readonly-spans/README.md) | `npm run demo -- stage-142-character-readonly-spans` | View the original string payload with CLR UTF-16 indexing |
+| [143 · Struct pointers and sizeof](stage-143-struct-pointers/README.md) | `npm run demo -- stage-143-struct-pointers` | 32-bit CLR `sizeof`; `p->F`, `&p->F` and `p[i]` on blittable sequential structs in memory 0 |
 | [144 · Writable character spans](stage-144-writable-character-spans/README.md) | `npm run demo -- stage-144-writable-character-spans` | Write into the traced managed UTF-16 array through a span alias |
 | [146 · Class value-field receivers](stage-146-class-value-receivers/README.md) | `npm run demo -- stage-146-class-value-receivers` | Call original managed methods through stable class-field addresses |
 | [147 · Constructor receiver aliases](stage-147-constructor-receiver-aliases/README.md) | `npm run demo -- stage-147-constructor-receiver-aliases` | Preserve chained receiver writes in the original Windows Forms Padding constructor |

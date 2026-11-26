@@ -40,6 +40,8 @@ namespace PortableCompiler
         internal const int LoadInlineStorage = 103, BoundObjectElement = 1;
         internal const int NewObjectSpan = 104, SpanLength = 105, SpanRead = 106, StringAsSpan = 108;
         internal const int CharacterArrayAsSpan = 109, SpanAddress = 110, SpanAsReadOnly = 111;
+        // sizeof <type>: lowered to an int32 Constant once the layout is measured.
+        internal const int SizeOf = 112; // clear of the reflection kinds 73–75 (Stage 131)
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
@@ -350,6 +352,13 @@ namespace PortableCompiler
                         if ((member >> 24) != 0x0a || (member & 0xffffff) == 0) return -2;
                         kind = ConstrainedStatic;
                         comparison = (int)(member & 0xffffff);
+                    }
+                    else if (extended == 0x1c)
+                    {
+                        if (length - pc < 4) return -1;
+                        operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                        pc += 4;
+                        kind = SizeOf;
                     }
                     else if (extended == 0x1a)
                     {

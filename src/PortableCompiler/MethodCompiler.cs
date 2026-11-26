@@ -432,6 +432,12 @@ namespace PortableCompiler
                             int address = pc * maximum + depths[pc] - (kind == BranchIl.LoadIndirect ? 2 : 3);
                             if (IsNativeInteger(states[address])) linearMemory = true;
                         }
+                        // Stage 143 (decision 0071): p->F loads and stores also address memory 0.
+                        bool fieldStore = kind == BranchIl.SetField || kind == BranchIl.UpdateConstructorField;
+                        bool nativeField = (kind == BranchIl.GetField || fieldStore) && depths[pc] != 0 &&
+                            records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
+                            IsNativeInteger(states[pc * maximum + depths[pc] - 1 - (fieldStore ? 2 : 1)]);
+                        if (nativeField) linearMemory = true;
                         if (kind == BranchIl.LocalAllocate && depths[pc] != 0)
                         {
                             // An initializer's guard and a shadow-stack frame both wrap the
@@ -514,7 +520,7 @@ namespace PortableCompiler
                                 kind == BranchIl.ObjectElementAddress)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
-                                kind == BranchIl.SetField || kind == BranchIl.StringLength || kind == BranchIl.InvokeDelegate ||
+                                kind == BranchIl.SetField || nativeField || kind == BranchIl.StringLength || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
                                 kind == BranchIl.LoadObjectIndirect || kind == BranchIl.StoreObjectIndirect ||
@@ -861,13 +867,28 @@ namespace PortableCompiler
                         int type = ObjectLayouts.Find(objects, owner, fieldOwner, new int[0]);
                         if (type == 0)
                             type = BundleLayouts.Register(bundle, image, layout, heaps, owner, fieldOwner, objects);
+                        // Stage 143 (decision 0071): a struct reached only through S* has no class layout.
+                        if (type == -2)
+                            type = BundleLayouts.RegisterValue(bundle, image, layout, heaps, owner, fieldOwner, objects);
                         if (type < 0) return type;
                         int fieldIndex = ObjectLayouts.FieldOrdinal(objects, type, field);
                         if (fieldIndex < 0) return -1;
                         records[slot + 1] = fieldIndex;
                         records[slot + 3] = FieldAccess.Encode(type, ObjectLayouts.FieldType(objects, type, field));
+                        if (ObjectLayouts.IsValueType(objects, type) && records.Length > slot + 2 * BranchIl.Width + 3)
+                        {
+                            // Stage 143 (decision 0071): the same field through an S* address in memory 0.
+                            var native = new int[2];
+                            if (NativeValueLayouts.Field(bundle, owner, fieldOwner, field, native) == 0)
+                            {
+                                records[slot + 2 * BranchIl.Width + 2] = native[0] + 1;
+                                records[slot + 2 * BranchIl.Width + 3] = native[1];
+                            }
+                        }
                     }
                     int descriptor = records[slot + 3];
+                    // Stage 143 (decision 0071): a recorded native offset means an S* receiver may reach this field.
+                    bool pointerField = records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0;
                     if (kind == BranchIl.SetField)
                     {
                         int local = records[slot + BranchIl.Width + 1] - 1;
@@ -875,8 +896,12 @@ namespace PortableCompiler
                         {
                             if (local < 0)
                             {
-                                if (!valueConstructor || frame[0] != FieldAccess.Owner(descriptor)) return -2;
-                                records[slot] = BranchIl.UpdateConstructorField;
+                                // A constructor can also write through an ordinary pointer.
+                                // StackDepths distinguishes that receiver from the managed this.
+                                if (valueConstructor && frame[0] == FieldAccess.Owner(descriptor))
+                                    records[slot] = BranchIl.UpdateConstructorField;
+                                else if (!pointerField)
+                                    return -2;
                                 continue;
                             }
                             int locationType = frame[local];
@@ -893,6 +918,8 @@ namespace PortableCompiler
                     if (kind == BranchIl.FieldAddress)
                     {
                         int next = records[slot + 2];
+                        if (pointerField && !ObjectLayouts.IsValueType(objects, FieldAccess.Storage(descriptor)))
+                            continue; // &p->F of a primitive field: native address arithmetic
                         if (ObjectLayouts.IsValueType(objects, FieldAccess.Storage(descriptor)) &&
                             next < records.Length / BranchIl.Width && records[next * BranchIl.Width] == BranchIl.GetField &&
                             !ValueOperands.Entry(records, next, clauses))
@@ -906,6 +933,23 @@ namespace PortableCompiler
                         }
                         else if (linked || !LinkExchange(image, heaps, layout, records, slot)) return -2;
                     }
+                    continue;
+                }
+                if (kind == BranchIl.SizeOf)
+                {
+                    uint token = unchecked((uint)records[slot + 1]);
+                    uint table = token >> 24;
+                    int row = (int)(token & 0xffffff);
+                    if (table != 1 && table != 2) return -2; // TypeSpec, including generic T
+                    var identity = new int[2];
+                    int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner,
+                        row << 2 | (table == 1 ? 1 : 0), identity);
+                    if (status < 0) return status;
+                    var measured = new int[2];
+                    status = NativeValueLayouts.Measure(bundle, identity[0], identity[1], measured);
+                    if (status < 0) return status;
+                    records[slot] = BranchIl.Constant;
+                    records[slot + 1] = measured[0];
                     continue;
                 }
                 if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField)

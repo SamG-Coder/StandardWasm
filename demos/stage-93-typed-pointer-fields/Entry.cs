@@ -27,15 +27,18 @@ namespace TypedPointerDemo
 
         public static int ReadPrimitive(DrawingSlot slot) => slot.ReadSigned(null);
 
-        public static int RejectAddress(DrawingSlot slot)
+        // Since Stage 143 (decision 0071), a pointer to a blittable struct is a native
+        // address: any value can be stored, and a null pointer exports as 0.
+        public static int StoreFontAddress()
         {
+            var slot = new DrawingSlot();
             slot.Font = (NativeFont*)1;
-            return 0;
+            return slot.Font == (NativeFont*)1 ? 1 : 0;
         }
 
         // A default int* field is null: ldind.i4 raises NullReferenceException (Stage 132).
         public static int DereferenceNullField() => *new DrawingSlot().Signed;
-        public static NativeFont* RejectExport() => null;
+        public static NativeFont* ExportNullFont() => null;
     }
 
     public static class Demo

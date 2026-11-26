@@ -176,6 +176,7 @@ namespace PortableCompiler
                 int depth = depths[pc] - 1;
                 int state = pc * maximum;
                 int top = depth - 1;
+                bool fieldStore = kind == SetField || kind == UpdateConstructorField;
                 used = Local(code, used, 0x20, pcLocal);
                 used = Const(code, used, pc);
                 code[used++] = 0x46;
@@ -766,6 +767,39 @@ namespace PortableCompiler
                     used = ManagedValueLocationWasm.ReadLocation(code, used, 0, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, operand, depth));
                 }
+                else if ((kind == GetField || fieldStore || kind == FieldAddress) &&
+                    records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
+                    IsNativeInteger(states[state + (fieldStore ? top - 1 : top)]))
+                {
+                    // Stage 143 (decision 0071): p->F in memory 0. The field offset is the memarg offset.
+                    int offset = records[slot + 2 * BranchIl.Width + 2] - 1, load = records[slot + 2 * BranchIl.Width + 3];
+                    int receiver = fieldStore ? top - 1 : top;
+                    int address = Spill(spills, maximum, spillFlags, Native, receiver);
+                    if (kind == FieldAddress)
+                    {
+                        // &p->F does not dereference p: plain address arithmetic, as on the CLR.
+                        used = Local(code, used, 0x20, address);
+                        used = Const(code, used, offset);
+                        code[used++] = 0x6a;
+                        used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, Native, top));
+                    }
+                    else
+                    {
+                        used = LinearMemoryWasm.GuardNull(code, used, address);
+                        used = Local(code, used, 0x20, address);
+                        if (kind == GetField)
+                        {
+                            used = LinearMemoryWasm.Load(code, used, load, offset);
+                            used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, StackDepths.IndirectType(load), top));
+                        }
+                        else
+                        {
+                            int value = states[state + top];
+                            used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, value, top));
+                            used = LinearMemoryWasm.Store(code, used, StoreFor(load), offset);
+                        }
+                    }
+                }
                 else if (kind == GetField || kind == SetField)
                 {
                     int descriptor = records[slot + 3];
@@ -1077,6 +1111,11 @@ namespace PortableCompiler
             type == NullValue ? first - 1 : first + SpillBank(type, spillFlags) * maximum + depth;
 
         private static int ExtraSpillBanks(int flags) => (flags & LocationSpill) + (flags >> 1);
+        // stind.* matching a field's ldind.* opcode.
+        private static int StoreFor(int load) =>
+            load <= 0x47 ? 0x52 : load <= 0x49 ? 0x53 : load <= 0x4b ? 0x54 : load == 0x4c ? 0x55 :
+            load == 0x4e ? 0x56 : load == 0x4f ? 0x57 : 0xdf;
+
 
         // The gap between primitive tags and layout IDs has no Wasm locals.
         private static int SpillBank(int type, int flags) =>
