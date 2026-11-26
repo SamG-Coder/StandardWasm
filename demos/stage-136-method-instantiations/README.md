@@ -10,6 +10,8 @@ Run `npm run demo -- stage-136-method-instantiations` with matching
 .NET 10 x86 and default-host runtimes and Edge installed. The runner
 builds the portable metadata probe and compares the same input DLLs
 in Node and Edge. It also compiles and executes closed static methods
-referenced by MethodDef tokens, covering recursion, method-typed locals
-and arrays, and class and struct constraints. MemberRef calls and
-interface-based constraints are still diagnosed.
+referenced by MethodDef or MemberRef tokens, covering recursion,
+method-typed locals and arrays, class and struct constraints, and
+generic methods on closed declaring types. It verifies overloads with
+the same Wasm parameter types and field access through a constructed
+type. Interface-based method constraints are still diagnosed.

@@ -12,7 +12,7 @@ namespace PortableCompiler
                 next, end, context, objects, 0, methodArguments: methodArguments));
 
         internal static int ReadInstantiation(BundleImages bundle, byte[] image,
-            int[] layout, int[] heaps, int owner, int blob, int[] objects, int context = 0)
+            int[] layout, int[] heaps, int owner, int blob, int[] objects, int context = 0, int[] methodArguments = null)
         {
             // context is the closed layout whose arguments substitute VAR in
             // the TypeSpec, such as Holder<!0> referenced from Holder<int>.
@@ -23,7 +23,7 @@ namespace PortableCompiler
             if (size < 1 || size > limit - start) return -1;
             if (image[start] != 0x15) return -2;
             int end = start + size;
-            int type = Read(bundle, image, layout, heaps, owner, next, end, context, objects, 0);
+            int type = Read(bundle, image, layout, heaps, owner, next, end, context, objects, 0, methodArguments: methodArguments);
             return type < 0 || next[0] == end ? type : -1;
         }
 

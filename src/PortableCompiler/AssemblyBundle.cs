@@ -12,7 +12,8 @@ namespace PortableCompiler
         // declaring layout, which substitutes VAR in a TypeSpec parent.
         internal static int Resolve(BundleImages bundle, byte[] caller,
             int[] layout, int[] heaps, int owner, int member, int opcode, bool baseCall, int[] objects, int[] symbol, int context, int callerType,
-            bool allowVirtual = false, bool valueAddress = false)
+            bool allowVirtual = false, bool valueAddress = false,
+            int methodArity = 0, int[] callerMethodArguments = null)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedParent: true);
@@ -29,7 +30,7 @@ namespace PortableCompiler
                 // The closed layout already proved the definition's identity,
                 // type accessibility and argument constraints.
                 closed = ManagedReferenceSignatures.ReadInstantiation(bundle, caller, layout, heaps,
-                    owner, parent, objects, context);
+                    owner, parent, objects, context, callerMethodArguments);
                 if (closed < ObjectLayouts.FirstClass) return closed < 0 ? closed : -2;
                 // Value receivers are managed pointers, and interface members
                 // need dispatch. Both are outside direct specialization.
@@ -84,8 +85,11 @@ namespace PortableCompiler
                 }
                 if (access != 6 && !local && !(baseCall && opcode == 0x28 && (access == 4 || access == 5))) continue;
                 int signature = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 4);
-                int match = BundleSignatures.Match(bundle, caller, layout, heaps, owner, reference[5],
-                    target, targetLayout, targetHeaps, matched, signature, false, objects, closed);
+                int match = methodArity == 0
+                    ? BundleSignatures.Match(bundle, caller, layout, heaps, owner, reference[5],
+                        target, targetLayout, targetHeaps, matched, signature, false, objects, closed)
+                    : GenericMethodSignatures.Match(bundle, caller, layout, heaps, owner, reference[5],
+                        target, targetLayout, targetHeaps, matched, signature, methodArity);
                 if (match < 0) return match;
                 if (match == 0) continue;
                 // Bind the declaration. The caller may defer virtual slot
@@ -112,7 +116,7 @@ namespace PortableCompiler
         }
 
         internal static int ResolveField(BundleImages bundle, byte[] caller,
-            int[] layout, int[] heaps, int owner, int member, bool write, bool staticField, int[] objects, int[] globals, int[] field, int context, int callerType)
+            int[] layout, int[] heaps, int owner, int member, bool write, bool staticField, int[] objects, int[] globals, int[] field, int context, int callerType, int[] methodArguments = null)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedParent: true);
@@ -128,7 +132,7 @@ namespace PortableCompiler
             {
                 if (staticField) return -2;
                 type = ManagedReferenceSignatures.ReadInstantiation(bundle, caller, layout, heaps,
-                    owner, parent, objects, context);
+                    owner, parent, objects, context, methodArguments);
                 if (type < ObjectLayouts.FirstClass) return type < 0 ? type : -2;
                 matched = ObjectLayouts.AssemblyOf(objects, type);
                 declaringType = ObjectLayouts.TypeDef(objects, type);

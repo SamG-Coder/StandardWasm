@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using MethodSpecDependency;
 
 public static class Methods
 {
@@ -23,6 +24,14 @@ public static class Execution
     public static int Value(int value) => Structure(Choose(new Cell(value), new Cell(3), 0)).Value;
 
     public static int Array(int value) => EchoArray(new[] { value })[0];
+
+    public static int LinkedArray(int value) => MethodsFromAnotherAssembly.Pass(new[] { value })[0];
+    public static int LinkedOverloads(int value) =>
+        MethodsFromAnotherAssembly.Select<int, uint>(value, (uint)value) * 10 +
+        MethodsFromAnotherAssembly.Select<int, uint>((uint)value, value);
+    public static int LinkedDeclaringType(int value) => Box<int>.Forward<long>(value, 3L);
+    public static int LinkedParentVariable(int value) => MethodsFromAnotherAssembly.Forward(value);
+    public static int LinkedConstructed(int value) => MethodsFromAnotherAssembly.Unwrap(new Box<int>(value));
 
     private static T Reference<T>(T value) where T : class => value;
     private static T Structure<T>(T value) where T : struct => value;

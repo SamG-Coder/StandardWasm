@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { root, run } from "../../scripts/toolchain.mjs";
 import { wasm32Runtime } from "../../scripts/runtime-packs.mjs";
+import { packEntry } from "../stage-74-executable-entry/companions.mjs";
 
 const stage = join(root, "demos", "stage-136-method-instantiations");
 const base = join(root, "artifacts", "method-instantiations");
@@ -22,14 +23,19 @@ run("dotnet", [driver, bootstrap, "BootstrapLibrary.CompilerExports", compiler])
 
 const runtime = wasm32Runtime();
 const core = "System.Private.CoreLib.dll";
+const fixture = "MethodSpecFixture.dll", dependency = "MethodSpecDependency.dll";
 run("dotnet", ["run", "--project", join(stage, "Oracle"), "-c", "Release", "--",
-    join(built("Fixture"), "MethodSpecFixture.dll"), join(runtime.directory, core), join(runtime.widePack, core), oracle, executionOracle]);
+    join(built("Fixture"), fixture), join(runtime.directory, core), join(runtime.widePack, core), oracle, executionOracle,
+    join(built("Fixture"), dependency)]);
 const cases = JSON.parse(readFileSync(oracle, "utf8"));
 const execution = JSON.parse(readFileSync(executionOracle, "utf8"));
 const assets = new Map([["/reader", readFileSync(reader)], ["/compiler", readFileSync(compiler)]]);
 for (const { source, path } of cases)
     if (!assets.has("/" + source)) assets.set("/" + source, readFileSync(path));
 const tests = cases.map(({ source, row }) => ({ source, row }));
+const [bundle] = packEntry({ path: fixture, bytes: assets.get("/fixture") },
+    [{ path: dependency, bytes: readFileSync(join(built("Fixture"), dependency)) }], execution.entries[0].row);
+assets.set("/bundle", bundle);
 
 async function inspect(get, tests) {
     const { instance: { exports: reader } } = await WebAssembly.instantiate(await get("/reader"));
@@ -70,7 +76,7 @@ async function execute(get, execution) {
     }
     const output = compiler.CreateBytes(1 << 20);
     const location = compiler.CreateDiagnostic();
-    const size = compiler.CompileModuleDetailed(upload(await get("/fixture")), upload(manifest), output, location);
+    const size = compiler.CompileBundleDetailed(upload(await get("/bundle")), upload(manifest), output, location);
     if (size < 1) throw Error("Compiler returned " + size + " at [" +
         [0, 1, 2].map(i => compiler.ReadDiagnostic(location, i)) + "]");
     const bytes = Uint8Array.from({ length: size }, (_, i) => compiler.ReadByte(output, i));

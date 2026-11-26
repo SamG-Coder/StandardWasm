@@ -612,23 +612,45 @@ namespace PortableCompiler
                     int status = MethodSpecifications.Read(image, heaps, layout, counts, records[slot + 1], spec);
                     if (status < 0) return status;
                     int method = spec[MethodSpecifications.Target];
-                    if ((method & 1) != 0) return -2; // MemberRef needs generic signature binding.
-                    int row = method >> 1;
-                    if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x10) == 0) return -2;
+                    int row = method >> 1, targetOwner = owner, targetContext = 0;
+                    byte[] targetImage = image;
+                    int[] targetLayout = layout, targetHeaps = heaps;
+                    if ((method & 1) != 0)
+                    {
+                        if (bundle.Length == 0) return -2;
+                        if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
+                        if (callerType < 0) return -1;
+                        var symbol = new int[5];
+                        status = AssemblyBundle.Resolve(bundle, image, layout, heaps, owner, row, 0x28, false, objects, symbol,
+                            context, callerType, methodArity: spec[MethodSpecifications.Arity], callerMethodArguments: methodArguments);
+                        if (status < 0) return status;
+                        targetOwner = symbol[0];
+                        row = symbol[1];
+                        targetContext = symbol[3];
+                        targetImage = bundle.Get(targetOwner);
+                        targetLayout = new int[4];
+                        targetHeaps = new int[8];
+                        if (CompressedTables.FindWithHeaps(targetImage, targetLayout, targetHeaps) < 0) return -1;
+                    }
+                    else
+                    {
+                        int targetType = ObjectLayouts.Owner(image, heaps, layout, row, false);
+                        if (targetType < 0) return targetType;
+                        if (context != 0 && targetType == ObjectLayouts.TypeDef(objects, context)) targetContext = context;
+                    }
+                    if ((MethodDefinitions.ReadColumn(targetImage, targetLayout, row, 2) & 0x10) == 0) return -2;
                     var types = new int[spec[MethodSpecifications.Arity]];
                     status = MethodInstantiations.ReadArguments(bundle, image, layout, heaps, owner,
                         context, objects, methodArguments, spec, types);
                     if (status < 0) return status;
-                    int constraints = GenericParameters.Check(image, heaps, layout, row, types, objects, new int[8], method: true);
+                    int constraints = GenericParameters.Check(targetImage, targetHeaps, targetLayout, row,
+                        types, objects, new int[8], method: true);
                     if (constraints != 0) return constraints < 0 ? constraints : -2;
 
-                    int targetType = ObjectLayouts.Owner(image, heaps, layout, row, false);
-                    if (targetType < 0) return targetType;
-                    int targetContext = context != 0 && targetType == ObjectLayouts.TypeDef(objects, context) ? context : 0;
-                    int function = instantiations.Find(owners, rows, contexts, functions, owner, row, targetContext, types);
+                    int function = instantiations.Find(owners, rows, contexts, functions, targetOwner, row, targetContext, types);
                     if (function < 0)
                     {
-                        functions = Register(bundle, image, layout, heaps, owner, row, targetContext,
+                        functions = Register(bundle, targetImage, targetLayout, targetHeaps, targetOwner, row, targetContext,
                             owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions, methodArguments: types);
                         if (functions < 0) return functions;
                         function = functions - 1;
@@ -652,7 +674,7 @@ namespace PortableCompiler
                         if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
                         if (callerType < 0) return -1;
                         int status = AssemblyBundle.ResolveField(bundle, image, layout, heaps, owner,
-                            field, kind == BranchIl.SetField, false, objects, globals, linkedField, context, callerType);
+                            field, kind == BranchIl.SetField, false, objects, globals, linkedField, context, callerType, methodArguments);
                         if (status < 0) return status;
                         records[slot + 1] = linkedField[0];
                         records[slot + 3] = linkedField[1];
@@ -709,7 +731,7 @@ namespace PortableCompiler
 
                     if (linked && bundle.Length == 0) return -2;
                     int status = linked ? AssemblyBundle.ResolveField(bundle, image, layout, heaps, owner,
-                        field, write, true, objects, globals, symbol, context, callerType) :
+                        field, write, true, objects, globals, symbol, context, callerType, methodArguments) :
                         StaticFields.ResolveLocal(bundle, image, layout, heaps, owner, field, write, objects, globals, symbol, callerRow);
                     if (status < 0) return status;
                     if (symbol[3] != 0)
@@ -837,7 +859,7 @@ namespace PortableCompiler
                         if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
                         if (callerType < 0) return -1;
                         int resolved = AssemblyBundle.Resolve(bundle, image, layout, heaps, owner, member, opcode, baseCall, objects, symbol,
-                            context, callerType, allowVirtual: !addressed, valueAddress: addressed);
+                            context, callerType, allowVirtual: !addressed, valueAddress: addressed, callerMethodArguments: methodArguments);
                         if (resolved < 0) return resolved;
                         int targetOwner = symbol[0], targetRow = symbol[1], targetContext = symbol[3];
                         int linked = Lookup(owners, rows, contexts, bases, indices, functions, targetOwner, targetRow, targetContext);

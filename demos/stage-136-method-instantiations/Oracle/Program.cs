@@ -37,11 +37,16 @@ foreach (var (source, path) in new[] {
 }
 File.WriteAllText(args[3], JsonSerializer.Serialize(cases));
 
+AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.GetFullPath(args[5]));
 var execution = AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.GetFullPath(args[0])).GetType("Execution")!;
 MethodInfo pick = execution.GetMethod("Pick", BindingFlags.NonPublic | BindingFlags.Static)!;
 if (!pick.GetMethodBody()!.LocalVariables.Any(local => local.LocalType.IsGenericMethodParameter))
     throw new InvalidOperationException("The fixture must contain a method-typed local.");
-var methods = new[] { "Integer", "Wide", "Text", "Recurse", "Value", "Array" }
+var methods = new[]
+{
+    "Integer", "Wide", "Text", "Recurse", "Value", "Array",
+    "LinkedArray", "LinkedOverloads", "LinkedDeclaringType", "LinkedParentVariable", "LinkedConstructed"
+}
     .Select(name => execution.GetMethod(name)!).ToArray();
 var entries = methods.Select(method => new { name = method.Name, row = method.MetadataToken & 0xffffff });
 var calls = methods.SelectMany(method => new[] { int.MinValue, 0, 1, int.MaxValue }.Select(input =>

@@ -16,8 +16,10 @@ Read the MethodDefOrRef target and bounded instantiation arguments from
 the MethodSpec table. Resolve the method within the caller's assembly
 bundle and apply the target's access and generic constraint rules.
 A compiled body is identified by its assembly, MethodDef, closed
-declaring type and exact method type argument vector. Reserve the body
-before lowering calls so recursion reuses the same specialization.
+declaring type and exact method type argument vector. Bind open MemberRef
+signatures by generic arity, variable ordinal and nominal type identity
+before substituting slot storage. Reserve the body before lowering calls
+so recursion reuses the same specialization.
 Two instantiations can share a storage type and still require distinct
 CLR type identities.
 
@@ -34,6 +36,7 @@ bytes with the CLR metadata reader for ordinary .NET Standard DLLs
 and the installed CoreLib images in Node and Edge. This covers both
 MethodDef and MemberRef targets, and argument slices containing the
 declaring and method parameter encodings. The compiler also executes
-static MethodDef calls with closed arguments, including recursive calls
-and method-typed locals. MemberRef binding and interface constraints
-remain open before the CoreLib guard can execute.
+static MethodDef and MemberRef calls with closed arguments, including
+recursive calls, method-typed locals, overload selection and fields of
+constructed generic types. Interface constraints remain open before
+the CoreLib guard can execute.
