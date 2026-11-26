@@ -37,12 +37,12 @@ namespace PortableCompiler
                 int classType = FirstClass + i, fields = LayoutFieldCount(objects, classType);
                 int size = 1, stored = 0, parent = Parent(objects, classType);
                 if (parent != 0) size += 2 + UnsignedSize(HeapType((byte)parent));
-                else if (!IsSealed(objects, classType)) size += 2;
+                else if (!IsSealed(objects, classType) && !IsInterface(objects, classType)) size += 2;
                 for (int field = 0; field < fields; field++)
                 {
                     int type = LayoutFieldType(objects, classType, field);
                     if (type == 0) continue;
-                    size += 1 + ValueWidth((byte)type);
+                    size += 1 + ValueWidth(Representation(objects, type));
                     stored++;
                 }
                 size += UnsignedSize(stored);
@@ -73,9 +73,9 @@ namespace PortableCompiler
             {
                 int shape = offsets[i];
                 int result = types[shape];
-                int type = 2 + UnsignedSize(arities[i]) + ValueWidth(result);
+                int type = 2 + UnsignedSize(arities[i]) + ValueWidth(Representation(objects, result));
                 for (int parameter = 0; parameter < arities[i]; parameter++)
-                    type += ValueWidth(types[shape + 1 + parameter]);
+                    type += ValueWidth(Representation(objects, types[shape + 1 + parameter]));
                 int code = UnsignedSize(sizes[i]) + sizes[i];
                 int index = UnsignedSize(i + typeOffset);
                 if (type > output.Length - typeSize || code > output.Length - codeSize ||
@@ -222,7 +222,10 @@ namespace PortableCompiler
             {
                 int classType = FirstClass + i, fields = LayoutFieldCount(objects, classType);
                 int parent = Parent(objects, classType);
-                bool final = IsSealed(objects, classType);
+                // Interface IDs reserve an empty type entry to keep heap
+                // indices stable. Interface values use eqref and never
+                // allocate instances of this placeholder.
+                bool final = IsSealed(objects, classType) || IsInterface(objects, classType);
                 if (parent != 0 || !final)
                 {
                     output[cursor++] = final ? (byte)0x4f : (byte)0x50;
@@ -238,7 +241,7 @@ namespace PortableCompiler
                 {
                     int fieldType = LayoutFieldType(objects, classType, field);
                     if (fieldType == 0) continue;
-                    cursor = ValueType(output, cursor, (byte)fieldType);
+                    cursor = ValueType(output, cursor, Representation(objects, fieldType));
                     output[cursor++] = 1;
                 }
             }
@@ -248,11 +251,11 @@ namespace PortableCompiler
                 output[cursor++] = 0x60;
                 cursor = Unsigned(output, cursor, arities[type]);
                 for (int i = 0; i < arities[type]; i++)
-                    cursor = ValueType(output, cursor, types[shape + i + 1]);
+                    cursor = ValueType(output, cursor, Representation(objects, types[shape + i + 1]));
                 int result = types[shape];
                 output[cursor++] = result == Void ? (byte)0 : (byte)1;
                 if (result != Void)
-                    cursor = ValueType(output, cursor, result);
+                    cursor = ValueType(output, cursor, Representation(objects, result));
             }
             if (hasRemainder) cursor = FloatRemainderWasm.WriteType(output, cursor);
             if (tagCount != 0)

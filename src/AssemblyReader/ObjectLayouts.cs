@@ -6,12 +6,12 @@ namespace PeLibrary
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
         internal const int FirstClass = ArrayTypeRefs.Doubles + 1, MaxClasses = 256 - FirstClass;
-        private const int Header = 2, Width = 9, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
-        private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8;
+        private const int Header = 3, Width = 10, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
+        private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         internal const int FieldMapStart = Header + MaxClasses * Width;
 
-        // The header stores class count and occupied field slots. Each class
-        // maps an assembly-local TypeDef and Field range to its own field storage.
+        // The header stores the type count, occupied field slots and occupied
+        // interface edge slots. Field slices and interface edges grow inward.
         internal static int Find(int[] registry, int assembly, int row)
         {
             for (int i = 0; i < registry[0]; i++)
@@ -38,9 +38,10 @@ namespace PeLibrary
             int defWidth = fieldColumn + fieldIndex + methodIndex;
             uint def = (uint)(defs + (row - 1) * defWidth);
             uint flags = U32(image, def);
-            if ((flags & 0x38) != 0) return -2; // Interface or non-auto layout.
+            bool isInterface = (flags & 0x20) != 0;
+            if ((flags & 0x18) != 0) return -2; // Non-auto layout.
             uint baseType = ReadIndex(image, def + (uint)(4 + 2 * strings), extends);
-            if (baseType == 0 || (baseType & 3) > 1) return -2;
+            if (isInterface ? baseType != 0 : baseType == 0 || (baseType & 3) > 1) return -2;
             if ((baseType & 3) == 1 && IsObjectRef(image, streams, methods, counts, refs, (int)(baseType >> 2)))
                 baseType = 0;
 
@@ -48,6 +49,7 @@ namespace PeLibrary
             uint end = row == counts[2] ? (uint)(counts[4] + 1) :
                 ReadIndex(image, def + (uint)(defWidth + fieldColumn), fieldIndex);
             if (first < 1 || end < first || end > (uint)(counts[4] + 1)) return -1;
+            if (isInterface) end = first; // Interfaces have no instance fields.
             shape[0] = defs + counts[2] * defWidth;
             shape[1] = (int)first;
             shape[2] = (int)(end - first);
@@ -60,7 +62,7 @@ namespace PeLibrary
         {
             if (registry[0] >= MaxClasses) return -2;
             int count = shape[2], storage = FieldMapStart + registry[1];
-            if (count > registry.Length - storage) return -3;
+            if (count > registry.Length - registry[2] - storage) return -3;
             // Reserve the class and its whole field slice before following
             // recursive references. Their registration may append other slices.
             int index = registry[0];
@@ -143,7 +145,11 @@ namespace PeLibrary
         internal static int Parent(int[] registry, int type) => registry[Slot(type) + Base];
         internal static bool IsSealed(int[] registry, int type) => (registry[Slot(type) + ShapeFlags] & 0x100) != 0;
         internal static bool IsAbstract(int[] registry, int type) => (registry[Slot(type) + ShapeFlags] & 0x80) != 0;
+        internal static bool IsInterface(int[] registry, int type) =>
+            type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & 0x20) != 0;
+        internal static int Representation(int[] registry, int type) => IsInterface(registry, type) ? ObjectReference : type;
         internal static int AssemblyOf(int[] registry, int type) => registry[Slot(type) + Assembly];
+        internal static int TypeDef(int[] registry, int type) => registry[Slot(type) + TypeRow];
         internal static int FirstRow(int[] registry, int type) => registry[Slot(type) + FirstField];
         internal static int TableOf(int[] registry, int type) => registry[Slot(type) + FieldTable];
 
@@ -160,6 +166,42 @@ namespace PeLibrary
             if (source < FirstClass || target < FirstClass) return false;
             for (int type = Parent(registry, source); type != 0; type = Parent(registry, type))
                 if (type == target) return true;
+            return false;
+        }
+
+        internal static bool AddInterface(int[] registry, int source, int target)
+        {
+            int edge = registry.Length - registry[2] - 2;
+            if (edge < FieldMapStart + registry[1]) return false;
+            int slot = Slot(source) + Interfaces;
+            registry[edge] = target;
+            registry[edge + 1] = registry[slot];
+            registry[slot] = edge;
+            registry[2] = registry[2] + 2;
+            return true;
+        }
+
+        internal static bool Implements(int[] registry, int source, int target)
+        {
+            if (source < FirstClass || !IsInterface(registry, target)) return false;
+            return FindInterface(registry, source, target, new byte[registry[0]]);
+        }
+
+        private static bool FindInterface(int[] registry, int source, int target, byte[] seen)
+        {
+            // Interface inheritance can form diamonds. Visit each type once,
+            // including every class base whose InterfaceImpl rows apply.
+            for (int type = source; type != 0; type = Parent(registry, type))
+            {
+                int index = type - FirstClass;
+                if (seen[index] != 0) break;
+                seen[index] = 1;
+                for (int edge = registry[Slot(type) + Interfaces]; edge != 0; edge = registry[edge + 1])
+                {
+                    int next = registry[edge];
+                    if (next == target || FindInterface(registry, next, target, seen)) return true;
+                }
+            }
             return false;
         }
 

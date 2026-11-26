@@ -88,6 +88,9 @@ namespace PortableCompiler
             int modules = ranges.Length / 2 + 1;
             var bases = new int[modules + 1];
             bases[1] = count;
+            var interfaceTable = new int[3];
+            int interfaces = InterfaceImplementations.ReadTable(image, heaps, layout, interfaceTable);
+            if (interfaces < 0) return interfaces;
             for (int module = 1; module < modules; module++)
             {
                 CompileLocation.Set(location, module, 0, -1);
@@ -96,15 +99,19 @@ namespace PortableCompiler
                 var dependencyHeaps = new int[8];
                 int size = CompressedTables.FindWithHeaps(dependency, dependencyLayout, dependencyHeaps);
                 if (size < 0) return size == MethodDefinitions.Unsupported ? -2 : -1;
+                int dependencyInterfaces = InterfaceImplementations.ReadTable(dependency, dependencyHeaps, dependencyLayout, interfaceTable);
+                if (dependencyInterfaces < 0) return dependencyInterfaces;
+                interfaces += dependencyInterfaces;
                 int dependencyInitialization = TypeInitializers.RejectModuleInitializer(dependency, dependencyLayout, dependencyHeaps);
                 if (dependencyInitialization < 0) return dependencyInitialization;
                 if (size >= int.MaxValue - bases[module]) return -2;
                 bases[module + 1] = bases[module] + size;
             }
             int symbols = bases[modules];
-            // A Field row occupies at least six bytes in each input image.
+            // Field rows occupy at least six bytes. Each InterfaceImpl row
+            // reserves up to two extra cells for the nominal edge.
             int imageBytes = bundle.Length == 0 ? main.Length : bundle.Length;
-            var objects = new int[ObjectLayouts.FieldMapStart + imageBytes / 6];
+            var objects = new int[ObjectLayouts.FieldMapStart + imageBytes / 6 + interfaces * 2];
             var owners = new int[symbols];
             var rows = new int[symbols];
             var indices = new int[symbols + 1];
@@ -134,6 +141,10 @@ namespace PortableCompiler
                     if (functions < 0) return functions;
                     index = functions - 1;
                 }
+                // Wasm sees interface parameters as eqref. Keep the host
+                // from bypassing the linker's nominal assignment checks.
+                for (int parameter = 1; parameter <= arities[index]; parameter++)
+                    if (ObjectLayouts.IsInterface(objects, signatures[offsets[index] + parameter])) return -2;
                 exports[export] = index;
             }
             var body = new int[6];
@@ -352,7 +363,7 @@ namespace PortableCompiler
                     }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
-                        arities, code, remainderFixup, catchRegion, outgoingNulls);
+                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects);
                 }
 
                 if (used > moduleCode.Length - length)
@@ -389,7 +400,7 @@ namespace PortableCompiler
                     if (type < 0) return type;
                     if (kind == BranchIl.CastClass && type == EventHandlerReference)
                         records[slot] = BranchIl.CastHandler;
-                    else if (type < ObjectLayouts.FirstClass) return -2;
+                    else if (type < ObjectLayouts.FirstClass || ObjectLayouts.IsInterface(objects, type)) return -2;
                     records[slot + 1] = type;
                     continue;
                 }
@@ -684,6 +695,7 @@ namespace PortableCompiler
             {
                 receiver = BundleLayouts.Register(main, bundle, ranges, image, layout, heaps, assembly, owner, objects);
                 if (receiver < 0) return receiver;
+                if (ObjectLayouts.IsInterface(objects, receiver)) return -2;
             }
             int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
             return SignatureTypes.Read(main, bundle, ranges, image, heaps, signature, types, offset, receiver, layout, objects, assembly);

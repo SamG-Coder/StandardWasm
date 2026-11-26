@@ -72,6 +72,7 @@
     <ProjectReference Include="../demos/stage-78-strong-names/StrongNameDemo.csproj" />
     <ProjectReference Include="../demos/stage-80-type-forwarding/ForwardingDemo.csproj" />
     <ProjectReference Include="../demos/stage-82-static-field-layout/FieldLayoutDemo.csproj" />
+    <ProjectReference Include="../demos/stage-83-interface-references/InterfaceDemo.csproj" />
     <ProjectReference Include="../demos/stage-78-strong-names/Alternate/Alternate.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />
     <Compile Remove="Fixtures/**/*.cs" />

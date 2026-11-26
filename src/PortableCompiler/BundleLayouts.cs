@@ -39,7 +39,8 @@ namespace PortableCompiler
                         symbol[0], symbol[1], objects, depth + 1);
                 }
                 if (parent < 0) return parent;
-                if (parent != 0 && ObjectLayouts.IsSealed(objects, parent)) return -2;
+                if (parent != 0 && (ObjectLayouts.IsSealed(objects, parent) || ObjectLayouts.IsInterface(objects, parent)))
+                    return -2;
             }
             // The parent must precede the child in the Wasm recursive type group.
             // Defer all fields until that ordering is fixed, even if a base field
@@ -68,6 +69,8 @@ namespace PortableCompiler
                 }
                 if (status < 0) return status;
             }
+            int interfaces = RegisterInterfaces(main, bundle, ranges, image, layout, heaps, owner, type, objects);
+            if (interfaces < 0) return interfaces;
             var reference = new int[1];
             int fields = ObjectLayouts.FieldCount(objects, type);
             int first = ObjectLayouts.FirstRow(objects, type);
@@ -82,6 +85,29 @@ namespace PortableCompiler
                 ObjectLayouts.SetFieldType(objects, type, offset, storage);
             }
             return type;
+        }
+
+        private static int RegisterInterfaces(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+            int[] layout, int[] heaps, int owner, int type, int[] objects)
+        {
+            var table = new int[3];
+            int count = InterfaceImplementations.ReadTable(image, heaps, layout, table);
+            if (count < 0) return count;
+            int row = ObjectLayouts.TypeDef(objects, type);
+            for (int index = 0; index < count; index++)
+            {
+                int coded = InterfaceImplementations.Read(image, table, index, row);
+                if (coded < 0) return coded;
+                // Generic interface instantiations need TypeSpec support.
+                // Missing optional assemblies cannot establish an assignment.
+                if (coded == 0 || (coded & 3) == 2 || (coded & 3) == 1 && bundle.Length == 0) continue;
+                int target = RegisterReference(main, bundle, ranges, image, layout, heaps, owner, coded, objects);
+                if (target == -4 || target == -6) continue;
+                if (target < 0) return target;
+                if (!ObjectLayouts.IsInterface(objects, target)) return -2;
+                if (!ObjectLayouts.AddInterface(objects, type, target)) return -3;
+            }
+            return 0;
         }
 
         internal static int RegisterReference(byte[] main, byte[] bundle, int[] ranges, byte[] image,

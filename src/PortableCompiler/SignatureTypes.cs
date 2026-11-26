@@ -42,7 +42,8 @@ namespace PortableCompiler
         internal static bool Assignable(byte source, int target, int[] objects) =>
             source == StackType(target) || source == NullValue && IsReference(StackType(target)) ||
             target == ObjectLayouts.ObjectReference && IsObjectReference(source) ||
-            ObjectLayouts.Inherits(objects, source, StackType(target));
+            ObjectLayouts.Inherits(objects, source, StackType(target)) ||
+            ObjectLayouts.Implements(objects, source, StackType(target));
 
         internal static byte FloatWidth(byte left, byte right) => left == F64 || right == F64 ? F64 : F32;
 

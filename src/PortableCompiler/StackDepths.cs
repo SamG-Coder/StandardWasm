@@ -228,7 +228,7 @@ namespace PortableCompiler
                 return result == Void ? start : Push(stack, start, StackType(result));
             }
             if (kind == BaseCtor)
-                return depth > 0 && stack[depth - 1] >= FirstClass ? depth - 1 : -1;
+                return depth > 0 && stack[depth - 1] >= FirstClass && !IsInterface(objects, stack[depth - 1]) ? depth - 1 : -1;
             if (kind == GetField)
             {
                 if (depth == 0 || !Assignable(stack[depth - 1], (byte)(extra >> 8), objects)) return -1;

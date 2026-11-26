@@ -71,6 +71,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [80 · CLR type forwarding](stage-80-type-forwarding/README.md) | `npm run demo -- stage-80-type-forwarding` | An unchanged caller follows a signed type facade to its implementation |
 | [81 · CoreLib object root](stage-81-corelib-object-root/README.md) | `npm run demo -- stage-81-corelib-object-root` | The installed CoreLib constructor chain agrees with the CLR |
 | [82 · Static fields and instance layout](stage-82-static-field-layout/README.md) | `npm run demo -- stage-82-static-field-layout` | Static fields do not shift inherited instance storage |
+| [83 · Interface references](stage-83-interface-references/README.md) | `npm run demo -- stage-83-interface-references` | Linked interface fields preserve reference identity and null |
 
 ## Adding a stage
 

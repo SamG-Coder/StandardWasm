@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal static int Emit(int[] records, int[] depths, byte[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
-            byte[] outgoingNulls)
+            byte[] outgoingNulls, int[] objects)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -31,7 +31,7 @@ namespace PortableCompiler
             for (int i = arguments; i < arguments + locals; i++)
             {
                 code[used++] = 1;
-                used = WasmBinary.ValueType(code, used, frame[i]);
+                used = WasmBinary.ValueType(code, used, Representation(objects, frame[i]));
             }
             if (hasNull)
             {
@@ -45,13 +45,13 @@ namespace PortableCompiler
                 for (int kind = I32; kind <= spillKinds; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
-                    used = WasmBinary.ValueType(code, used, kind);
+                    used = WasmBinary.ValueType(code, used, Representation(objects, kind));
                 }
             }
             for (int i = 0; i < classes; i++)
             {
                 code[used++] = 1;
-                used = WasmBinary.ValueType(code, used, (byte)(FirstClass + i));
+                used = WasmBinary.ValueType(code, used, Representation(objects, FirstClass + i));
             }
             if (stringScratch)
             {
