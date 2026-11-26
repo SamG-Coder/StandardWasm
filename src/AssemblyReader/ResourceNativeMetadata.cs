@@ -6,10 +6,11 @@ namespace PeLibrary
     {
         // Locate the native stub and the managed marshalling wrapper in a
         // selected CoreLib. Do not use SDK-specific names or MethodDef rows.
-        // On success, result receives [native MethodDef, wrapper MethodDef].
+        // On success, result receives the native target, managed marshaller,
+        // public override and original ManifestResourceStream constructor.
         internal static int Identify(byte[] image, int[] heaps, int[] methods, int[] result)
         {
-            if (result.Length < 2) return -3;
+            if (result.Length < 4) return -3;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
             if (first < 0) return first;
@@ -33,8 +34,12 @@ namespace PeLibrary
                 wrapper = row;
             }
             if (wrapper == 0) return -2;
+            int open = ResourceStreamMetadata.FindOpen(image, heaps, methods, counts, first, owner, range, wrapper);
+            if (open < 0) return open;
             result[0] = native;
             result[1] = wrapper;
+            result[2] = open;
+            result[3] = range[0]; // constructor proven in the original managed body
             return 1;
         }
 

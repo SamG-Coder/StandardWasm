@@ -324,7 +324,7 @@ namespace PeLibrary
         }
 
         internal static bool NamedDefinition(byte[] image, int[] heaps, int[] methods, int[] counts,
-            int first, int row, string space, string name)
+            int first, int row, string space, string name, bool nested = false)
         {
             if (row < 1 || row > counts[2]) return false;
             int strings = methods[2];
@@ -333,9 +333,10 @@ namespace PeLibrary
             int width = 4 + 2 * strings + CodedWidth(counts[2], counts[1], counts[27]) +
                 IndexWidth(counts[4]) + IndexWidth(counts[6]);
             uint at = (uint)(definitions + (row - 1) * width);
-            if ((U32(image, at) & 7) > 1) return false; // Only top-level definitions.
+            if (((U32(image, at) & 7) > 1) != nested) return false;
+            uint namespaceIndex = ReadIndex(image, at + (uint)(4 + strings), strings);
             return MatchesAscii(image, heaps, ReadIndex(image, at + 4, strings), name) &&
-                MatchesAscii(image, heaps, ReadIndex(image, at + (uint)(4 + strings), strings), space);
+                (space.Length == 0 ? namespaceIndex == 0 : MatchesAscii(image, heaps, namespaceIndex, space));
         }
 
         // Publish the half-open MethodDef rows [range[0], range[1]) owned by a TypeDef.

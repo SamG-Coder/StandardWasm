@@ -99,6 +99,42 @@ namespace PortableCompiler
             return WasmBinary.Unsigned(code, used, firstFunction + 1);
         }
 
+        // The caller has proved which frame local owns the out uint. Clear it
+        // before marshalling, as the CoreLib stub does. Leave the pointer on
+        // the stack and report a failure separately from a missing resource.
+        internal static int LookupNative(byte[] code, int used, int owner, int name, int chars, int scratch,
+            int firstFunction, int outLength, int status, int packed)
+        {
+            used = Const(code, used, 0);
+            used = Local(code, used, 0x21, outLength);
+            used = Const(code, used, 0);
+            used = Local(code, used, 0x21, status);
+            used = Lookup(code, used, owner, name, chars, scratch, firstFunction);
+            used = Local(code, used, 0x22, packed);
+            code[used++] = 0x42; code[used++] = 0; // i64.const 0
+            code[used++] = 0x53; // i64.lt_s
+            code[used++] = 0x04; code[used++] = 0x7f; // if result i32 pointer
+            used = Local(code, used, 0x20, packed);
+            code[used++] = 0x42; code[used++] = 0x7c; // i64.const -4, missing
+            code[used++] = 0x52; // i64.ne
+            code[used++] = 0x04; code[used++] = 0x40;
+            used = Local(code, used, 0x20, packed);
+            code[used++] = 0xa7; // i32.wrap_i64
+            used = Local(code, used, 0x21, status);
+            code[used++] = 0x0b;
+            used = Const(code, used, 0);
+            code[used++] = 0x05; // else, embedded resource
+            used = Local(code, used, 0x20, packed);
+            code[used++] = 0xa7; // low word, pointer
+            used = Local(code, used, 0x20, packed);
+            code[used++] = 0x42; code[used++] = 32;
+            code[used++] = 0x88; // i64.shr_u, high word holds the length
+            code[used++] = 0xa7;
+            used = Local(code, used, 0x21, outLength);
+            code[used++] = 0x0b;
+            return used;
+        }
+
         private static int Entry(byte[] output, int cursor, string name, int kind)
         {
             cursor = Ascii(output, cursor, ModuleName);
