@@ -158,7 +158,7 @@ namespace PortableCompiler
                 {
                     int type = signatures[offsets[index] + parameter];
                     if (CanExchangeClass(objects, type)) externalObjects = true;
-                    if (type == NullPointer || RuntimeTypeMetadata.IsStorage(type) || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
+                    if (type == NullPointer || type == ObjectLocation || RuntimeTypeMetadata.IsStorage(type) || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
                         return -2;
                 }
                 int result = signatures[offsets[index]];
@@ -490,12 +490,14 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.InvalidCast | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.CastClass)
                                 tags = ExceptionTypes.InvalidCast;
-                            else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet || kind == BranchIl.StringCharacter)
+                            else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet || kind == BranchIl.StringCharacter ||
+                                kind == BranchIl.ObjectElementAddress)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || kind == BranchIl.StringLength || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
+                                kind == BranchIl.LoadObjectIndirect || kind == BranchIl.StoreObjectIndirect ||
                                 kind == BranchIl.ExchangeHandlerField || (kind == BranchIl.Call && records[slot + 3] != 0))
                                 tags = ExceptionTypes.NullReference;
                             else if (kind == BranchIl.Binary)
@@ -656,6 +658,16 @@ namespace PortableCompiler
                         continue;
                     }
                     if (kind != BranchIl.TestClass || element != -2) return element;
+                }
+                if (kind == BranchIl.ObjectElementAddress || kind == BranchIl.LoadObjectIndirect || kind == BranchIl.StoreObjectIndirect)
+                {
+                    if (kind == BranchIl.ObjectElementAddress &&
+                        BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, records[slot + 1], objects) != ObjectReference)
+                        return -2;
+                    int array = ObjectLayouts.RegisterArray(objects, ObjectReference);
+                    if (array < 0) return array;
+                    records[slot + 1] = array;
+                    continue;
                 }
                 if (kind == BranchIl.CastClass || kind == BranchIl.TestClass)
                 {

@@ -160,6 +160,18 @@ namespace PortableCompiler
                 if (depth < 1 || (!IsNativeInteger(stack[depth - 1]) && stack[depth - 1] != I32)) return -2;
                 return Push(stack, allocated, depth - 1, Native);
             }
+            if (kind == ObjectElementAddress)
+            {
+                if (depth < 2 || !ArrayIndex(stack, depth)) return -1;
+                int array = stack[depth - 2];
+                if (array != operand && array != NullValue) return -2;
+                return Push(stack, allocated, depth - 2, ObjectLocation);
+            }
+            if (kind == LoadObjectIndirect)
+                return Match(stack, depth, ObjectLocation) ? Push(stack, allocated, depth - 1, ObjectReference) : -2;
+            if (kind == StoreObjectIndirect)
+                return Match(stack, depth - 1, ObjectLocation) &&
+                    Assignable(stack[depth - 1], ObjectReference, objects) ? depth - 2 : -2;
             if (kind == LoadIndirect)
             {
                 if (depth < 1 || !IsNativeInteger(stack[depth - 1])) return -2;

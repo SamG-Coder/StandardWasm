@@ -1,0 +1,7 @@
+{
+  "assembly": "ManagedObjectByrefs",
+  "exportType": "ManagedObjectByrefs.Kernels",
+  "method": "AcrossCall",
+  "inputs": [1],
+  "expected": 7
+}

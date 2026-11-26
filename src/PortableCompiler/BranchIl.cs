@@ -35,6 +35,8 @@ namespace PortableCompiler
         internal const int TakeValueFieldAddress = 76, LoadValueLocation = 77;
         internal const int LoadConstructorAddress = 78, UpdateConstructorField = 79;
         internal const int BoxValue = 80, UnboxValue = 81, TestBox = 82, ConstrainedStatic = 83;
+        // A traced address is different from a native linear-memory address.
+        internal const int ObjectElementAddress = 100, LoadObjectIndirect = 101, StoreObjectIndirect = 102;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
@@ -274,6 +276,18 @@ namespace PortableCompiler
                     else return -2;
                 }
                 else if (op == 0x8e) kind = ArrayLength;
+                else if (op == 0x8f)
+                {
+                    if (length - pc < 4) return -1;
+                    uint token = ImageBytes.U32(image, (uint)(start + pc));
+                    pc += 4;
+                    uint table = token >> 24;
+                    if (table != 1 && table != 2) return -2;
+                    int row = (int)(token & 0xffffff);
+                    if (row == 0) return -1;
+                    operand = row << 2 | (table == 1 ? 1 : 0);
+                    kind = ObjectElementAddress;
+                }
                 else if (op >= 0x90 && op <= 0x9a)
                 {
                     kind = ArrayGet;
@@ -372,10 +386,10 @@ namespace PortableCompiler
                     kind = ConvertFloat;
                     operand = op;
                 }
+                else if (op == 0x50 || op == 0x51)
+                    kind = op == 0x50 ? LoadObjectIndirect : StoreObjectIndirect;
                 else if (op >= 0x46 && op <= 0x4f || op >= 0x52 && op <= 0x57 || op == 0xdf)
                 {
-                    // ldind.ref and stind.ref (0x50, 0x51) move managed references
-                    // through an address and stay unsupported.
                     kind = op <= 0x4f ? LoadIndirect : StoreIndirect;
                     operand = op;
                 }

@@ -69,6 +69,11 @@ assertUnsupported(arraysDemo.dll, "PrimitiveArrays.CompoundElement",
 const inlineArrays = demos.find(d => d.assembly === "InlineArrayLayouts");
 assertUnsupported(inlineArrays.dll, "InlineArrayLayouts.LayoutBoundary",
     /LayoutBoundary::Read returned compiler status -2/);
+const objectLocations = demos.find(d => d.assembly === "ManagedObjectByrefs");
+assertUnsupported(objectLocations.dll, "ManagedObjectByrefs.HostBoundary",
+    /HostBoundary::HostAlias returned compiler status -2/);
+assertUnsupported(objectLocations.dll, "ManagedObjectByrefs.TypedBoundary",
+    /TypedBoundary::TypedElement at IL_[0-9a-f]+ returned compiler status -2/);
 const arrayIdentityProbe = "demos/stage-37-primitive-arrays/identity/ArrayIdentityProbe";
 run("dotnet", ["build", "-c", "Release", arrayIdentityProbe]);
 assertUnsupported(arrayIdentityProbe + "/bin/Release/netstandard2.0/ArrayIdentityProbe.dll", "ArrayIdentityProbe.Probe",
