@@ -74,6 +74,16 @@ namespace NestedOverlayDemo
 
         public static int RejectPadded(PaddedOverlay value) => value.Value.First;
         public static int RejectMixedAuto(MixedOverlay value) => value.Value.First;
+
+        public static long RestoreAutoPadding(long bits)
+        {
+            AutoPaddedOverlay value = default;
+            value.Raw = bits;
+            AutoThreeShorts copy = value.Value;
+            value.Raw = 0;
+            value.Value = copy;
+            return value.Raw;
+        }
     }
 
     public static class Demo

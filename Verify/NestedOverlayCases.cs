@@ -32,6 +32,10 @@ internal static class NestedOverlayCases
             throw new InvalidOperationException("CLR rejected a nested layout fixture.");
         Reject(nameof(Kernels.RejectPadded));
         Reject(nameof(Kernels.RejectMixedAuto));
+        const long paddingBits = unchecked((long)0xfedc000000000000UL);
+        if (Kernels.RestoreAutoPadding(paddingBits) != paddingBits)
+            throw new InvalidOperationException("CLR did not preserve the auto-layout view's padding.");
+        Reject(nameof(Kernels.RestoreAutoPadding));
 
         void Check(string name, object[] arguments, object expected)
         {
