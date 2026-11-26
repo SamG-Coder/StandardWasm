@@ -37,6 +37,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [74 · Run a dropped .NET entry point](stage-74-executable-entry/README.md) | `npm run demo -- stage-74-executable-entry` | Original console publishes run through the generated compiler |
 | [77 · Pointer memory-model experiment](stage-77-pointer-memory-model/README.md) | `npm run demo -- stage-77-pointer-memory-model` | Model A fails 5 aliasing cases; models B and C match all 34 CLR cases in Node and Edge |
 | [79 · Modal message-loop experiment](stage-79-modal-message-loop/README.md) | `npm run demo -- stage-79-modal-message-loop` | JSPI (Node, Edge) and worker (Edge) traces match the Windows WinForms dispatch order |
+| [95 � Original managed companions](stage-95-managed-companions/README.md) | `npm run demo -- stage-95-managed-companions` | Edge drops and runs original multi-assembly console publishes |
 
 ## Adding a stage
 

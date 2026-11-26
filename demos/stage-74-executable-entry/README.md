@@ -11,8 +11,9 @@ executable and select **Run managed entry**. Edge compiles and runs in a worker.
 The existing intake page remains available without the run feature.
 
 The runner accepts parameterless managed entries with an integer exit result
-and no runtime imports. It reads the original deployment metadata and leaves
-framework binding, console streams and arguments to later work. It also sends
+and no runtime imports. [Stage 95](../stage-95-managed-companions/README.md)
+covers the launch path for original managed companion DLLs. Console streams,
+arguments, and execution with a browser framework require separate work. It also sends
 the unchanged Stage 72 WinForms entry through the same compiler path. The
 compiler currently rejects it. An independent metadata probe records the first
 form allocation in the entry and its upstream base class; the current compiler
