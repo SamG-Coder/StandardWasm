@@ -13,9 +13,9 @@ namespace PortableCompiler
             byte result = (byte)frameShape[3];
             int classes = frameShape[4];
             bool stringScratch = frameShape[5] != 0;
-            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 1 + I64 + classes) + (stringScratch ? 2 : 0));
+            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 1 + F64 + classes) + (stringScratch ? 2 : 0));
             int spills = arguments + locals;
-            int temporaries = spills + (I64 + classes) * maximum;
+            int temporaries = spills + (F64 + classes) * maximum;
             int scratch = temporaries + classes;
             int pcLocal = scratch + (stringScratch ? 5 : 0);
             // Keep declared locals in CLI order, then allocate one bank per spill type.
@@ -26,7 +26,7 @@ namespace PortableCompiler
             }
             if (maximum != 0)
             {
-                for (int kind = I32; kind <= I64 + classes; kind++)
+                for (int kind = I32; kind <= F64 + classes; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
                     used = WasmBinary.ValueType(code, used, (byte)kind);
@@ -62,7 +62,8 @@ namespace PortableCompiler
                 code[used++] = 0x04;
                 code[used++] = 0x40;
 
-                if (kind == Load || kind == Constant || kind == WideConstant || kind == Dup)
+                if (kind == Load || kind == Constant || kind == WideConstant || kind == Dup ||
+                    kind == SingleConstant || kind == DoubleConstant)
                 {
                     byte pushed = I32;
                     if (kind == Load)
@@ -79,6 +80,11 @@ namespace PortableCompiler
                     {
                         pushed = I64;
                         used = WideConst(code, used, operand, records[slot + 3]);
+                    }
+                    else if (kind == SingleConstant || kind == DoubleConstant)
+                    {
+                        pushed = kind == SingleConstant ? F32 : F64;
+                        used = FloatWasm.Literal(code, used, pushed, operand, records[slot + 3]);
                     }
                     else used = Const(code, used, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, pushed, depth));
@@ -174,19 +180,24 @@ namespace PortableCompiler
                     used = Local(code, used, 0x20, Spill(spills, maximum, frame[operand], top));
                     used = Local(code, used, 0x21, operand);
                 }
-                else if (kind == Unary || kind == Narrow || kind == ConvertInteger)
+                else if (kind == Unary || kind == Narrow || kind == ConvertInteger || kind == ConvertFloat)
                 {
                     byte source = states[state + top];
-                    byte target = kind == Unary ? source : kind == ConvertInteger && ConvertsToWide(operand) ? I64 : I32;
+                    byte target = kind == Unary ? source : kind == ConvertFloat ? FloatWasm.Target(operand) :
+                        kind == ConvertInteger && ConvertsToWide(operand) ? I64 : I32;
                     used = Local(code, used, 0x20, Spill(spills, maximum, source, top));
-                    if (source != target)
+                    if (kind == Unary && IsFloat(source))
+                        code[used++] = source == F32 ? (byte)0x8c : (byte)0x9a;
+                    else if (kind == ConvertFloat || IsFloat(source))
+                        used = FloatWasm.Convert(code, used, operand, source, target);
+                    else if (source != target)
                         code[used++] = target == I32 ? (byte)0xa7 : operand == 0x6a ? (byte)0xac : (byte)0xad;
                     if (kind == Narrow)
                     {
                         used = Const(code, used, operand);
                         code[used++] = 0x71; // i32.and
                     }
-                    else if (kind == Unary)
+                    else if (kind == Unary && !IsFloat(source))
                     {
                         used = source == I64 ? WideConst(code, used, -1, -1) : Const(code, used, -1);
                         code[used++] = NumericOpcode(operand, source);
@@ -196,15 +207,18 @@ namespace PortableCompiler
                 else if (kind == Binary)
                 {
                     byte type = states[state + top - 1];
-                    byte resultType = IsComparison(operand) ? I32 : type;
+                    byte rightType = states[state + top];
+                    byte width = IsFloat(type) ? FloatWidth(type, rightType) : type;
+                    byte resultType = IsComparison(operand) ? I32 : width;
                     int left = Spill(spills, maximum, type, top - 1);
                     int right = Spill(spills, maximum, states[state + top], top);
                     if (operand == 0x6f)
                         used = GuardRemainder(code, used, type, left, right);
-                    used = Local(code, used, 0x20, left);
-                    used = Local(code, used, 0x20, right);
+                    used = NumericLocal(code, used, left, type, width);
+                    used = NumericLocal(code, used, right, rightType, width);
                     if (type == I64 && IsShift(operand)) code[used++] = 0xad;
-                    code[used++] = NumericOpcode(operand, type);
+                    if (IsFloat(width)) used = FloatWasm.Binary(code, used, operand, width);
+                    else code[used++] = NumericOpcode(operand, type);
                     used = Local(code, used, 0x21, Spill(spills, maximum, resultType, top - 1));
                 }
                 else if (kind == Call || kind == NewObject)
@@ -267,16 +281,17 @@ namespace PortableCompiler
                     byte array = states[state + top - 1];
                     used = Local(code, used, 0x20, Spill(spills, maximum, array, top - 1));
                     used = Local(code, used, 0x20, spills + top);
-                    int instruction = operand == 0x94 ? 0x0b : operand == 0x90 ? 0x0c : 0x0d;
+                    // Unpacked integer arrays use array.get. Packed elements require extension.
+                    int instruction = array == Ints || array == Longs ? 0x0b : operand == 0x90 ? 0x0c : 0x0d;
                     used = Gc(code, used, instruction, array);
-                    used = Local(code, used, 0x21, spills + top - 1);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, ArrayValueType(array), top - 1));
                 }
                 else if (kind == ArraySet)
                 {
                     byte array = states[state + top - 2];
                     used = Local(code, used, 0x20, Spill(spills, maximum, array, top - 2));
                     used = Local(code, used, 0x20, spills + top - 1);
-                    used = Local(code, used, 0x20, spills + top);
+                    used = Local(code, used, 0x20, Spill(spills, maximum, ArrayValueType(array), top));
                     used = Gc(code, used, 0x0e, array);
                 }
 
@@ -294,10 +309,16 @@ namespace PortableCompiler
                         used = Const(code, used, operand);
                         used = Const(code, used, next);
                         byte type = states[state + top];
+                        byte width = type;
                         if (IsComparison(comparison))
-                            used = Local(code, used, 0x20, Spill(spills, maximum, type, top - 1));
-                        used = Local(code, used, 0x20, Spill(spills, maximum, type, top));
-                        if (IsComparison(comparison)) code[used++] = NumericOpcode(comparison, type);
+                        {
+                            byte leftType = states[state + top - 1];
+                            if (IsFloat(type)) width = FloatWidth(leftType, type);
+                            used = NumericLocal(code, used, Spill(spills, maximum, leftType, top - 1), leftType, width);
+                        }
+                        used = NumericLocal(code, used, Spill(spills, maximum, type, top), type, width);
+                        if (IsFloat(width)) used = FloatWasm.Binary(code, used, comparison, width);
+                        else if (IsComparison(comparison)) code[used++] = NumericOpcode(comparison, type);
                         else if (type == I64)
                         {
                             code[used++] = 0x50; // i64.eqz produces the i32 select condition
@@ -350,6 +371,13 @@ namespace PortableCompiler
             code[used++] = 0x0b; // end the default block
             used = Const(code, used, fallthrough);
             code[used++] = 0x0b; // end the result block
+            return used;
+        }
+
+        private static int NumericLocal(byte[] code, int used, int local, byte source, byte width)
+        {
+            used = Local(code, used, 0x20, local);
+            if (source == F32 && width == F64) code[used++] = 0xbb;
             return used;
         }
 
