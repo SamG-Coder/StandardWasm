@@ -8,6 +8,9 @@ namespace PortableCompiler
     {
         private readonly BundleImage[] images;
         internal readonly int Count;
+        // Generic arguments can re-enter reservation through ordinary type
+        // binding. The shared depth bounds that path and direct inheritance.
+        internal int LayoutDepth;
         // Zero retains the standalone compilation policy. A one-image
         // packed bundle still uses the bundle linking policy.
         internal readonly int Length;
