@@ -27,16 +27,19 @@ namespace PortableCompiler
                 continuations > MaxLocals) return -2;
             int spills = arguments + locals + (hasNull ? 1 : 0);
             int fixedLocals = spills + classes + (stringScratch ? 5 : 0) +
-                (eventScratch ? 6 : 0) + 1 + exceptionLocals + continuations;
+                (eventScratch ? 6 : 0) + 1 + 2 * exceptionLocals + continuations;
             if (fixedLocals > MaxLocals || maximum > (MaxLocals - fixedLocals) / spillKinds) return -2;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
             int eventLocals = scratch + (stringScratch ? 5 : 0);
             int pcLocal = eventLocals + (eventScratch ? 6 : 0);
             int continuationBase = pcLocal + 1 + exceptionLocals;
+            // Thrown managed objects (decision 0054) mirror the exnref locals: a scratch
+            // eqref followed by one saved object per clause.
+            int objectBase = continuationBase + continuations;
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
                 (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (exceptionLocals != 0 ? 1 : 0) +
-                (continuations != 0 ? 1 : 0));
+                (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0));
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < arguments + locals; i++)
             {
@@ -91,6 +94,11 @@ namespace PortableCompiler
             {
                 used = WasmBinary.Unsigned(code, used, continuations);
                 code[used++] = 0x7f; // normal cleanup destinations
+            }
+            if (exceptionLocals != 0)
+            {
+                used = WasmBinary.Unsigned(code, used, exceptionLocals);
+                code[used++] = ExceptionDispatchWasm.ObjectReference;
             }
             // Raw Wasm callers supply i32. Enforce the CLI argument width before
             // the first instruction, including on entry from a managed call.
@@ -636,9 +644,23 @@ namespace PortableCompiler
                     code[used++] = 0x0f;
                 }
                 else if (kind == ThrowNull)
-                    used = ExceptionTagsWasm.Throw(code, used, ExceptionTagsWasm.NullTag);
+                {
+                    int thrown = states[state + top];
+                    if (thrown == NullValue)
+                        used = ExceptionTagsWasm.Throw(code, used, ExceptionTagsWasm.NullTag);
+                    else
+                    {
+                        // CLR throw of a null managed reference raises NullReferenceException.
+                        // A non-null object travels on the object tag with its own reference.
+                        int source = Spill(spills, maximum, thrown, top);
+                        used = Local(code, used, 0x20, source);
+                        code[used++] = 0xd1; // ref.is_null
+                        used = ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.NullTag);
+                        used = ExceptionDispatchWasm.ThrowObject(code, used, source);
+                    }
+                }
                 else if (kind == Rethrow)
-                    used = ExceptionDispatchWasm.ThrowReference(code, used, pcLocal + 2 + operand);
+                    used = ExceptionDispatchWasm.ReraiseCaught(code, used, pcLocal + 2 + operand, objectBase + 1 + operand);
                 else
                 {
                     if (hasNull)
@@ -678,19 +700,19 @@ namespace PortableCompiler
                     else if (kind == Switch)
                         used = SwitchDispatch(code, used, records, operand, records[slot + 3], next, spills + top);
                     else if (kind == EndFinally)
-                        used = FinallyWasm.Finish(code, used, pcLocal + 2 + operand, continuationBase + operand);
+                        used = FinallyWasm.Finish(code, used, pcLocal + 2 + operand, objectBase + 1 + operand, continuationBase + operand);
                     else if (kind == Leave && continuations != 0)
-                        used = FinallyWasm.Leave(code, used, pc, operand, pcLocal, continuationBase, catchRegion);
+                        used = FinallyWasm.Leave(code, used, pc, operand, pcLocal, continuationBase, objectBase, catchRegion);
                     else used = Const(code, used, kind == Branch || kind == Leave ? operand : next);
                     used = Local(code, used, 0x21, pcLocal);
                     code[used++] = 0x0c;
                     // Catch dispatch adds try_table and one block per tag around the instruction if.
-                    code[used++] = catchRegion.Length == 0 ? (byte)1 : (byte)(2 + ExceptionTagsWasm.Count);
+                    code[used++] = catchRegion.Length == 0 ? (byte)1 : (byte)ExceptionDispatchWasm.Depth;
                 }
                 code[used++] = 0x0b;
             }
             code[used++] = 0;
-            if (catchRegion.Length != 0) used = ExceptionDispatchWasm.End(code, used, pcLocal, catchRegion, exceptionLocals > 1);
+            if (catchRegion.Length != 0) used = ExceptionDispatchWasm.End(code, used, pcLocal, catchRegion, exceptionLocals > 1, objectBase);
             code[used++] = 0x0b;
             code[used++] = 0;
             code[used++] = 0x0b;

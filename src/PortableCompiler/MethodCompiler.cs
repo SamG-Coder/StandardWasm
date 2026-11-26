@@ -225,12 +225,18 @@ namespace PortableCompiler
                             continue; // The reader publishes zero in the union field.
                         }
                         if (catchRegion[clause] != 0) return -2;
-                        int mask = ExceptionTypes.CatchMask(image, heaps, layout, catchRegion[clause + 5]);
+                        // Fixed-tag bits, plus the object tag and caught class when the
+                        // clause type is a linked class (decision 0054).
+                        int mask = ManagedExceptionClauses.ClauseMask(bundle, image, layout, heaps, owner,
+                            catchRegion[clause + 5], objects);
+                        if (mask < 0) return mask;
                         if (mask == 0) return -2;
                         catchRegion[clause + 5] = mask;
                     }
                     if (location.Length != 0) location[2] = -1;
-                    exceptionTags |= ExceptionTypes.Supported;
+                    // Every protected region also catches the object tag, so a finally
+                    // cannot be skipped by a thrown managed object (decision 0054).
+                    exceptionTags |= ExceptionTypes.Supported | ExceptionTypes.Object;
                 }
 
                 int parameters = arities[current];
@@ -323,8 +329,10 @@ namespace PortableCompiler
                     int capacity = body[1] * 64 + 32;
                     if (catchRegion.Length != 0)
                     {
-                        int handlerBytes = 32 + ExceptionTagsWasm.Count * 20 +
-                            catchRegion.Length / ExceptionClauses.Width * (40 * ExceptionTagsWasm.Count);
+                        // One dispatch per fixed tag plus the object dispatch, whose clause arms add a
+                        // nominal ref.test and clear the other kind's saved reference (decision 0054).
+                        int handlerBytes = 32 + (ExceptionTagsWasm.Count + 1) * 20 +
+                            catchRegion.Length / ExceptionClauses.Width * (48 * (ExceptionTagsWasm.Count + 1));
                         if (capacity > int.MaxValue - handlerBytes) return -3;
                         capacity += handlerBytes;
                     }
@@ -401,6 +409,8 @@ namespace PortableCompiler
                                     tags = BranchIl.IsSignedIntegerDivision(operation, type)
                                         ? ExceptionTypes.Arithmetic : ExceptionTypes.DivideByZero;
                             }
+                            // A throw may raise a managed object on the object tag (decision 0054).
+                            if (kind == BranchIl.ThrowNull) tags |= ExceptionTypes.Object;
                             if (tags != 0)
                             {
                                 if (capacity > int.MaxValue - 64) return -3;

@@ -5,6 +5,34 @@ namespace PortableCompiler
         internal const int OverflowExportSize = 12, DivideExportSize = 16;
         internal const int IndexExportSize = 19, NullExportSize = 17, InvalidCastExportSize = 15, ArgumentExportSize = 12;
         internal const int OverflowTag = 0, DivideTag = 1, IndexTag = 2, NullTag = 3, InvalidCastTag = 4, ArgumentTag = 5, Count = 6;
+        // Decision 0054: a thrown managed object travels on tag 6 with an (eqref) payload. The six
+        // payload-free tags keep their indices and catch_ref paths; the object tag follows them.
+        internal const int ObjectTag = 6, ObjectExportSize = 10, ObjectTagTypeBytes = 4;
+
+        internal static int WriteObjectTagType(byte[] output, int cursor)
+        {
+            output[cursor++] = 0x60; // func
+            output[cursor++] = 1;
+            output[cursor++] = 0x6d; // eqref: the compiler's representation of System.Object
+            output[cursor++] = 0;
+            return cursor;
+        }
+
+        internal static int WriteObjectExport(byte[] code, int used)
+        {
+            // A leading NUL keeps the tag outside the printable managed export namespace.
+            code[used++] = 7;
+            code[used++] = 0;
+            code[used++] = (byte)'o';
+            code[used++] = (byte)'b';
+            code[used++] = (byte)'j';
+            code[used++] = (byte)'e';
+            code[used++] = (byte)'c';
+            code[used++] = (byte)'t';
+            code[used++] = 4; // exported tag
+            code[used++] = ObjectTag;
+            return used;
+        }
 
         internal static int WriteOverflowExport(byte[] code, int used)
         {
