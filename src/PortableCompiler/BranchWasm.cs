@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects)
+            byte[] outgoingNulls, int[] objects, int[] fieldInitializers)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -18,6 +18,10 @@ namespace PortableCompiler
             int exceptionLocals = frameShape[8], continuations = frameShape[9];
             int hostImports = frameShape[10];
             bool valueConstructor = frameShape[11] != 0;
+            // Stage 129 (decision 0057): a precise-type member calls its type
+            // initializer on entry. An initializer body runs behind its guard.
+            int prologue = frameShape[12] - 1, guard = frameShape[13] - 1, epoch = frameShape[14] - 1;
+            int activeInitializers = frameShape[15] - 1;
             bool hasNull = outgoingNulls.Length != 0;
             int spillKinds = PeLibrary.ConsoleStorage.Writer + classes;
             // V8 counts parameters together with function locals. Reject
@@ -109,6 +113,12 @@ namespace PortableCompiler
                 used = NormalizeSlot(code, used, frame[i]);
                 used = Local(code, used, 0x21, i);
             }
+            if (prologue >= 0)
+            {
+                code[used++] = 0x10; // call the initializer after the caller evaluated the arguments
+                used = WasmBinary.Unsigned(code, used, hostImports + prologue);
+            }
+            if (guard >= 0) used = TypeInitializerWasm.Begin(code, used, guard, epoch, activeInitializers, pcLocal);
             code[used++] = 0x03;
             code[used++] = 0x40;
             if (catchRegion.Length != 0) used = ExceptionDispatchWasm.Begin(code, used);
@@ -174,6 +184,15 @@ namespace PortableCompiler
                     code[used++] = 0;
                     used = StringWasm.Wrap(code, used);
                     used = Local(code, used, 0x21, Spill(spills, maximum, String, depth));
+                }
+                else if (kind == NewRootObject)
+                {
+                    // A fresh, identity-bearing plain object. It has no fields and no
+                    // virtual members; Object member calls on it stay diagnosed.
+                    code[used++] = 0xfb;
+                    code[used++] = 1; // struct.new_default
+                    used = WasmBinary.Unsigned(code, used, WasmBinary.RootObjectHeap);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, ObjectReference, depth));
                 }
                 else if (kind == LoadEventArgsEmpty || kind == NewEventArgs)
                 {
@@ -434,7 +453,8 @@ namespace PortableCompiler
                     int returned = signatures[shape];
                     // Preserve the current frame whenever it can handle an exception.
                     // With the same result type, the callee already normalizes its return value.
-                    if (kind == Call && catchRegion.Length == 0 && first == 0 && returned == result &&
+                    // An initializer must observe its callee's failure, so it never tail-calls.
+                    if (kind == Call && catchRegion.Length == 0 && guard < 0 && first == 0 && returned == result &&
                         next < depths.Length && records[next * Width] == Return)
                     {
                         code[used++] = 0x12; // return_call
@@ -504,6 +524,7 @@ namespace PortableCompiler
                 }
                 else if (kind == LoadStaticField)
                 {
+                    used = TypeInitializerWasm.Trigger(code, used, fieldInitializers, operand, hostImports);
                     code[used++] = 0x23; // global.get
                     used = WasmBinary.Unsigned(code, used, operand);
                     int storage = StackType(records[slot + 3]);
@@ -516,6 +537,8 @@ namespace PortableCompiler
                     // Globals have full-width Wasm value types. Normalize CLI
                     // byte and short assignments before persisting them.
                     used = NormalizeSlot(code, used, storage);
+                    // CLI order: the right-hand side, then the initializer, then the write.
+                    used = TypeInitializerWasm.Trigger(code, used, fieldInitializers, operand, hostImports);
                     code[used++] = 0x24; // global.set
                     used = WasmBinary.Unsigned(code, used, operand);
                 }
@@ -641,6 +664,7 @@ namespace PortableCompiler
                         used = LoadOperand(code, used, Spill(spills, maximum, source, top), source, result);
                         used = NormalizeSlot(code, used, result);
                     }
+                    if (guard >= 0) used = TypeInitializerWasm.Complete(code, used, guard, activeInitializers);
                     code[used++] = 0x0f;
                 }
                 else if (kind == ThrowNull)
@@ -715,6 +739,7 @@ namespace PortableCompiler
             if (catchRegion.Length != 0) used = ExceptionDispatchWasm.End(code, used, pcLocal, catchRegion, exceptionLocals > 1, objectBase);
             code[used++] = 0x0b;
             code[used++] = 0;
+            if (guard >= 0) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers);
             code[used++] = 0x0b;
             return used;
         }

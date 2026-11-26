@@ -9,7 +9,10 @@ namespace PortableCompiler
         internal const int ScalarThunkType = 2, EventThunkType = 8, EventEntryHeap = 9, EventHandlerHeap = 10;
         private const int WideArrayHeap = 6, EventArgsHeap = 7, SingleArrayHeap = 11, DoubleArrayHeap = 12;
         private const int NativeArrayHeap = DoubleArrayHeap + 1;
-        private const int FirstClassHeap = NativeArrayHeap + 2;
+        // The zero-field companion of the native vector is distinct from every class heap.
+        // A plain System.Object allocates it without widening its static eqref (decision 0057).
+        internal const int RootObjectHeap = NativeArrayHeap + 1;
+        private const int FirstClassHeap = RootObjectHeap + 1;
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,

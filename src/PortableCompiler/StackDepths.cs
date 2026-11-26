@@ -148,6 +148,7 @@ namespace PortableCompiler
             if (kind == ClearValue) return depth;
             if (kind == NullLiteral) return Push(stack, allocated, depth, NullValue);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, allocated, depth, EventArgsReference);
+            if (kind == NewRootObject) return Push(stack, allocated, depth, ObjectReference);
             if (kind == CombineHandler || kind == RemoveHandler)
                 return Match(stack, depth, EventHandlerReference) && Match(stack, depth - 1, EventHandlerReference)
                     ? depth - 1 : -1;

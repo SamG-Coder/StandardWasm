@@ -24,6 +24,8 @@ namespace PortableCompiler
         // function and the auxiliary field is the addressed frame index.
         internal const int ConstructValue = 66;
         internal const int LoadTypeToken = 67, TypeFromHandle = 68;
+        // newobj System.Object::.ctor: a fresh plain object (decision 0057). [] -> [Object].
+        internal const int NewRootObject = 69;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
