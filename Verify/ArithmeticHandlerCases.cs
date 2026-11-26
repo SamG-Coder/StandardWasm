@@ -41,7 +41,7 @@ internal static class ArithmeticHandlerCases
                 string? exceptionType = null;
                 try { expected = oracle(); }
                 catch (ArithmeticException error) { exception = exceptionType = error.GetType().FullName; }
-                catch (IndexOutOfRangeException error) { exception = error.GetType().FullName; }
+                catch (IndexOutOfRangeException error) { exception = exceptionType = error.GetType().FullName; }
                 cases.Add(new
                 {
                     module = "BootstrapLibrary", method = "Compile", fixture = method,

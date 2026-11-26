@@ -35,7 +35,7 @@ namespace PeLibrary
             uint resolution = Index(image, type, scope);
             if ((resolution & 3) != 2 || resolution >> 2 == 0 || resolution >> 2 > (uint)counts[35])
                 return -2; // Only AssemblyRef-scoped primitive TypeRefs.
-            if (!AssemblyReferences.IsPlatformPrimitiveAssembly(image, streams, methods, counts, (int)(resolution >> 2)))
+            if (!PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, (int)(resolution >> 2)))
                 return -2;
             uint name = Index(image, type + (uint)scope, strings);
             uint ns = Index(image, type + (uint)(scope + strings), strings);

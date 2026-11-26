@@ -1,0 +1,1 @@
+{"assembly":"ForeignFieldTypes","exportType":"ForeignFieldTypes.LinkDemo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["ForeignFieldOwner.dll","ForeignFieldLeaf.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":32768,"arguments":[17]},"expected":35}

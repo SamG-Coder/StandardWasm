@@ -3,16 +3,17 @@ using static PortableCompiler.BranchIl;
 
 namespace PortableCompiler
 {
-    internal static class ArithmeticCatch
+    internal static class ExceptionClauses
     {
         // Once validated, a clause carries the resume offset in the flags slot
-        // and the supported tag mask in the metadata token slot.
+        // and the supported tag mask in the metadata token slot. A zero mask denotes finally.
         internal const int Width = ExceptionRegions.Width, Resume = 0, TryStart = 1, TryLength = 2, Mask = 5;
         private const int HandlerStart = 3, HandlerLength = 4;
 
         internal static int Validate(int[] records, int[] clauses, int[] location)
         {
             int length = records.Length / BranchIl.Width;
+            int exceptionLocals = 1; // The dispatcher always retains the caught Wasm reference.
             for (int clause = 0; clause < clauses.Length; clause += Width)
             {
                 int start = clauses[clause + HandlerStart], tryStart = clauses[clause + TryStart];
@@ -24,6 +25,13 @@ namespace PortableCompiler
                 for (int earlier = 0; earlier < clause; earlier += Width)
                     if (!ValidPair(clauses, earlier, clause)) return -1;
 
+                if (IsFinally(clauses, clause))
+                {
+                    // Cleanup starts with an empty stack and can suspend while a nested handler runs.
+                    clauses[clause + Resume] = start;
+                    exceptionLocals = 1 + clauses.Length / Width;
+                    continue;
+                }
                 int entry = start * BranchIl.Width;
                 // The generated handler resumes with an empty stack after consuming
                 // the original exception operand. No other edge may target that pop.
@@ -42,6 +50,24 @@ namespace PortableCompiler
                 {
                     if (!Edge(clauses, pc, operand, true)) return -1;
                 }
+                else if (kind == Rethrow)
+                {
+                    int handler = InnermostHandler(clauses, pc, true);
+                    if (handler < 0) return -1;
+                    records[slot + 1] = handler / Width;
+                    // A nested catch can overwrite the dispatcher scratch slot.
+                    exceptionLocals = 1 + clauses.Length / Width;
+                }
+                else if (kind == EndFinally)
+                {
+                    int handler = InnermostHandler(clauses, pc, false);
+                    if (handler < 0 || !IsFinally(clauses, handler)) return -1;
+                    // A protected block nested inside this handler cannot end it.
+                    for (int clause = 0; clause < clauses.Length; clause += Width)
+                        if (InProtectedRange(clauses, clause, pc) &&
+                            Contains(clauses, handler + HandlerStart, clause + TryStart)) return -1;
+                    records[slot + 1] = handler / Width;
+                }
                 else if (kind == Return)
                 {
                     if (Protected(clauses, pc)) return -1;
@@ -56,7 +82,21 @@ namespace PortableCompiler
                 }
                 pc = next;
             }
-            return 0;
+            return exceptionLocals;
+        }
+
+        private static int InnermostHandler(int[] clauses, int pc, bool catchesOnly)
+        {
+            int selected = -1, shortest = int.MaxValue;
+            for (int clause = 0; clause < clauses.Length; clause += Width)
+            {
+                if (catchesOnly && IsFinally(clauses, clause)) continue;
+                int length = clauses[clause + HandlerLength];
+                if (length >= shortest || !InRange(clauses, clause + HandlerStart, pc)) continue;
+                shortest = length;
+                selected = clause;
+            }
+            return selected;
         }
 
         internal static bool StartsTry(int[] clauses, int pc)
@@ -72,7 +112,8 @@ namespace PortableCompiler
         private static bool ValidPair(int[] clauses, int earlier, int later)
         {
             if (SameTry(clauses, earlier, later))
-                return !Overlaps(clauses, earlier + HandlerStart, later + HandlerStart);
+                return !IsFinally(clauses, earlier) && !IsFinally(clauses, later) &&
+                    !Overlaps(clauses, earlier + HandlerStart, later + HandlerStart);
             // Metadata must list an inner protected block before any try that encloses it.
             if (Inside(clauses, earlier, later + TryStart)) return true;
             if (Inside(clauses, later, earlier + TryStart)) return false;
@@ -97,6 +138,11 @@ namespace PortableCompiler
         private static bool Overlaps(int[] clauses, int a, int b) =>
             clauses[a] < clauses[b] + clauses[b + 1] && clauses[b] < clauses[a] + clauses[a + 1];
 
+        internal static bool IsFinally(int[] clauses, int clause) => clauses[clause + Mask] == 0;
+
+        internal static bool InProtectedRange(int[] clauses, int clause, int pc) =>
+            InRange(clauses, clause + TryStart, pc);
+
         private static bool InRange(int[] clauses, int range, int pc) =>
             pc >= clauses[range] && pc - clauses[range] < clauses[range + 1];
 
@@ -114,8 +160,10 @@ namespace PortableCompiler
                 int handler = clause + HandlerStart, region = clause + TryStart;
                 bool fromHandler = InRange(clauses, handler, source), toHandler = InRange(clauses, handler, target);
                 bool fromTry = InRange(clauses, region, source), toTry = InRange(clauses, region, target);
-                if (toHandler && (!fromHandler || target == clauses[handler])) return false;
-                if (!leave && (fromHandler && !toHandler || fromTry && !toTry)) return false;
+                bool cleanup = IsFinally(clauses, clause);
+                if (toHandler && (!fromHandler || !cleanup && target == clauses[handler])) return false;
+                if (fromHandler && !toHandler && (!leave || cleanup)) return false;
+                if (!leave && fromTry && !toTry) return false;
                 if (toTry && !fromTry && target != clauses[region] &&
                     (!leave || !LeaveToAssociatedTry(clauses, clause, source, target))) return false;
             }

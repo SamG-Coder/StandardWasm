@@ -1,0 +1,1 @@
+{"assembly":"InstanceNull","exportType":"InstanceNull.InstanceDemo","method":"Compile","inputs":[{"file":"self"},{"name":"CallCleanup"}],"generated":{"capacity":16384,"arguments":[0,2]},"expected":-101}
