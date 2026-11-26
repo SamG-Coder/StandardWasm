@@ -5,6 +5,8 @@ namespace PortableCompiler
     internal static class AssemblyBundle
     {
         internal const int ObjectOwner = -1; // Canonical root has no emitted TypeDef slot.
+        // Friend access has not been evaluated yet; distinct from every FriendAssemblies.Allows result.
+        private const int FriendUnknown = int.MinValue;
         // symbol receives [owner, MethodDef, constructor declaring TypeDef or 0,
         // closed declaring layout or 0]. context is the caller's own closed
         // declaring layout, which substitutes VAR in a TypeSpec parent.
@@ -48,21 +50,39 @@ namespace PortableCompiler
                 if (declaring < 0) return declaring;
             }
             int row = 0;
+            int friend = FriendUnknown;
             for (int candidate = range[0]; candidate < range[1]; candidate++)
             {
                 int flags = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 2);
                 int access = flags & 7;
-                // A closed parent in the caller's own assembly may name assembly
-                // members, and private members of the caller's own definition.
-                // Nested-type and friend access are not modeled and stay unbound.
-                bool local = closed != 0 && matched == owner &&
-                    (access == 3 || access == 5 || access == 1 && callerType == declaring);
-                if (access != 6 && !local && !(baseCall && opcode == 0x28 && (access == 4 || access == 5))) continue;
+                // The cheap static and name filters run first, so the friend metadata is read
+                // only for a candidate that could actually bind this call.
                 bool isStatic = (flags & 0x10) != 0;
                 if (isStatic && opcode != 0x28) continue;
                 int name = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 3);
                 if (!AssemblyReferences.SameString(caller, heaps, reference[4], target, targetHeaps, name))
                     continue;
+                // A closed parent in the caller's own assembly may name assembly
+                // members, and private members of the caller's own definition.
+                // Nested-type access is not modeled and stays unbound.
+                bool local = closed != 0 && matched == owner &&
+                    (access == 3 || access == 5 || access == 1 && callerType == declaring);
+                // Assembly (internal) and FamORAssem (protected internal) members of another
+                // bundle assembly are accessible when it names the caller in InternalsVisibleTo,
+                // with the identity rules of decision 0028 (decision 0055). Private, FamANDAssem
+                // and Family-only access stay rejected here; Family keeps the base-call rule below.
+                if (!local && matched >= 0 && matched != owner && (access == 3 || access == 5))
+                {
+                    if (friend == FriendUnknown)
+                    {
+                        var counts = new int[45];
+                        if (MetadataTableRows.ReadCounts(target, targetHeaps[4], targetHeaps[5], counts) < 0) return -1;
+                        friend = FriendAssemblies.Allows(target, targetHeaps, targetLayout, counts, caller, heaps, layout);
+                    }
+                    if (friend < 0) return friend;
+                    local = friend != 0;
+                }
+                if (access != 6 && !local && !(baseCall && opcode == 0x28 && (access == 4 || access == 5))) continue;
                 int signature = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 4);
                 int match = BundleSignatures.Match(bundle, caller, layout, heaps, owner, reference[5],
                     target, targetLayout, targetHeaps, matched, signature, false, objects, closed);
