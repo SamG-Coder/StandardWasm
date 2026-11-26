@@ -6,19 +6,24 @@ namespace PeLibrary
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
         internal const int FirstClass = NativeStorage.Scalar + 1, MaxClasses = 256 - FirstClass;
-        private const int Header = 3, Width = 10, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
+        private const int Header = 3, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
+        private const int Arguments = 10, Arity = 11, Element = 12;
         internal const int FieldMapStart = Header + MaxClasses * Width;
 
         // The header stores the type count, occupied field slots and occupied
-        // interface edge slots. Field slices and interface edges grow inward.
-        internal static int Find(int[] registry, int assembly, int row)
+        // auxiliary slots. Field slices and auxiliary data grow inward.
+        internal static int Find(int[] registry, int assembly, int row, int[] arguments)
         {
             for (int i = 0; i < registry[0]; i++)
             {
                 int candidate = Slot(FirstClass + i);
-                if (registry[candidate + Assembly] == assembly && registry[candidate + TypeRow] == row)
-                    return FirstClass + i;
+                if (registry[candidate + Assembly] != assembly || registry[candidate + TypeRow] != row ||
+                    registry[candidate + Arity] != arguments.Length) continue;
+                int start = registry[candidate + Arguments];
+                int j = 0;
+                while (j < arguments.Length && registry[start + j] == arguments[j]) j++;
+                if (j == arguments.Length) return FirstClass + i;
             }
             return 0;
         }
@@ -58,11 +63,12 @@ namespace PeLibrary
             return 0;
         }
 
-        internal static int Reserve(int[] registry, int assembly, int row, int[] shape, int parent)
+        internal static int Reserve(int[] registry, int assembly, int row, int[] shape, int parent, int[] arguments)
         {
             if (registry[0] >= MaxClasses) return -2;
             int count = shape[2], storage = FieldMapStart + registry[1];
-            if (count > registry.Length - registry[2] - storage) return -3;
+            int argumentStart = registry.Length - registry[2] - arguments.Length;
+            if (count > argumentStart - storage) return -3;
             // Reserve the class and its whole field slice before following
             // recursive references. Their registration may append other slices.
             int index = registry[0];
@@ -77,7 +83,32 @@ namespace PeLibrary
             registry[slot + Base] = parent;
             registry[slot + ShapeFlags] = shape[4];
             registry[slot + FieldTable] = shape[0];
+            registry[slot + Arguments] = argumentStart;
+            registry[slot + Arity] = arguments.Length;
+            for (int i = 0; i < arguments.Length; i++) registry[argumentStart + i] = arguments[i];
+            registry[2] = registry[2] + arguments.Length;
             return FirstClass + index;
+        }
+
+        internal static int RegisterArray(int[] registry, int element)
+        {
+            for (int i = 0; i < registry[0]; i++)
+                if (registry[Slot(FirstClass + i) + Element] == element) return FirstClass + i;
+            if (registry[0] >= MaxClasses) return -2;
+            int type = FirstClass + registry[0];
+            registry[0] = registry[0] + 1;
+            registry[Slot(type) + Element] = element;
+            return type;
+        }
+
+        internal static int ArrayElement(int[] registry, int type) =>
+            type >= FirstClass && type - FirstClass < registry[0] ? registry[Slot(type) + Element] : 0;
+
+        internal static int Argument(int[] registry, int type, int index)
+        {
+            if (type < FirstClass || type - FirstClass >= registry[0]) return -2;
+            int slot = Slot(type);
+            return index < 0 || index >= registry[slot + Arity] ? -2 : registry[registry[slot + Arguments] + index];
         }
 
         // Return storage directly for known types. A class signature yields
@@ -90,12 +121,14 @@ namespace PeLibrary
             uint flags = U16(image, at);
             if ((flags & 0x10) != 0) return 0; // Static fields have no instance storage.
             uint sig = ReadIndex(image, at + (uint)(2 + strings), blobs);
-            if (!Fits(sig, 3, (uint)streams[1])) return -1;
-            uint blob = (uint)streams[0] + sig;
-            int size = image[blob];
-            if (size < 2 || !Fits(sig, (uint)(size + 1), (uint)streams[1])) return -1;
-            if (image[blob + 1] != 6) return -2;
-            byte element = image[blob + 2];
+            if (sig == 0 || sig >= (uint)streams[1]) return -1;
+            int limit = streams[0] + streams[1];
+            int size = CompressedUnsigned(image, (int)((uint)streams[0] + sig), limit, reference);
+            int blob = reference[0], end = blob + size;
+            reference[0] = 0;
+            if (size < 2 || size > limit - blob) return -1;
+            if (image[blob] != 6) return -2;
+            byte element = image[blob + 1];
             if (size == 2 && element == 8) return 1;
             if (size == 2 && element == 0x0e) return 6;
             if (size == 2 && element == 0x1c) return ObjectReference;
@@ -103,12 +136,17 @@ namespace PeLibrary
             if (size == 2 && NativeStorage.IsIntegerElement(element)) return NativeStorage.Scalar;
             if (size == 3 && element == 0x1d)
             {
-                byte type = ArrayTypeRefs.Storage(image[blob + 3]);
-                return type == 0 ? -2 : type;
+                byte type = ArrayTypeRefs.Storage(image[blob + 2]);
+                if (type != 0) return type;
+            }
+            if (element == 0x15 || element == 0x13 || element == 0x1d)
+            {
+                reference[0] = -blob - 1;
+                reference[1] = end;
+                return 0;
             }
             if (element != 0x12) return -2;
-            int end = (int)blob + 1 + size;
-            int coded = CompressedUnsigned(image, (int)blob + 3, end, reference);
+            int coded = CompressedUnsigned(image, blob + 2, end, reference);
             if (coded <= 0 || reference[0] != end) return -2;
             reference[0] = coded;
             return 0;

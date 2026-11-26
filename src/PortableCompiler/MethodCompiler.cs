@@ -111,7 +111,9 @@ namespace PortableCompiler
             // Field rows occupy at least six bytes. Each InterfaceImpl row
             // reserves up to two extra cells for the nominal edge.
             int imageBytes = bundle.Length == 0 ? main.Length : bundle.Length;
-            var objects = new int[ObjectLayouts.FieldMapStart + imageBytes / 6 + interfaces * 2];
+            // Closed instantiations have distinct field slices and argument
+            // vectors even when they share a CLI definition.
+            var objects = new int[ObjectLayouts.FieldMapStart + imageBytes / 6 + interfaces * 2 + output.Length / 4];
             var owners = new int[symbols];
             var rows = new int[symbols];
             var indices = new int[symbols + 1];
@@ -389,7 +391,17 @@ namespace PortableCompiler
                 if (location.Length != 0) location[2] = slot / BranchIl.Width;
                 if (kind == BranchIl.NewArray)
                 {
-                    int type = ArrayTypeRefs.ElementType(image, heaps, layout, unchecked((uint)records[slot + 1]));
+                    uint token = unchecked((uint)records[slot + 1]);
+                    int type = ArrayTypeRefs.ElementType(image, heaps, layout, token);
+                    if (type == -2)
+                    {
+                        uint table = token >> 24;
+                        if (table != 1 && table != 2) return -2;
+                        int coded = (int)((token & 0xffffff) << 2) | (table == 1 ? 1 : 0);
+                        int element = BundleLayouts.RegisterReference(main, bundle, ranges, image, layout, heaps, owner, coded, objects);
+                        if (element < 0) return element;
+                        type = ObjectLayouts.RegisterArray(objects, element);
+                    }
                     if (type < 0) return type;
                     records[slot + 1] = type;
                 }
@@ -400,7 +412,8 @@ namespace PortableCompiler
                     if (type < 0) return type;
                     if (kind == BranchIl.CastClass && type == EventHandlerReference)
                         records[slot] = BranchIl.CastHandler;
-                    else if (type < ObjectLayouts.FirstClass || ObjectLayouts.IsInterface(objects, type)) return -2;
+                    else if (type < ObjectLayouts.FirstClass || ObjectLayouts.IsInterface(objects, type) ||
+                        ObjectLayouts.ArrayElement(objects, type) != 0) return -2;
                     records[slot + 1] = type;
                     continue;
                 }
@@ -508,7 +521,7 @@ namespace PortableCompiler
                         var symbol = new int[3];
                         bool baseCall = opcode == 0x28 && callerReceiver >= ObjectLayouts.FirstClass &&
                             ObjectLayouts.IsConstructor(image, heaps, layout, callerRow);
-                        int resolved = AssemblyBundle.Resolve(main, bundle, ranges, image, layout, heaps, owner, member, opcode, baseCall, symbol);
+                        int resolved = AssemblyBundle.Resolve(main, bundle, ranges, image, layout, heaps, owner, member, opcode, baseCall, objects, symbol);
                         if (resolved < 0) return resolved;
                         int targetOwner = symbol[0], targetRow = symbol[1];
                         int linked = indices[bases[targetOwner] + targetRow] - 1;

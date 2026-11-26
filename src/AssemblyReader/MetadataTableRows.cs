@@ -81,6 +81,8 @@ namespace PeLibrary
             }
             if (table == 41) return 2 * Width(counts[2]);
             if (table == 42) return 4 + strings + (counts[2] < 32768 && counts[6] < 32768 ? 2 : 4);
+            if (table == 44) return Width(counts[42]) +
+                (counts[2] < 16384 && counts[1] < 16384 && counts[27] < 16384 ? 2 : 4);
             return table == 43 ? blobs + MethodRefWidth(counts) : 0;
         }
 

@@ -75,6 +75,7 @@
     <ProjectReference Include="../demos/stage-83-interface-references/InterfaceDemo.csproj" />
     <ProjectReference Include="../demos/stage-84-native-sized-storage/NativeLayout.csproj" />
     <ProjectReference Include="../demos/stage-85-nested-references/NestedDemo.csproj" />
+    <ProjectReference Include="../demos/stage-86-closed-generic-layouts/GenericStorageDemo.csproj" />
     <ProjectReference Include="../demos/stage-78-strong-names/Alternate/Alternate.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />
     <Compile Remove="Fixtures/**/*.cs" />

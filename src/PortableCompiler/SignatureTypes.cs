@@ -122,15 +122,35 @@ namespace PortableCompiler
                     types[target] = ObjectLayouts.ObjectReference;
                 else if (element == 0x1d && cursor < end)
                 {
-                    byte storage = ArrayTypeRefs.Storage(image[cursor++]);
-                    if (storage == 0) return -2;
+                    int storage = ArrayTypeRefs.Storage(image[cursor]);
+                    if (storage == 0)
+                    {
+                        next[0] = cursor - 1;
+                        storage = ManagedReferenceSignatures.Read(main, bundle, ranges, image, methods, heap,
+                            assembly, next, end, receiver, objects, 0);
+                        if (storage < 0) return storage;
+                        cursor = next[0];
+                    }
+                    else cursor++;
                     types[target] = storage;
                 }
                 else if (element == 0x15)
                 {
-                    cursor = DelegateMetadata.ParseFunc(image, heap, methods, cursor - 1, end);
-                    if (cursor < 0) return -2;
-                    types[target] = Delegate;
+                    int afterDelegate = DelegateMetadata.ParseFunc(image, heap, methods, cursor - 1, end);
+                    if (afterDelegate >= 0)
+                    {
+                        cursor = afterDelegate;
+                        types[target] = Delegate;
+                    }
+                    else
+                    {
+                        next[0] = cursor - 1;
+                        int type = ManagedReferenceSignatures.Read(main, bundle, ranges, image, methods, heap,
+                            assembly, next, end, receiver, objects, 0);
+                        if (type < 0) return type;
+                        cursor = next[0];
+                        types[target] = type;
+                    }
                 }
                 else if (element == 0x12)
                 {

@@ -74,6 +74,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [83 · Interface references](stage-83-interface-references/README.md) | `npm run demo -- stage-83-interface-references` | Linked interface fields preserve reference identity and null |
 | [84 · Native-sized storage](stage-84-native-sized-storage/README.md) | `npm run demo -- stage-84-native-sized-storage` | Linked native-sized fields use wasm32 width |
 | [85 · Nested type references](stage-85-nested-references/README.md) | `npm run demo -- stage-85-nested-references` | Nested identities survive cross-DLL binding and forwarding |
+| [86 · Closed generic layouts](stage-86-closed-generic-layouts/README.md) | `npm run demo -- stage-86-closed-generic-layouts` | Closed reference arguments specialize instance and array storage |
 
 ## Adding a stage
 

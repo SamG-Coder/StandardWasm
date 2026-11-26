@@ -35,6 +35,13 @@ namespace PortableCompiler
             for (int i = 0; i < objects[0]; i++)
             {
                 int classType = FirstClass + i, fields = LayoutFieldCount(objects, classType);
+                int element = ArrayElement(objects, classType);
+                if (element != 0)
+                {
+                    classBytes += 2 + ValueWidth(Representation(objects, element));
+                    if (classBytes > output.Length) return -3;
+                    continue;
+                }
                 int size = 1, stored = 0, parent = Parent(objects, classType);
                 if (parent != 0) size += 2 + UnsignedSize(HeapType((byte)parent));
                 else if (!IsSealed(objects, classType) && !IsInterface(objects, classType)) size += 2;
@@ -221,6 +228,14 @@ namespace PortableCompiler
             for (int i = 0; i < objects[0]; i++)
             {
                 int classType = FirstClass + i, fields = LayoutFieldCount(objects, classType);
+                int element = ArrayElement(objects, classType);
+                if (element != 0)
+                {
+                    output[cursor++] = 0x5e; // mutable reference vector
+                    cursor = ValueType(output, cursor, Representation(objects, element));
+                    output[cursor++] = 1;
+                    continue;
+                }
                 int parent = Parent(objects, classType);
                 // Interface IDs reserve an empty type entry to keep heap
                 // indices stable. Interface values use eqref and never

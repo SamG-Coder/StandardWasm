@@ -255,11 +255,20 @@ namespace PortableCompiler
             }
             else if (kind == ArrayLength)
             {
-                if (depth < 1 || (stack[depth - 1] != NullValue && !IsArray(stack[depth - 1]))) return -1;
+                if (depth < 1 || (stack[depth - 1] != NullValue && !IsArray(stack[depth - 1]) &&
+                    ArrayElement(objects, stack[depth - 1]) == 0)) return -1;
                 stack[depth - 1] = Native;
             }
             else if (kind == ArrayGet)
             {
+                if (operand == 0x9a)
+                {
+                    if (depth < 2 || !ArrayIndex(stack, depth)) return -1;
+                    int element = ArrayElement(objects, stack[depth - 2]);
+                    if (element == 0) return -2;
+                    stack[depth - 2] = (byte)element;
+                    return depth - 1;
+                }
                 byte array = ArrayLoadType(operand);
                 if (!ArrayIndex(stack, depth) || !Match(stack, depth - 1, array)) return -1;
                 stack[depth - 2] = ArrayValueType(array);
@@ -267,6 +276,13 @@ namespace PortableCompiler
             }
             else if (kind == ArraySet)
             {
+                if (operand == 0xa2)
+                {
+                    if (depth < 3 || !ArrayIndex(stack, depth - 1)) return -1;
+                    int element = ArrayElement(objects, stack[depth - 3]);
+                    if (element == 0) return -2;
+                    return Assignable(stack[depth - 1], element, objects) ? depth - 3 : -1;
+                }
                 byte array = ArrayStoreType(operand);
                 if (!Match(stack, depth, ArrayValueType(array)) || !ArrayIndex(stack, depth - 1) ||
                     !Match(stack, depth - 2, array))

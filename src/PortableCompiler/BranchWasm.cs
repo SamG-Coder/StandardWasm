@@ -446,7 +446,7 @@ namespace PortableCompiler
                 }
                 else if (kind == ArrayGet)
                 {
-                    byte array = ArrayLoadType(operand);
+                    byte array = operand == 0x9a ? states[state + top - 1] : ArrayLoadType(operand);
                     int reference = Spill(spills, maximum, states[state + top - 1], top - 1);
                     int index = Spill(spills, maximum, states[state + top], top);
                     used = GuardNull(code, used, reference);
@@ -458,18 +458,19 @@ namespace PortableCompiler
                     int instruction = array != Bytes && array != Chars ? 0x0b :
                         operand == 0x90 || operand == 0x92 ? 0x0c : 0x0d;
                     used = Gc(code, used, instruction, array);
-                    used = Local(code, used, 0x21, Spill(spills, maximum, ArrayValueType(array), top - 1));
+                    byte value = operand == 0x9a ? (byte)ArrayElement(objects, array) : ArrayValueType(array);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, value, top - 1));
                 }
                 else if (kind == ArraySet)
                 {
-                    byte array = ArrayStoreType(operand);
+                    byte array = operand == 0xa2 ? states[state + top - 2] : ArrayStoreType(operand);
                     int reference = Spill(spills, maximum, states[state + top - 2], top - 2);
                     int index = Spill(spills, maximum, states[state + top - 1], top - 1);
                     used = GuardNull(code, used, reference);
                     used = GuardArrayIndex(code, used, reference, index, false);
                     used = Local(code, used, 0x20, reference);
                     used = Local(code, used, 0x20, index);
-                    used = Local(code, used, 0x20, Spill(spills, maximum, ArrayValueType(array), top));
+                    used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
                     used = Gc(code, used, 0x0e, array);
                 }
 
