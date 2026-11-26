@@ -7,7 +7,7 @@ namespace PortableCompiler
     {
         internal static int Match(byte[] main, byte[] bundle, int[] ranges,
             byte[] caller, int[] callerLayout, int[] callerHeaps, int callerOwner, int callerSignature,
-            byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner, int targetSignature, bool field)
+            byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner, int targetSignature, bool field, int[] objects)
         {
             var next = new int[1];
             int left = Start(caller, callerHeaps, callerSignature, next, field);
@@ -20,7 +20,18 @@ namespace PortableCompiler
 
             // A field has exactly one type, without a parameter count.
             int count = 0;
-            if (!field)
+            if (field)
+            {
+                next[0] = left;
+                int leftModifier = ObjectLayouts.ReadFieldModifier(caller, callerHeaps, callerLayout, next, leftEnd);
+                if (leftModifier < 0) return leftModifier;
+                left = next[0];
+                next[0] = right;
+                int rightModifier = ObjectLayouts.ReadFieldModifier(target, targetHeaps, targetLayout, next, rightEnd);
+                if (leftModifier != rightModifier) return 0;
+                right = next[0];
+            }
+            else
             {
                 count = CompressedUnsigned(caller, left, leftEnd, next);
                 left = next[0];
@@ -58,7 +69,7 @@ namespace PortableCompiler
                     else return 0;
                     continue;
                 }
-                if (element == 0x12)
+                if (element == 0x12 || element == 0x11)
                 {
                     int leftToken = CompressedUnsigned(caller, left, leftEnd, next);
                     left = next[0];
@@ -78,13 +89,54 @@ namespace PortableCompiler
                 else if (element == 0x1d)
                 {
                     // Exact element encodings distinguish signed and unsigned arrays.
-                    if (left >= leftEnd || right >= rightEnd || ArrayTypeRefs.Storage(caller[left]) == 0 ||
-                        caller[left++] != target[right++]) return 0;
+                    if (left >= leftEnd || right >= rightEnd) return 0;
+                    if (ArrayTypeRefs.Storage(caller[left]) != 0)
+                    {
+                        if (caller[left++] != target[right++]) return 0;
+                        continue;
+                    }
+                    int match = MatchReference(main, bundle, ranges, caller, callerLayout, callerHeaps, callerOwner,
+                        target, targetLayout, targetHeaps, targetOwner, left - 1, leftEnd, right - 1, rightEnd, objects, next);
+                    if (match <= 0) return match;
+                    left = next[0];
+                    right = match;
                 }
-                else if ((element < 1 || element > 0x0e) && element != 0x1c)
+                else if (element == 0x15)
+                {
+                    int match = MatchReference(main, bundle, ranges, caller, callerLayout, callerHeaps, callerOwner,
+                        target, targetLayout, targetHeaps, targetOwner, left - 1, leftEnd, right - 1, rightEnd, objects, next);
+                    if (match <= 0) return match;
+                    left = next[0];
+                    right = match;
+                }
+                else if (element == PointerStorage.Element)
+                {
+                    if (!PointerStorage.IsVoidPointer(caller, left, leftEnd) ||
+                        !PointerStorage.IsVoidPointer(target, right, rightEnd)) return 0;
+                    left++;
+                    right++;
+                }
+                else if ((element < 1 || element > 0x0e) && !NativeStorage.IsIntegerElement(element) && element != 0x1c)
                     return 0;
             }
             return left == leftEnd && right == rightEnd ? 1 : 0;
+        }
+
+        private static int MatchReference(byte[] main, byte[] bundle, int[] ranges, byte[] caller, int[] callerLayout,
+            int[] callerHeaps, int callerOwner, byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner,
+            int left, int leftEnd, int right, int rightEnd, int[] objects, int[] next)
+        {
+            next[0] = left;
+            int leftType = ManagedReferenceSignatures.Read(main, bundle, ranges, caller, callerLayout, callerHeaps,
+                callerOwner, next, leftEnd, 0, objects, 0);
+            if (leftType < 0) return leftType;
+            left = next[0];
+            next[0] = right;
+            int rightType = ManagedReferenceSignatures.Read(main, bundle, ranges, target, targetLayout, targetHeaps,
+                targetOwner, next, rightEnd, 0, objects, 0);
+            right = next[0];
+            next[0] = left;
+            return leftType == rightType ? right : 0;
         }
 
         private static int ObjectIdentity(byte[] main, byte[] bundle, int[] ranges, byte[] image,

@@ -13,6 +13,8 @@ namespace PortableCompiler
         internal const int FieldToken = 46, InitializedArray = 47;
         internal const int CheckedInteger = 48, CheckedConversion = 49, Leave = 50, Rethrow = 51, EndFinally = 52;
         internal const int CastClass = 53, TestClass = 54, ThrowNull = 55;
+        internal const int LocalAddress = 56, InitializeValue = 57, UpdateValue = 58, ClearValue = 59;
+        internal const int ProvenNativeZero = 2;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
@@ -24,6 +26,16 @@ namespace PortableCompiler
                 if (location.Length != 0) location[2] = pc;
                 int slot = pc * Width;
                 int op = image[start + pc++];
+                if (op == 0xfe && pc < length && image[start + pc] == 0x13)
+                {
+                    pc++;
+                    if (pc >= length) return -1;
+                    op = image[start + pc++];
+                    // This module owns its GC fields on one Wasm agent.
+                    // Keep each field operation in sequence. Shared or
+                    // address-based accesses need their own memory model.
+                    if (op != 0x7b && op != 0x7d) return -2;
+                }
                 int kind, operand = 0, comparison = 0;
                 if (op >= 2 && op <= 5 || op == 0x0e)
                 {
@@ -43,11 +55,11 @@ namespace PortableCompiler
                     operand = image[start + pc++];
                     if (operand >= arguments) return -1;
                 }
-                else if (op >= 6 && op <= 13 || op == 0x11 || op == 0x13)
+                else if (op >= 6 && op <= 13 || op >= 0x11 && op <= 0x13)
                 {
                     bool store = op == 0x13 || (op >= 10 && op <= 13);
-                    kind = store ? Store : Load;
-                    if (op == 0x11 || op == 0x13)
+                    kind = op == 0x12 ? LocalAddress : store ? Store : Load;
+                    if (op >= 0x11)
                     {
                         if (pc >= length) return -1;
                         operand = image[start + pc++];
@@ -158,7 +170,7 @@ namespace PortableCompiler
                     if (operand == 0) return -1;
                     if (op == 0x7b || op == 0x7c || op == 0x7d)
                     {
-                        if (table != 4 && (table != 0x0a || op == 0x7c)) return -2;
+                        if (table != 4 && table != 0x0a) return -2;
                         kind = op == 0x7b ? GetField : op == 0x7c ? FieldAddress : SetField;
                         comparison = table == 0x0a ? 1 : 0;
                     }
@@ -218,12 +230,12 @@ namespace PortableCompiler
                     operand = (int)(token & 0xffffff);
                 }
                 else if (op == 0x8e) kind = ArrayLength;
-                else if (op >= 0x90 && op <= 0x96 || op == 0x98 || op == 0x99)
+                else if (op >= 0x90 && op <= 0x96 || op >= 0x98 && op <= 0x9a)
                 {
                     kind = ArrayGet;
                     operand = op;
                 }
-                else if (op >= 0x9c && op <= 0xa1)
+                else if (op >= 0x9c && op <= 0xa2)
                 {
                     kind = ArraySet;
                     operand = op;
@@ -246,6 +258,22 @@ namespace PortableCompiler
                         kind = LoadFunction;
                         operand = (int)(token & 0xffffff);
                     }
+                    else if (extended == 0x0d)
+                    {
+                        if (length - pc < 2) return -1;
+                        operand = (int)ImageBytes.U16(image, (uint)(start + pc));
+                        pc += 2;
+                        if (operand >= locals) return -1;
+                        kind = LocalAddress;
+                        operand += arguments;
+                    }
+                    else if (extended == 0x15)
+                    {
+                        if (length - pc < 4) return -1;
+                        operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                        pc += 4;
+                        kind = InitializeValue;
+                    }
                     else if (extended == 0x1a)
                     {
                         if (!hasCatches) return -1;
@@ -264,7 +292,7 @@ namespace PortableCompiler
                     kind = CheckedInteger;
                     operand = op;
                 }
-                else if (op >= 0x82 && op <= 0x89 || op >= 0xb3 && op <= 0xba)
+                else if (op >= 0x82 && op <= 0x8b || op >= 0xb3 && op <= 0xba || op == 0xd4 || op == 0xd5)
                 {
                     kind = CheckedConversion;
                     operand = op;
@@ -315,6 +343,7 @@ namespace PortableCompiler
                 }
             }
             FuseUnsignedSingle(records, length);
+            MarkNativeZero(records, length);
             return 0;
         }
 
@@ -322,8 +351,29 @@ namespace PortableCompiler
         {
             int slot = offset * Width;
             int kind = records[slot];
-            if (kind == ConvertFloat || kind == Load || kind == MethodSpecCall) records[slot + 3] = 1;
+            if (kind == ConvertFloat || kind == ConvertInteger || kind == Load || kind == MethodSpecCall)
+                records[slot + 3] = 1;
             return records[slot] != 0;
+        }
+
+        private static void MarkNativeZero(int[] records, int length)
+        {
+            for (int pc = 0; pc < length;)
+            {
+                int slot = pc * Width;
+                int next = records[slot + 2];
+                if (records[slot] == Constant && records[slot + 1] == 0 && next < length)
+                {
+                    int conversion = next * Width;
+                    int opcode = records[conversion + 1];
+                    // A jump directly to the conversion could bring a
+                    // different value. Only certify the literal's own path.
+                    if (records[conversion] == ConvertInteger && (opcode == 0xd3 || opcode == 0xe0) &&
+                        records[conversion + 3] == 0)
+                        records[conversion + 3] = ProvenNativeZero;
+                }
+                pc = next;
+            }
         }
 
         private static void FuseUnsignedSingle(int[] records, int length)
@@ -362,7 +412,6 @@ namespace PortableCompiler
         internal static bool IsSignedIntegerDivision(int instruction, byte type) =>
             (instruction == 0x6d || instruction == 0x6f) && SignatureTypes.IsInteger(type);
 
-        internal static bool ConvertsToWide(int instruction) => instruction == 0x6a || instruction == 0x6e;
 
         private static int SignedByte(int value) => (value ^ 128) - 128;
 
