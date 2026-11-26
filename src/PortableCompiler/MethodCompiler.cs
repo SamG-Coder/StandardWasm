@@ -80,8 +80,8 @@ namespace PortableCompiler
             int count = CompressedTables.FindWithHeaps(image, layout, heaps);
             if (count < 0)
                 return count == MethodDefinitions.Unsupported ? -2 : -1;
-            if (MethodNames.HasInitializer(image, layout, heaps, count))
-                return -2;
+            int mainInitialization = TypeInitializers.RejectModuleInitializer(image, layout, heaps);
+            if (mainInitialization < 0) return mainInitialization;
 
             // A MethodDef row is local to its image. Give every row a disjoint
             // range in the global symbol index and record its owner on the queue.
@@ -96,8 +96,8 @@ namespace PortableCompiler
                 var dependencyHeaps = new int[8];
                 int size = CompressedTables.FindWithHeaps(dependency, dependencyLayout, dependencyHeaps);
                 if (size < 0) return size == MethodDefinitions.Unsupported ? -2 : -1;
-                if (MethodNames.HasInitializer(dependency, dependencyLayout, dependencyHeaps, size))
-                    return -2;
+                int dependencyInitialization = TypeInitializers.RejectModuleInitializer(dependency, dependencyLayout, dependencyHeaps);
+                if (dependencyInitialization < 0) return dependencyInitialization;
                 if (size >= int.MaxValue - bases[module]) return -2;
                 bases[module + 1] = bases[module] + size;
             }
@@ -669,11 +669,13 @@ namespace PortableCompiler
             int implementation = MethodDefinitions.ReadColumn(image, layout, row, 1);
             if ((attributes & 0x2440) != 0 || (implementation & 7) != 0)
                 return -2;
+            int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+            if (owner < 0) return -1;
+            int initialization = TypeInitializers.RejectDeclaringType(image, layout, heaps, owner);
+            if (initialization < 0) return initialization;
             int receiver = 0;
             if ((attributes & 0x10) == 0)
             {
-                int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
-                if (owner < 0) return -1;
                 receiver = BundleLayouts.Register(main, bundle, ranges, image, layout, heaps, assembly, owner, objects);
                 if (receiver < 0) return receiver;
             }
