@@ -45,7 +45,9 @@ namespace PortableCompiler
             int storage = BundleLayouts.ReadFieldStorage(bundle, image, layout, heaps, owner,
                 table, field, 0, objects, new int[2], true);
             if (storage < 0) return storage;
-            if ((!IsScalar(storage) && !IsReference(storage)) || ObjectLayouts.IsValueType(objects, storage)) return -2;
+            // Value layouts use immutable aggregates. The global holds the
+            // current whole value, and loads keep an independent snapshot.
+            if (!IsScalar(storage) && !IsReference(storage)) return -2;
 
             int index = Register(globals, owner, field, storage);
             if (index < 0) return index;

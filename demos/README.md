@@ -136,6 +136,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [130 · Fieldless sequential values](stage-130-fieldless-values/README.md) | `npm run demo -- stage-130-fieldless-values` | One-byte nominal empty values keep their managed identity |
 | [131 · Runtime reflection](stage-131-runtime-reflection/README.md) | `npm run demo -- stage-131-runtime-reflection` | Preserve module identity and original basenames in compiled assemblies |
 | [133 · String object identity](stage-133-string-object-identity/README.md) | `npm run demo -- stage-133-string-object-identity` | Preserve identity for identical literals across linked assemblies |
+| [134 · Static aggregate fields](stage-134-static-aggregate-fields/README.md) | `npm run demo -- stage-134-static-aggregate-fields` | Read and write static structs with CLR copy and initializer semantics |
 
 ## Adding a stage
 
