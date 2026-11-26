@@ -31,7 +31,7 @@ namespace PortableCompiler
         }
 
         internal static int Update(byte[] code, int used, int[] objects, int type, int local, int offset, int storage,
-            int replacement, byte replacementType)
+            int replacement, int replacementType)
         {
             int width = ExplicitValueLayouts.ViewWidth(objects, storage);
             if (width != 8)

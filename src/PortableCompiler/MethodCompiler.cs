@@ -162,7 +162,8 @@ namespace PortableCompiler
             }
             var body = new int[6];
             var frameShape = new int[11];
-            bool eventArgsEmpty = false;
+            // Each emitted global needs at least five bytes in the destination.
+            var globals = new int[1 + output.Length / 5 * 3];
             int exceptionTags = 0;
             var noCatch = new int[0];
             var sizingBuffer = new byte[0];
@@ -253,7 +254,7 @@ namespace PortableCompiler
                         return status;
                     functions = LinkOperands(main, bundle, ranges, image, layout, heaps, owner, source,
                         parameters == 0 ? 0 : signatures[signature + 1], records, owners, rows,
-                        bases, indices, arities, offsets, signatures, objects, thunks, literals, literalSize, functions, location, frame, catchRegion, hostUse);
+                        bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse);
                     if (functions < 0)
                         return functions;
 
@@ -262,7 +263,7 @@ namespace PortableCompiler
                     if (maximum > 0 && body[1] > int.MaxValue / maximum)
                         return -2;
                     var depths = new int[body[1]];
-                    var states = new byte[body[1] * maximum];
+                    var states = new int[body[1] * maximum];
                     bool hasNull = false;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                         if (records[slot] == BranchIl.NullLiteral || records[slot] == BranchIl.ConvertInteger &&
@@ -349,7 +350,7 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.NullReference;
                             else if (kind == BranchIl.Binary)
                             {
-                                byte type = states[pc * maximum + depths[pc] - 2];
+                                int type = states[pc * maximum + depths[pc] - 2];
                                 if (BranchIl.IsIntegerDivision(operation, type))
                                     tags = BranchIl.IsSignedIntegerDivision(operation, type)
                                         ? ExceptionTypes.Arithmetic : ExceptionTypes.DivideByZero;
@@ -388,14 +389,13 @@ namespace PortableCompiler
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
                             frameShape[6] = 1;
-                        if (kind == BranchIl.LoadEventArgsEmpty && depths[slot / BranchIl.Width] != 0)
-                            eventArgsEmpty = true;
                     }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
                         arities, code, remainderFixup, catchRegion, outgoingNulls, objects);
                 }
 
+                if (used < 0) return used;
                 if (used > moduleCode.Length - length)
                     return -3;
                 for (int i = 0; i < used; i++)
@@ -407,13 +407,12 @@ namespace PortableCompiler
                 return CompileProgram(main, bundle, ranges, entries, output, location, ConsoleWasm.ImportCount);
             CompileLocation.Clear(location);
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], eventArgsEmpty, remainderFixup[0], exceptionTags,
-                hostImports);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostImports);
         }
 
         private static int LinkOperands(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
             int[] heaps, int owner, int callerRow, int callerReceiver, int[] records, int[] owners, int[] rows, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
-            byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse)
+            int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse)
         {
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
             {
@@ -468,7 +467,7 @@ namespace PortableCompiler
                         if (bundle.Length == 0) return -2;
                         var linkedField = new int[2];
                         int status = AssemblyBundle.ResolveField(main, bundle, ranges, image, layout, heaps, owner,
-                            field, kind == BranchIl.SetField, objects, linkedField);
+                            field, kind == BranchIl.SetField, false, objects, globals, linkedField);
                         if (status < 0) return status;
                         records[slot + 1] = linkedField[0];
                         records[slot + 3] = linkedField[1];
@@ -508,6 +507,30 @@ namespace PortableCompiler
                     }
                     continue;
                 }
+                if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField)
+                {
+                    var symbol = new int[2];
+                    int field = records[slot + 1];
+                    bool write = kind == BranchIl.StoreStaticField;
+                    bool linked = records[slot + 3] != 0;
+                    if (!write && linked && owner == 0 && EventMetadata.Member(image, heaps, layout, field) == EventMetadata.Empty)
+                    {
+                        int eventGlobal = StaticFields.Register(globals, StaticFields.EventOwner, 0, EventArgsReference);
+                        if (eventGlobal < 0) return eventGlobal;
+                        records[slot] = BranchIl.LoadEventArgsEmpty;
+                        records[slot + 1] = eventGlobal;
+                        continue;
+                    }
+
+                    if (linked && bundle.Length == 0) return -2;
+                    int status = linked ? AssemblyBundle.ResolveField(main, bundle, ranges, image, layout, heaps, owner,
+                        field, write, true, objects, globals, symbol) :
+                        StaticFields.ResolveLocal(main, bundle, ranges, image, layout, heaps, owner, field, write, objects, globals, symbol);
+                    if (status < 0) return status;
+                    records[slot + 1] = symbol[0];
+                    records[slot + 3] = symbol[1];
+                    continue;
+                }
                 if (kind == BranchIl.LoadString)
                 {
                     int start = literalSize[0];
@@ -533,11 +556,6 @@ namespace PortableCompiler
                     if (owner == 0)
                     {
                         int eventMember = EventMetadata.Member(image, heaps, layout, member);
-                        if (eventMember == EventMetadata.Empty && opcode == 0x7e)
-                        {
-                            records[slot] = BranchIl.LoadEventArgsEmpty;
-                            continue;
-                        }
                         if (eventMember == EventMetadata.Construct && opcode == 0x73)
                         {
                             records[slot] = BranchIl.NewEventArgs;
@@ -557,7 +575,6 @@ namespace PortableCompiler
                             continue;
                         }
                     }
-                    if (opcode == 0x7e) return -2;
                     int consoleMember = ConsoleMetadata.Member(image, heaps, layout, member);
                     if (consoleMember == ConsoleMetadata.Unsupported) return -2;
                     if (consoleMember != 0)
@@ -769,7 +786,7 @@ namespace PortableCompiler
         // Class slots have already resolved to an assembly-qualified layout.
         private static bool IsSharedBundleType(int type) =>
             IsScalar(type) || type == String || type == ObjectReference || type == NullPointer || IsArray(StackType(type)) ||
-            (type >= ObjectLayouts.FirstClass && type < Signed8);
+            (type >= ObjectLayouts.FirstClass && type - ObjectLayouts.FirstClass < ObjectLayouts.MaxClasses);
 
         private static bool IsSharedBundleSignature(int[] types, int offset, int arity)
         {
@@ -787,10 +804,14 @@ namespace PortableCompiler
                 return -2;
             int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
             if (owner < 0) return -1;
-            int initialization = TypeInitializers.RejectDeclaringType(image, layout, heaps, owner);
+            bool isStatic = (attributes & 0x10) != 0;
+            // The initializer itself cannot be exposed as an ordinary method.
+            if (isStatic && MethodNames.IsInitializer(image, layout, heaps, row)) return -2;
+            int initialization = TypeInitializers.RejectDeclaringType(image, layout, heaps, owner,
+                allowBeforeFieldInit: true);
             if (initialization < 0) return initialization;
             int receiver = 0;
-            if ((attributes & 0x10) == 0)
+            if (!isStatic)
             {
                 receiver = BundleLayouts.Register(main, bundle, ranges, image, layout, heaps, assembly, owner, objects);
                 if (receiver < 0) return receiver;

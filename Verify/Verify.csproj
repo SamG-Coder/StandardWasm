@@ -101,6 +101,9 @@
     <ProjectReference Include="../demos/stage-94-floating-point-fields/FloatFieldDemo.csproj" />
     <ProjectReference Include="../demos/stage-96-primitive-generic-layouts/PrimitiveGenericDemo.csproj" />
     <ProjectReference Include="../demos/stage-97-byref-like-permission/ByRefPermissionFixture.csproj" />
+    <ProjectReference Include="../demos/stage-104-wide-layout-ids/WideLayoutDemo.csproj" />
+    <ProjectReference Include="../demos/stage-106-static-field-storage/StaticStorageDemo.csproj" />
+    <ProjectReference Include="../demos/stage-108-beforefieldinit-calls/BeforeFieldInitDemo.csproj" />
     <ProjectReference Include="../demos/stage-103-handle-generic-constraints/HandleConstraintDemo.csproj" />
     <ProjectReference Include="../demos/stage-102-nominal-enum-arguments/EnumArgumentDemo.csproj" />
     <ProjectReference Include="../demos/stage-101-nested-overlay-views/NestedOverlayDemo.csproj" />

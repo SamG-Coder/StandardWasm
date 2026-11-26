@@ -144,6 +144,9 @@ ExplicitScalarCases.Add(cases);
 NestedOverlayCases.Add(cases);
 EnumArgumentCases.Add(cases);
 HandleConstraintCases.Add(cases);
+WideLayoutCases.Add(cases);
+StaticStorageCases.Add(cases);
+BeforeFieldInitCases.Add(cases);
 StringVectorCases.Add(cases);
 
 // Integer division (stage 08). The grid crosses every signed boundary with every divisor boundary.

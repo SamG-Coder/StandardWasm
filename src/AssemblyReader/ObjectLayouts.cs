@@ -5,13 +5,14 @@ namespace PeLibrary
     internal static class ObjectLayouts
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
-        internal const int FirstClass = ConsoleStorage.Writer + 1, MaxClasses = 256 - FirstClass;
+        // Keep layout IDs above primitive, packed storage and generic scalar keys.
+        internal const int FirstClass = 0x400, MaxClasses = 4096, MaxTypeDepth = 236;
         private const int Header = 4, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         private const int Arguments = 10, Arity = 11, Element = 12;
         private const int ValueShape = 0x40000000, NullableShape = 0x20000000;
-        private const int FieldStorageBits = 9, FieldStorageMask = (1 << FieldStorageBits) - 1;
-        private const int EnumHead = 3, EnumKeyBase = 0x300;
+        private const int FieldStorageBits = 16, FieldStorageMask = (1 << FieldStorageBits) - 1;
+        private const int EnumHead = 3, EnumKeyBase = 0x100000;
         internal const int FieldMapStart = Header + MaxClasses * Width;
 
         // The header stores the type count, occupied field and auxiliary slots,
@@ -170,14 +171,14 @@ namespace PeLibrary
 
         // Return storage directly for known types. A class signature yields
         // its image-local TypeDefOrRef code for the linker to resolve.
-        internal static int ReadStorage(byte[] image, int[] streams, int[] methods, int table, int row, int[] reference)
+        internal static int ReadStorage(byte[] image, int[] streams, int[] methods, int table, int row, int[] reference, bool staticField)
         {
             reference[0] = 0;
             reference[1] = 0;
             int strings = methods[2], blobs = methods[3];
             uint at = (uint)(table + (row - 1) * (2 + strings + blobs));
             uint flags = U16(image, at);
-            if ((flags & 0x10) != 0) return 0; // Static fields have no instance storage.
+            if (!staticField && (flags & 0x10) != 0) return 0; // Static fields have no instance storage.
             uint sig = ReadIndex(image, at + (uint)(2 + strings), blobs);
             if (sig == 0 || sig >= (uint)streams[1]) return -1;
             int limit = streams[0] + streams[1];

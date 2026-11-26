@@ -12,7 +12,7 @@ namespace PortableCompiler
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup, int exceptionTags, int hostImports)
+            byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostImports)
         {
             // Imported functions precede defined functions in the Wasm index
             // space. Emitted bodies already include this offset in their calls.
@@ -50,7 +50,7 @@ namespace PortableCompiler
                     continue;
                 }
                 int size = 1, stored = 0, parent = Parent(objects, classType);
-                if (parent != 0) size += 2 + UnsignedSize(HeapType((byte)parent));
+                if (parent != 0) size += 2 + UnsignedSize(HeapType(parent));
                 else if (!IsSealed(objects, classType) && !IsInterface(objects, classType)) size += 2;
                 for (int field = 0; field < fields; field++)
                 {
@@ -154,8 +154,9 @@ namespace PortableCompiler
                 remaining = Reserve(remaining, tableSize);
             if (tagCount != 0)
                 remaining = Reserve(remaining, tagSize);
-            if (eventArgsEmpty)
-                remaining = Reserve(remaining, 8);
+            int globalSize = WasmGlobals.Size(globals, objects);
+            if (globalSize != 0)
+                remaining = Reserve(remaining, globalSize);
             remaining = Reserve(remaining, exportSize);
             if (thunks[0] != 0)
                 remaining = Reserve(remaining, elementSize);
@@ -271,7 +272,7 @@ namespace PortableCompiler
                 {
                     output[cursor++] = final ? (byte)0x4f : (byte)0x50;
                     output[cursor++] = parent == 0 ? (byte)0 : (byte)1;
-                    if (parent != 0) cursor = Unsigned(output, cursor, HeapType((byte)parent));
+                    if (parent != 0) cursor = Unsigned(output, cursor, HeapType(parent));
                 }
                 output[cursor++] = 0x5f; // struct
                 int stored = 0;
@@ -346,16 +347,10 @@ namespace PortableCompiler
                 }
             }
 
-            if (eventArgsEmpty)
+            if (globalSize != 0)
             {
-                cursor = Section(output, cursor, 6, 8);
-                output[cursor++] = 1;
-                cursor = ValueType(output, cursor, EventArgsReference);
-                output[cursor++] = 0; // immutable global, initialized once per module instance
-                output[cursor++] = 0xfb;
-                output[cursor++] = 1; // struct.new_default
-                output[cursor++] = EventArgsHeap;
-                output[cursor++] = 0x0b;
+                cursor = Section(output, cursor, 6, globalSize);
+                cursor = WasmGlobals.Write(output, cursor, globals, objects);
             }
             cursor = Section(output, cursor, 7, exportSize);
             cursor = Unsigned(output, cursor, exportCount);
@@ -417,7 +412,7 @@ namespace PortableCompiler
                 output[cursor++] = 0;
                 output[cursor++] = 0xfb;
                 output[cursor++] = 22; // ref.cast to the target's concrete receiver
-                cursor = Signed(output, cursor, HeapType((byte)receiver));
+                cursor = Signed(output, cursor, HeapType(receiver));
                 for (int argument = 1; argument < arity; argument++)
                 {
                     output[cursor++] = 0x20;
@@ -445,16 +440,15 @@ namespace PortableCompiler
             return cursor;
         }
 
-        private static int ValueWidth(int type) =>
-            type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference || type == NullPointer ||
-                type == ConsoleStorage.Writer ? 1 :
-                HeapType(StackType(type)) <= 63 ? 2 : 3;
+        internal static int ValueWidth(int type) =>
+            type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference || type == NullPointer || type == ConsoleStorage.Writer ? 1 :
+                1 + HeapTypeSize(HeapType(StackType(type)));
 
         internal static int ValueType(byte[] output, int cursor, int slot)
         {
-            byte type = StackType(slot);
+            int type = StackType(slot);
             if (type == I32 || type == MethodPointer || IsNativeInteger(type) || type == ConsoleStorage.Writer)
-                output[cursor++] = 0x7f; // A console writer is its host stream number.
+                output[cursor++] = 0x7f; // Console writers store their host stream number.
             else if (type == NullPointer)
                 output[cursor++] = NullSpillWasm.NullRef; // Only the null pointer inhabits the browser storage type.
             else if (type == I64)
@@ -471,15 +465,19 @@ namespace PortableCompiler
             return cursor;
         }
 
-        internal static int HeapType(byte type) =>
+        internal static int HeapType(int type) =>
             type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
                 type == EventArgsReference ? EventArgsHeap :
                 type == EventHandlerReference ? EventHandlerHeap :
                 type == Singles ? SingleArrayHeap : type == Doubles ? DoubleArrayHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;
 
+        // Positive heap indices are encoded as signed LEB values. The sign
+        // bit reserves one additional bit compared with an unsigned index.
+        private static int HeapTypeSize(int index) => UnsignedSize(index * 2);
+
         private static int ThunkSize(int receiver, int function, int arity) =>
-            7 + (HeapType((byte)receiver) <= 63 ? 1 : 2) + 2 * (arity - 1) + UnsignedSize(function);
+            7 + HeapTypeSize(HeapType(receiver)) + 2 * (arity - 1) + UnsignedSize(function);
 
         private static int Reserve(int remaining, int size)
         {
