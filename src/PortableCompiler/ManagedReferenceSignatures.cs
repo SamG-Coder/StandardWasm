@@ -6,11 +6,11 @@ namespace PortableCompiler
 {
     internal static class ManagedReferenceSignatures
     {
-        internal static int ReadStorage(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps,
+        internal static int ReadStorage(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int[] next, int end, int context, int[] objects) =>
-            ObjectLayouts.SignatureStorage(objects, Read(main, bundle, ranges, image, layout, heaps, owner, next, end, context, objects, 0));
+            ObjectLayouts.SignatureStorage(objects, Read(bundle, image, layout, heaps, owner, next, end, context, objects, 0));
 
-        internal static int ReadInstantiation(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+        internal static int ReadInstantiation(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int blob, int[] objects, int context = 0)
         {
             // context is the closed layout whose arguments substitute VAR in
@@ -22,11 +22,11 @@ namespace PortableCompiler
             if (size < 1 || size > limit - start) return -1;
             if (image[start] != 0x15) return -2;
             int end = start + size;
-            int type = Read(main, bundle, ranges, image, layout, heaps, owner, next, end, context, objects, 0);
+            int type = Read(bundle, image, layout, heaps, owner, next, end, context, objects, 0);
             return type < 0 || next[0] == end ? type : -1;
         }
 
-        internal static int Read(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps,
+        internal static int Read(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int[] next, int end, int context, int[] objects, int depth)
         {
             int at = next[0];
@@ -44,7 +44,7 @@ namespace PortableCompiler
                 if (primitive > 0) return GenericScalar.Key(primitive);
                 if (primitive != -2) return primitive;
 
-                int type = BundleLayouts.RegisterType(main, bundle, ranges, image, layout, heaps, owner, token, objects, true, true);
+                int type = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, token, objects, true, true);
                 return type;
             }
             if (element == 0x0e) return String;
@@ -54,11 +54,11 @@ namespace PortableCompiler
                 int token = CompressedUnsigned(image, at + 1, end, next);
                 if (token < 0) return -1;
                 return element == 0x13 ? ObjectLayouts.Argument(objects, context, token) :
-                    BundleLayouts.RegisterReference(main, bundle, ranges, image, layout, heaps, owner, token, objects);
+                    BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, token, objects);
             }
             if (element == 0x1d)
             {
-                int item = Read(main, bundle, ranges, image, layout, heaps, owner, next, end, context, objects, depth + 1);
+                int item = Read(bundle, image, layout, heaps, owner, next, end, context, objects, depth + 1);
                 if (item < 0) return item;
                 // An enum vector needs separate nominal identity and array lowering.
                 if (ObjectLayouts.IsEnumKey(item)) return -2;
@@ -74,11 +74,11 @@ namespace PortableCompiler
             var arguments = new int[count];
             for (int i = 0; i < count; i++)
             {
-                int argument = Read(main, bundle, ranges, image, layout, heaps, owner, next, end, context, objects, depth + 1);
+                int argument = Read(bundle, image, layout, heaps, owner, next, end, context, objects, depth + 1);
                 if (argument < 0) return argument;
                 arguments[i] = argument;
             }
-            return BundleLayouts.RegisterInstantiation(main, bundle, ranges, image, layout, heaps, owner, definition, objects, arguments, definitionKind == 0x11);
+            return BundleLayouts.RegisterInstantiation(bundle, image, layout, heaps, owner, definition, objects, arguments, definitionKind == 0x11);
         }
     }
 }

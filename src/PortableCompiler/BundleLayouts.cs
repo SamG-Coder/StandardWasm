@@ -4,22 +4,32 @@ namespace PortableCompiler
 {
     internal static class BundleLayouts
     {
-        internal static int Register(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+        internal static int Register(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int row, int[] objects)
         {
-            return RegisterClosed(main, bundle, ranges, image, layout, heaps, owner, row, objects, new int[0]);
+            return RegisterClosed(bundle, image, layout, heaps, owner, row, objects, new int[0]);
         }
 
-        private static int RegisterClosed(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+        // A value-type definition in its own assembly. Returns -2 for a
+        // reference type or an enum, so callers keep their class diagnostics.
+        internal static int RegisterValue(BundleImages bundle, byte[] image,
+            int[] layout, int[] heaps, int owner, int row, int[] objects)
+        {
+            int type = RegisterClosed(bundle, image, layout, heaps, owner, row, objects, new int[0], true);
+            if (type < 0) return type;
+            return ObjectLayouts.IsValueType(objects, type) ? type : -2;
+        }
+
+        private static int RegisterClosed(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int row, int[] objects, int[] arguments, bool valueType = false, bool enumIdentity = false)
         {
-            int type = ReserveTree(main, bundle, ranges, image, layout, heaps, owner, row, objects, arguments, new int[0], 0, valueType);
+            int type = ReserveTree(bundle, image, layout, heaps, owner, row, objects, arguments, new int[0], 0, valueType);
             if (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0])
                 return enumIdentity && type > 0 ? ObjectLayouts.RegisterEnum(objects, owner, row, type) : type;
-            return Complete(main, bundle, ranges, image, layout, heaps, owner, type, objects);
+            return Complete(bundle, image, layout, heaps, owner, type, objects);
         }
 
-        private static int ReserveTree(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+        private static int ReserveTree(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int row, int[] objects, int[] arguments, int[] noArguments, int depth, bool valueType)
         {
             int known = ObjectLayouts.Find(objects, owner, row, arguments);
@@ -31,7 +41,7 @@ namespace PortableCompiler
             if (status < 0) return status;
             if (status != 0)
             {
-                status = BundleConstraints.Check(main, bundle, ranges, image, layout, heaps, owner, objects, arguments, deferred);
+                status = BundleConstraints.Check(bundle, image, layout, heaps, owner, objects, arguments, deferred);
                 if (status < 0) return status;
             }
             status = ObjectLayouts.ReadShape(image, heaps, layout, row, shape, valueType);
@@ -40,22 +50,25 @@ namespace PortableCompiler
             if (shape[3] != 0)
             {
                 var symbol = new int[2];
-                status = AssemblyBundle.ClassIdentity(main, bundle, ranges, image, layout, heaps, owner, shape[3], symbol);
+                status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, shape[3], symbol);
                 if (status < 0) return status;
                 if (symbol[0] == AssemblyBundle.ObjectOwner) parent = 0;
                 else if (symbol[0] == owner)
-                    parent = ReserveTree(main, bundle, ranges, image, layout, heaps, owner, symbol[1], objects, noArguments, noArguments, depth + 1, false);
+                    parent = ReserveTree(bundle, image, layout, heaps, owner, symbol[1], objects, noArguments, noArguments, depth + 1, false);
                 else
                 {
-                    byte[] target = AssemblyBundle.Load(main, bundle, ranges, symbol[0]);
+                    byte[] target = bundle.Get(symbol[0]);
                     var targetLayout = new int[4];
                     var targetHeaps = new int[8];
                     if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
-                    parent = ReserveTree(main, bundle, ranges, target, targetLayout, targetHeaps,
+                    parent = ReserveTree(bundle, target, targetLayout, targetHeaps,
                         symbol[0], symbol[1], objects, noArguments, noArguments, depth + 1, false);
                 }
                 if (parent < 0) return parent;
                 if (parent != 0 && (ObjectLayouts.IsSealed(objects, parent) || ObjectLayouts.IsInterface(objects, parent)))
+                    return -2;
+                if (parent != 0 && !ObjectLayouts.HasLayout(objects, parent) &&
+                    ObjectLayouts.RequiresLayoutParent(image, heaps, layout, shape))
                     return -2;
             }
             // The parent must precede the child in the Wasm recursive type group.
@@ -64,7 +77,7 @@ namespace PortableCompiler
             return ObjectLayouts.Reserve(objects, owner, row, shape, parent, arguments);
         }
 
-        private static int Complete(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+        private static int Complete(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int type, int[] objects)
         {
             if (!ObjectLayouts.BeginFields(objects, type)) return type;
@@ -74,20 +87,20 @@ namespace PortableCompiler
                 int parentOwner = ObjectLayouts.AssemblyOf(objects, parent);
                 int status;
                 if (parentOwner == owner)
-                    status = Complete(main, bundle, ranges, image, layout, heaps, owner, parent, objects);
+                    status = Complete(bundle, image, layout, heaps, owner, parent, objects);
                 else
                 {
-                    byte[] parentImage = AssemblyBundle.Load(main, bundle, ranges, parentOwner);
+                    byte[] parentImage = bundle.Get(parentOwner);
                     var parentLayout = new int[4];
                     var parentHeaps = new int[8];
                     if (CompressedTables.FindWithHeaps(parentImage, parentLayout, parentHeaps) < 0) return -1;
-                    status = Complete(main, bundle, ranges, parentImage, parentLayout, parentHeaps, parentOwner, parent, objects);
+                    status = Complete(bundle, parentImage, parentLayout, parentHeaps, parentOwner, parent, objects);
                 }
                 if (status < 0) return status;
             }
             if (!ObjectLayouts.IsValueType(objects, type))
             {
-                int interfaces = RegisterInterfaces(main, bundle, ranges, image, layout, heaps, owner, type, objects);
+                int interfaces = RegisterInterfaces(bundle, image, layout, heaps, owner, type, objects);
                 if (interfaces < 0) return interfaces;
             }
             var reference = new int[2];
@@ -100,7 +113,7 @@ namespace PortableCompiler
             if (limit < 0) return limit;
             for (int offset = 0; offset < fields; offset++)
             {
-                int storage = ReadFieldStorage(main, bundle, ranges, image, layout, heaps, owner,
+                int storage = ReadFieldStorage(bundle, image, layout, heaps, owner,
                     table, first + offset, type, objects, reference, false);
                 if (storage < 0) return storage;
                 if (overlay && storage != 0)
@@ -116,7 +129,7 @@ namespace PortableCompiler
             return type;
         }
 
-        internal static int ReadFieldStorage(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+        internal static int ReadFieldStorage(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int table, int row, int receiver, int[] objects,
             int[] reference, bool staticField)
         {
@@ -127,20 +140,20 @@ namespace PortableCompiler
                 int end = reference[1];
                 reference[0] = -reference[0];
                 if (image[reference[0]] == PointerStorage.Element)
-                    storage = PointerSignatures.ReadStorage(main, bundle, ranges, image, layout, heaps,
+                    storage = PointerSignatures.ReadStorage(bundle, image, layout, heaps,
                         owner, reference[0] + 1, end, reference);
                 else
-                    storage = ManagedReferenceSignatures.ReadStorage(main, bundle, ranges, image, layout, heaps,
+                    storage = ManagedReferenceSignatures.ReadStorage(bundle, image, layout, heaps,
                         owner, reference, end, receiver, objects);
                 if (storage >= 0 && reference[0] != end) return -1;
             }
             else if (reference[0] != 0)
-                storage = RegisterType(main, bundle, ranges, image, layout, heaps, owner,
+                storage = RegisterType(bundle, image, layout, heaps, owner,
                     reference[0], objects, reference[1] == 1);
             return storage;
         }
 
-        private static int RegisterInterfaces(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+        private static int RegisterInterfaces(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int type, int[] objects)
         {
             var table = new int[3];
@@ -154,7 +167,7 @@ namespace PortableCompiler
                 // Generic interface instantiations need TypeSpec support.
                 // Missing optional assemblies cannot establish an assignment.
                 if (coded == 0 || (coded & 3) == 2 || (coded & 3) == 1 && bundle.Length == 0) continue;
-                int target = RegisterReference(main, bundle, ranges, image, layout, heaps, owner, coded, objects);
+                int target = RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
                 if (target == -4 || target == -6) continue;
                 if (target < 0) return target;
                 if (!ObjectLayouts.IsInterface(objects, target)) return -2;
@@ -163,43 +176,43 @@ namespace PortableCompiler
             return 0;
         }
 
-        internal static int RegisterInstantiation(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+        internal static int RegisterInstantiation(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int coded, int[] objects, int[] arguments, bool valueType)
         {
             var symbol = new int[2];
-            int status = AssemblyBundle.ClassIdentity(main, bundle, ranges, image, layout, heaps, owner, coded, symbol);
+            int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, coded, symbol);
             if (status < 0) return status;
             if (symbol[0] == AssemblyBundle.ObjectOwner) return -2;
             if (symbol[0] == owner)
-                return RegisterClosed(main, bundle, ranges, image, layout, heaps, owner, symbol[1], objects, arguments, valueType);
-            byte[] target = AssemblyBundle.Load(main, bundle, ranges, symbol[0]);
+                return RegisterClosed(bundle, image, layout, heaps, owner, symbol[1], objects, arguments, valueType);
+            byte[] target = bundle.Get(symbol[0]);
             var targetLayout = new int[4];
             var targetHeaps = new int[8];
             if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
-            return RegisterClosed(main, bundle, ranges, target, targetLayout, targetHeaps, symbol[0], symbol[1], objects, arguments, valueType);
+            return RegisterClosed(bundle, target, targetLayout, targetHeaps, symbol[0], symbol[1], objects, arguments, valueType);
         }
 
-        internal static int RegisterReference(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+        internal static int RegisterReference(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int coded, int[] objects)
-            => RegisterType(main, bundle, ranges, image, layout, heaps, owner, coded, objects, false);
+            => RegisterType(bundle, image, layout, heaps, owner, coded, objects, false);
 
-        internal static int RegisterType(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+        internal static int RegisterType(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int coded, int[] objects, bool valueType, bool enumIdentity = false)
         {
             int platformType = valueType ? 0 : EventMetadata.Reference(image, heaps, layout, coded);
             if (platformType != 0) return platformType;
 
             var symbol = new int[2];
-            int status = AssemblyBundle.ClassIdentity(main, bundle, ranges, image, layout, heaps, owner, coded, symbol);
+            int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, coded, symbol);
             if (status < 0) return status;
             if (symbol[0] == AssemblyBundle.ObjectOwner) return valueType ? -2 : ObjectLayouts.ObjectReference;
             if (symbol[0] == owner)
-                return RegisterClosed(main, bundle, ranges, image, layout, heaps, owner, symbol[1], objects, new int[0], valueType, enumIdentity);
-            byte[] target = AssemblyBundle.Load(main, bundle, ranges, symbol[0]);
+                return RegisterClosed(bundle, image, layout, heaps, owner, symbol[1], objects, new int[0], valueType, enumIdentity);
+            byte[] target = bundle.Get(symbol[0]);
             var targetLayout = new int[4];
             var targetHeaps = new int[8];
             if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
-            return RegisterClosed(main, bundle, ranges, target, targetLayout, targetHeaps, symbol[0], symbol[1], objects, new int[0], valueType, enumIdentity);
+            return RegisterClosed(bundle, target, targetLayout, targetHeaps, symbol[0], symbol[1], objects, new int[0], valueType, enumIdentity);
         }
     }
 }

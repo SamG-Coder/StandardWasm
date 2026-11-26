@@ -35,6 +35,7 @@ internal static class BundleCases
         Reject("missing transitive dependency", Pack(entry, library), -4);
         Reject("ambiguous AssemblyDef identity", Pack(entry, library, leaf, library), -5);
         Reject("truncated bundle", joined[..^1], -1);
+        Reject("zero-length final image", [..joined, 0, 0, 0, 0], -1);
 
         using var pe = new PEReader(new MemoryStream(library));
         var metadata = pe.GetMetadataReader();
@@ -43,6 +44,21 @@ internal static class BundleCases
         byte[] wrongVersion = (byte[])library.Clone();
         BinaryPrimitives.WriteUInt16LittleEndian(wrongVersion.AsSpan(version), 999);
         Reject("dependency version mismatch", Pack(entry, wrongVersion, leaf), -4);
+
+        // Reusing the caller's array in a later invocation must take a new
+        // snapshot. The changed image has identical lengths and owner indices.
+        byte[] reused = (byte[])joined.Clone();
+        int libraryStart = 8 + entry.Length;
+        int first = BundleDemo.CompileBundle(reused, manifest, output);
+        if (first != size || Convert.ToHexString(output.AsSpan(0, first)).ToLowerInvariant() != hex)
+            throw new InvalidOperationException("Initial compile of reusable bundle changed the output.");
+        wrongVersion.CopyTo(reused, libraryStart);
+        Reject("changed dependency in reused bundle", reused, -4);
+        library.CopyTo(reused, libraryStart);
+        int restored = BundleDemo.CompileBundle(reused, manifest, output);
+        if (restored != size || Convert.ToHexString(output.AsSpan(0, restored)).ToLowerInvariant() != hex)
+            throw new InvalidOperationException("Restored bundle did not reproduce the module.");
+        AddCase("restored dependency in reused bundle", new[] { Encode(reused), Encode(manifest) }, [9], 89, hex);
 
         int row = typeof(SharedMath.MathLibrary).GetMethod(nameof(SharedMath.MathLibrary.Blend))!.MetadataToken & 0xffffff;
         var definition = metadata.GetMethodDefinition(MetadataTokens.MethodDefinitionHandle(row));

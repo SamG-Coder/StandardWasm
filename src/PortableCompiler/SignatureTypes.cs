@@ -7,7 +7,8 @@ namespace PortableCompiler
     {
         internal const byte Void = 0, I32 = 1, Bytes = ArrayTypeRefs.Bytes, Ints = ArrayTypeRefs.Ints, Delegate = 4,
             MethodPointer = 5, String = 6, Chars = ArrayTypeRefs.Packed16, I64 = WideStorage.Scalar, Longs = WideStorage.Array,
-            F32 = FloatStorage.Single, F64 = FloatStorage.Double, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles, Native = NativeStorage.Scalar;
+            F32 = FloatStorage.Single, F64 = FloatStorage.Double, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles, Native = NativeStorage.Scalar,
+            NativeVector = NativeStorage.Vector;
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
 
         // Signature and frame tags keep the CLI storage width. Narrow types
@@ -60,10 +61,10 @@ namespace PortableCompiler
         internal static byte FloatWidth(int left, int right) => left == F64 || right == F64 ? F64 : F32;
 
         internal static bool IsArray(int type) =>
-            type == Bytes || type == Ints || type == Chars || type == Longs || type == Singles || type == Doubles;
+            type == Bytes || type == Ints || type == Chars || type == Longs || type == Singles || type == Doubles || type == NativeVector;
 
         internal static byte ArrayValueType(int array) =>
-            array == Longs ? I64 : array == Singles ? F32 : array == Doubles ? F64 : I32;
+            array == Longs ? I64 : array == Singles ? F32 : array == Doubles ? F64 : array == NativeVector ? Native : I32;
 
         internal static byte ArrayLoadType(int opcode)
         {
@@ -71,11 +72,13 @@ namespace PortableCompiler
             if (opcode <= 0x93) return Chars;
             if (opcode <= 0x95) return Ints;
             if (opcode == 0x96) return Longs;
+            if (opcode == 0x97) return NativeVector;
             return opcode == 0x98 ? Singles : Doubles;
         }
 
         internal static byte ArrayStoreType(int opcode)
         {
+            if (opcode == 0x9b) return NativeVector;
             if (opcode == 0x9c) return Bytes;
             if (opcode == 0x9d) return Chars;
             if (opcode == 0x9e) return Ints;
@@ -87,7 +90,7 @@ namespace PortableCompiler
         // write only their slots. Stack values normalize CLI small integers to i32.
         // context is the closed declaring layout that supplies VAR arguments,
         // or zero when the declaring type is not generic.
-        internal static int Read(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context)
+        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context)
         {
             if (index <= 0 || index >= heap[1])
                 return -2;
@@ -125,7 +128,7 @@ namespace PortableCompiler
                     types[target] = Native;
                 else if (element == PointerStorage.Element)
                 {
-                    int storage = PointerSignatures.ReadStorage(main, bundle, ranges, image, methods, heap,
+                    int storage = PointerSignatures.ReadStorage(bundle, image, methods, heap,
                         assembly, cursor, end, next);
                     if (storage < 0) return storage;
                     cursor = next[0];
@@ -143,7 +146,7 @@ namespace PortableCompiler
                     if (storage == 0)
                     {
                         next[0] = cursor - 1;
-                        storage = ManagedReferenceSignatures.ReadStorage(main, bundle, ranges, image, methods, heap,
+                        storage = ManagedReferenceSignatures.ReadStorage(bundle, image, methods, heap,
                             assembly, next, end, context, objects);
                         if (storage < 0) return storage;
                         cursor = next[0];
@@ -162,7 +165,7 @@ namespace PortableCompiler
                     else
                     {
                         next[0] = cursor - 1;
-                        int type = ManagedReferenceSignatures.ReadStorage(main, bundle, ranges, image, methods, heap,
+                        int type = ManagedReferenceSignatures.ReadStorage(bundle, image, methods, heap,
                             assembly, next, end, context, objects);
                         if (type < 0) return type;
                         cursor = next[0];
@@ -186,7 +189,7 @@ namespace PortableCompiler
                     int coded = CompressedUnsigned(image, cursor, end, next);
                     if (coded <= 0) return -2;
                     cursor = next[0];
-                    int type = BundleLayouts.RegisterType(main, bundle, ranges, image, methods,
+                    int type = BundleLayouts.RegisterType(bundle, image, methods,
                         heap, assembly, coded, objects, element == 0x11);
                     if (type < 0) return type;
                     types[target] = type;

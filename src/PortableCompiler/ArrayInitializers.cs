@@ -29,6 +29,8 @@ namespace PortableCompiler
                 int length = records[slot + 1];
                 int type = ArrayTypeRefs.ElementType(image, heaps, methods, unchecked((uint)records[next + 1]));
                 if (type < 0) return type;
+                // A native-width RVA data blob targets the originating architecture.
+                if (type == NativeVector) return -2;
                 int width = type == Bytes ? 1 : type == Chars ? 2 : type == Longs || type == Doubles ? 8 : 4;
                 if (length <= 0 || length > int.MaxValue / width) return -2;
                 int bytes = length * width;

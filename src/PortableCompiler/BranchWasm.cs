@@ -17,6 +17,7 @@ namespace PortableCompiler
             bool eventScratch = frameShape[6] != 0;
             int exceptionLocals = frameShape[8], continuations = frameShape[9];
             int hostImports = frameShape[10];
+            bool valueConstructor = frameShape[11] != 0;
             bool hasNull = outgoingNulls.Length != 0;
             int spillKinds = PeLibrary.ConsoleStorage.Writer + classes;
             // V8 counts parameters together with function locals. Reject
@@ -54,7 +55,10 @@ namespace PortableCompiler
                 for (int kind = I32; kind <= spillKinds; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
-                    used = WasmBinary.ValueType(code, used, Representation(objects, kind <= PeLibrary.ConsoleStorage.Writer ? kind : FirstClass + kind - PeLibrary.ConsoleStorage.Writer - 1));
+                    int type = kind == NativeZero ? NativeVector : kind;
+                    if (kind > PeLibrary.ConsoleStorage.Writer)
+                        type = FirstClass + kind - PeLibrary.ConsoleStorage.Writer - 1;
+                    used = WasmBinary.ValueType(code, used, Representation(objects, type));
                 }
             }
             for (int i = 0; i < classes; i++)
@@ -383,7 +387,16 @@ namespace PortableCompiler
                     int receiver = kind == NewObject ? 1 : 0;
                     int first = depth - arity + receiver;
                     int temp = 0;
-                    if (kind == NewObject)
+                    bool valueObject = kind == NewObject && IsValueType(objects, signatures[shape + 1]);
+                    if (valueObject)
+                    {
+                        // CLI newobj on a value type constructs a fresh zeroed
+                        // instance. Null is the default aggregate, and the
+                        // constructor returns the constructed value: [args] -> [S].
+                        code[used++] = 0xd0; // ref.null
+                        used = WasmBinary.Signed(code, used, WasmBinary.HeapType(signatures[shape + 1]));
+                    }
+                    else if (kind == NewObject)
                     {
                         int type = StackType(signatures[shape + 1]);
                         temp = temporaries + type - FirstClass;
@@ -416,13 +429,33 @@ namespace PortableCompiler
                     }
                     code[used++] = 0x10;
                     used = WasmBinary.Unsigned(code, used, hostImports + operand);
-                    if (kind == NewObject)
+                    if (kind == NewObject && !valueObject)
                     {
                         returned = signatures[shape + 1];
                         used = Local(code, used, 0x20, temp);
                     }
                     if (returned != Void)
                         used = Local(code, used, 0x21, Spill(spills, maximum, StackType(returned), first));
+                }
+                else if (kind == ConstructValue)
+                {
+                    // [S, arguments] -> []. The CLR runs the constructor on the
+                    // location's address. Here the callee receives the location's
+                    // aggregate as it is at the call and returns the replacement,
+                    // which is stored back. Copies taken earlier keep their values.
+                    int arity = arities[operand], shape = offsets[operand];
+                    int first = depth - arity;
+                    int target = records[slot + 3];
+                    used = Local(code, used, 0x20, target);
+                    for (int i = 1; i < arity; i++)
+                    {
+                        int argument = first + i;
+                        int source = states[state + argument];
+                        used = LoadOperand(code, used, Spill(spills, maximum, source, argument), source, signatures[shape + 1 + i]);
+                    }
+                    code[used++] = 0x10;
+                    used = WasmBinary.Unsigned(code, used, hostImports + operand);
+                    used = Local(code, used, 0x21, target);
                 }
                 else if (kind == MathCall)
                 {
@@ -576,7 +609,10 @@ namespace PortableCompiler
 
                 if (kind == Return)
                 {
-                    if (result != Void)
+                    // A value constructor's IL ret has an empty stack. Its Wasm
+                    // result is the receiver's final aggregate.
+                    if (valueConstructor) used = Local(code, used, 0x20, 0);
+                    else if (result != Void)
                     {
                         int source = states[state + top];
                         used = LoadOperand(code, used, Spill(spills, maximum, source, top), source, result);
@@ -724,7 +760,10 @@ namespace PortableCompiler
 
         // The gap between primitive tags and layout IDs has no Wasm locals.
         private static int SpillBank(int type) =>
-            type >= FirstClass ? PeLibrary.ConsoleStorage.Writer + type - FirstClass : (type == NativeZero ? Native : type) - 1;
+            // NativeZero already spills as Native. Use its otherwise vacant bank
+            // for native arrays without increasing the engine's local pressure.
+            type >= FirstClass ? PeLibrary.ConsoleStorage.Writer + type - FirstClass :
+                (type == NativeZero ? Native : type == NativeVector ? NativeZero : type) - 1;
 
         internal static int LoadOperand(byte[] code, int used, int local, int source, int target)
         {

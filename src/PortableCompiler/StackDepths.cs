@@ -269,6 +269,20 @@ namespace PortableCompiler
             }
             if (kind == Call || kind == NewObject)
                 return CallShape(stack, depth, signatures, offsets[operand], arities[operand], kind == NewObject ? 1 : 0, objects);
+            if (kind == ConstructValue)
+            {
+                // The receiver entry is the addressed location's value, pushed by
+                // the lowered ldloca or ldarg.0. The callee returns the replacement,
+                // which the emitter stores back to that location.
+                int count = arities[operand], offset = offsets[operand];
+                int start = depth - count;
+                if (start < 0 || frame[extra] != signatures[offset + 1] ||
+                    !Assignable(stack[start], signatures[offset + 1], objects)) return -1;
+                for (int i = 1; i < count; i++)
+                    if (!Assignable(stack[start + i], signatures[offset + 1 + i], objects))
+                        return -1;
+                return start;
+            }
             if (kind == BaseCtor)
                 return depth > 0 && stack[depth - 1] >= FirstClass && !IsInterface(objects, stack[depth - 1]) &&
                     !IsValueType(objects, stack[depth - 1]) ? depth - 1 : -1;
@@ -322,7 +336,8 @@ namespace PortableCompiler
                     return Assignable(stack[depth - 1], element, objects) ? depth - 3 : -1;
                 }
                 byte array = ArrayStoreType(operand);
-                if (!Match(stack, depth, ArrayValueType(array)) || !ArrayIndex(stack, depth - 1) ||
+                if (depth == 0 || !Assignable(stack[depth - 1], ArrayValueType(array), objects) ||
+                    !ArrayIndex(stack, depth - 1) ||
                     !Match(stack, depth - 2, array))
                     return -1;
                 return depth - 3;
