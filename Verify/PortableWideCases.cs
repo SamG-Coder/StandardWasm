@@ -84,7 +84,7 @@ internal static class PortableWideCases
                 module = "BootstrapLibrary", method = linked ? "CompileBundle" : "Compile", fixture = method,
                 inputs = linked ? new[] { encodedBundle, EncodeBytes(entries) } : new[] { encodedImage, (object)row },
                 generated = new { capacity, arguments = Array.ConvertAll(args, Encode), hex, bundle = linked,
-                    exceptionType = exception == typeof(OverflowException).FullName ? exception : null },
+                    exceptionType = exception },
                 expected, exception
             });
         }

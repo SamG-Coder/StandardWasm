@@ -6,16 +6,17 @@ namespace PortableCompiler
     {
         internal const int Width = 4;
         internal const int Load = 1, Store = 2, Constant = 3, Unary = 4, Binary = 5,
-            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12, NewArray = 13, ArrayLength = 14, ArrayGet = 15, ArraySet = 16, Narrow = 17, NewObject = 18, GetField = 19, SetField = 20, BaseCtor = 21, LoadFunction = 22, NewDelegate = 23, InvokeDelegate = 24, MemberCall = 25, LoadString = 26, StringLength = 27, StringCharacter = 28, JoinStrings = 29, StringFromChars = 30, NullString = 31, WideConstant = 32, ConvertInteger = 33, Switch = 34, SingleConstant = 35, DoubleConstant = 36, ConvertFloat = 37;
+            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12, NewArray = 13, ArrayLength = 14, ArrayGet = 15, ArraySet = 16, Narrow = 17, NewObject = 18, GetField = 19, SetField = 20, BaseCtor = 21, LoadFunction = 22, NewDelegate = 23, InvokeDelegate = 24, MemberCall = 25, LoadString = 26, StringLength = 27, StringCharacter = 28, JoinStrings = 29, StringFromChars = 30, NullLiteral = 31, WideConstant = 32, ConvertInteger = 33, Switch = 34, SingleConstant = 35, DoubleConstant = 36, ConvertFloat = 37;
         internal const int UnsignedSingle = 0x100;
         internal const int LoadEventArgsEmpty = 38, NewEventArgs = 39, CombineHandler = 40, CastHandler = 41, RemoveHandler = 42;
         internal const int FieldAddress = 43, MethodSpecCall = 44, ExchangeHandlerField = 45;
         internal const int FieldToken = 46, InitializedArray = 47;
-        internal const int CheckedInteger = 48, CheckedConversion = 49, Leave = 50;
+        internal const int CheckedInteger = 48, CheckedConversion = 49, Leave = 50, Rethrow = 51, EndFinally = 52;
+        internal const int CastClass = 53, TestClass = 54;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
-        internal static int Decode(byte[] image, int start, int length, int arguments, int locals, int[] records, int[] location)
+        internal static int Decode(byte[] image, int start, int length, int arguments, int locals, int[] records, int[] location, bool hasCatches)
         {
             int pc = 0;
             while (pc < length)
@@ -132,6 +133,11 @@ namespace PortableCompiler
                         records[entry * Width + 1] = pc + delta;
                     }
                 }
+                else if (op == 0xdc)
+                {
+                    if (!hasCatches) return -1;
+                    kind = EndFinally;
+                }
                 else if (op == 0xdd || op == 0xde)
                 {
                     int size = op == 0xdd ? 4 : 1;
@@ -152,8 +158,9 @@ namespace PortableCompiler
                     if (operand == 0) return -1;
                     if (op == 0x7b || op == 0x7c || op == 0x7d)
                     {
-                        if (table != 4) return -2;
+                        if (table != 4 && (table != 0x0a || op == 0x7c)) return -2;
                         kind = op == 0x7b ? GetField : op == 0x7c ? FieldAddress : SetField;
+                        comparison = table == 0x0a ? 1 : 0;
                     }
                     else if (table == 0x2b && op == 0x28)
                     {
@@ -171,16 +178,19 @@ namespace PortableCompiler
                         comparison = op == 0x6f ? 1 : 0;
                     }
                 }
-                else if (op == 0x74)
+                else if (op == 0x74 || op == 0x75)
                 {
                     if (length - pc < 4) return -1;
                     uint token = ImageBytes.U32(image, (uint)(start + pc));
                     pc += 4;
-                    if (token >> 24 != 1) return -2;
-                    kind = CastHandler;
-                    operand = (int)(token & 0xffffff);
+                    uint table = token >> 24;
+                    if (table != 1 && table != 2) return -2;
+                    int row = (int)(token & 0xffffff);
+                    if (row == 0) return -1;
+                    kind = op == 0x74 ? CastClass : TestClass;
+                    operand = (row << 2) | (table == 1 ? 1 : 0);
                 }
-                else if (op == 0x14) kind = NullString;
+                else if (op == 0x14) kind = NullLiteral;
                 else if (op == 0x72)
                 {
                     if (length - pc < 4) return -1;
@@ -234,6 +244,11 @@ namespace PortableCompiler
                         if (token >> 24 != 6) return -2;
                         kind = LoadFunction;
                         operand = (int)(token & 0xffffff);
+                    }
+                    else if (extended == 0x1a)
+                    {
+                        if (!hasCatches) return -1;
+                        kind = Rethrow;
                     }
                     else
                     {
@@ -339,6 +354,9 @@ namespace PortableCompiler
         internal static bool IsShift(int instruction) => instruction >= 0x74 && instruction <= 0x76;
 
         internal static bool IsComparison(int instruction) => instruction >= 0x46 && instruction <= 0x4f;
+
+        internal static bool IsIntegerDivision(int instruction, byte type) =>
+            instruction >= 0x6d && instruction <= 0x70 && SignatureTypes.IsInteger(type);
 
         internal static bool IsSignedIntegerDivision(int instruction, byte type) =>
             (instruction == 0x6d || instruction == 0x6f) && SignatureTypes.IsInteger(type);

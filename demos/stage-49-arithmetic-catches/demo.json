@@ -1,0 +1,1 @@
+{"assembly":"ArithmeticHandlers","exportType":"ArithmeticHandlers.ArithmeticDemo","method":"Compile","inputs":[{"file":"self"},{"name":"SpecificThenBase"}],"generated":{"capacity":8192,"arguments":[18,0]},"expected":-101}

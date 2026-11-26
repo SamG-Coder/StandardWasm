@@ -49,7 +49,7 @@ internal static class EmitterCases
                 catch (ArithmeticException error)
                 {
                     expected = null;
-                    if (error is OverflowException) exceptionType = error.GetType().FullName;
+                    exceptionType = error.GetType().FullName;
                 }
                 cases.Add(new
                 {

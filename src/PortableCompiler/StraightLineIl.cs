@@ -67,7 +67,7 @@ namespace PortableCompiler
                 }
                 else
                 {
-                    if (op == 0x5b) return Unsupported; // Signed division needs the overflow guard.
+                    if (op >= 0x5b && op <= 0x5e) return Unsupported; // Integer division requires exception guards.
                     int lowered = Binary(op);
                     if (lowered < 0) return Unsupported;
                     if (depth < 2) return Invalid;
