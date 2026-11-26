@@ -10,7 +10,7 @@ namespace PeLibrary
         private const int Header = 4, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         private const int Arguments = 10, Arity = 11, Element = 12;
-        private const int ValueShape = 0x40000000, NullableShape = 0x20000000;
+        private const int ValueShape = 0x40000000, NullableShape = 0x20000000, InlineArrayShape = 0x10000000;
         private const int FieldStorageBits = 16, FieldStorageMask = (1 << FieldStorageBits) - 1;
         private const int EnumHead = 3, EnumKeyBase = 0x100000;
         internal const int FieldMapStart = Header + MaxClasses * Width;
@@ -103,15 +103,26 @@ namespace PeLibrary
                 int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]));
                 if (supported < 0) return supported;
             }
+            int inlineLength = 0;
             if (valueType)
             {
                 // Sequential values use declared managed fields. Explicit
                 // field offsets are validated separately before lowering.
                 if ((flags & 0x120) != 0x100 || valueBase != 1)
                     return -2;
-                int attributed = ValueTypeAttributes.CheckSupported(image, streams, methods, counts,
+                int attributed = ValueTypeAttributes.ReadInlineArrayLength(image, streams, methods, counts,
                     row, refs, refWidth, defs, defWidth);
                 if (attributed < 0) return attributed;
+                inlineLength = attributed;
+                if (inlineLength != 0)
+                {
+                    // The single declared instance field is element zero.
+                    if (layout == 0x10 || end - first != 1) return -2;
+                    int fieldWidth = 2 + strings + methods[3];
+                    if ((U16(image, (uint)(fields + ((int)first - 1) * fieldWidth)) & 0x10) != 0)
+                        return -2;
+                    flags |= InlineArrayShape;
+                }
                 if (layout != 0x10)
                 {
                     int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]),
@@ -130,7 +141,7 @@ namespace PeLibrary
             if (isInterface) end = first; // Interfaces have no instance fields.
             shape[0] = fields;
             shape[1] = (int)first;
-            shape[2] = (int)(end - first);
+            shape[2] = inlineLength != 0 ? inlineLength : (int)(end - first);
             shape[3] = (int)baseType;
             shape[4] = (int)flags;
             return 0;
@@ -467,7 +478,13 @@ namespace PeLibrary
             }
         }
 
+        internal static bool IsInlineArray(int[] registry, int type) =>
+            (registry[Slot(type) + ShapeFlags] & InlineArrayShape) != 0;
+
         internal static int FieldCount(int[] registry, int type) => registry[Slot(type) + Fields];
+
+        internal static int DeclaredFieldCount(int[] registry, int type) =>
+            IsInlineArray(registry, type) ? 1 : FieldCount(registry, type);
 
         internal static int FieldTypeAt(int[] registry, int type, int offset) =>
             registry[registry[Slot(type) + Storage] + offset] & FieldStorageMask;
@@ -485,7 +502,7 @@ namespace PeLibrary
         {
             int slot = Slot(type);
             int index = field - registry[slot + FirstField], storage = registry[slot + Storage];
-            if (index < 0 || index >= registry[slot + Fields] || registry[storage + index] == 0)
+            if (index < 0 || index >= DeclaredFieldCount(registry, type) || registry[storage + index] == 0)
                 return -1;
             if (IsExplicitValue(registry, type))
                 return (registry[storage + index] >> FieldStorageBits) - 1;
