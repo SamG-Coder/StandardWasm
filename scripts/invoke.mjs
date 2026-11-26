@@ -11,7 +11,9 @@ export function managedExceptionType(exports, error) {
     const index = exports["\0indexOutOfRange"];
     if (index instanceof WebAssembly.Tag && error.is(index)) return "System.IndexOutOfRangeException";
     const nullReference = exports["\0nullReference"];
-    return nullReference instanceof WebAssembly.Tag && error.is(nullReference) ? "System.NullReferenceException" : null;
+    if (nullReference instanceof WebAssembly.Tag && error.is(nullReference)) return "System.NullReferenceException";
+    const invalidCast = exports["\0invalidCast"];
+    return invalidCast instanceof WebAssembly.Tag && error.is(invalidCast) ? "System.InvalidCastException" : null;
 }
 
 export function invoke(exports, method, inputs) {
