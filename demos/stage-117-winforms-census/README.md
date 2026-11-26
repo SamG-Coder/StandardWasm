@@ -1,10 +1,15 @@
 # Stage 117 · WinForms blocker census
 
 Run `npm run demo -- stage-117-winforms-census` on Windows x64 with the
-.NET 10 SDK and the Microsoft.NETCore.App and Microsoft.WindowsDesktop.App
-10.0.10 runtimes. Set `STANDARDWASM_DESKTOP_VERSION` to census another
-installed version and `STANDARDWASM_CENSUS_PARALLEL` to change the number
-of concurrent compiler verdicts (default 12).
+.NET 10 SDK and the win-x86 Microsoft.NETCore.App and
+Microsoft.WindowsDesktop.App 10.0.10 runtimes. [Decision 0044](../../docs/decisions/0044-corelib-native-width.md)
+lowers CoreLib bodies only from a 4-byte native-width CoreLib, so the census
+reads the win-x86 packs. Set `STANDARDWASM_X86_DOTNET` to the win-x86 host if
+it isn't in the default location. Set `STANDARDWASM_DESKTOP_VERSION` to census
+another installed version, and `STANDARDWASM_CENSUS_PARALLEL` to change the
+number of concurrent compiler verdicts (default 12). A run takes about 3.5
+minutes. `STANDARDWASM_CENSUS_REUSE=<census.json>` replays an earlier run's
+verdicts so the rankings can be regenerated without recompiling.
 
 The runner publishes the unchanged [Stage 72](../stage-72-winforms-windows-reference/README.md)
 reference application. A host-side analyzer then walks the static call graph

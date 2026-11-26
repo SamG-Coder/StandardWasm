@@ -1,8 +1,10 @@
 # Stage 117 results · WinForms blocker census
 
-Recorded on Windows 11 x64 with .NET SDK 10.0.302 and Microsoft.NETCore.App and
-Microsoft.WindowsDesktop.App 10.0.10. The compiler is built from main 70f8b6e.
-The Stage 72 entry assembly `WinFormsReference.dll` has sha256 `979d6eb4…50cf`.
+Recorded on Windows 11 x64 with .NET SDK 10.0.302 and the win-x86
+Microsoft.NETCore.App and Microsoft.WindowsDesktop.App 10.0.10 packs. Decision
+0044 requires a 4-byte native-width CoreLib before CoreLib bodies are lowered,
+so the census uses those packs. The compiler is built from main e573583. The
+Stage 72 entry assembly `WinFormsReference.dll` has sha256 `a65eda77…6178`.
 The run loaded 59 assemblies, and [recorded/census-summary.json](recorded/census-summary.json)
 lists all of them with hashes. The full ranked tables are in
 [recorded/summary.md](recorded/summary.md). The per-method `census.json`
@@ -14,42 +16,45 @@ actually executes.
 
 ## Reproducibility
 
-`npm run demo -- stage-117-winforms-census` took 65 min at 12-way parallel
-compilation on this machine. Two independent full compile runs agreed on all
-28,357 per-method verdicts. Replaying those verdicts with
-`STANDARDWASM_CENSUS_REUSE` produced a byte-identical `census.json`.
+`npm run demo -- stage-117-winforms-census` takes about 3.5 minutes. The
+compiler runs at 12-way parallelism and totals 40 CPU minutes. Two consecutive
+full runs produced byte-identical `census.json` files. Replaying a run's
+verdicts with `STANDARDWASM_CENSUS_REUSE=<census.json>` regenerates the rankings
+without recompiling.
 
 ## Reach
 
 | Measure | Count |
 | --- | ---: |
-| Reached methods | 28,357 |
-| … with IL | 27,117 |
+| Reached methods | 28,344 |
+| … with IL | 27,102 |
 | Instantiated types | 1,695 |
 | Types whose initializer is reached | 2,867 |
 | Virtual slots called | 2,048 |
 | Unresolved member references | 0 |
 
-The reached methods include 12,662 in System.Private.CoreLib, 5,684 in
+The reached methods include 12,649 in System.Private.CoreLib, 5,684 in
 System.Windows.Forms, 1,003 in System.Private.Windows.Core and 672 in
-System.Windows.Forms.Primitives. The conservative walk also reaches System.Text.Json,
-networking and cryptography through `Stream`, `EventSource` and similar
-slots. The per-assembly witness paths in `recorded/summary.md` show where each
-one comes in.
+System.Windows.Forms.Primitives. The conservative walk also reaches System.Text.Json
+(1,890 methods), networking and cryptography through `Stream`, `EventSource`
+and similar slots. The per-assembly witness paths in `recorded/summary.md`
+show where each one comes in.
 
 ## Compiler verdicts
 
-From `Program.Main` the whole program stops at -2 [WinFormsReference, MethodDef 3,
-IL_0022], which is `newobj System.Drawing.Size::.ctor`. That is the same boundary
-the live Stage 95 drop reports, and #240 is fixing it.
+From `Program.Main` the whole program now stops at -4 [System.Windows.Forms,
+MethodDef 4340, IL_0000]. That is `Application.Run(Form)` calling
+`Application/ThreadContext::FromCurrent`, the boundary that #232 tracks. On main
+70f8b6e the same census stopped at `ReferenceForm::.ctor` IL_0022 (#240), so the
+entry verdict follows the live drop as the compiler grows.
 
 | Verdict | Methods |
 | --- | ---: |
-| Whole closure compiles | 2,099 |
-| Blocked in own body | 13,373 |
-| Own body lowers, blocked in a callee | 2,684 |
-| Export ABI rejects the shape (no own verdict) | 8,961 |
-| No IL (P/Invoke, internal call, runtime, abstract) | 1,240 |
+| Whole closure compiles | 2,129 |
+| Blocked in own body | 13,318 |
+| Own body lowers, blocked in a callee | 2,698 |
+| Export ABI rejects the shape (no own verdict) | 8,957 |
+| No IL (P/Invoke, internal call, runtime, abstract) | 1,242 |
 
 An IL offset of -1 doesn't mean the failure is in the method header. The
 compiler resets the location to -1 before stack analysis and emission, so the
@@ -66,23 +71,35 @@ reached methods whose compile stops in the group first, including methods
 whose own body lowers but whose callee fails. Each method counts once, under
 its first blocker, so later blockers are hidden behind earlier ones.
 
-| Rank | Group | Own | First | Representative sites | Issue |
+| Rank | Group | Own | First | Representative sites [assembly, MethodDef, IL] | Issue |
 | ---: | --- | ---: | ---: | --- | --- |
-| 1 | Locals without `localsinit` (`[SkipLocalsInit]`) | 3,450 | 3,788 | `Convert::ToInt32` CoreLib#3962, `OperatingSystem::IsOSVersionAtLeast` CoreLib#7199 | ISSUE_SKIPLOCALSINIT |
-| 2 | Static initialization (type initializers, static fields with `.cctor`) | 1,303 | 1,495 | `List`1::.ctor` IL_0007 `s_emptyArray`, `Lock::.ctor` IL_0007 | #232, #170 (Codex) |
-| 3 | Managed exception objects (typed catch, `throw`, filters) | 736 | 2,175 | `SR::GetResourceString` CoreLib#8021 IL_0014 catch `MissingManifestResourceException` blocks 832 methods | ISSUE_EXCEPTIONS |
-| 4 | Generic method instantiation (MethodSpec) | 799 | 896 | `Encoding::.ctor` IL_0013 `ThrowIfNegative<T>`, `BitConverter` `Unsafe.BitCast<,>` | ISSUE_GENERIC_METHODS |
-| 5 | Value-type instance methods on a managed receiver address | 686 | 774 | `GC::SuppressFinalize` IL_0011 `MethodTable::get_HasFinalizer`, `ToolStrip::get_OverflowButton` IL_003c | ISSUE_VALUE_METHODS |
-| 6 | Virtual and interface dispatch on non-exact receivers | 611 | 736 | `Delegate::Combine` IL_0007 `CombineImpl`, `Control::get_IsHandleCreated` IL_0006 | ISSUE_DISPATCH |
-| 7 | Managed byrefs, field addresses and `Span<T>` | 373 | 405 | `ExceptionDispatchInfo` IL_0007 `ldflda`, `TableLayout/ContainerInfo` IL_0001 `ldflda` | ISSUE_BYREFS |
-| 8 | Runtime type handles (`ldtoken`, `typeof`) | 205 | 235 | `JsonConverter::.ctor` IL_0012, WinForms enum converters | coordinate with #232 |
-| 9 | Platform boundary (P/Invoke, QCall, InternalCall) | 163 | 210 | `Environment::get_TickCount64` → `Kernel32::GetTickCount64`, `Marshal::GetLastPInvokeError` | ISSUE_EXTERN |
-| 10 | Unmanaged pointers, pinning, `sizeof`, `calli` | 152 | 153 | `Control` IL_0024 `sizeof TRACKMOUSEEVENT` | ISSUE_POINTERS |
+| 1 | Locals without `localsinit` (`[SkipLocalsInit]`) | 3,442 | 3,781 | `Convert::ToInt32` [CoreLib, 3984, -1], `OperatingSystem::IsOSVersionAtLeast` [CoreLib, 7222, -1] | #268 |
+| 2 | Managed exception objects (typed catch, `throw`, filters) | 764 | 2,204 | `SR::GetResourceString` [CoreLib, 8040, IL_0014] catches `MissingManifestResourceException`, which alone blocks 835 methods | #269 |
+| 3 | Static initialization (type initializers, static fields with `.cctor`) | 1,222 | 1,411 | `List`1::.ctor` [CoreLib, 42058, IL_0007] `s_emptyArray`, `Lock::.ctor` [CoreLib, 16464, IL_0007] | #232, #170 (Codex) |
+| 4 | Value-type instance methods on a managed receiver address | 700 | 797 | `GC::SuppressFinalize` [CoreLib, 1515, IL_0011] `MethodTable::get_HasFinalizer`, `ToolStrip::get_OverflowButton` [SWF, 11650, IL_003e] `Rectangle::get_Size` | #259 (read-only), #271 |
+| 5 | Class virtual dispatch, receiver not exact | 445 | 558 | `Control::get_IsHandleCreated` [SWF, 3201, IL_0006], `Control::set_Visible` [SWF, 3312, IL_0002] | #264 landed; see note |
+| 6 | Managed byrefs, field addresses and `Span<T>` | 429 | 461 | `ExceptionDispatchInfo` [CoreLib, 32910, IL_0007] `ldflda`, `TableLayout/ContainerInfo` [SWF, 26301, IL_0001] | #273 |
+| 7 | Generic method instantiation (MethodSpec) | 409 | 507 | `Encoding::.ctor` [CoreLib, 18917, IL_0013] `ThrowIfNegative<T>`, `Unsafe.BitCast` [CoreLib, 3431, IL_0001] | #270 |
+| 8 | Runtime type handles (`ldtoken`, `typeof`) | 206 | 236 | `JsonConverter::.ctor` [System.Text.Json, 2556, IL_0012], WinForms enum converters | coordinate with #232 |
+| 9 | Platform boundary (P/Invoke, QCall, InternalCall) | 167 | 219 | `Environment::get_TickCount64` [CoreLib, 1420, IL_0000] → `Kernel32::GetTickCount64`, `Environment::get_CurrentManagedThreadId` | #274 |
+| 10 | Unmanaged pointers, pinning, `sizeof`, `calli` | 217 | 218 | `sizeof TRACKMOUSEEVENT` [SWF, 3491, IL_0024] | #275 |
+| 11 | Interface dispatch | 194 | 210 | `IArrangedElement::PerformLayout` [SWF, 20984, IL_0015], `IKeyboardToolTip::CanShowToolTipsNow` [SWF, 20522, IL_001d] | #272 |
 
-Groups 1 and 3 are narrow and large. `SR.GetResourceString` sits on nearly
+Groups 1 and 2 are narrow and large. `SR.GetResourceString` sits on nearly
 every framework path that formats an error message. Because of the init-locals
-rule, 6,011 reached methods (3,450 judged own-body) can't compile until it
+rule, 6,002 reached methods (3,442 judged own-body) can't compile until it
 changes, whatever else they contain.
+
+Note on group 5: #264 implements closed-world class dispatch, and it diagnoses
+class receivers that reach the code through export parameters or returns. The
+census roots each method as its own export, so a receiver taken from a
+parameter falls into this group even when the whole program would resolve it.
+Treat the count as an upper bound. Re-measure it from `Program.Main` once
+startup gets further.
+
+Another 1,647 method-level failures have no distinguishing type or feature,
+and 1,522 are attributed only to their declaring type. Those need the
+compiler to report its reason.
 
 ## Static features of reached methods
 
@@ -91,10 +108,10 @@ Feature tags are counted independently of the compiler. The full table is in
 
 | Feature | Reached methods |
 | --- | ---: |
-| Locals without `localsinit` | 6,011 |
-| Value-type instance call | 4,851 |
+| Locals without `localsinit` | 6,002 |
+| Value-type instance call | 4,850 |
 | Virtual call | 4,725 |
-| Generic method call (MethodSpec) | 3,565 |
+| Generic method call (MethodSpec) | 3,564 |
 | `throw` | 1,949 |
 | `Span<T>` in signature / locals | 1,538 / 792 |
 | Unsafe pointer in signature / locals | 1,245 / 771 |
@@ -105,11 +122,11 @@ Feature tags are counted independently of the compiler. The full table is in
 | Static constructor | 577 |
 | Pinned local (`fixed`) | 520 |
 | `try/catch` | 409 |
-| Threading: Tasks / Interlocked / Thread / Monitor / Lock | 385 / 310 / 247 / 236 / 109 |
-| `volatile.` prefix | 325 |
+| Threading: Tasks / Interlocked / Thread / Monitor / Lock | 385 / 312 / 247 / 236 / 109 |
+| `volatile.` prefix | 323 |
 | `stackalloc` | 301 |
-| Explicit layout (field access / declaring type) | 185 / 63 |
-| Runtime internal call | 113 |
+| Explicit layout (field access / declaring type) | 186 / 64 |
+| Runtime internal call | 116 |
 | Indirect call (`calli`) | 89 |
 | Exception filter | 65 |
 
@@ -124,8 +141,9 @@ The loaded Windows Desktop assemblies declare 994 distinct entry points in
 compiled metadata, and reached code uses 408 of them. GdiPlus declares 523
 P/Invoke methods, Primitives 321, Private.Windows.Core 137,
 Microsoft.Win32.SystemEvents 33 and Drawing.Common 17. The #163 audit counted
-1,535 unique CsWin32 names in the `NativeMethods.txt` source lists. That count includes
-types and constants, so it isn't directly comparable with these entry points.
+1,535 unique CsWin32 names in the `NativeMethods.txt` source lists. That count
+includes types and constants, so it isn't directly comparable with these entry
+points.
 
 | DLL | Reached | From Windows Desktop | Declared by Windows Desktop |
 | --- | ---: | ---: | ---: |
@@ -153,7 +171,7 @@ types and constants, so it isn't directly comparable with these entry points.
   reflection activation, `TypeDescriptor` attributes, resource deserialization
   and COM activation, and 115 reached methods call such APIs. It also ignores
   runtime-synthesized array interfaces.
-- 8,961 methods have value-type or interface parameters or results, so they
+- 8,957 methods have value-type or interface parameters or results, so they
   can't be compile roots. They get a verdict only as callees.
 - A method counts only once, under its first blocker, so later blockers in the
   same method stay hidden until that one is fixed. Rerun the census after each
