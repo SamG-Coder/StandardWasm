@@ -16,6 +16,8 @@ namespace PortableCompiler
         internal const int LocalAddress = 56, InitializeValue = 57, UpdateValue = 58, ClearValue = 59;
         internal const int LoadStaticField = 60, StoreStaticField = 61;
         internal const int ProvenNativeZero = 2;
+        // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
+        internal const int MathCall = 62;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).

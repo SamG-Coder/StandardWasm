@@ -69,6 +69,7 @@ async function sample(renderer, count, changed, frames, warmup) {
 window.benchmark = async ({ count, fraction, frames = 32, warmup = 8, repeats = 3 }) => {
     const { gpu, canvas } = await prepare(count);
     const changed = Math.round(count * fraction);
+    const queueDrainMs = [];
     const totals = { gpu: { submit: [], frame: [] }, canvas: { submit: [], frame: [] } };
     for (let repeat = 0; repeat < repeats; repeat++) {
         const order = repeat % 2 === 0 ? [["gpu", gpu], ["canvas", canvas]] : [["canvas", canvas], ["gpu", gpu]];
@@ -76,11 +77,15 @@ window.benchmark = async ({ count, fraction, frames = 32, warmup = 8, repeats = 
             const values = await sample(renderer, count, changed, frames, warmup);
             totals[key].submit.push(...values.submit);
             totals[key].frame.push(...values.frame);
-            if (key === "gpu") await gpu.finished();
+            if (key === "gpu") {
+                const start = performance.now();
+                await gpu.finished();
+                queueDrainMs.push(performance.now() - start);
+            }
         }
     }
     return { count, changed, fraction, frames, warmup, repeats, adapter,
-        gpu: summarize(totals.gpu.submit, totals.gpu.frame),
+        gpu: { ...summarize(totals.gpu.submit, totals.gpu.frame), queueDrainMs },
         canvas2d: summarize(totals.canvas.submit, totals.canvas.frame) };
 };
 

@@ -18,5 +18,11 @@ namespace TypedPointerDependency
         public int Score(NativePen* value) => value == null ? 17 : -1;
 
         public NativeFont** ReadFonts() => Fonts;
+
+        public static int Pick(int* value) => value == null ? 1 : -1;
+        public static int Pick(uint* value) => value == null ? 2 : -1;
+        public static int Pick(long* value) => value == null ? 3 : -1;
+
+        public int ReadSigned(int* value) => value == null ? 7 : -1;
     }
 }

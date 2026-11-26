@@ -11,7 +11,7 @@ export async function verifyBootstrap(initial, fixture, cases, saveCompiler) {
             return array;
         }
 
-        const capacity = 1 << 20;
+        const capacity = fixture.capacity ?? (1 << 20);
         const output = compiler.CreateBytes(capacity);
         const length = compiler.CompileModule(upload(dll), upload(manifest), output);
         if (length <= 0 || length > capacity)
@@ -26,10 +26,14 @@ export async function verifyBootstrap(initial, fixture, cases, saveCompiler) {
     }
 
     const first = await build(initial);
+    const firstHex = Array.from(first.bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+    if (firstHex !== fixture.expectedHex) throw Error("First generated compiler differs from the CLR output");
     // No references allocated by the initial Wasm instance are passed onward.
     const second = await build(first.exports);
-    if (second.bytes.length !== first.bytes.length || !first.bytes.every((b, i) => second.bytes[i] === b))
-        throw Error("Self-recompiled compiler differs from the first generation");
+    const third = await build(second.exports);
+    for (const generation of [second, third])
+        if (generation.bytes.length !== first.bytes.length || !first.bytes.every((b, i) => generation.bytes[i] === b))
+            throw Error("Self-recompiled compiler differs from the first generation");
 
     let tested = 0;
     for (const c of cases) {

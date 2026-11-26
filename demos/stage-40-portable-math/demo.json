@@ -1,0 +1,1 @@
+{"assembly":"PortableMath","exportType":"PortableMath.MathDemo","method":"Compile","inputs":[{"file":"self"},{"name":"Hypotenuse"}],"generated":{"capacity":16384,"arguments":[{"f64":"3"},{"f64":"4"}]},"expected":{"f64":"5"}}
