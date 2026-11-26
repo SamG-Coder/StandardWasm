@@ -2,6 +2,22 @@ import { canvasBaseline } from "./render.mjs";
 
 const frame = () => new Promise(requestAnimationFrame);
 
+function observedClockStep() {
+    let previous = performance.now();
+    let step = Infinity;
+    let ticks = 0;
+    // Observe positive changes, since several reads can land on the same tick.
+    for (let reads = 0; reads < 100_000 && ticks < 64; reads++) {
+        const current = performance.now();
+        if (current <= previous) continue;
+        step = Math.min(step, current - previous);
+        previous = current;
+        ticks++;
+    }
+    if (!Number.isFinite(step)) throw Error("Browser clock did not advance during sampling");
+    return step;
+}
+
 export function prepareProfileTiming({
     canvas, model, text, gpu, captions, setManagedText, readPreview, previewRegion, previewControl
 }) {
@@ -31,6 +47,9 @@ export function prepareProfileTiming({
 
     return {
         async sample({ values, samples, warmup, repeats }) {
+            if (!globalThis.crossOriginIsolated)
+                throw Error("Profile timings require a cross-origin isolated page");
+            const clock = { crossOriginIsolated: globalThis.crossOriginIsolated, observedStepMs: observedClockStep() };
             const totals = {
                 webgpu: { updateMs: [], submitMs: [], queueDrainMs: [] },
                 canvas2d: { updateMs: [], submitMs: [] }
@@ -67,7 +86,7 @@ export function prepareProfileTiming({
                     }
                 }
             }
-            return { adapter: gpu.info, totals, width: model.width, height: model.height,
+            return { adapter: gpu.info, clock, totals, width: model.width, height: model.height,
                 previewRegion, captionCount: model.controls.length };
         },
         async render(key, value) {
