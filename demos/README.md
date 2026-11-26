@@ -131,6 +131,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [125 · Runtime type handles](stage-125-runtime-type-handles/README.md) | `npm run demo -- stage-125-runtime-type-handles` | Compare canonical TypeDef and TypeRef identities from managed DLLs |
 | [126 · Managed exception objects](stage-126-managed-exception-objects/README.md) | `npm run demo -- stage-126-managed-exception-objects` | Throw and catch linked exception classes against the x86 CLR; filters stay diagnosed |
 | [127 · Friend-assembly methods](stage-127-friend-methods/README.md) | `npm run demo -- stage-127-friend-methods` | Bind internal and protected internal methods through InternalsVisibleTo; ungranted calls stay diagnosed |
+| [128 · Interface dispatch](stage-128-interface-dispatch/README.md) | `npm run demo -- stage-128-interface-dispatch` | Inherited and explicit interface slots select their CLR bodies |
 
 ## Adding a stage
 

@@ -14,6 +14,9 @@ namespace PortableCompiler
                 (!allocated && !IsSealed(objects, receiver)) ||
                 IsValueType(objects, receiver) || IsInterface(objects, receiver)) return -2;
 
+            if (IsInterface(objects, declared))
+                return InterfaceSlots.SelectBody(bundle, objects, receiver, declared, owner, row, symbol);
+
             var ancestors = new int[objects[0]];
             int count = 0;
             for (int type = receiver; type != declared; type = Parent(objects, type))
@@ -28,14 +31,16 @@ namespace PortableCompiler
             if (CompressedTables.FindWithHeaps(source, sourceLayout, sourceHeaps) < 0) return -1;
             int name = MethodDefinitions.ReadColumn(source, sourceLayout, row, 3);
             int signature = MethodDefinitions.ReadColumn(source, sourceLayout, row, 4);
-            int sourceType = TypeDef(objects, declared);
-            int explicitSlot = VirtualSlotMetadata.HasNamedMethodImpl(source, sourceHeaps, sourceLayout, sourceType,
-                source, sourceHeaps, name);
+            int explicitSlot = HasClassMethodImpl(bundle, objects, declared, owner, source, sourceHeaps,
+                sourceLayout, source, sourceHeaps, name);
             if (explicitSlot != 0) return explicitSlot < 0 ? explicitSlot : -2;
 
             symbol[0] = owner;
             symbol[1] = row;
-            bool final = (MethodDefinitions.ReadColumn(source, sourceLayout, row, 2) & 0x20) != 0;
+            int declarationFlags = MethodDefinitions.ReadColumn(source, sourceLayout, row, 2);
+            int declarationAccess = declarationFlags & 7;
+            bool familySlot = declarationAccess == 4 || declarationAccess == 5;
+            bool final = (declarationFlags & 0x20) != 0;
             var layout = new int[4];
             var heaps = new int[8];
             var range = new int[2];
@@ -46,7 +51,7 @@ namespace PortableCompiler
                 int targetOwner = AssemblyOf(objects, type), typeRow = TypeDef(objects, type);
                 byte[] image = bundle.Get(targetOwner);
                 if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
-                explicitSlot = VirtualSlotMetadata.HasNamedMethodImpl(image, heaps, layout, typeRow,
+                explicitSlot = HasClassMethodImpl(bundle, objects, type, targetOwner, image, heaps, layout,
                     source, sourceHeaps, name);
                 if (explicitSlot != 0) return explicitSlot < 0 ? explicitSlot : -2;
 
@@ -70,7 +75,8 @@ namespace PortableCompiler
                     flags = attributes;
                 }
                 if (selected == 0) continue;
-                if ((flags & 7) != 6) return -2;
+                int access = flags & 7;
+                if (access != 6 && !(familySlot && (access == 4 || access == 5))) return -2;
                 // A new slot shadows the old name for later ordinary
                 // overrides. It does not change calls to the original slot.
                 if ((flags & 0x100) != 0)
@@ -84,6 +90,28 @@ namespace PortableCompiler
                 final = (flags & 0x20) != 0;
             }
             return 0;
+        }
+
+        private static int HasClassMethodImpl(BundleImages bundle, int[] objects, int type, int owner,
+            byte[] image, int[] heaps, int[] layout, byte[] declaration, int[] declarationHeaps, int name)
+        {
+            var cursor = new int[1];
+            var parent = new int[2];
+            int typeRow = TypeDef(objects, type);
+            while (true)
+            {
+                int coded = VirtualSlotMetadata.NextNamedMethodImplParent(image, heaps, layout, typeRow,
+                    declaration, declarationHeaps, name, cursor);
+                if (coded <= 0) return coded;
+                int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, coded, parent);
+                if (status < 0) return status == -1 ? -1 : -2;
+
+                // An interface MethodImpl can share a name with this virtual
+                // slot. Only a declaration on the class chain can remap it.
+                for (int current = type; current >= FirstClass; current = Parent(objects, current))
+                    if (AssemblyOf(objects, current) == parent[0] && TypeDef(objects, current) == parent[1])
+                        return 1;
+            }
         }
     }
 }

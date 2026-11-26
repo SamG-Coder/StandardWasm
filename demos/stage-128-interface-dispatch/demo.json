@@ -1,0 +1,8 @@
+{
+  "assembly": "InterfaceDispatchDemo",
+  "exportType": "InterfaceDispatchDemo.Demo",
+  "method": "CompileBundle",
+  "inputs": [{"file": "bundle", "dependencies": ["ReadContract.dll"]}, {"name": "ReadResource"}],
+  "generated": {"bundle": true, "capacity": 65536, "arguments": [4]},
+  "expected": 63
+}
