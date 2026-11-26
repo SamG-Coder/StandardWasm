@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { root, run } from "../../scripts/toolchain.mjs";
+import { runOn32BitClr, wasm32Runtime } from "../../scripts/runtime-packs.mjs";
 
 const stage = join(root, "demos", "stage-113-corelib-native-width");
 const compiler = process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts", "StandardWasm.Compiler.wasm");
@@ -15,27 +15,16 @@ const evidence = mkdtempSync(join(output, "run-"));
 
 // The 32-bit CLR is both the oracle and the supported pack. The 64-bit pack is
 // the same release, which isolates the native width from the version.
-const x86Host = process.env.STANDARDWASM_X86_DOTNET || "C:/Program Files (x86)/dotnet/dotnet.exe";
-if (!existsSync(x86Host)) throw Error("Install the win-x86 .NET 10 runtime or set STANDARDWASM_X86_DOTNET.");
-function coreRuntimes(host) {
-    const listed = execFileSync(host, ["--list-runtimes"], { encoding: "utf8" });
-    return new Map([...listed.matchAll(/^Microsoft\.NETCore\.App (10\.\S+) \[(.+)\]$/gm)]
-        .map(([, version, directory]) => [version, join(directory, version)]));
-}
-const narrowRuntimes = coreRuntimes(x86Host);
-const wideRuntimes = coreRuntimes("dotnet");
-const version = [...narrowRuntimes.keys()].filter(v => wideRuntimes.has(v)).sort().at(-1);
-if (!version) throw Error("Install matching win-x86 and win-x64 .NET 10 runtimes.");
-const widePack = process.env.STANDARDWASM_X64_RUNTIME_PACK || wideRuntimes.get(version);
+const runtime = wasm32Runtime();
+const version = runtime.version;
+const widePack = process.env.STANDARDWASM_X64_RUNTIME_PACK || runtime.widePack;
 const browserPack = process.env.STANDARDWASM_BROWSER_WASM_PACK ||
     join(homedir(), ".nuget", "packages", "microsoft.netcore.app.runtime.mono.browser-wasm", version);
 
 run("dotnet", ["build", "-c", "Release", join(stage, "Consumer")]);
-run("dotnet", ["build", "-c", "Release", join(stage, "Oracle")]);
 const consumer = join(stage, "Consumer", "bin", "Release", "net10.0", "NativeWidthConsumer.dll");
-const oracleDll = join(stage, "Oracle", "bin", "Release", "net10.0", "Oracle.dll");
-run(x86Host, ["exec", "--fx-version", version, oracleDll, evidence, consumer, widePack,
-    ...(existsSync(browserPack) ? [browserPack] : [])]);
+runOn32BitClr(runtime, join(stage, "Oracle"), join(stage, "Oracle", "bin", "Release", "net10.0", "Oracle.dll"),
+    [evidence, consumer, widePack, ...(existsSync(browserPack) ? [browserPack] : [])]);
 const oracle = JSON.parse(readFileSync(join(evidence, "oracle.json"), "utf8"));
 assert.equal(oracle.process, "X86");
 const files = [compiler, ...oracle.files].map(path => readFileSync(path));
