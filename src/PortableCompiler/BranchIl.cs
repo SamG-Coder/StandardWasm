@@ -13,6 +13,7 @@ namespace PortableCompiler
         internal const int FieldToken = 46, InitializedArray = 47;
         internal const int CheckedInteger = 48, CheckedConversion = 49, Leave = 50, Rethrow = 51, EndFinally = 52;
         internal const int CastClass = 53, TestClass = 54, ThrowNull = 55;
+        internal const int ProvenNativeZero = 2;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
@@ -325,6 +326,7 @@ namespace PortableCompiler
                 }
             }
             FuseUnsignedSingle(records, length);
+            MarkNativeZero(records, length);
             return 0;
         }
 
@@ -332,8 +334,29 @@ namespace PortableCompiler
         {
             int slot = offset * Width;
             int kind = records[slot];
-            if (kind == ConvertFloat || kind == Load || kind == MethodSpecCall) records[slot + 3] = 1;
+            if (kind == ConvertFloat || kind == ConvertInteger || kind == Load || kind == MethodSpecCall)
+                records[slot + 3] = 1;
             return records[slot] != 0;
+        }
+
+        private static void MarkNativeZero(int[] records, int length)
+        {
+            for (int pc = 0; pc < length;)
+            {
+                int slot = pc * Width;
+                int next = records[slot + 2];
+                if (records[slot] == Constant && records[slot + 1] == 0 && next < length)
+                {
+                    int conversion = next * Width;
+                    int opcode = records[conversion + 1];
+                    // A jump directly to the conversion could bring a
+                    // different value. Only certify the literal's own path.
+                    if (records[conversion] == ConvertInteger && (opcode == 0xd3 || opcode == 0xe0) &&
+                        records[conversion + 3] == 0)
+                        records[conversion + 3] = ProvenNativeZero;
+                }
+                pc = next;
+            }
         }
 
         private static void FuseUnsignedSingle(int[] records, int length)

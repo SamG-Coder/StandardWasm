@@ -78,7 +78,8 @@ namespace PortableCompiler
                     return next;
                 if (outgoingNulls.Length != 0)
                     for (int i = 0; i < next; i++)
-                        outgoingNulls[pc * maximum + i] = stack[i] == NullValue ? (byte)1 : (byte)0;
+                        outgoingNulls[pc * maximum + i] = stack[i] == NullValue ? (byte)1 :
+                            stack[i] == NativeZero ? (byte)2 : (byte)0;
                 if (kind == Branch || kind == Conditional || kind == Leave)
                 {
                     head = Edge(operand, next, maximum, stack, depths, states, pending, head);
@@ -161,7 +162,7 @@ namespace PortableCompiler
                 if (depth < 1) return -1;
                 byte source = stack[depth - 1];
                 if (!IsScalar(source)) return -1;
-                if (source == Native && kind != ConvertInteger && kind != Narrow) return -2;
+                if (IsNativeInteger(source) && kind != ConvertInteger && kind != Narrow) return -2;
                 if (kind == Unary)
                     return IsFloat(source) && operand != 0x6c ? -1 : depth;
                 if (kind == ConvertFloat)
@@ -172,7 +173,8 @@ namespace PortableCompiler
                 else
                 {
                     if (IsFloat(source) && (operand == 0xd3 || operand == 0xe0)) return -2;
-                    stack[depth - 1] = kind == ConvertInteger ? IntegerConversionType(operand) : I32;
+                    stack[depth - 1] = kind == ConvertInteger ?
+                        extra == ProvenNativeZero ? NativeZero : IntegerConversionType(operand) : I32;
                 }
                 return depth;
             }
@@ -183,7 +185,7 @@ namespace PortableCompiler
             {
                 if (depth < 2) return -1;
                 byte type = stack[depth - 1];
-                if (type == Native || stack[depth - 2] == Native) return -2;
+                if (IsNativeInteger(type) || IsNativeInteger(stack[depth - 2])) return -2;
                 return IsInteger(type) && Match(stack, depth - 1, type) ? depth - 1 : -1;
             }
             if (kind == Binary || kind == Conditional)
@@ -192,11 +194,20 @@ namespace PortableCompiler
                 if (depth < needed) return -1;
                 byte type = stack[depth - needed];
                 byte top = stack[depth - 1];
-                if (type == Native || top == Native)
+                if (type == VoidPointer || top == VoidPointer)
+                {
+                    if (needed == 1) return depth - 1;
+                    if ((type != VoidPointer && type != NativeZero) || (top != VoidPointer && top != NativeZero))
+                        return -2;
+                    if (kind == Conditional) return extra == 0x46 || extra == 0x47 ? depth - needed : -2;
+                    return operand == 0x46 || operand == 0x4b && top == NativeZero
+                        ? Push(stack, depth - 2, I32) : -2;
+                }
+                if (IsNativeInteger(type) || IsNativeInteger(top))
                 {
                     // CLI comparisons can mix native int and int32. Both
                     // use i32 bits here, including the common ldlen test.
-                    if ((type != Native && type != I32) || (top != Native && top != I32) ||
+                    if ((!IsNativeInteger(type) && type != I32) || (!IsNativeInteger(top) && top != I32) ||
                         kind == Binary && !IsComparison(operand)) return -2;
                     return kind == Binary ? Push(stack, depth - 2, I32) : depth - needed;
                 }
@@ -296,7 +307,7 @@ namespace PortableCompiler
             depth > 0 && (stack[depth - 1] == type || stack[depth - 1] == NullValue && IsReference(type));
 
         private static bool ArrayIndex(byte[] stack, int depth) =>
-            depth > 0 && (stack[depth - 1] == I32 || stack[depth - 1] == Native);
+            depth > 0 && (stack[depth - 1] == I32 || IsNativeInteger(stack[depth - 1]));
 
         private static int Push(byte[] stack, int depth, byte type)
         {
@@ -323,8 +334,10 @@ namespace PortableCompiler
                 for (int i = 0; i < count; i++)
                 {
                     byte current = states[offset + i], incoming = stack[i];
-                    if (current == incoming || incoming == NullValue && IsReference(current)) continue;
-                    if (current != NullValue || !IsReference(incoming)) return -1;
+                    if (current == incoming || incoming == NullValue && IsReference(current) ||
+                        incoming == NativeZero && (current == Native || current == VoidPointer)) continue;
+                    if ((current != NullValue || !IsReference(incoming)) &&
+                        (current != NativeZero || (incoming != Native && incoming != VoidPointer))) return -1;
                     states[offset + i] = incoming;
                     changed = true;
                 }

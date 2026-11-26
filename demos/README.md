@@ -77,6 +77,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [86 · Closed generic layouts](stage-86-closed-generic-layouts/README.md) | `npm run demo -- stage-86-closed-generic-layouts` | Closed reference arguments specialize instance and array storage |
 | [87 · Packed integer instance fields](stage-87-packed-integer-fields/README.md) | `npm run demo -- stage-87-packed-integer-fields` | Packed field loads preserve CLI width and signedness |
 | [88 · Volatile instance fields](stage-88-volatile-field-signatures/README.md) | `npm run demo -- stage-88-volatile-field-signatures` | Linked volatile fields retain metadata identity and single-agent order |
+| [89 · Unmanaged null pointer fields](stage-89-unmanaged-pointer-fields/README.md) | `npm run demo -- stage-89-unmanaged-pointer-fields` | Linked void pointer fields preserve safe null flows |
 
 ## Adding a stage
 

@@ -109,6 +109,13 @@ namespace PortableCompiler
                     left = next[0];
                     right = match;
                 }
+                else if (element == PointerStorage.Element)
+                {
+                    if (!PointerStorage.IsVoidPointer(caller, left, leftEnd) ||
+                        !PointerStorage.IsVoidPointer(target, right, rightEnd)) return 0;
+                    left++;
+                    right++;
+                }
                 else if ((element < 1 || element > 0x0e) && !NativeStorage.IsIntegerElement(element) && element != 0x1c)
                     return 0;
             }

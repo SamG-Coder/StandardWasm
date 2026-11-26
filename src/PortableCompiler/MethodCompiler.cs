@@ -146,7 +146,11 @@ namespace PortableCompiler
                 // Wasm sees interface parameters as eqref. Keep the host
                 // from bypassing the linker's nominal assignment checks.
                 for (int parameter = 1; parameter <= arities[index]; parameter++)
-                    if (ObjectLayouts.IsInterface(objects, signatures[offsets[index] + parameter])) return -2;
+                {
+                    int type = signatures[offsets[index] + parameter];
+                    if (type == VoidPointer || ObjectLayouts.IsInterface(objects, type)) return -2;
+                }
+                if (signatures[offsets[index]] == VoidPointer) return -2;
                 exports[export] = index;
             }
             var body = new int[6];
@@ -254,7 +258,8 @@ namespace PortableCompiler
                     var states = new byte[body[1] * maximum];
                     bool hasNull = false;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
-                        if (records[slot] == BranchIl.NullLiteral) hasNull = true;
+                        if (records[slot] == BranchIl.NullLiteral || records[slot] == BranchIl.ConvertInteger &&
+                            records[slot + 3] == BranchIl.ProvenNativeZero) hasNull = true;
                     var outgoingNulls = new byte[hasNull ? states.Length : 0];
                     int exceptionLocals = 0;
                     if (catchRegion.Length != 0)
@@ -682,7 +687,7 @@ namespace PortableCompiler
 
         // Class slots have already resolved to an assembly-qualified layout.
         private static bool IsSharedBundleType(int type) =>
-            IsScalar(type) || type == String || type == ObjectReference || IsArray(StackType(type)) ||
+            IsScalar(type) || type == String || type == ObjectReference || type == VoidPointer || IsArray(StackType(type)) ||
             (type >= ObjectLayouts.FirstClass && type < Signed8);
 
         private static bool IsSharedBundleSignature(int[] types, int offset, int arity)

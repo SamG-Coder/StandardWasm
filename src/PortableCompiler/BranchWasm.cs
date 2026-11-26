@@ -245,7 +245,8 @@ namespace PortableCompiler
                 }
                 else if (kind == Store)
                 {
-                    used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
+                    byte source = states[state + top];
+                    used = LoadOperand(code, used, Spill(spills, maximum, source, top), source, frame[operand]);
                     used = NormalizeSlot(code, used, frame[operand]);
                     used = Local(code, used, 0x21, operand);
                 }
@@ -259,7 +260,7 @@ namespace PortableCompiler
                 {
                     byte source = states[state + top];
                     byte target = kind == Unary ? source : kind == ConvertFloat ? FloatWasm.Target(operand) :
-                        kind == ConvertInteger ? IntegerConversionType(operand) : I32;
+                        kind == ConvertInteger ? records[slot + 3] == ProvenNativeZero ? NativeZero : IntegerConversionType(operand) : I32;
                     used = Local(code, used, 0x20, Spill(spills, maximum, source, top));
                     if (kind == Unary && IsFloat(source))
                         code[used++] = source == F32 ? (byte)0x8c : (byte)0x9a;
@@ -296,7 +297,13 @@ namespace PortableCompiler
                     byte resultType = IsComparison(operand) ? I32 : width;
                     int left = Spill(spills, maximum, type, top - 1);
                     int right = Spill(spills, maximum, states[state + top], top);
-                    if (operand == 0x6f && IsFloat(width))
+                    if (type == VoidPointer || rightType == VoidPointer)
+                    {
+                        // Admitted pointer operands can only denote null.
+                        // The validator accepted equality or a null test.
+                        used = Const(code, used, operand == 0x46 ? 1 : 0);
+                    }
+                    else if (operand == 0x6f && IsFloat(width))
                     {
                         // Any exact remainder of two f32 operands also fits in
                         // f32. Reuse the f64 helper and demote at the IL result.
@@ -366,7 +373,8 @@ namespace PortableCompiler
                     for (int i = receiver; i < arity; i++)
                     {
                         int argument = first + i - receiver;
-                        used = Local(code, used, 0x20, Spill(spills, maximum, states[state + argument], argument));
+                        byte source = states[state + argument];
+                        used = LoadOperand(code, used, Spill(spills, maximum, source, argument), source, signatures[shape + 1 + i]);
                     }
                     code[used++] = 0x10;
                     used = WasmBinary.Unsigned(code, used, operand);
@@ -412,7 +420,10 @@ namespace PortableCompiler
                     used = GuardNull(code, used, reference);
                     used = Local(code, used, 0x20, reference);
                     if (kind == SetField)
-                        used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
+                    {
+                        byte source = states[state + top];
+                        used = LoadOperand(code, used, Spill(spills, maximum, source, top), source, storage);
+                    }
                     // struct.set truncates packed cells to their storage
                     // width. The load selects the CLI extension to int32.
                     int instruction = 5;
@@ -484,7 +495,8 @@ namespace PortableCompiler
                 {
                     if (result != Void)
                     {
-                        used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
+                        byte source = states[state + top];
+                        used = LoadOperand(code, used, Spill(spills, maximum, source, top), source, result);
                         used = NormalizeSlot(code, used, result);
                     }
                     code[used++] = 0x0f;
@@ -503,27 +515,30 @@ namespace PortableCompiler
                         used = Const(code, used, operand);
                         used = Const(code, used, next);
                         byte type = states[state + top];
-                        byte width = type;
-                        if (IsComparison(comparison))
+                        bool compares = IsComparison(comparison);
+                        byte leftType = compares ? states[state + top - 1] : type;
+                        if (type == VoidPointer || leftType == VoidPointer)
+                            used = Const(code, used, comparison == 0x45 || comparison == 0x46 ? 1 : 0);
+                        else
                         {
-                            byte leftType = states[state + top - 1];
-                            if (IsFloat(type)) width = FloatWidth(leftType, type);
-                            used = NumericLocal(code, used, Spill(spills, maximum, leftType, top - 1), leftType, width);
+                            byte width = compares && IsFloat(type) ? FloatWidth(leftType, type) : type;
+                            if (compares)
+                                used = NumericLocal(code, used, Spill(spills, maximum, leftType, top - 1), leftType, width);
+                            used = NumericLocal(code, used, Spill(spills, maximum, type, top), type, width);
+                            if (IsFloat(width)) used = FloatWasm.Binary(code, used, comparison, width);
+                            else if (type == NullValue || IsReference(type))
+                            {
+                                code[used++] = compares ? (byte)0xd3 : (byte)0xd1; // ref.eq or ref.is_null
+                                if (comparison == 0 || comparison == 0x47) code[used++] = 0x45;
+                            }
+                            else if (compares) code[used++] = NumericOpcode(comparison, type);
+                            else if (type == I64)
+                            {
+                                code[used++] = 0x50; // i64.eqz produces the i32 select condition
+                                if (comparison == 0) code[used++] = 0x45;
+                            }
+                            else if (comparison != 0) code[used++] = 0x45;
                         }
-                        used = NumericLocal(code, used, Spill(spills, maximum, type, top), type, width);
-                        if (IsFloat(width)) used = FloatWasm.Binary(code, used, comparison, width);
-                        else if (type == NullValue || IsReference(type))
-                        {
-                            code[used++] = IsComparison(comparison) ? (byte)0xd3 : (byte)0xd1; // ref.eq or ref.is_null
-                            if (comparison == 0 || comparison == 0x47) code[used++] = 0x45;
-                        }
-                        else if (IsComparison(comparison)) code[used++] = NumericOpcode(comparison, type);
-                        else if (type == I64)
-                        {
-                            code[used++] = 0x50; // i64.eqz produces the i32 select condition
-                            if (comparison == 0) code[used++] = 0x45;
-                        }
-                        else if (comparison != 0) code[used++] = 0x45;
                         code[used++] = 0x1b;
                     }
                     else if (kind == Switch)
@@ -622,7 +637,15 @@ namespace PortableCompiler
         }
 
         internal static int Spill(int first, int maximum, byte type, int depth) =>
-            type == NullValue ? first - 1 : first + (type - 1) * maximum + depth;
+            type == NullValue ? first - 1 : first + ((type == NativeZero ? Native : type) - 1) * maximum + depth;
+
+        private static int LoadOperand(byte[] code, int used, int local, byte source, int target)
+        {
+            if (source != NativeZero || target != VoidPointer) return Local(code, used, 0x20, local);
+            code[used++] = 0xd0; // ref.null none
+            code[used++] = NullSpillWasm.NullRef;
+            return used;
+        }
 
         private static int NormalizeSlot(byte[] code, int used, int type)
         {

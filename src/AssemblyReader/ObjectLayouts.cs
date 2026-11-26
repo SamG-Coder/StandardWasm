@@ -5,7 +5,7 @@ namespace PeLibrary
     internal static class ObjectLayouts
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
-        internal const int FirstClass = NativeStorage.Scalar + 1, MaxClasses = 256 - FirstClass;
+        internal const int FirstClass = PointerStorage.NativeZero + 1, MaxClasses = 256 - FirstClass;
         private const int Header = 3, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         private const int Arguments = 10, Arity = 11, Element = 12;
@@ -135,6 +135,8 @@ namespace PeLibrary
             size = end - blob;
             reference[0] = 0;
             byte element = image[blob + 1];
+            if (size == 3 && element == PointerStorage.Element && PointerStorage.IsVoidPointer(image, blob + 2, end))
+                return PointerStorage.VoidPointer;
             if (size == 2 && (element == 8 || element == 9)) return 1;
             if (size == 2 && element >= 2 && element <= 7) return NarrowStorage.FromElement(element);
             if (size == 2 && element == 0x0e) return 6;
