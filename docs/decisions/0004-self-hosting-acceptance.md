@@ -25,7 +25,11 @@ This record pins what "reproduces the module" and "passes the library suite" mea
 
 Each host compiler capability (64-bit integers, floating point, `switch`, `Math` intrinsics, exact float remainder, primitive arrays, and later additions) needs a portable counterpart before the milestone closes. Porting work can proceed per capability, each step with its own stage cases run through gen2. The original host/portable comparison is part of the historical record below. Current toolchain invocations use the portable compiler.
 
-## Current status (2026-11-26)
+## Portable toolchain verification
+
+The migrated toolchain bootstraps the portable compiler on the CLR. The self-hosted compiler passed the direct audit in Node and Edge. Each engine covered all 41,191 direct CLR cases, with 40,994 matching returns, 197 matching typed exceptions and zero legacy traps. The audit complements the generated-code and bootstrap cases in `npm test`.
+
+## Earlier self-hosting status (2026-11-26)
 
 - Item 1: met on main since #24. Since #26, `npm test` asserts C = G1 = G2 = G3 in Node and Edge with the multi-export compiler: 138,112 bytes, SHA-256 e5a069a46ef5973f3d1003ef120927128abc123fb299d1c1327a0165ad8d9ec6, also saved as `artifacts/StandardWasm.Compiler.wasm`.
 - Item 2: met on main since #26. B's exports only emit G1. G2 and G3 are built through the previous generation's own CreateBytes, SetByte, ReadByte and CompileModule exports, and every generated-code case runs through G2's exports. A fresh process holding only the saved compiler file reproduces it byte for byte.
