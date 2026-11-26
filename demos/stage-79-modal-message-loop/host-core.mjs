@@ -30,7 +30,14 @@ export async function runJspi(bytes, { timerMs, echoCount, gc }) {
         getMessage: new WebAssembly.Suspending(() => queue.length ? queue.shift() : new Promise(r => { waiter = r; })),
         post: m => (m >>> 16) === 7 ? onEcho(m & 0xffff) : deliver(m),
         // Collect garbage while the click handler's frame is suspended, so that frame's GC references must be traced.
-        setTimer: ms => setTimeout(() => { if (gc) { gc(); collectedWhileSuspended++; } deliver(msg(4, 0)); }, ms),
+        // Only collect when the Wasm stack is provably suspended in getMessage (a waiter is pending).
+        setTimer: ms => setTimeout(() => {
+            if (gc) {
+                if (!waiter) throw Error("Expected the Wasm stack to be suspended in getMessage before collecting");
+                gc(); collectedWhileSuspended++;
+            }
+            deliver(msg(4, 0));
+        }, ms),
         trace: id => {
             trace.push(TRACE_NAMES[id]);
             if (id === 5) monitor.dialogShown();

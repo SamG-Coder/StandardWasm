@@ -27,13 +27,20 @@ Results on Windows 11 (Ryzen 7 9800X3D), Node 24.19.0 and Edge 158.0.4370.33 (Pl
 
 (Two runs, shown as first / second.) The host-task count is the evidence that the page thread kept running during the modal loop. In both runs a 4 ms interval fired at its full rate in Edge. Animation-frame counts in headless Edge were not stable across runs (J 3 then 0, W 5 then 3) and are not used as evidence.
 
-**Managed references across suspension** (Codex review on #179). The click handler allocates a Wasm GC struct, `{ticks, tag = 0x5eed}`, and holds it in a local of its own frame across the whole modal loop. The dialog's timer increments `ticks` through a second reference (a global) while that frame is suspended. Under J, the host also forces a garbage collection (`gc()` via `--expose-gc` / `--js-flags=--expose-gc`) inside the timer callback, while the frame is suspended. After `ShowDialog` returns, the frame's reference must be `ref.eq` to the global, keep its tag, and show `ticks = 1`.
-- Node J (one forced collection while suspended): preserved.
-- Edge J (one forced collection while suspended): preserved.
-- Edge W: preserved.
-- Mutation check: replacing the frame's reference with a fresh struct before the comparison gives `stateCheck = 0`, so the check discriminates.
+**Managed references across suspension** (Codex reviews on #179). The click handler creates two Wasm GC structs and holds both in locals of its own frame across the whole modal loop:
+- **Aliased object:** `{ticks, tag = 0x5eed}`, also published through a global. The dialog's timer increments `ticks` through that global while the frame is suspended.
+- **Frame-only object:** `{ticks = 7, tag = 0x0bad}`, with no other reference, so only the suspended frame can keep it alive.
 
-This shows only that a suspended JSPI frame keeps its GC references alive, traced and identical. Full framework lowering remains separate.
+Under J, the host forces a garbage collection inside the timer callback, and first asserts that the Wasm stack is suspended in `getMessage` (a pending waiter). After `ShowDialog` returns, the frame checks three things:
+- the aliased local is `ref.eq` to the global, with its tag and `ticks = 1`
+- the frame-only object still holds `ticks = 7` and `tag = 0x0bad`
+
+Results:
+- Node J and Edge J (one forced collection while provably suspended): both objects preserved.
+- Edge W: both preserved.
+- Mutation checks give `stateCheck = 0` in two ways: by replacing the aliased local with a fresh struct, and by changing the frame-only object's expected tag. So the check reads both objects.
+
+This shows that a suspended JSPI frame roots its own GC references across a collection, and that aliased references stay identical. Full framework lowering remains separate.
 
 Asyncify rejects the module: "Asyncify does not yet support non-number types, like references". It can't suspend code that holds Wasm GC references, and compiled .NET code always holds them.
 

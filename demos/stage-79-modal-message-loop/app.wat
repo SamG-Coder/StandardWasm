@@ -42,9 +42,12 @@
       (call $post (call $msg (i32.const 6) (i32.const 0))) (return)))
     (unreachable))
 
-  (func $click (local $state (ref null $State))
+  (func $click (local $state (ref null $State)) (local $private (ref null $State))
     (call $trace (i32.const 2))                                       ;; click-begin
     (local.set $state (struct.new $State (i32.const 0) (i32.const 0x5eed)))
+    ;; A second object held ONLY by this frame's local: no global or other reference, so only the suspended frame
+    ;; can keep it alive across the collection the host forces while suspended (Codex review on #179).
+    (local.set $private (struct.new $State (i32.const 7) (i32.const 0x0bad)))
     (global.set $shared (local.get $state))
     (call $post (call $msg (i32.const 1) (i32.const 4)))              ;; BeginInvoke posted-during-click
     ;; ShowDialog: Shown is posted, then a nested loop runs until the dialog closes. The frame of $click stays live.
@@ -54,11 +57,13 @@
       (br_if $closed (i32.eqz (global.get $dialogOpen)))
       (call $dispatch (call $getMessage))
       (br $modal)))
-    ;; Same object (ref.eq), its tag intact and the timer's update visible: 1, otherwise 0.
-    (global.set $stateCheck (i32.and (i32.and
+    ;; Same object (ref.eq), its tag intact and the timer's update visible, and the frame-only object intact: 1.
+    (global.set $stateCheck (i32.and (i32.and (i32.and
       (ref.eq (local.get $state) (global.get $shared))
       (i32.eq (struct.get $State $tag (ref.as_non_null (local.get $state))) (i32.const 0x5eed)))
-      (i32.eq (struct.get $State $ticks (ref.as_non_null (local.get $state))) (i32.const 1))))
+      (i32.eq (struct.get $State $ticks (ref.as_non_null (local.get $state))) (i32.const 1)))
+      (i32.and (i32.eq (struct.get $State $tag (ref.as_non_null (local.get $private))) (i32.const 0x0bad))
+               (i32.eq (struct.get $State $ticks (ref.as_non_null (local.get $private))) (i32.const 7)))))
     (global.set $shared (ref.null $State))
     (call $trace (i32.const 8))                                       ;; click-after-dialog
     (call $post (call $msg (i32.const 5) (i32.const 0))))             ;; BeginInvoke Close
