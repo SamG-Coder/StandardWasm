@@ -12,10 +12,12 @@ namespace PortableCompiler
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             byte result = (byte)frameShape[3];
             int classes = frameShape[4];
-            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 7 + classes));
+            bool stringScratch = frameShape[5] != 0;
+            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 8 + classes) + (stringScratch ? 2 : 0));
             int spills = arguments + locals;
-            int temporaries = spills + (6 + classes) * maximum;
-            int pcLocal = temporaries + classes;
+            int temporaries = spills + (7 + classes) * maximum;
+            int scratch = temporaries + classes;
+            int pcLocal = scratch + (stringScratch ? 5 : 0);
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < spills; i++)
             {
@@ -24,7 +26,7 @@ namespace PortableCompiler
             }
             if (maximum != 0)
             {
-                for (int kind = I32; kind <= String + classes; kind++)
+                for (int kind = I32; kind <= Chars + classes; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
                     used = WasmBinary.ValueType(code, used, (byte)kind);
@@ -34,6 +36,13 @@ namespace PortableCompiler
             {
                 code[used++] = 1;
                 used = WasmBinary.ValueType(code, used, (byte)(FirstClass + i));
+            }
+            if (stringScratch)
+            {
+                code[used++] = 3;
+                used = WasmBinary.ValueType(code, used, Chars);
+                code[used++] = 2;
+                code[used++] = 0x7f;
             }
             code[used++] = 1;
             code[used++] = 0x7f;
@@ -81,12 +90,28 @@ namespace PortableCompiler
                     code[used++] = characters == 0 ? (byte)8 : (byte)9; // fixed empty or passive data
                     code[used++] = 4;
                     code[used++] = 0;
+                    used = StringWasm.Wrap(code, used);
                     used = Local(code, used, 0x21, Spill(spills, maximum, String, depth));
+                }
+                else if (kind == NullString)
+                {
+                    code[used++] = 0xd0;
+                    code[used++] = 5;
+                    used = Local(code, used, 0x21, Spill(spills, maximum, String, depth));
+                }
+                else if (kind == JoinStrings || kind == StringFromChars)
+                {
+                    bool join = kind == JoinStrings;
+                    int at = top - (join ? 1 : 0);
+                    used = StringWasm.Copy(code, used, Spill(spills, maximum, join ? String : Chars, at),
+                        Spill(spills, maximum, String, top), scratch, join);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, String, at));
                 }
                 else if (kind == StringLength || kind == StringCharacter)
                 {
                     int at = top - (kind == StringCharacter ? 1 : 0);
                     used = Local(code, used, 0x20, Spill(spills, maximum, String, at));
+                    used = StringWasm.Unwrap(code, used);
                     if (kind == StringCharacter)
                     {
                         used = Local(code, used, 0x20, spills + top);
@@ -147,7 +172,7 @@ namespace PortableCompiler
                 else if (kind == Unary || kind == Narrow)
                 {
                     used = Local(code, used, 0x20, spills + top);
-                    used = Const(code, used, kind == Narrow ? 255 : -1);
+                    used = Const(code, used, kind == Narrow ? operand : -1);
                     code[used++] = kind == Narrow ? (byte)0x71 : (byte)operand;
                     used = Local(code, used, 0x21, spills + top);
                 }
@@ -271,7 +296,7 @@ namespace PortableCompiler
         {
             code[used++] = 0xfb;
             code[used++] = (byte)instruction;
-            return WasmBinary.Unsigned(code, used, array - Bytes);
+            return WasmBinary.Unsigned(code, used, WasmBinary.HeapType((byte)array));
         }
 
         private static int Const(byte[] code, int used, int value)

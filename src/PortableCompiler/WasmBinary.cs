@@ -10,9 +10,9 @@ namespace PortableCompiler
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
             byte[] literals, int literalSize)
         {
-            int typeOffset = objects[0] + 5;
+            int typeOffset = objects[0] + 6;
             int totalFunctions = functions + thunks[0];
-            int typeSize = UnsignedSize(functions + typeOffset) + 20;
+            int typeSize = UnsignedSize(functions + typeOffset) + 25;
             for (int i = 0; i < objects[0]; i++)
             {
                 int slot = 1 + i * Width;
@@ -116,8 +116,13 @@ namespace PortableCompiler
             output[cursor++] = 0;
             output[cursor++] = 0x70;
             output[cursor++] = 0;
-            output[cursor++] = 0x5e; // immutable packed UTF-16 array
+            output[cursor++] = 0x5e; // Char[] backing store
             output[cursor++] = 0x77;
+            output[cursor++] = 1;
+            output[cursor++] = 0x5f; // String: immutable reference to private Char[] storage
+            output[cursor++] = 1;
+            output[cursor++] = 0x63;
+            output[cursor++] = 4;
             output[cursor++] = 0;
             for (int i = 0; i < objects[0]; i++)
             {
@@ -244,10 +249,13 @@ namespace PortableCompiler
             else
             {
                 output[cursor++] = 0x63; // ref null
-                cursor = Signed(output, cursor, type == Delegate ? 3 : type - Bytes);
+                cursor = Signed(output, cursor, HeapType(type));
             }
             return cursor;
         }
+
+        internal static int HeapType(byte type) =>
+            type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type - Bytes;
 
         private static int ThunkSize(int receiver, int function) =>
             7 + (receiver - Bytes <= 63 ? 1 : 2) + UnsignedSize(function);

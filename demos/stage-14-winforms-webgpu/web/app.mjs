@@ -15,7 +15,7 @@ async function start() {
     }
     const title = readText(exports.Title());
     const buttonCaption = readText(exports.ButtonCaption());
-    const resultPrefix = readText(exports.ResultPrefix());
+    const state = exports.Create(0);
     const tree = exports.BuildTree();
     const { columns, keys, kinds } = resources;
     function describe(index) {
@@ -26,7 +26,7 @@ async function start() {
             throw Error("Unsupported runtime control kind " + kind);
         return {
             name: key, kind: kind === kinds.button ? "button" : "label",
-            text: key === keys.increment ? buttonCaption : resultPrefix + "0",
+            text: key === keys.increment ? buttonCaption : "",
             x: field(columns.x), y: field(columns.y),
             width: field(columns.width), height: field(columns.height)
         };
@@ -56,7 +56,6 @@ async function start() {
     result.className = "sr-only";
     result.setAttribute("aria-live", "polite");
     form.append(result);
-    const state = exports.Create(0);
     const clickBinding = exports.Bind(state);
     function repaint() {
         if (exports.ControlCount(tree) !== model.controls.length)
@@ -75,7 +74,7 @@ async function start() {
         }
         form.dataset.labelLeft = String(model.controls.find(control => control.name === keys.result).x);
         form.dataset.controlCount = String(model.controls.length);
-        result.value = resultPrefix + exports.Read(state);
+        result.value = readText(exports.LabelText(state));
         texts.set(keys.result, result.value);
         text.update(texts);
         gpu.upload();

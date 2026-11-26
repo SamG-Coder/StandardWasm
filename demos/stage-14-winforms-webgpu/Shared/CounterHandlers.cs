@@ -1,4 +1,5 @@
 using System;
+using StandardWasm.Managed;
 
 namespace CounterExample
 {
@@ -30,7 +31,8 @@ namespace CounterExample
 
         public static string Title() => CounterText.Title;
         public static string ButtonCaption() => CounterText.Increment;
-        public static string ResultPrefix() => CounterText.ResultPrefix;
+        public static string LabelText(CounterState state) =>
+            string.Concat(CounterText.ResultPrefix, InvariantText.Int32(state.Value()));
         public static int TextLength(string text) => text.Length;
         public static int TextCodeUnit(string text, int index) => text[index];
 

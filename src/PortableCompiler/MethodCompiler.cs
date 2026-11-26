@@ -63,7 +63,7 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[5];
+            var frameShape = new int[6];
 
             for (int current = 0; current < functions; current++)
             {
@@ -145,6 +145,16 @@ namespace PortableCompiler
                     frameShape[2] = maximum;
                     frameShape[3] = result;
                     frameShape[4] = objects[0];
+                    frameShape[5] = 0;
+                    for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
+                    {
+                        int kind = records[slot];
+                        if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars)
+                        {
+                            frameShape[5] = 1;
+                            break;
+                        }
+                    }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets, arities, code);
                 }
@@ -205,7 +215,18 @@ namespace PortableCompiler
                         continue;
                     }
                     int stringMember = StringMetadata.Member(image, heaps, layout, member);
-                    if (stringMember != 0 && (opcode == 0x6f || opcode == 0x28))
+                    if (stringMember == StringMetadata.Concat && opcode == 0x28)
+                    {
+                        records[slot] = BranchIl.JoinStrings;
+                        continue;
+                    }
+                    if (stringMember == StringMetadata.FromChars && opcode == 0x73)
+                    {
+                        records[slot] = BranchIl.StringFromChars;
+                        continue;
+                    }
+                    if ((stringMember == StringMetadata.Length || stringMember == StringMetadata.Character) &&
+                        (opcode == 0x6f || opcode == 0x28))
                     {
                         records[slot] = stringMember == StringMetadata.Length
                             ? BranchIl.StringLength : BranchIl.StringCharacter;

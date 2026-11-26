@@ -19,16 +19,14 @@ internal class CounterForm : Form
         var state = CounterHandlers.Create(0);
         var click = CounterHandlers.Bind(state);
         Result.Font = new Font("Segoe UI", 24, FontStyle.Bold);
-        ShowValue(CounterHandlers.Read(state));
+        Result.Text = CounterHandlers.LabelText(state);
         Increment.Click += (_, _) =>
         {
-            ShowValue(CounterHandlers.Dispatch(click, layout));
+            CounterHandlers.Dispatch(click, layout);
+            Result.Text = CounterHandlers.LabelText(state);
             ApplyLayout(layout);
         };
     }
-
-    private void ShowValue(int value) =>
-        Result.Text = CounterText.ResultPrefix + value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     private void ApplyLayout(ControlTree layout)
     {
