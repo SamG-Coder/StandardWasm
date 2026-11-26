@@ -1,4 +1,4 @@
-import { decode, invoke } from "./invoke.mjs";
+import { decode, invoke, managedExceptionType } from "./invoke.mjs";
 
 function manifest(rows, names) {
     const encoder = new TextEncoder();
@@ -73,8 +73,10 @@ export async function auditPortable(compilerBytes, fixtures, loadDll) {
                 let actual, trap;
                 try { actual = invoke(exports, name, test.inputs); }
                 catch (error) {
-                    trap = error.message;
-                    if (error instanceof WebAssembly.RuntimeError) actual = null;
+                    const managed = managedExceptionType(exports, error);
+                    trap = managed ?? error.message;
+                    if (error instanceof WebAssembly.RuntimeError || managed !== null && managed === test.exception)
+                        actual = null;
                 }
                 if (Object.is(actual, decode(test.expected))) {
                     report.passed++;

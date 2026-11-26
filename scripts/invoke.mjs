@@ -5,6 +5,12 @@
 export const decode = value =>
     value?.i64 !== undefined ? BigInt(value.i64) : value?.f64 !== undefined ? Number(value.f64) : value;
 
+export function managedExceptionType(exports, error) {
+    const overflow = exports["\0overflow"];
+    return overflow instanceof WebAssembly.Tag && error instanceof WebAssembly.Exception && error.is(overflow)
+        ? "System.OverflowException" : null;
+}
+
 export function invoke(exports, method, inputs) {
     const args = inputs.map(input => {
         if (!Array.isArray(input?.bytes)) return decode(input);

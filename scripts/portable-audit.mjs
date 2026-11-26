@@ -29,7 +29,7 @@ for (const test of oracle) {
     const methods = grouped.get(test.module);
     if (!methods.has(test.method)) methods.set(test.method, { name: test.method, cases: [], transport: false });
     const method = methods.get(test.method);
-    method.cases.push({ inputs: test.inputs, expected: test.expected });
+    method.cases.push({ inputs: test.inputs, expected: test.expected, exception: test.exception });
     method.transport ||= test.inputs.some(input => Array.isArray(input?.bytes));
     direct++;
 }
