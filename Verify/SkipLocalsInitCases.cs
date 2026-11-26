@@ -21,11 +21,13 @@ internal static class SkipLocalsInitCases
         Accept(nameof(Kernels.Value), Kernels.Value);
         Accept(nameof(Kernels.Nested), x => Kernels.Nested(x), [-3, 0, 1, 5, 20]);
         Accept(nameof(Kernels.Objects), Kernels.Objects);
-        Reject(nameof(Kernels.Stack));
+        // Stage 137 (decision 0065): stackalloc runs on the shadow stack in memory 0.
+        Accept(nameof(Kernels.Stack), Kernels.Stack, memory: true);
 
-        void Accept(string method, Func<int, int> oracle, int[]? values = null)
+        void Accept(string method, Func<int, int> oracle, int[]? values = null, bool memory = false)
         {
-            int row = RowWithoutInitLocals(method);
+            // Release optimizes Stack's pointer local away, so its row is taken directly.
+            int row = memory ? typeof(Kernels).GetMethod(method)!.MetadataToken & 0xffffff : RowWithoutInitLocals(method);
             var output = new byte[capacity];
             int length = CompilerExports.Compile(image, row, output);
             if (length <= 0) throw new InvalidOperationException($"{method} compiler returned {length}");
@@ -35,33 +37,10 @@ internal static class SkipLocalsInitCases
                 {
                     module = "BootstrapLibrary", method = "Compile", fixture = "skip-locals-init " + method,
                     inputs = new[] { encoded, row },
-                    generated = new { capacity, arguments = new[] { x }, hex },
+                    generated = memory ? (object)new { capacity, arguments = new[] { x }, hex, memory = true }
+                        : new { capacity, arguments = new[] { x }, hex },
                     expected = oracle(x)
                 });
-        }
-
-        void Reject(string method)
-        {
-            // The -2 must be reported at the decoded localloc instruction itself, so it cannot
-            // come from the old InitLocals rule (IL -1) or from an unrelated construct. The pointer
-            // local is optimized away in Release, so the offset is the anchor, not the locals.
-            int row = typeof(Kernels).GetMethod(method)!.MetadataToken & 0xffffff;
-            int rva = metadata.GetMethodDefinition(MetadataTokens.MethodDefinitionHandle(row)).RelativeVirtualAddress;
-            int localloc = IlOffsets.Find(pe.GetMethodBody(rva).GetILBytes()!, System.Reflection.Emit.OpCodes.Localloc);
-            if (localloc < 0) throw new InvalidOperationException($"{method} must contain localloc");
-            byte[] output = Enumerable.Repeat((byte)0xa5, capacity).ToArray();
-            int[] diagnostic = CompilerExports.CreateDiagnostic();
-            int status = CompilerExports.CompileDetailed(image, row, output, diagnostic);
-            if (status != -2 || output.Any(value => value != 0xa5) || !diagnostic.SequenceEqual(new[] { 0, row, localloc }))
-                throw new InvalidOperationException(
-                    $"{method} (stackalloc) returned {status} at [{string.Join(", ", diagnostic)}]; expected -2 at [0, {row}, {localloc}]");
-            cases.Add(new
-            {
-                module = "BootstrapLibrary", method = "Compile", fixture = "skip-locals-init " + method,
-                inputs = new[] { encoded, row },
-                generated = new { capacity, arguments = Array.Empty<int>(), reject = true, diagnostic },
-                expected = status
-            });
         }
 
         // Pin the fixture: each kernel must have locals and a cleared InitLocals flag,

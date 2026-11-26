@@ -150,6 +150,26 @@ namespace PortableCompiler
         {
             if (kind == LoadString) return Push(stack, allocated, depth, String);
             if (kind == LoadTypeToken) return Push(stack, allocated, depth, PeLibrary.RuntimeTypeMetadata.Handle);
+            // Only an unmanaged pointer (a native int, decision 0060) addresses memory 0.
+            // A proven null (NativeZero) spills as Native and raises NullReferenceException
+            // at run time, as on the CLR. A managed byref stays a diagnostic.
+            if (kind == LocalAllocate)
+            {
+                // ECMA-335 III.3.47: the size is a native unsigned int (an int32 is accepted).
+                // A constant zero (ldc.i4.0; conv.u) is a proven NativeZero, which spills as Native.
+                if (depth < 1 || (!IsNativeInteger(stack[depth - 1]) && stack[depth - 1] != I32)) return -2;
+                return Push(stack, allocated, depth - 1, Native);
+            }
+            if (kind == LoadIndirect)
+            {
+                if (depth < 1 || !IsNativeInteger(stack[depth - 1])) return -2;
+                return Push(stack, allocated, depth - 1, IndirectType(operand));
+            }
+            if (kind == StoreIndirect)
+            {
+                if (depth < 2 || !IsNativeInteger(stack[depth - 2]) || !IndirectValue(operand, stack[depth - 1])) return -2;
+                return depth - 2;
+            }
             if (kind == TypeFromHandle)
                 return depth > 0 && stack[depth - 1] == PeLibrary.RuntimeTypeMetadata.Handle
                     ? Push(stack, allocated, depth - 1, PeLibrary.RuntimeTypeMetadata.Type) : -1;
@@ -246,7 +266,15 @@ namespace PortableCompiler
             {
                 if (depth < 2) return -1;
                 int type = stack[depth - 1];
-                if (IsNativeInteger(type) || IsNativeInteger(stack[depth - 2])) return -2;
+                if (IsNativeInteger(type) || IsNativeInteger(stack[depth - 2]))
+                {
+                    // Checked native arithmetic (decision 0065) uses the 4-byte wasm32 width,
+                    // as on the 32-bit CLR. C# scales stackalloc sizes with mul.ovf.un.
+                    if ((!IsNativeInteger(type) && type != I32) ||
+                        (!IsNativeInteger(stack[depth - 2]) && stack[depth - 2] != I32)) return -2;
+                    stack[depth - 2] = Native;
+                    return depth - 1;
+                }
                 return IsInteger(type) && Match(stack, depth - 1, type) ? depth - 1 : -1;
             }
             if (kind == Binary || kind == Conditional)
@@ -269,9 +297,16 @@ namespace PortableCompiler
                 {
                     // CLI comparisons can mix native int and int32. Both
                     // use i32 bits here, including the common ldlen test.
-                    if ((!IsNativeInteger(type) && type != I32) || (!IsNativeInteger(top) && top != I32) ||
-                        kind == Binary && !IsComparison(operand)) return -2;
-                    return kind == Binary ? Push(stack, allocated, depth - 2, I32) : depth - needed;
+                    if ((!IsNativeInteger(type) && type != I32) || (!IsNativeInteger(top) && top != I32)) return -2;
+                    if (kind != Binary) return depth - needed;
+                    if (IsComparison(operand)) return Push(stack, allocated, depth - 2, I32);
+                    // ECMA-335 Table III.2: native int with int32 or native int yields native
+                    // int for arithmetic and bitwise operations, and a shift keeps the type of
+                    // its value. Pointer arithmetic (decision 0060) uses this. Both are i32 on
+                    // wasm32, so the emitted i32 operation is unchanged.
+                    if (operand < 0x6a || operand > 0x76) return -2;
+                    if (IsShift(operand) && !IsNativeInteger(type)) return Push(stack, allocated, depth - 2, I32);
+                    return Push(stack, allocated, depth - 2, Native);
                 }
                 if (type == NullValue || top == NullValue || IsReference(type) || IsReference(top))
                 {
@@ -380,6 +415,18 @@ namespace PortableCompiler
             }
             return depth;
         }
+
+        // The CLI stack type of ldind.*: small integers widen to int32.
+        internal static int IndirectType(int opcode) =>
+            opcode == 0x4c ? I64 : opcode == 0x4d ? Native : opcode == 0x4e ? F32 : opcode == 0x4f ? F64 : I32;
+
+        // stind.* stores the low bits of an int32 for i1/i2/i4, a native int for
+        // stind.i (int32 converts implicitly on wasm32), and either float width for r4/r8.
+        private static bool IndirectValue(int opcode, int value) =>
+            opcode == 0x55 ? value == I64 :
+            opcode == 0x56 || opcode == 0x57 ? value == F32 || value == F64 :
+            opcode == 0xdf ? IsNativeInteger(value) || value == I32 :
+            value == I32;
 
         private static bool Match(int[] stack, int depth, int type) =>
             depth > 0 && (stack[depth - 1] == type || stack[depth - 1] == NullValue && IsReference(type));

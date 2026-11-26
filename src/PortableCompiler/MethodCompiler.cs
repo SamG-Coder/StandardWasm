@@ -133,6 +133,8 @@ namespace PortableCompiler
             var hostUse = new int[1];
             int functions = 0, length = 0;
             bool externalObjects = false;
+            // Any reachable ldind/stind needs the host-lent memory 0 (decision 0060).
+            bool linearMemory = false;
             var dispatch = new VirtualDispatch(output.Length);
             for (int export = 0; export < exportCount; export++)
             {
@@ -166,7 +168,8 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[17];
+            var frameShape = new int[20];
+            var shadowStack = new int[3]; // $sp, base, limit globals + 1
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * 3];
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
@@ -393,6 +396,7 @@ namespace PortableCompiler
                         if (capacity > int.MaxValue - 320) return -3;
                         capacity += 320;
                     }
+                    bool allocates = false;
                     int classBytes = objects[0] * 12;
                     if (classBytes > int.MaxValue - capacity) return -3;
                     capacity += classBytes;
@@ -412,6 +416,29 @@ namespace PortableCompiler
                         }
                         int pc = slot / BranchIl.Width;
                         int operation = records[slot + 1];
+                        if ((kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect) && depths[pc] != 0)
+                            linearMemory = true;
+                        if (kind == BranchIl.LocalAllocate && depths[pc] != 0)
+                        {
+                            // An initializer's guard and a shadow-stack frame both wrap the
+                            // body; combining them is not supported yet.
+                            if (initializerGuard >= 0)
+                            {
+                                if (location.Length != 0) location[2] = pc;
+                                return -2;
+                            }
+                            linearMemory = true;
+                            allocates = true;
+                            if (shadowStack[0] == 0)
+                                for (int g = 0; g < 3; g++)
+                                {
+                                    int global = StaticFields.Register(globals, 0, int.MinValue + 1 + g, I32);
+                                    if (global < 0) return global;
+                                    shadowStack[g] = global + 1;
+                                }
+                            if (capacity > int.MaxValue - StackAllocationWasm.Capacity) return -3;
+                            capacity += StackAllocationWasm.Capacity;
+                        }
                         if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField)
                         {
                             if (capacity > int.MaxValue - TypeInitializerWasm.TriggerCapacity) return -3;
@@ -462,6 +489,7 @@ namespace PortableCompiler
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || kind == BranchIl.StringLength || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection ||
+                                kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect ||
                                 kind == BranchIl.ExchangeHandlerField || (kind == BranchIl.Call && records[slot + 3] != 0))
                                 tags = ExceptionTypes.NullReference;
                             else if (kind == BranchIl.Binary)
@@ -504,7 +532,10 @@ namespace PortableCompiler
                     frameShape[13] = initializerGuard + 1;
                     frameShape[14] = initializers.Epoch + 1;
                     frameShape[15] = initializers.Active + 1;
-                    frameShape[16] = resourceOpen ? ((hostFeatures & WasmImports.Console) != 0 ? ConsoleWasm.ImportCount + 1 : 1) : 0;
+                    frameShape[16] = allocates ? shadowStack[0] : 0;
+                    frameShape[17] = allocates ? shadowStack[1] : 0;
+                    frameShape[18] = allocates ? shadowStack[2] : 0;
+                    frameShape[19] = resourceOpen ? ((hostFeatures & WasmImports.Console) != 0 ? ConsoleWasm.ImportCount + 1 : 1) : 0;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
@@ -532,7 +563,7 @@ namespace PortableCompiler
                 return CompileProgram(bundle, entries, output, location, hostFeatures | hostUse[0]);
             length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, length, hostImports, location);
             if (length < 0) return length;
-            if (initializers.Epoch >= 0)
+            if (initializers.Epoch >= 0 || shadowStack[0] != 0)
             {
                 // Stage 129 (decision 0057): every host export enters through a wrapper
                 // that retires initializers interrupted by an earlier raw trap. Internal
@@ -551,13 +582,14 @@ namespace PortableCompiler
                     offsets[functions] = offset;
                     bodyOffsets[functions] = length;
                     length = TypeInitializerWasm.ExportEntry(moduleCode, length, initializers.Epoch, initializers.Active,
-                        hostImports + target, arity);
+                        hostImports + target, arity, shadowStack[0] - 1, shadowStack[2] - 1);
                     if (length < 0) return length;
                     sizes[functions] = length - bodyOffsets[functions];
                     exports[export] = functions++;
                 }
             }
             CompileLocation.Clear(location);
+            if (linearMemory) hostFeatures |= WasmImports.Memory;
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
                 moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0]);
         }

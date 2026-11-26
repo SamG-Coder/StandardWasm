@@ -26,7 +26,9 @@ The compiler continues to diagnose these shapes:
 | `ExplicitLayout` class | Field offsets can overlap object references. |
 | Sequential class with `Pack` or `Size` | The CLR object extent changes and no byte view preserves it. |
 | Sequential class over an auto class other than `Object`, outside the platform CoreLib | CoreCLR throws `TypeLoadException` when it loads such a type. |
-| Sequential class with a precise type initializer | This is handled as for auto classes (#170). |
+
+A sequential class with a precise type initializer was diagnosed here until
+Stage 129. It now runs its initializer as an auto class does (decision 0057).
 
 The CoreLib exception covers the runtime's own types. The runtime that ships a
 CoreLib loads that CoreLib's types: Mono's `System.Type` is sequential over
