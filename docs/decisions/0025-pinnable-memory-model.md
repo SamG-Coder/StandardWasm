@@ -64,12 +64,22 @@ B remains the fallback if no strategy works. It is correct and as fast on these 
 
 ## Open items (required before C is normative)
 
-- **Memory-pressure strategy, with a fixture.** Candidates to measure:
-  - an allocation budget that, when exceeded, suspends at the allocation slow path through JSPI (decision 0026) so finalization can run, then retries before raising `OutOfMemoryException`
-  - GC-visible accounting (a ballast object sized to live payload bytes) so the engine's collector schedules itself by payload volume
-  - compiler escape analysis that frees provably non-escaping payloads deterministically
+- **Memory-pressure strategy, with a fixture.** This was measured in stage 88 (#196): `npm run demo -- stage-88-payload-pressure`, with no forced GC, in Node 24.19.0 and Edge 158.0.4370.33. It reports peak linear memory for 625 MiB churned in yielding rounds, and for 312.5 MiB in one synchronous call:
 
-  The fixture must keep a 625 MiB churn of short-lived arrays under a stated linear-memory peak in Node and Edge without forced collection, and turn true exhaustion into a typed `OutOfMemoryException`.
+  | Strategy | Node yielding | Node sync | Edge yielding | Edge sync |
+  | --- | --- | --- | --- | --- |
+  | baseline | 94 MiB | 312.5 | 256 | 312.5 |
+  | ballast 1/8 (GC byte array of payload/8 on each wrapper) | 91 | 312.5 | **9.4** | 312.5 |
+  | ballast 1/32 | 97 | 312.5 | 50 | 312.5 |
+  | budget 32 MiB (JSPI yield in the allocation slow path, decision 0026) | 79 | 157 | 273 | 229 |
+  | ballast 1/32 + budget 32 MiB | 85 | 157 | 110 | **110** |
+
+  - **No strategy enforces a hard bound.** Nearly every slow-path yield found the budget still exceeded, because the engine had not collected yet, and browsers expose no API to request collection or to report external memory.
+  - **Ballast** makes Edge collect promptly for code that yields (256 → 9.4 MiB at 1/8). It had no effect in Node, and none for a synchronous loop, because finalization callbacks only run between tasks.
+  - **Budget plus JSPI yield** is the only measure that lowers synchronous-loop peaks, and it does so in both engines.
+  - **Combined,** they give the lowest worst case (110 MiB in Edge for both patterns, 157 MiB in Node), but the bound is set by the engine's GC schedule, not by StandardWasm.
+
+  **Consequence:** C can be made practical with ballast plus a budgeted JSPI yield, but it cannot guarantee a memory bound. Before C is normative, B needs a matching measurement. B's collector can run synchronously in its own allocation slow path, which gives a hard bound at the cost of root scanning. The choice is between a soft bound with Wasm GC (C) and a hard bound with a custom collector (B). It needs that measured comparison, and Codex's review, rather than a default.
 - **Allocator.** A size-class free-list allocator with zero-initialization (the CLR guarantees zeroed arrays) and growth via `memory.grow`. The prototypes use bump and single-size LIFO allocators.
 - **Interior pointers into class fields.** Pinning a field of a class instance (`fixed (int* p = &obj.Field)`) isn't covered, because class instances stay in Wasm GC. Whole-program compilation could find every type whose fields are ever pinned and give those types C-style storage. That needs its own fixture.
 - **Diagnostics until implemented.** IL that pins or takes the address of managed memory remains an explicit unsupported diagnostic at the method and IL offset.
