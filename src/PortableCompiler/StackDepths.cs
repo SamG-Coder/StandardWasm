@@ -60,7 +60,12 @@ namespace PortableCompiler
                 if (kind == ThrowNull)
                 {
                     if (depth == 0) return -1;
-                    if (stack[depth - 1] != NullValue) return -2;
+                    // The null literal raises NullReferenceException. A managed class reference
+                    // travels on the object tag after a null test (decision 0054). Interfaces
+                    // and value types keep the explicit diagnostic.
+                    int thrown = stack[depth - 1];
+                    if (thrown != NullValue && (thrown < FirstClass || IsInterface(objects, thrown) ||
+                        IsValueType(objects, thrown))) return -2;
                     continue; // throw has no normal successor and clears the evaluation stack.
                 }
                 if (kind == Rethrow || kind == EndFinally) continue; // Unwinding drops the evaluation stack.
