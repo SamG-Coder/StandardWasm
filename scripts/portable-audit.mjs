@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import { chromium } from "playwright-core";
 import { auditPortable } from "./audit-portable-core.mjs";
 import { listDemos } from "./demos.mjs";
+import { oracleCases } from "./oracle.mjs";
 import { root, run } from "./toolchain.mjs";
 
 const { values: options } = parseArgs({ options: {
@@ -14,7 +15,7 @@ const { values: options } = parseArgs({ options: {
 } });
 const compilerBytes = readFileSync(options.compiler);
 const oracleBytes = readFileSync(join(root, "artifacts/oracle.json"));
-const oracle = JSON.parse(oracleBytes);
+const oracle = oracleCases(JSON.parse(oracleBytes));
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const demos = new Map(listDemos().filter(demo => !demo.runner).map(demo => [demo.assembly, demo]));
 const grouped = new Map();
