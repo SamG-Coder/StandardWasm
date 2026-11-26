@@ -196,6 +196,7 @@ namespace PortableCompiler
                 }
                 if (rows[current] == 0) continue; // Synthetic dispatcher, emitted after discovery.
                 int owner = owners[current], source = rows[current], context = contexts[current];
+                if (context < 0) context = ~context;
                 CompileLocation.Set(location, owner, source, -1);
                 if (owner != activeOwner)
                 {
@@ -279,8 +280,9 @@ namespace PortableCompiler
                 // value. Its IL returns void, so stack analysis checks void.
                 bool valueConstructor = IsValueConstructor(image, layout, heaps, source, signatures, signature, parameters, objects);
                 if (valueConstructor) result = Void;
-                // Any other instance method on a value type only reads its receiver.
-                bool valueMethod = !valueConstructor &&
+                bool locationReceiver = parameters > 0 && IsValueLocation(signatures[signature + 1]);
+                // Snapshot receivers retain the existing read-only ABI.
+                bool valueMethod = !valueConstructor && !locationReceiver &&
                     IsValueMethod(image, layout, heaps, source, signatures, signature, parameters, objects);
                 bool scalar = result == I32;
                 int narrowParameters = 0;
@@ -331,7 +333,7 @@ namespace PortableCompiler
                         return status;
                     virtualUsed[0] = 0;
                     functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
-                        parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod, valueMethod, records, owners, rows, contexts,
+                        parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
                         initializers, reflection);
                     if (functions < 0)
@@ -489,7 +491,7 @@ namespace PortableCompiler
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || kind == BranchIl.StringLength || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection ||
-                                kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect ||
+                                kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
                                 kind == BranchIl.ExchangeHandlerField || (kind == BranchIl.Call && records[slot + 3] != 0))
                                 tags = ExceptionTypes.NullReference;
                             else if (kind == BranchIl.Binary)
@@ -702,7 +704,14 @@ namespace PortableCompiler
                         int local = records[slot + BranchIl.Width + 1] - 1;
                         if (ObjectLayouts.IsValueType(objects, FieldAccess.Owner(descriptor)))
                         {
-                            if (local < 0 || frame[local] != FieldAccess.Owner(descriptor)) return -2;
+                            if (local < 0) return -2;
+                            int locationType = frame[local];
+                            if (IsValueLocation(locationType))
+                            {
+                                if (ObjectLayouts.IsExplicitValue(objects, LocatedValue(locationType))) return -2;
+                                locationType = LocatedValue(locationType);
+                            }
+                            if (locationType != FieldAccess.Owner(descriptor)) return -2;
                             records[slot] = BranchIl.UpdateValue;
                         }
                         else if (local >= 0) return -2;
@@ -714,6 +723,13 @@ namespace PortableCompiler
                             next < records.Length / BranchIl.Width && records[next * BranchIl.Width] == BranchIl.GetField &&
                             !ValueOperands.Entry(records, next, clauses))
                             records[slot] = BranchIl.GetField;
+                        else if (ManagedValueLocationWasm.UsesCell(objects, FieldAccess.Owner(descriptor), FieldAccess.Storage(descriptor)))
+                        {
+                            int status = ValueOperands.LowerClassField(image, layout, heaps, bases[owner + 1] - bases[owner],
+                                records, slot, FieldAccess.Storage(descriptor), clauses);
+                            if (status < 0) return status;
+                            records[slot] = BranchIl.TakeValueFieldAddress;
+                        }
                         else if (linked || !LinkExchange(image, heaps, layout, records, slot)) return -2;
                     }
                     continue;
@@ -768,10 +784,10 @@ namespace PortableCompiler
                 if (kind == BranchIl.MemberCall)
                 {
                     int member = records[slot + 1], opcode = records[slot + 3];
-                    // A call on a value location's address can only be a linked
-                    // value constructor or read-only instance method. The link
-                    // step below checks which. Skip the platform special forms.
-                    bool addressed = records[slot + BranchIl.Width + 1] != 0;
+                    // Bind addressed receivers through the member metadata.
+                    // Platform shortcuts do not consume a managed location.
+                    int address = records[slot + BranchIl.Width + 1];
+                    bool addressed = address != 0;
                     // A static member would receive the address as a byref argument.
                     if (addressed && (opcode != 0x28 || bundle.Length == 0 || !MemberHasThis(image, heaps, layout, member)))
                         return -2;
@@ -910,6 +926,7 @@ namespace PortableCompiler
                             context, callerType, allowVirtual: !addressed, valueAddress: addressed);
                         if (resolved < 0) return resolved;
                         int targetOwner = symbol[0], targetRow = symbol[1], targetContext = symbol[3];
+                        if (address < 0) targetContext = ~targetContext;
                         int linked = Lookup(owners, rows, contexts, bases, indices, functions, targetOwner, targetRow, targetContext);
                         bool virtualMethod = symbol[4] != 0;
                         bool deferred = opcode == 0x6f && virtualMethod;
@@ -934,6 +951,11 @@ namespace PortableCompiler
                         }
                         if (!IsSharedBundleSignature(signatures, offsets[linked], arities[linked]))
                             return -2;
+                        if (address < 0)
+                        {
+                            if (!BindLocationCall(records, slot, linked, -address, arities, offsets, signatures)) return -2;
+                            continue;
+                        }
                         bool linkedValue = symbol[2] != 0 &&
                             ObjectLayouts.IsValueType(objects, signatures[offsets[linked] + 1]) &&
                             signatures[offsets[linked]] == signatures[offsets[linked] + 1] &&
@@ -990,13 +1012,20 @@ namespace PortableCompiler
                     if (staged < 0) return staged;
                     continue;
                 }
-                int index = indices[bases[owner] + target] - 1;
+                int fieldReceiver = kind == BranchIl.Call ? records[slot + BranchIl.Width + 1] : 0;
+                int key = fieldReceiver < 0 ? -1 : 0;
+                int index = Lookup(owners, rows, contexts, bases, indices, functions, owner, target, key);
                 if (index < 0)
                 {
-                    functions = Register(bundle, image, layout, heaps, owner, target, 0, owners, rows, contexts, bases, indices,
+                    functions = Register(bundle, image, layout, heaps, owner, target, key, owners, rows, contexts, bases, indices,
                         arities, offsets, signatures, objects, functions, allowVirtual: virtualMethodLocal && kind == BranchIl.Call);
                     if (functions < 0) return functions;
                     index = functions - 1;
+                }
+                if (fieldReceiver < 0)
+                {
+                    if (!BindLocationCall(records, slot, index, -fieldReceiver, arities, offsets, signatures)) return -2;
+                    continue;
                 }
                 int signature = offsets[index];
                 bool hasReceiver = arities[index] > 0 && StackType(signatures[signature + 1]) >= ObjectLayouts.FirstClass;
@@ -1066,6 +1095,17 @@ namespace PortableCompiler
                 }
             }
             return functions;
+        }
+
+        private static bool BindLocationCall(int[] records, int slot, int function, int storage,
+            int[] arities, int[] offsets, int[] signatures)
+        {
+            int argumentCount = records[slot + 2 * BranchIl.Width + 1];
+            if (argumentCount != arities[function] || signatures[offsets[function] + 1] != ValueLocation(storage)) return false;
+            records[slot] = BranchIl.Call;
+            records[slot + 1] = function;
+            records[slot + 3] = 0;
+            return true;
         }
 
         // Value-type constructors use the receiver-in, value-out ABI of
@@ -1334,9 +1374,15 @@ namespace PortableCompiler
         {
             if (functions >= owners.Length) return -3;
             int offset = NextSignature(offsets, arities, functions);
-            int arity = MethodShape(bundle, image, layout, heaps, owner, row, context, signatures, offset, objects, allowVirtual, initializer, receiverOverride);
-            if (arity < 0)
-                return arity;
+            // A complemented context is the same method specialized for a traced receiver.
+            int arity = MethodShape(bundle, image, layout, heaps, owner, row, context < 0 ? ~context : context,
+                signatures, offset, objects, allowVirtual, initializer, receiverOverride);
+            if (arity < 0) return arity;
+            if (context < 0)
+            {
+                if (!IsValueMethod(image, layout, heaps, row, signatures, offset, arity, objects)) return -2;
+                signatures[offset + 1] = ValueLocation(signatures[offset + 1]);
+            }
             owners[functions] = owner;
             rows[functions] = row;
             contexts[functions] = context;
@@ -1349,7 +1395,7 @@ namespace PortableCompiler
         // Class slots have already resolved to an assembly-qualified layout.
         private static bool IsSharedBundleType(int type) =>
             IsScalar(type) || type == String || type == ObjectReference || type == NullPointer ||
-            RuntimeTypeMetadata.IsStorage(type) || IsArray(StackType(type)) ||
+            RuntimeTypeMetadata.IsStorage(type) || IsArray(StackType(type)) || IsValueLocation(type) ||
             // The platform EventArgs and EventHandler representations are
             // compiler-owned and bound by identity, so every assembly shares them.
             type == EventArgsReference || type == EventHandlerReference ||

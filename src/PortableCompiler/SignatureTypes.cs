@@ -10,6 +10,11 @@ namespace PortableCompiler
             F32 = FloatStorage.Single, F64 = FloatStorage.Double, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles, Native = NativeStorage.Scalar,
             NativeVector = NativeStorage.Vector;
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
+        // Keep the located CLI type in the verifier even though all cells share a Wasm heap.
+        private const int ValueLocationBase = 65536;
+        internal static int ValueLocation(int type) => ValueLocationBase + type;
+        internal static bool IsValueLocation(int type) => type >= ValueLocationBase;
+        internal static int LocatedValue(int type) => type - ValueLocationBase;
 
         // Signature and frame tags keep the CLI storage width. Narrow types
         // are distinct from evaluation-stack types.
@@ -32,7 +37,8 @@ namespace PortableCompiler
         // Widen classes, strings, and primitive GC vectors without allocating or losing identity.
         // Boxing and other CLR reference conversions use separate IL operations.
         internal static bool IsObjectReference(int type) =>
-            type == String || RuntimeTypeMetadata.IsReference(type) || IsArray(type) || type >= ObjectLayouts.FirstClass ||
+            type == String || RuntimeTypeMetadata.IsReference(type) || IsArray(type) ||
+            type >= ObjectLayouts.FirstClass && !IsValueLocation(type) ||
             type >= ObjectLayouts.ObjectReference && type <= ObjectLayouts.EventHandlerReference;
 
         // Zero denotes the CLI null literal in a live stack slot and void in a method signature.
@@ -51,6 +57,7 @@ namespace PortableCompiler
         {
             int expected = StackType(target);
             if (source == expected) return true;
+            if (IsValueLocation(source) || IsValueLocation(expected)) return false;
             if (ObjectLayouts.IsValueType(objects, source) || ObjectLayouts.IsValueType(objects, expected)) return false;
             return source == NullValue && IsReference(expected) ||
                 source == NativeZero && (target == Native || target == NullPointer) ||

@@ -616,6 +616,19 @@ namespace PortableCompiler
                     code[used++] = 0x24; // global.set
                     used = WasmBinary.Unsigned(code, used, operand);
                 }
+                else if (kind == TakeValueFieldAddress)
+                {
+                    int descriptor = records[slot + 3], storage = FieldAccess.Storage(descriptor);
+                    int reference = Spill(spills, maximum, states[state + top], top);
+                    used = GuardNull(code, used, reference);
+                    used = ManagedValueLocationWasm.Take(code, used, FieldAccess.Owner(descriptor), reference, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, ValueLocation(storage), top));
+                }
+                else if (kind == LoadValueLocation)
+                {
+                    used = ManagedValueLocationWasm.ReadLocation(code, used, 0, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, operand, depth));
+                }
                 else if (kind == GetField || kind == SetField)
                 {
                     int descriptor = records[slot + 3];
@@ -685,7 +698,7 @@ namespace PortableCompiler
                         used = ExplicitValueWasm.Update(code, used, objects, type, local, operand, FieldAccess.Storage(descriptor), replacement, source);
                     else
                         used = ValueFieldsWasm.Update(code, used, objects, type, local, temporaries + type - FirstClass,
-                            operand, replacement, source);
+                            operand, replacement, source, IsValueLocation(frame[local]));
                 }
                 else if (kind == NewArray || kind == InitializedArray)
                 {
@@ -925,12 +938,20 @@ namespace PortableCompiler
         private static int SpillBank(int type) =>
             // NativeZero already spills as Native. Use its otherwise vacant bank
             // for native arrays without increasing the engine's local pressure.
-            PeLibrary.RuntimeTypeMetadata.IsStorage(type) ? ObjectReference - 1 :
+            PeLibrary.RuntimeTypeMetadata.IsStorage(type) || IsValueLocation(type) ? ObjectReference - 1 :
             type >= FirstClass ? PeLibrary.ConsoleStorage.Writer + type - FirstClass :
                 (type == NativeZero ? Native : type == NativeVector ? NativeZero : type) - 1;
 
         internal static int LoadOperand(byte[] code, int used, int local, int source, int target)
         {
+            if (IsValueLocation(source))
+            {
+                // Cell operands spill as eqref. Restore their physical type at a typed call.
+                used = Local(code, used, 0x20, local);
+                code[used++] = 0xfb;
+                code[used++] = 0x17; // ref.cast null
+                return WasmBinary.Signed(code, used, WasmBinary.ValueLocationHeap);
+            }
             if (source != NativeZero || target != NullPointer) return Local(code, used, 0x20, local);
             code[used++] = 0xd0; // ref.null none
             code[used++] = NullSpillWasm.NullRef;

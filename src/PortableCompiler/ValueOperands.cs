@@ -39,12 +39,25 @@ namespace PortableCompiler
             int next = records[slot + 2] * Width;
             if (next >= records.Length || Entry(records, next / Width, clauses)) return -2;
             int kind = records[next];
-            // [&this] -> ldfld -> [field]. The load already pushes the current value.
-            if (kind == GetField) return 0;
+            // An address-backed receiver reloads its current snapshot at every read.
+            if (kind == GetField)
+            {
+                if (SignatureTypes.IsValueLocation(frame[0]))
+                {
+                    records[slot] = LoadValueLocation;
+                    records[slot + 1] = SignatureTypes.LocatedValue(frame[0]);
+                }
+                return 0;
+            }
             if (kind == InitializeValue)
-                return readOnly ? -2 : Clear(bundle, image, layout, heaps, owner, records, slot, next, frame[0], objects);
+                return readOnly || SignatureTypes.IsValueLocation(frame[0]) ? -2 :
+                    Clear(bundle, image, layout, heaps, owner, records, slot, next, frame[0], objects);
             return LowerAddressUse(image, layout, heaps, methodCount, records, slot, 0, clauses, readOnly);
         }
+
+        internal static int LowerClassField(byte[] image, int[] layout, int[] heaps, int methodCount,
+            int[] records, int slot, int storage, int[] clauses) =>
+            LowerAddressUse(image, layout, heaps, methodCount, records, slot, 0, clauses, fieldReceiver: storage);
 
         // A frame address followed by initobj of the same type clears the location.
         private static int Clear(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
@@ -82,7 +95,7 @@ namespace PortableCompiler
         // temporary stack separately so the sequence cannot consume values
         // below the original address or pass it anywhere else.
         private static int LowerAddressUse(byte[] image, int[] layout, int[] heaps, int methodCount,
-            int[] records, int slot, int local, int[] clauses, bool readOnly = false)
+            int[] records, int slot, int local, int[] clauses, bool readOnly = false, int fieldReceiver = 0)
         {
             int next = records[slot + 2] * Width;
             int depth = 0;
@@ -92,7 +105,7 @@ namespace PortableCompiler
                 int kind = records[next];
                 if (kind == SetField && depth == 1)
                 {
-                    if (readOnly) return -2;
+                    if (readOnly || fieldReceiver != 0) return -2;
                     // [&value, field] -> stfld -> []. UpdateValue replaces the local's aggregate.
                     records[slot] = Nop;
                     records[next + Width + 1] = local + 1;
@@ -118,11 +131,11 @@ namespace PortableCompiler
                     // current value, and the call's spare operand records keep
                     // the location and the argument count.
                     if (records[slot] == FrameAddress) records[slot] = Load;
-                    records[next + Width + 1] = local + 1;
+                    records[next + Width + 1] = fieldReceiver == 0 ? local + 1 : -fieldReceiver;
                     records[next + 2 * Width + 1] = depth + 1;
                     return 0;
                 }
-                if (kind == Load || kind == Constant || kind == WideConstant || kind == SingleConstant ||
+                if (kind == Load || kind == LoadStaticField || kind == Constant || kind == WideConstant || kind == SingleConstant ||
                     kind == DoubleConstant || kind == NullLiteral || kind == LoadString) depth++;
                 else if (kind == Binary || kind == CheckedInteger)
                 {

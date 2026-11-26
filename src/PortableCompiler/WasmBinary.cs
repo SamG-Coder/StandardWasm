@@ -505,7 +505,7 @@ namespace PortableCompiler
         }
 
         internal static int HeapType(int type) =>
-            type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
+            IsValueLocation(type) ? ValueLocationHeap : type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
                 type == EventArgsReference ? EventArgsHeap :
                 type == EventHandlerReference ? EventHandlerHeap :
                 type == Singles ? SingleArrayHeap : type == Doubles ? DoubleArrayHeap :

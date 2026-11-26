@@ -50,8 +50,15 @@ namespace PortableCompiler
         }
 
         internal static int Update(byte[] code, int used, int[] objects, int type, int local, int temporary,
-            int field, int replacement, int replacementType)
+            int field, int replacement, int replacementType, bool location = false)
         {
+            if (location)
+            {
+                used = ManagedValueLocationWasm.ReadLocation(code, used, local, type);
+                used = Local(code, used, 0x21, temporary);
+                used = Local(code, used, 0x20, local);
+                local = temporary;
+            }
             used = Materialize(code, used, type, local);
             used = Local(code, used, 0x21, temporary);
             int ordinal = 0;
@@ -72,7 +79,7 @@ namespace PortableCompiler
             // Publish a fresh immutable aggregate to the addressed local.
             // Existing copies keep the original value.
             used = Gc(code, used, 0, type);
-            return Local(code, used, 0x21, local);
+            return location ? ManagedValueLocationWasm.WriteSnapshot(code, used) : Local(code, used, 0x21, local);
         }
     }
 }

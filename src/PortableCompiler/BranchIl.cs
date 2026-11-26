@@ -32,6 +32,7 @@ namespace PortableCompiler
         // localloc: [size] -> [address] on the shadow stack in memory 0.
         internal const int LocalAllocate = 72;
         internal const int ReadReflection = 73, StringEquals = 74, ResourceLookup = 75;
+        internal const int TakeValueFieldAddress = 76, LoadValueLocation = 77;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;

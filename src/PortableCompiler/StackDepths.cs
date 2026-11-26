@@ -283,7 +283,7 @@ namespace PortableCompiler
                 if (depth < needed) return -1;
                 int type = stack[depth - needed];
                 int top = stack[depth - 1];
-                if (IsValueType(objects, type) || IsValueType(objects, top)) return -2;
+                if (IsValueType(objects, type) || IsValueType(objects, top) || IsValueLocation(type) || IsValueLocation(top)) return -2;
                 if (type == NullPointer || top == NullPointer)
                 {
                     if (needed == 1) return depth - 1;
@@ -362,6 +362,13 @@ namespace PortableCompiler
             if (kind == LoadStaticField) return Push(stack, allocated, depth, StackType(extra));
             if (kind == StoreStaticField)
                 return depth > 0 && Assignable(stack[depth - 1], extra, objects) ? depth - 1 : -1;
+            if (kind == TakeValueFieldAddress)
+            {
+                if (depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(extra), objects)) return -1;
+                return Push(stack, allocated, depth - 1, ValueLocation(FieldAccess.Storage(extra)));
+            }
+            if (kind == LoadValueLocation)
+                return Push(stack, allocated, depth, operand);
             if (kind == GetField)
             {
                 if (depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(extra), objects)) return -1;

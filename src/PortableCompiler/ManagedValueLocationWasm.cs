@@ -67,6 +67,37 @@ namespace PortableCompiler
             return used;
         }
 
+        internal static int Take(byte[] code, int used, int owner, int reference, int field)
+        {
+            used = Cell(code, used, owner, reference, field);
+            code[used++] = 0xd1; // ref.is_null
+            code[used++] = 0x04; code[used++] = 0x40;
+            used = Local(code, used, 0x20, reference);
+            code[used++] = 0xd0; code[used++] = 0x6d; // ref.null eq
+            used = CellInstruction(code, used, 0);
+            used = Gc(code, used, 5, owner);
+            used = WasmBinary.Unsigned(code, used, field);
+            code[used++] = 0x0b;
+            return Cell(code, used, owner, reference, field);
+        }
+
+        internal static int ReadLocation(byte[] code, int used, int local, int type)
+        {
+            used = Local(code, used, 0x20, local);
+            used = CellInstruction(code, used, 2);
+            code[used++] = 0;
+            code[used++] = 0xfb;
+            code[used++] = 0x17; // ref.cast null
+            return WasmBinary.Signed(code, used, WasmBinary.HeapType(type));
+        }
+
+        internal static int WriteSnapshot(byte[] code, int used)
+        {
+            used = CellInstruction(code, used, 5);
+            code[used++] = 0;
+            return used;
+        }
+
         private static int Cell(byte[] code, int used, int owner, int reference, int field)
         {
             used = Local(code, used, 0x20, reference);

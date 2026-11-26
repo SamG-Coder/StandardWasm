@@ -141,6 +141,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [135 · Addressed value arguments](stage-135-addressed-value-arguments/README.md) | `npm run demo -- stage-135-addressed-value-arguments` | Preserve the callee copy when taking the address of a by-value struct argument |
 | [137 · stackalloc on a shadow stack](stage-137-stackalloc/README.md) | `npm run demo -- stage-137-stackalloc` | `stackalloc` into primitive pointers; frames release on return and exceptions; exhaustion traps |
 | [138 · Inline-array layouts](stage-138-inline-array-layouts/README.md) | `npm run demo -- stage-138-inline-array-layouts` | Preserve the declared element and value copies of managed inline arrays |
+| [146 · Class value-field receivers](stage-146-class-value-receivers/README.md) | `npm run demo -- stage-146-class-value-receivers` | Call original managed methods through stable class-field addresses |
 
 ## Adding a stage
 
