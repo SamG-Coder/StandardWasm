@@ -141,6 +141,7 @@ namespace PortableCompiler
             bool eventArgsEmpty = false;
             int exceptionTags = 0;
             var noCatch = new int[0];
+            var sizingBuffer = new byte[0];
 
             int activeOwner = 0;
             for (int current = 0; current < functions; current++)
@@ -237,6 +238,10 @@ namespace PortableCompiler
                         return -2;
                     var depths = new int[body[1]];
                     var states = new byte[body[1] * maximum];
+                    bool hasNull = false;
+                    for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
+                        if (records[slot] == BranchIl.NullLiteral) hasNull = true;
+                    var outgoingNulls = new byte[hasNull ? states.Length : 0];
                     int exceptionLocals = 0;
                     if (catchRegion.Length != 0)
                     {
@@ -244,7 +249,7 @@ namespace PortableCompiler
                         if (exceptionLocals < 0) return exceptionLocals;
                     }
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
-                        result, signatures, offsets, arities, location, catchRegion);
+                        result, signatures, offsets, arities, location, catchRegion, outgoingNulls);
                     if (status < 0) return status;
 
                     if (location.Length != 0) location[2] = -1;
@@ -277,6 +282,12 @@ namespace PortableCompiler
                         int operation = records[slot + 1];
                         if (depths[pc] != 0)
                         {
+                            if (hasNull)
+                            {
+                                capacity = NullSpillWasm.Transfer(sizingBuffer, capacity, records, pc,
+                                    depths, states, outgoingNulls, maximum, 0);
+                                if (capacity == int.MaxValue) return -3;
+                            }
                             if (hasFinally && kind == BranchIl.Leave)
                             {
                                 int unwindBytes = catchRegion.Length / ExceptionClauses.Width * 32;
@@ -335,7 +346,8 @@ namespace PortableCompiler
                             eventArgsEmpty = true;
                     }
                     code = new byte[capacity];
-                    used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets, arities, code, remainderFixup, catchRegion);
+                    used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
+                        arities, code, remainderFixup, catchRegion, outgoingNulls);
                 }
 
                 if (used > moduleCode.Length - length)
