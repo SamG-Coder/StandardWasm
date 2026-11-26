@@ -114,11 +114,12 @@ export async function webgpuRenderer(canvas, model, text) {
         activeColors.set(active, i * 4);
     }
 
-    for (const [i, c] of model.controls.entries()) {
+    function encodeBounds(i, c) {
         const left = 2 * c.x / model.width - 1;
         const top = 1 - 2 * c.y / model.height;
         rectangles.set([left, top, 2 * c.width / model.width, -2 * c.height / model.height], i * 4);
     }
+    for (const [i, control] of model.controls.entries()) encodeBounds(i, control);
     const geometryBuffer = device.createBuffer({ size: rectangles.byteLength,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
     const colorBuffer = device.createBuffer({ size: initialColors.byteLength,
@@ -172,6 +173,10 @@ export async function webgpuRenderer(canvas, model, text) {
         dispose() {
             context.unconfigure();
             device.destroy();
+        },
+        updateBounds(index, control) {
+            encodeBounds(index, control);
+            device.queue.writeBuffer(geometryBuffer, index * 16, rectangles, index * 4, 4);
         },
         update(start, count, active) {
             if (count === 0) return;

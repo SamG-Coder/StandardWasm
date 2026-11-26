@@ -5,8 +5,9 @@ namespace PeLibrary
     internal static class ObjectLayouts
     {
         internal const int FirstClass = 6, MaxClasses = 256 - FirstClass, Width = 3;
+        internal const int FieldMapStart = 1 + MaxClasses * Width;
 
-        // Registry: count followed by triples of TypeDef row, first Field row, field count.
+        // Registry: count, fixed triples of TypeDef row, first Field row and field count, then field kinds by row.
         internal static int Register(byte[] image, int[] streams, int[] methods, int[] registry, int row)
         {
             for (int i = 0; i < registry[0]; i++)
@@ -40,12 +41,26 @@ namespace PeLibrary
             for (uint field = first; field < end; field++)
             {
                 uint at = (uint)fields + (field - 1) * (uint)(2 + strings + blobs);
-                if ((U16(image, at) & 0x10) != 0) return -2;
+                uint fieldFlags = U16(image, at);
+                if ((fieldFlags & 0x50) == 0x50)
+                    continue; // A literal is in metadata and has no instance storage.
+                if ((fieldFlags & 0x10) != 0) return -2;
                 uint sig = ReadIndex(image, at + (uint)(2 + strings), blobs);
                 if (!Fits(sig, 3, (uint)streams[1])) return -1;
                 uint blob = (uint)streams[0] + sig;
-                if (image[blob] != 2 || image[blob + 1] != 6 || image[blob + 2] != 8)
-                    return -2; // Ordinary i32 instance field.
+                if (image[blob + 1] != 6) return -2;
+                int type;
+                if (image[blob] == 2 && image[blob + 2] == 8)
+                    type = 1;
+                else if (image[blob] == 3 && Fits(sig, 4, (uint)streams[1]) && image[blob + 2] == 0x1d)
+                {
+                    int element = image[blob + 3];
+                    if (element == 5) type = 2;
+                    else if (element == 8) type = 3;
+                    else return -2;
+                }
+                else return -2;
+                registry[FieldMapStart + (int)field] = type;
             }
             int slot = 1 + registry[0] * Width;
             registry[slot] = row;
@@ -83,11 +98,18 @@ namespace PeLibrary
             return owner;
         }
 
+        internal static int FieldType(int[] registry, int field) => registry[FieldMapStart + field];
+
         internal static int FieldOrdinal(int[] registry, int type, int field)
         {
             int slot = 1 + (type - FirstClass) * Width;
             int index = field - registry[slot + 1];
-            return index >= 0 && index < registry[slot + 2] ? index : -1;
+            if (index < 0 || index >= registry[slot + 2] || FieldType(registry, field) == 0)
+                return -1;
+            int ordinal = 0;
+            for (int i = registry[slot + 1]; i < field; i++)
+                if (FieldType(registry, i) != 0) ordinal++;
+            return ordinal;
         }
 
         internal static bool IsConstructor(byte[] image, int[] streams, int[] methods, int row)

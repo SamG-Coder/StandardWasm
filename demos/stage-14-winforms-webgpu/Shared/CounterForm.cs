@@ -3,23 +3,46 @@ using System.Windows.Forms;
 
 namespace CounterExample;
 
-internal partial class CounterForm : Form
+internal class CounterForm : Form
 {
-    internal readonly Button Increment = new() { Name = "increment", Text = "Add one" };
+    internal readonly Button Increment = new() { Name = "increment", Text = CounterText.Increment };
     internal readonly Label Result = new() { Name = "result" };
 
     internal CounterForm()
     {
         Name = "counter";
-        Text = "Counter";
-        ClientSize = new Size(420, 240);
-        Increment.Bounds = new Rectangle(32, 151, 156, 48);
-        Result.Bounds = new Rectangle(32, 35, 350, 94);
-        Controls.Add(Result);
-        Controls.Add(Increment);
+        Text = CounterText.Title;
+        var layout = CounterHandlers.BuildTree();
+        ClientSize = new Size(CounterHandlers.ClientWidth(layout), CounterHandlers.ClientHeight(layout));
+        ApplyLayout(layout);
         AcceptButton = Increment;
-        Bind(Increment, Result, CounterHandlers.Bind, "Count: ");
+        var state = CounterHandlers.Create(0);
+        var click = CounterHandlers.Bind(state);
+        Result.Font = new Font("Segoe UI", 24, FontStyle.Bold);
+        ShowValue(CounterHandlers.Read(state));
+        Increment.Click += (_, _) =>
+        {
+            ShowValue(CounterHandlers.Dispatch(click, layout));
+            ApplyLayout(layout);
+        };
     }
 
-    partial void Bind(Button button, Label label, Func<CounterState, Func<int>> bind, string prefix);
+    private void ShowValue(int value) =>
+        Result.Text = CounterText.ResultPrefix + value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private void ApplyLayout(ControlTree layout)
+    {
+        for (int index = 0; index < CounterHandlers.ControlCount(layout); index++)
+        {
+            int key = CounterHandlers.ControlValue(layout, index, ControlTree.Key);
+            Control control = key == CounterLayout.Increment ? Increment : Result;
+            control.Bounds = new Rectangle(
+                CounterHandlers.ControlValue(layout, index, ControlTree.X),
+                CounterHandlers.ControlValue(layout, index, ControlTree.Y),
+                CounterHandlers.ControlValue(layout, index, ControlTree.Width),
+                CounterHandlers.ControlValue(layout, index, ControlTree.Height));
+            if (!Controls.Contains(control))
+                Controls.Add(control);
+        }
+    }
 }

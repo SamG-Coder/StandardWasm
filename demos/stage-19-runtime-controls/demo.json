@@ -1,0 +1,1 @@
+{"assembly":"ControlStorageLibrary","exportType":"ControlStorageLibrary.ControlStorageDemo","method":"Compile","inputs":[{"file":"self"},{"name":"Change"}],"generated":{"capacity":16384,"arguments":[511]},"expected":766}

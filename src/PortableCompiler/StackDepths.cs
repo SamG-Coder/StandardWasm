@@ -94,12 +94,13 @@ namespace PortableCompiler
                 return depth > 0 && stack[depth - 1] >= FirstClass ? depth - 1 : -1;
             if (kind == GetField)
             {
-                if (!Match(stack, depth, (byte)extra)) return -1;
-                stack[depth - 1] = I32;
+                if (!Match(stack, depth, (byte)(extra >> 8))) return -1;
+                stack[depth - 1] = unchecked((byte)extra);
                 return depth;
             }
             if (kind == SetField)
-                return Match(stack, depth, I32) && Match(stack, depth - 1, (byte)extra) ? depth - 2 : -1;
+                return Match(stack, depth, unchecked((byte)extra)) &&
+                    Match(stack, depth - 1, (byte)(extra >> 8)) ? depth - 2 : -1;
             if (kind == NewArray)
             {
                 if (!Match(stack, depth, I32)) return -1;

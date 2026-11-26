@@ -20,6 +20,7 @@
     <ProjectReference Include="../demos/stage-13-complete-bootstrap/BootstrapLibrary.csproj" />
     <ProjectReference Include="../demos/stage-15-managed-instances/ObjectLibrary.csproj" />
     <ProjectReference Include="../demos/stage-16-managed-delegates/DelegateLibrary.csproj" />
+    <ProjectReference Include="../demos/stage-19-runtime-controls/ControlStorageLibrary.csproj" />
     <ProjectReference Include="../demos/stage-15-managed-instances/identity/ObjectIdentityProbe/ObjectIdentityProbe.csproj" />
     <ProjectReference Include="../demos/stage-18-long-integers/LongIntegers.csproj" />
     <ProjectReference Include="../demos/stage-20-floating-point/FloatingPoint.csproj" />
