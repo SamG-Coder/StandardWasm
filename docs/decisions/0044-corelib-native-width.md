@@ -58,8 +58,11 @@ future need to compile them requires its own decision.
 | Microsoft.NETCore.App 10.0.10 win-x64 | AMD64, PE32+, ReadyToRun | 8 | status -7 |
 
 The host chooses the runtime pack. Identity matching doesn't authenticate the
-supplied bytes (decision 0038). This check doesn't prove that every 32-bit
-CoreLib body is supported. It prevents a 64-bit body from being silently
-narrowed.
+supplied bytes (decision 0038). The check trusts an authentic, internally
+consistent CoreLib: it reads the target width from one standard method and
+assumes the other bodies were built for the same target. It doesn't detect a
+CoreLib that mixes bodies from different builds or was edited elsewhere. For
+such a pack it only prevents narrowing when `IntPtr.get_Size` itself reports
+8. It also doesn't prove that every 32-bit CoreLib body is supported.
 
 See [Stage 113](../../demos/stage-113-corelib-native-width/README.md).
