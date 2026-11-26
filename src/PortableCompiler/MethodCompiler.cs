@@ -431,6 +431,8 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.Overflow;
                             else if (kind == BranchIl.NewDelegate)
                                 tags = ExceptionTypes.Argument;
+                            else if (kind == BranchIl.UnboxValue)
+                                tags = ExceptionTypes.InvalidCast | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.CastClass)
                                 tags = ExceptionTypes.InvalidCast;
                             else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet || kind == BranchIl.StringCharacter)
@@ -573,6 +575,27 @@ namespace PortableCompiler
                     if (type < 0) return type;
                     records[slot + 1] = type;
                 }
+                if (kind == BranchIl.BoxValue || kind == BranchIl.UnboxValue || kind == BranchIl.TestClass)
+                {
+                    int operand = records[slot + 1];
+                    if (kind == BranchIl.TestClass)
+                    {
+                        int table = (operand & 3) == 1 ? 1 : 2;
+                        operand = table << 24 | operand >> 2;
+                    }
+                    int element = PrimitiveBoxing.Element(bundle, image, layout, heaps,
+                        owner, operand, context, methodArguments, objects);
+                    if (element > 0)
+                    {
+                        int boxing = PrimitiveBoxing.Layout(objects);
+                        if (boxing < 0) return boxing;
+                        if (kind == BranchIl.TestClass) records[slot] = BranchIl.TestBox;
+                        records[slot + 1] = element;
+                        records[slot + 3] = boxing;
+                        continue;
+                    }
+                    if (kind != BranchIl.TestClass || element != -2) return element;
+                }
                 if (kind == BranchIl.CastClass || kind == BranchIl.TestClass)
                 {
                     // A descriptor is a Type on the CLR, even after widening to Object.
@@ -690,6 +713,8 @@ namespace PortableCompiler
                     }
                     records[slot] = BranchIl.Call;
                     records[slot + 1] = function;
+                    // A branch-target marker on MethodSpec is not a callvirt flag.
+                    records[slot + 3] = 0;
                     continue;
                 }
                 if (kind == BranchIl.FieldToken || kind == BranchIl.InitializeValue)

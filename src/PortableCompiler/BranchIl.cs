@@ -25,7 +25,7 @@ namespace PortableCompiler
         internal const int ConstructValue = 66;
         internal const int LoadTypeToken = 67, TypeFromHandle = 68;
         // newobj System.Object::.ctor: a fresh plain object (decision 0057). [] -> [Object].
-        internal const int NewRootObject = 69, ConstrainedStatic = 75;
+        internal const int NewRootObject = 69, ConstrainedStatic = 75, BoxValue = 80, UnboxValue = 81, TestBox = 82;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
@@ -232,6 +232,13 @@ namespace PortableCompiler
                     if ((token >> 24) != 0x70) return -1;
                     kind = LoadString;
                     operand = (int)(token & 0xffffff);
+                }
+                else if (op == 0x8c || op == 0xa5)
+                {
+                    if (length - pc < 4) return -1;
+                    operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                    pc += 4;
+                    kind = op == 0x8c ? BoxValue : UnboxValue;
                 }
                 else if (op == 0x8d)
                 {

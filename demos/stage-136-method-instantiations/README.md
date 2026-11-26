@@ -17,5 +17,8 @@ the same Wasm parameter types and field access through a constructed
 type. The fixture also verifies nominal, constructed and recursive
 interface constraints. A separate .NET 10 fixture verifies constrained
 static dispatch through the original CoreLib Int64 implementation and
-through user-defined MethodImpl mappings. The range guard's error path
-still needs support for boxing a closed generic value.
+through user-defined MethodImpl mappings. The .NET Standard fixture
+also boxes and unboxes closed primitive values, verifies signed zero,
+and checks nominal type tests, fresh object identity and typed failures.
+Boxing user-defined structs and dispatching virtual calls on boxes remain
+open.

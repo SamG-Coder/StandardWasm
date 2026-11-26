@@ -36,6 +36,29 @@ public static class Execution
     public static int SelfConstraint(int value) => MethodsFromAnotherAssembly.Self(new Marker(value)).Value;
     public static int MixedConstraint(int value) => Box<int>.Require(new Marker(value)).Value;
 
+    public static int BoxInteger(int value) => Unpack<int>(Pack(value));
+    public static int BoxWide(int value) => unchecked((int)(Unpack<long>(Pack((long)value << 32)) >> 32));
+    public static int BoxSingle(int value) => 1f / Unpack<float>(Pack(value < 0 ? -0f : 0f)) < 0f ? 1 : 0;
+    public static int BoxDouble(int value) => 1d / Unpack<double>(Pack(value < 0 ? -0d : 0d)) < 0d ? 1 : 0;
+    public static int NominalBox(int value) => IsInt(Pack(value)) && !IsInt(Pack((uint)value)) && !IsInt(new object()) ? 1 : 0;
+    public static int FreshBox(int value) => Pack(value) == Pack(value) ? 1 : 0;
+
+    public static int WrongBox(int value)
+    {
+        try { return Unpack<int>(Pack((uint)value)); }
+        catch (InvalidCastException) { return -17; }
+    }
+
+    public static int NullBox(int value)
+    {
+        try { return Unpack<int>(null); }
+        catch (NullReferenceException) { return value; }
+    }
+
+    private static object Pack<T>(T value) => value;
+    private static T Unpack<T>(object value) => (T)value;
+    private static bool IsInt(object value) => value is int;
+
     private static T Reference<T>(T value) where T : class => value;
     private static T Structure<T>(T value) where T : struct => value;
     private static T[] EchoArray<T>(T[] values) => values;

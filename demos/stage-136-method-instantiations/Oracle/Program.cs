@@ -46,7 +46,8 @@ var methods = new[]
 {
     "Integer", "Wide", "Text", "Recurse", "Value", "Array",
     "LinkedArray", "LinkedOverloads", "LinkedDeclaringType", "LinkedParentVariable", "LinkedConstructed",
-    "NominalConstraint", "SelfConstraint", "MixedConstraint"
+    "NominalConstraint", "SelfConstraint", "MixedConstraint",
+    "BoxInteger", "BoxWide", "BoxSingle", "BoxDouble", "NominalBox", "FreshBox", "WrongBox", "NullBox"
 }
     .Select(name => execution.GetMethod(name)!).ToArray();
 var entries = methods.Select(method => new { name = method.Name, row = method.MetadataToken & 0xffffff });

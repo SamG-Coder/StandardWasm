@@ -50,5 +50,19 @@ call targets the original managed body. Default interface implementations
 and unresolved targets stay diagnosed.
 
 The .NET 10 fixture verifies original Int64 numeric dispatch and two
-user-defined implementations. The original range guard advances to the
-generic exception helper, where boxing a closed value is still pending.
+user-defined implementations.
+
+## Primitive boxes
+
+Each boxing instruction creates a fresh managed object. Its private GC
+layout stores the exact CLI primitive element and the payload bits.
+A function-reference field distinguishes the private layout from user
+aggregates. Exact identity survives even when two primitive types have
+the same Wasm storage. The type test returns the same object on a match.
+Unboxing checks the type tag and returns a typed CLR-compatible exception
+for a wrong type or a null reference. Floating-point payloads use
+bitwise reinterpretation so signed zero survives the round trip.
+
+Boxed primitives currently support object identity, primitive type
+tests and value extraction. User-defined struct and enum boxes,
+nullable boxing and virtual dispatch on boxed values require more work.

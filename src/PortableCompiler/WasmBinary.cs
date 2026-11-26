@@ -49,6 +49,12 @@ namespace PortableCompiler
             for (int i = 0; i < objects[0]; i++)
             {
                 int classType = FirstClass + i, fields = LayoutFieldCount(objects, classType);
+                if (PrimitiveBoxing.IsLayout(objects, classType))
+                {
+                    if (PrimitiveBoxing.TypeBytes > output.Length - classBytes) return -3;
+                    classBytes += PrimitiveBoxing.TypeBytes;
+                    continue;
+                }
                 int element = ArrayElement(objects, classType);
                 if (element != 0)
                 {
@@ -280,6 +286,11 @@ namespace PortableCompiler
             for (int i = 0; i < objects[0]; i++)
             {
                 int classType = FirstClass + i, fields = LayoutFieldCount(objects, classType);
+                if (PrimitiveBoxing.IsLayout(objects, classType))
+                {
+                    cursor = PrimitiveBoxing.WriteType(output, cursor);
+                    continue;
+                }
                 int element = ArrayElement(objects, classType);
                 if (element != 0)
                 {
