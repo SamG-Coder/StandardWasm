@@ -1,0 +1,56 @@
+using static PortableCompiler.BranchIl;
+using static PortableCompiler.SignatureTypes;
+
+namespace PortableCompiler
+{
+    internal static class NullSpillWasm
+    {
+        internal const byte NullRef = 0x71;
+
+        internal static int Transfer(byte[] code, int used, int[] records, int pc, int[] depths,
+            byte[] states, byte[] outgoingNulls, int maximum, int spills)
+        {
+            int slot = pc * BranchIl.Width;
+            int kind = records[slot];
+            if (kind == Return || kind == Leave || kind == Rethrow || kind == EndFinally)
+                return used;
+
+            int operand = records[slot + 1];
+            if (kind == Branch || kind == Conditional)
+                used = Edge(code, used, depths, states, outgoingNulls, maximum, spills, pc, operand);
+            if (kind == Switch)
+                for (int i = 0; i < records[slot + 3]; i++)
+                    used = Edge(code, used, depths, states, outgoingNulls, maximum, spills,
+                        pc, SwitchTarget(records, operand, i));
+            if (kind != Branch)
+                used = Edge(code, used, depths, states, outgoingNulls, maximum, spills, pc, records[slot + 2]);
+            return used;
+        }
+
+        private static int Edge(byte[] code, int used, int[] depths, byte[] states, byte[] outgoingNulls,
+            int maximum, int spills, int pc, int successor)
+        {
+            int count = depths[successor] - 1;
+            for (int i = 0; i < count; i++)
+            {
+                byte target = states[successor * maximum + i];
+                if (target == NullValue || outgoingNulls[pc * maximum + i] == 0) continue;
+                if (code.Length == 0)
+                {
+                    if (used > int.MaxValue - 8) return int.MaxValue;
+                    used += 8; // ref.null, local.set and up to five bytes for its index.
+                    continue;
+                }
+
+                // All successors see null in this surviving slot. Initializing
+                // each required typed bank is safe before branch selection and
+                // prevents a prior iteration's reference from leaking through.
+                code[used++] = 0xd0;
+                code[used++] = NullRef;
+                code[used++] = 0x21;
+                used = WasmBinary.Unsigned(code, used, BranchWasm.Spill(spills, maximum, target, i));
+            }
+            return used;
+        }
+    }
+}

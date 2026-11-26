@@ -74,7 +74,8 @@ internal static class CheckedIntegerCases
                 cases.Add(new
                 {
                     module = "BootstrapLibrary", method = "Compile", fixture = method,
-                    inputs = new object[] { encoded, row }, generated = new { capacity, arguments, hex }, expected, exception
+                    inputs = new object[] { encoded, row },
+                    generated = new { capacity, arguments, hex, exceptionType = exception }, expected, exception
                 });
             }
         }

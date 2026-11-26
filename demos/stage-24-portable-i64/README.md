@@ -10,4 +10,4 @@ The portable backend implements scalar long and ulong parameters, returns, local
 
 Run npm test to compare both the linked and single-DLL paths against the CLR in Node and Edge. The fixtures check mixed-width calls, constants beyond JavaScript's safe integer range, narrowing and widening, shifts at the width boundary, and a loop with a wide accumulator. The self-recompiled compiler repeats these cases and the earlier fixtures.
 
-Division by zero and signed division or remainder overflow surface as Wasm traps. Checked addition is covered by Stage 44. Checked narrowing still produces a diagnostic before output is written. This stage adds scalar support. Managed i64 fields and arrays are covered by Stage 28.
+Division by zero surfaces as a Wasm trap. Stage 48 tags signed division and remainder overflow. Stage 44 covers checked arithmetic and Stage 45 covers checked narrowing. Stage 28 covers managed i64 fields and arrays.

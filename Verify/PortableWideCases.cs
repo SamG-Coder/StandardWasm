@@ -50,7 +50,8 @@ internal static class PortableWideCases
         Case(nameof(WideKernels.Widen), [-1, int.MinValue], () => WideKernels.Widen(-1, 0x80000000));
         Case(nameof(WideKernels.CheckedAdd), [long.MaxValue, 1L], () => WideKernels.CheckedAdd(long.MaxValue, 1));
         Case(nameof(WideKernels.CheckedAdd), [long.MinValue, 1L], () => WideKernels.CheckedAdd(long.MinValue, 1));
-        Reject(nameof(WideKernels.CheckedNarrow));
+        Case(nameof(WideKernels.CheckedNarrow), [(long)int.MinValue], () => WideKernels.CheckedNarrow(int.MinValue));
+        Case(nameof(WideKernels.CheckedNarrow), [1L + int.MaxValue], () => WideKernels.CheckedNarrow(1L + int.MaxValue));
 
         void Case(string method, object[] args, Func<object> evaluate, bool linked = false)
         {
@@ -82,25 +83,12 @@ internal static class PortableWideCases
             {
                 module = "BootstrapLibrary", method = linked ? "CompileBundle" : "Compile", fixture = method,
                 inputs = linked ? new[] { encodedBundle, EncodeBytes(entries) } : new[] { encodedImage, (object)row },
-                generated = new { capacity, arguments = Array.ConvertAll(args, Encode), hex, bundle = linked },
+                generated = new { capacity, arguments = Array.ConvertAll(args, Encode), hex, bundle = linked,
+                    exceptionType = exception },
                 expected, exception
             });
         }
 
-        void Reject(string method)
-        {
-            int row = Row(method);
-            Array.Fill(output, (byte)0xa5);
-            const int expected = -2;
-            if (CompilerExports.Compile(image, row, output) != expected || output.Any(value => value != 0xa5))
-                throw new InvalidOperationException($"Compiler did not reject {method} without modifying output");
-            cases.Add(new
-            {
-                module = "BootstrapLibrary", method = "Compile", fixture = method, inputs = new[] { encodedImage, (object)row },
-                generated = new { capacity, arguments = Array.Empty<int>(), reject = true },
-                expected
-            });
-        }
     }
 
     private static int Row(string method) => typeof(WideKernels).GetMethod(method)!.MetadataToken & 0xffffff;
