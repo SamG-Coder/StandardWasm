@@ -369,14 +369,22 @@ namespace PortableCompiler
             }
             if (kind == LoadValueLocation)
                 return Push(stack, allocated, depth, operand);
+            if (kind == LoadConstructorAddress)
+                return Push(stack, allocated, depth, ConstructorAddress);
             if (kind == GetField)
             {
-                if (depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(extra), objects)) return -1;
+                if (depth == 0) return -1;
+                int receiver = stack[depth - 1];
+                if (receiver == ConstructorAddress) receiver = frame[0];
+                if (!Assignable(receiver, FieldAccess.Owner(extra), objects)) return -1;
                 return Push(stack, allocated, depth - 1, StackType(FieldAccess.Storage(extra)));
             }
             if (kind == SetField)
                 return depth >= 2 && Assignable(stack[depth - 2], FieldAccess.Owner(extra), objects) &&
                     Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 2 : -1;
+            if (kind == UpdateConstructorField)
+                return depth >= 2 && stack[depth - 2] == ConstructorAddress &&
+                    frame[0] == FieldAccess.Owner(extra) && Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 2 : -2;
             if (kind == UpdateValue)
                 return depth > 0 && Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 1 : -1;
             if (kind == NewArray || kind == InitializedArray)

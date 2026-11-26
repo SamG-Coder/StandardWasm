@@ -624,6 +624,12 @@ namespace PortableCompiler
                     used = ManagedValueLocationWasm.Take(code, used, FieldAccess.Owner(descriptor), reference, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, ValueLocation(storage), top));
                 }
+                else if (kind == LoadConstructorAddress)
+                {
+                    // The verifier owns the address. The i32 placeholder is never dereferenced.
+                    used = Const(code, used, 0);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, ConstructorAddress, depth));
+                }
                 else if (kind == LoadValueLocation)
                 {
                     used = ManagedValueLocationWasm.ReadLocation(code, used, 0, operand);
@@ -635,7 +641,8 @@ namespace PortableCompiler
                     int type = FieldAccess.Owner(descriptor);
                     int storage = FieldAccess.Storage(descriptor);
                     int address = kind == GetField ? top : top - 1;
-                    int reference = Spill(spills, maximum, states[state + address], address);
+                    int reference = states[state + address] == ConstructorAddress ? 0 :
+                        Spill(spills, maximum, states[state + address], address);
                     if (ManagedValueLocationWasm.UsesCell(objects, type, storage))
                     {
                         used = GuardNull(code, used, reference);
@@ -687,11 +694,11 @@ namespace PortableCompiler
                     }
                     else used = ValueFieldsWasm.Clear(code, used, frame[operand], operand);
                 }
-                else if (kind == UpdateValue)
+                else if (kind == UpdateValue || kind == UpdateConstructorField)
                 {
                     int descriptor = records[slot + 3];
                     int type = FieldAccess.Owner(descriptor);
-                    int local = records[slot + BranchIl.Width + 1] - 1;
+                    int local = kind == UpdateConstructorField ? 0 : records[slot + BranchIl.Width + 1] - 1;
                     int source = states[state + top];
                     int replacement = Spill(spills, maximum, source, top);
                     if (IsExplicitValue(objects, type))
@@ -938,6 +945,7 @@ namespace PortableCompiler
         private static int SpillBank(int type) =>
             // NativeZero already spills as Native. Use its otherwise vacant bank
             // for native arrays without increasing the engine's local pressure.
+            type == ConstructorAddress ? I32 - 1 :
             PeLibrary.RuntimeTypeMetadata.IsStorage(type) || IsValueLocation(type) ? ObjectReference - 1 :
             type >= FirstClass ? PeLibrary.ConsoleStorage.Writer + type - FirstClass :
                 (type == NativeZero ? Native : type == NativeVector ? NativeZero : type) - 1;

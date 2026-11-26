@@ -333,7 +333,7 @@ namespace PortableCompiler
                         return status;
                     virtualUsed[0] = 0;
                     functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
-                        parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, records, owners, rows, contexts,
+                        parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
                         initializers, reflection);
                     if (functions < 0)
@@ -466,7 +466,7 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - unwindBytes) return -3;
                                 capacity += unwindBytes;
                             }
-                            if (kind == BranchIl.UpdateValue)
+                            if (kind == BranchIl.UpdateValue || kind == BranchIl.UpdateConstructorField)
                             {
                                 int fields = ObjectLayouts.FieldCount(objects, FieldAccess.Owner(records[slot + 3]));
                                 if (fields > (int.MaxValue - capacity) / 16) return -3;
@@ -597,7 +597,7 @@ namespace PortableCompiler
         }
 
         private static int LinkOperands(BundleImages bundle, byte[] image, int[] layout,
-            int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
+            int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, bool valueConstructor, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed,
             TypeInitializerPlan initializers, RuntimeReflectionPlan reflection)
         {
@@ -654,7 +654,10 @@ namespace PortableCompiler
                     if (kind == BranchIl.Store) return -2;
                     int lowered = ValueOperands.LowerReceiver(bundle, image, layout, heaps,
                         owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses, readOnlyReceiver);
-                    if (lowered < 0) return lowered;
+                    if (lowered == -2 && valueConstructor)
+                        records[slot] = BranchIl.LoadConstructorAddress;
+                    else if (lowered < 0)
+                        return lowered;
                     continue;
                 }
                 if (kind == BranchIl.FrameAddress)
@@ -704,7 +707,12 @@ namespace PortableCompiler
                         int local = records[slot + BranchIl.Width + 1] - 1;
                         if (ObjectLayouts.IsValueType(objects, FieldAccess.Owner(descriptor)))
                         {
-                            if (local < 0) return -2;
+                            if (local < 0)
+                            {
+                                if (!valueConstructor || frame[0] != FieldAccess.Owner(descriptor)) return -2;
+                                records[slot] = BranchIl.UpdateConstructorField;
+                                continue;
+                            }
                             int locationType = frame[local];
                             if (IsValueLocation(locationType))
                             {

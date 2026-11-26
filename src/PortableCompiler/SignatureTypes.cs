@@ -12,6 +12,8 @@ namespace PortableCompiler
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
         // Keep the located CLI type in the verifier even though all cells share a Wasm heap.
         private const int ValueLocationBase = 65536;
+        // This address only names argument zero in the enclosing value constructor.
+        internal const int ConstructorAddress = ValueLocationBase - 1;
         internal static int ValueLocation(int type) => ValueLocationBase + type;
         internal static bool IsValueLocation(int type) => type >= ValueLocationBase;
         internal static int LocatedValue(int type) => type - ValueLocationBase;
@@ -38,7 +40,7 @@ namespace PortableCompiler
         // Boxing and other CLR reference conversions use separate IL operations.
         internal static bool IsObjectReference(int type) =>
             type == String || RuntimeTypeMetadata.IsReference(type) || IsArray(type) ||
-            type >= ObjectLayouts.FirstClass && !IsValueLocation(type) ||
+            type >= ObjectLayouts.FirstClass && type < ConstructorAddress ||
             type >= ObjectLayouts.ObjectReference && type <= ObjectLayouts.EventHandlerReference;
 
         // Zero denotes the CLI null literal in a live stack slot and void in a method signature.
@@ -57,7 +59,7 @@ namespace PortableCompiler
         {
             int expected = StackType(target);
             if (source == expected) return true;
-            if (IsValueLocation(source) || IsValueLocation(expected)) return false;
+            if (source >= ConstructorAddress || expected >= ConstructorAddress) return false;
             if (ObjectLayouts.IsValueType(objects, source) || ObjectLayouts.IsValueType(objects, expected)) return false;
             return source == NullValue && IsReference(expected) ||
                 source == NativeZero && (target == Native || target == NullPointer) ||
