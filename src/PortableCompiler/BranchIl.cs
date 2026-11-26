@@ -15,6 +15,7 @@ namespace PortableCompiler
         internal const int CastClass = 53, TestClass = 54, ThrowNull = 55;
         internal const int LocalAddress = 56, InitializeValue = 57, UpdateValue = 58, ClearValue = 59;
         internal const int LoadStaticField = 60, StoreStaticField = 61;
+        internal const int VirtualCall = 62;
         internal const int ProvenNativeZero = 2;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.

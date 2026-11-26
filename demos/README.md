@@ -93,6 +93,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [104 · Wide layout IDs](stage-104-wide-layout-ids/README.md) | `npm run demo -- stage-104-wide-layout-ids` | Allocation, fields and checked casts over 300 managed layouts |
 | [106 · Static field storage](stage-106-static-field-storage/README.md) | `npm run demo -- stage-106-static-field-storage` | Private typed Wasm globals shared by linked managed methods |
 | [108 · BeforeFieldInit calls](stage-108-beforefieldinit-calls/README.md) | `npm run demo -- stage-108-beforefieldinit-calls` | Allow non-triggering static calls and diagnose reached initializers |
+| [109 · Virtual dispatch on sealed receivers](stage-109-exact-virtual-dispatch/README.md) | `npm run demo -- stage-109-exact-virtual-dispatch` | Resolve inherited and hidden virtual slots for sealed classes |
 
 ## Adding a stage
 

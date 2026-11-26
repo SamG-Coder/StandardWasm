@@ -130,4 +130,5 @@ HandleConstraintCases.Add(cases);
 WideLayoutCases.Add(cases);
 StaticStorageCases.Add(cases);
 BeforeFieldInitCases.Add(cases);
+VirtualDispatchCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);
