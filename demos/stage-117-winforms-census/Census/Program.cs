@@ -64,18 +64,20 @@ foreach (LoadedAssembly assembly in set.All.ToArray())
 }
 
 // --- Compiler verdicts ---------------------------------------------------
-// The pack is the Stage 95 framework selection plus every assembly that owns
-// reached code. An assembly whose module initializer the compiler rejects
+// Include the browser launch framework selection and every assembly that owns
+// reached code. The Thread facade is required for binding even though its
+// forwarded type's methods belong to CoreLib. A rejected module initializer
 // would fail every compile at [module, 0, -1]; it is removed and recorded.
-string[] stage95 =
+string[] launchFramework =
 [
     "System.Windows.Forms", "System.Windows.Forms.Primitives", "System.Private.Windows.Core", "System.Drawing.Common",
     "System.Private.Windows.GdiPlus", "System.Private.CoreLib", "System.Runtime", "System.ComponentModel.Primitives",
     "System.Collections", "System.Threading", "System.Drawing.Primitives", "System.ComponentModel",
     "System.ComponentModel.TypeConverter", "System.Collections.Concurrent", "System.Collections.Specialized", "System.ObjectModel",
+    "System.Threading.Thread",
 ];
 var pack = new List<LoadedAssembly> { app };
-foreach (string name in stage95)
+foreach (string name in launchFramework)
     if (set.ByName(name) is { } loaded && !pack.Contains(loaded)) pack.Add(loaded);
 foreach (int owner in graph.Reached.Keys.Select(m => m.Assembly).Distinct().OrderBy(i => set.All[i].Name, StringComparer.Ordinal))
     if (!pack.Contains(set.All[owner])) pack.Add(set.All[owner]);

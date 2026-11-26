@@ -59,8 +59,10 @@ path for each assembly, so a reader can see why each one is included.
 ## Compiler verdicts
 
 Each reached method with IL is compiled as the only export of a bundle. Its
-own assembly is the main image, and the bundle also holds the Stage 95
-framework pack and every other assembly that owns reached code. The compiler
+own assembly is the main image, and the bundle also holds the launch
+framework pack and every other assembly that owns reached code. The launch
+pack includes `System.Threading.Thread`, whose forwarded types are needed for
+binding even though they contribute no method bodies. The compiler
 lowers the export first and then its callees in registration order:
 
 - **compiles**: the whole closure from that method lowered.
