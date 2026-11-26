@@ -31,6 +31,9 @@ namespace PortableCompiler
             int tagCount = argumentException ? ExceptionTagsWasm.Count : invalidCast ? ExceptionTagsWasm.InvalidCastTag + 1 :
                 nullReference ? ExceptionTagsWasm.NullTag + 1 :
                 bounds ? ExceptionTagsWasm.IndexTag + 1 : divide ? ExceptionTagsWasm.DivideTag + 1 : overflow ? 1 : 0;
+            // The object tag (decision 0054) follows all six fixed tags so their indices stay stable.
+            bool objectTag = (exceptionTags & ExceptionTypes.Object) != 0;
+            if (objectTag) tagCount = ExceptionTagsWasm.ObjectTag + 1;
             int remainderIndex = hostImports + functions + thunks[0];
             int builderIndex = remainderIndex + (hasRemainder ? 1 : 0);
             int totalFunctions = builderIndex - hostImports + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0);
@@ -70,11 +73,13 @@ namespace PortableCompiler
             int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 2;
             if (hasRemainder) typeEntries++;
             if (tagCount != 0) typeEntries++;
+            if (objectTag) typeEntries++;
             if (hostImports != 0) typeEntries += ConsoleWasm.ImportCount;
             if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
             int prefix = UnsignedSize(typeEntries) + 70 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (tagCount != 0) prefix += 3; // () -> () exception payload
+            if (objectTag) prefix += ExceptionTagsWasm.ObjectTagTypeBytes; // (eqref) -> () managed object payload
             if (hostImports != 0) prefix += ConsoleWasm.TypeBytes;
             if (argumentArray != 0) prefix += EntryArgumentsWasm.TypeBytes(argumentArray);
             if (classBytes > output.Length - prefix) return -3;
@@ -88,7 +93,8 @@ namespace PortableCompiler
             }
             int tagType = typeOffset + functions + (hasRemainder ? 1 : 0);
             // Host import and argument builder types follow every existing type.
-            int importType = tagType + (tagCount != 0 ? 1 : 0);
+            int objectTagType = tagType + 1;
+            int importType = tagType + (tagCount != 0 ? 1 : 0) + (objectTag ? 1 : 0);
             int builderType = importType + (hostImports != 0 ? ConsoleWasm.ImportCount : 0);
             if (argumentArray != 0)
             {
@@ -116,13 +122,14 @@ namespace PortableCompiler
             }
             int exportCount = exports.Length + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0) +
                 (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) +
-                (nullReference ? 1 : 0) + (invalidCast ? 1 : 0) + (argumentException ? 1 : 0);
+                (nullReference ? 1 : 0) + (invalidCast ? 1 : 0) + (argumentException ? 1 : 0) + (objectTag ? 1 : 0);
             int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
                 (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
                 (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0) +
-                (argumentException ? ExceptionTagsWasm.ArgumentExportSize : 0);
+                (argumentException ? ExceptionTagsWasm.ArgumentExportSize : 0) + (objectTag ? ExceptionTagsWasm.ObjectExportSize : 0);
             if (argumentArray != 0) exportSize += EntryArgumentsWasm.ExportBytes(builderIndex);
-            int tagSize = 1 + tagCount * (1 + UnsignedSize(tagType));
+            int tagSize = 1 + (objectTag ? ExceptionTagsWasm.Count : tagCount) * (1 + UnsignedSize(tagType)) +
+                (objectTag ? 1 + UnsignedSize(objectTagType) : 0);
             for (int i = 0; i < exports.Length; i++)
             {
                 int name = (int)ImageBytes.U32(names, (uint)entryOffsets[i] + 4);
@@ -319,6 +326,7 @@ namespace PortableCompiler
                 output[cursor++] = 0;
                 output[cursor++] = 0;
             }
+            if (objectTag) cursor = ExceptionTagsWasm.WriteObjectTagType(output, cursor);
             if (hostImports != 0) cursor = ConsoleWasm.WriteTypes(output, cursor);
             if (argumentArray != 0) cursor = EntryArgumentsWasm.WriteTypes(output, cursor, argumentArray);
             if (hostImports != 0)
@@ -353,7 +361,7 @@ namespace PortableCompiler
                 for (int tag = 0; tag < tagCount; tag++)
                 {
                     output[cursor++] = 0; // exception attribute
-                    cursor = Unsigned(output, cursor, tagType);
+                    cursor = Unsigned(output, cursor, tag == ExceptionTagsWasm.ObjectTag ? objectTagType : tagType);
                 }
             }
 
@@ -381,6 +389,7 @@ namespace PortableCompiler
             if (nullReference) cursor = ExceptionTagsWasm.WriteNullExport(output, cursor);
             if (invalidCast) cursor = ExceptionTagsWasm.WriteInvalidCastExport(output, cursor);
             if (argumentException) cursor = ExceptionTagsWasm.WriteArgumentExport(output, cursor);
+            if (objectTag) cursor = ExceptionTagsWasm.WriteObjectExport(output, cursor);
 
             if (thunks[0] != 0)
             {
