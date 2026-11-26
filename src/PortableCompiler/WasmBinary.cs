@@ -32,12 +32,13 @@ namespace PortableCompiler
             bool invalidCast = (exceptionTags & ExceptionTypes.InvalidCast) != 0;
             // Tag indices stay stable even when lower tags are unused.
             bool argumentException = (exceptionTags & ExceptionTypes.Argument) != 0;
-            int tagCount = argumentException ? ExceptionTagsWasm.Count : invalidCast ? ExceptionTagsWasm.InvalidCastTag + 1 :
+            bool argumentNull = (exceptionTags & ExceptionTypes.ArgumentNull) != 0;
+            int tagCount = argumentNull ? ExceptionTagsWasm.ArgumentNullTag + 1 :
+                argumentException ? ExceptionTagsWasm.ArgumentTag + 1 : invalidCast ? ExceptionTagsWasm.InvalidCastTag + 1 :
                 nullReference ? ExceptionTagsWasm.NullTag + 1 :
                 bounds ? ExceptionTagsWasm.IndexTag + 1 : divide ? ExceptionTagsWasm.DivideTag + 1 : overflow ? 1 : 0;
-            // The object tag (decision 0054) follows all six fixed tags so their indices stay stable.
             bool objectTag = (exceptionTags & ExceptionTypes.Object) != 0;
-            if (objectTag) tagCount = ExceptionTagsWasm.ObjectTag + 1;
+            if (objectTag && tagCount <= ExceptionTagsWasm.ObjectTag) tagCount = ExceptionTagsWasm.ObjectTag + 1;
             int remainderIndex = hostImports + functions + thunks[0];
             int builderIndex = remainderIndex + (hasRemainder ? 1 : 0);
             int totalFunctions = builderIndex - hostImports + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0);
@@ -131,13 +132,15 @@ namespace PortableCompiler
             }
             int exportCount = exports.Length + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0) +
                 (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) +
-                (nullReference ? 1 : 0) + (invalidCast ? 1 : 0) + (argumentException ? 1 : 0) + (objectTag ? 1 : 0);
+                (nullReference ? 1 : 0) + (invalidCast ? 1 : 0) + (argumentException ? 1 : 0) + (objectTag ? 1 : 0) +
+                (argumentNull ? 1 : 0);
             int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
                 (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
                 (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0) +
-                (argumentException ? ExceptionTagsWasm.ArgumentExportSize : 0) + (objectTag ? ExceptionTagsWasm.ObjectExportSize : 0);
+                (argumentException ? ExceptionTagsWasm.ArgumentExportSize : 0) + (objectTag ? ExceptionTagsWasm.ObjectExportSize : 0) +
+                (argumentNull ? ExceptionTagsWasm.ArgumentNullExportSize : 0);
             if (argumentArray != 0) exportSize += EntryArgumentsWasm.ExportBytes(builderIndex);
-            int tagSize = 1 + (objectTag ? ExceptionTagsWasm.Count : tagCount) * (1 + UnsignedSize(tagType)) +
+            int tagSize = 1 + (tagCount - (objectTag ? 1 : 0)) * (1 + UnsignedSize(tagType)) +
                 (objectTag ? 1 + UnsignedSize(objectTagType) : 0);
             for (int i = 0; i < exports.Length; i++)
             {
@@ -372,7 +375,7 @@ namespace PortableCompiler
                 for (int tag = 0; tag < tagCount; tag++)
                 {
                     output[cursor++] = 0; // exception attribute
-                    cursor = Unsigned(output, cursor, tag == ExceptionTagsWasm.ObjectTag ? objectTagType : tagType);
+                    cursor = Unsigned(output, cursor, objectTag && tag == ExceptionTagsWasm.ObjectTag ? objectTagType : tagType);
                 }
             }
 
@@ -400,6 +403,7 @@ namespace PortableCompiler
             if (nullReference) cursor = ExceptionTagsWasm.WriteNullExport(output, cursor);
             if (invalidCast) cursor = ExceptionTagsWasm.WriteInvalidCastExport(output, cursor);
             if (argumentException) cursor = ExceptionTagsWasm.WriteArgumentExport(output, cursor);
+            if (argumentNull) cursor = ExceptionTagsWasm.WriteArgumentNullExport(output, cursor);
             if (objectTag) cursor = ExceptionTagsWasm.WriteObjectExport(output, cursor);
 
             if (thunks[0] != 0)

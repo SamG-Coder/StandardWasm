@@ -142,6 +142,23 @@ namespace PortableCompiler
             return used;
         }
 
+        internal static int ThrowForFailure(byte[] code, int used, int status)
+        {
+            used = Local(code, used, 0x20, status);
+            used = Const(code, used, -8);
+            code[used++] = 0x46; // null resource name
+            used = ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.ArgumentNullTag);
+            used = Local(code, used, 0x20, status);
+            used = Const(code, used, -9);
+            code[used++] = 0x46; // empty resource name
+            used = ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.ArgumentTag);
+            used = Local(code, used, 0x20, status);
+            code[used++] = 0x04; code[used++] = 0x40;
+            code[used++] = 0x00; // Unimplemented linked resources and invalid host responses stop execution.
+            code[used++] = 0x0b;
+            return used;
+        }
+
         private static int Entry(byte[] output, int cursor, string name, int kind)
         {
             cursor = Ascii(output, cursor, ModuleName);

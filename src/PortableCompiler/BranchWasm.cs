@@ -22,6 +22,7 @@ namespace PortableCompiler
             // initializer on entry. An initializer body runs behind its guard.
             int prologue = frameShape[12] - 1, guard = frameShape[13] - 1, epoch = frameShape[14] - 1;
             int activeInitializers = frameShape[15] - 1;
+            int resourceFunction = frameShape[16] - 1;
             bool hasNull = outgoingNulls.Length != 0;
             int spillKinds = PeLibrary.ConsoleStorage.Writer + classes;
             // V8 counts parameters together with function locals. Reject
@@ -31,18 +32,19 @@ namespace PortableCompiler
                 continuations > MaxLocals) return -2;
             int spills = arguments + locals + (hasNull ? 1 : 0);
             int fixedLocals = spills + classes + (stringScratch ? 5 : 0) +
-                (eventScratch ? 6 : 0) + 1 + 2 * exceptionLocals + continuations;
+                (eventScratch ? 6 : 0) + (resourceFunction >= 0 ? 7 : 0) + 1 + 2 * exceptionLocals + continuations;
             if (fixedLocals > MaxLocals || maximum > (MaxLocals - fixedLocals) / spillKinds) return -2;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
             int eventLocals = scratch + (stringScratch ? 5 : 0);
-            int pcLocal = eventLocals + (eventScratch ? 6 : 0);
+            int resourceLocals = eventLocals + (eventScratch ? 6 : 0);
+            int pcLocal = resourceLocals + (resourceFunction >= 0 ? 7 : 0);
             int continuationBase = pcLocal + 1 + exceptionLocals;
             // Thrown managed objects (decision 0054) mirror the exnref locals: a scratch
             // eqref followed by one saved object per clause.
             int objectBase = continuationBase + continuations;
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
-                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (exceptionLocals != 0 ? 1 : 0) +
+                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
                 (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0));
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < arguments + locals; i++)
@@ -86,6 +88,15 @@ namespace PortableCompiler
                 code[used++] = 0x7f;
                 code[used++] = 1; // unpublished output array
                 used = WasmBinary.ValueType(code, used, EventHandlerReference);
+            }
+            if (resourceFunction >= 0)
+            {
+                code[used++] = 1;
+                used = WasmBinary.ValueType(code, used, Chars);
+                code[used++] = 5; // owner, length, address, copy index, status
+                code[used++] = 0x7f;
+                code[used++] = 1;
+                code[used++] = 0x7e; // packed result
             }
             code[used++] = 1;
             code[used++] = 0x7f;
@@ -178,6 +189,18 @@ namespace PortableCompiler
                     used = GuardNull(code, used, receiver);
                     used = RuntimeReflectionWasm.Read(code, used, frameShape[7], operand, receiver,
                         Spill(spills, maximum, target, top), pcLocal, reflection);
+                }
+                else if (kind == ResourceLookup)
+                {
+                    used = RuntimeReflectionWasm.ModuleSlot(code, used, frameShape[7], 0, reflection);
+                    used = Const(code, used, 1);
+                    code[used++] = 0x6b; // descriptor slot to zero-based bundle owner
+                    used = Local(code, used, 0x21, resourceLocals + 1);
+                    used = ResourceWasm.LookupNative(code, used, resourceLocals + 1, 1,
+                        resourceLocals, resourceLocals + 2, resourceFunction,
+                        records[slot + 3], resourceLocals + 5, resourceLocals + 6);
+                    used = Local(code, used, 0x21, operand);
+                    used = ResourceWasm.ThrowForFailure(code, used, resourceLocals + 5);
                 }
                 else if (kind == LoadString)
                 {

@@ -56,7 +56,7 @@ namespace PeLibrary
             // ldloca.s of the RuntimeAssembly slot feeds QCallAssembly.
             // ldloca.s of the third local passes the out uint to the wrapper.
             if (U32(image, at) != 0x00120a02 || image[at + 4] != 0x73 ||
-                U32(image, at + 9) != 0x28021203 || U32(image, at + 13) != (uint)(0x06000000 | wrapper) ||
+                U32(image, at + 9) != 0x28021203 || U32(image, at + NativeCallOffset + 1) != (uint)(0x06000000 | wrapper) ||
                 U32(image, at + 17) != 0xe016070b || U32(image, at + 21) != 0x07020d2e ||
                 U32(image, at + 25) != 0x6e086e08 || U16(image, at + 29) != 0x7317 ||
                 U16(image, at + 35) != 0x142a || image[at + 37] != 0x2a)

@@ -161,7 +161,7 @@ namespace PortableCompiler
                 if (writer < 0 || stack[writer] != PeLibrary.ConsoleStorage.Writer) return -1;
                 return writer == depth - 1 || Match(stack, depth, String) ? writer : -1;
             }
-            if (kind == ClearValue) return depth;
+            if (kind == ClearValue || kind == ResourceLookup) return depth;
             if (kind == NullLiteral) return Push(stack, allocated, depth, NullValue);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, allocated, depth, EventArgsReference);
             if (kind == NewRootObject) return Push(stack, allocated, depth, ObjectReference);

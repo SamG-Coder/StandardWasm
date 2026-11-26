@@ -8,14 +8,7 @@ namespace PortableCompiler
         internal static int Read(byte[] code, int used, int bodyStart, int operation,
             int receiver, int result, int scratch, RuntimeReflectionPlan plan)
         {
-            used = Local(code, used, 0x20, receiver);
-            code[used++] = 0xfb;
-            code[used++] = 22; // ref.cast to the deferred descriptor heap
-            used = WasmIndexFixups.Write(code, used, bodyStart, plan.HeapFixups);
-            code[used++] = 0xfb;
-            code[used++] = 2; // struct.get module slot
-            used = WasmIndexFixups.Write(code, used, bodyStart, plan.HeapFixups);
-            code[used++] = 0;
+            used = ModuleSlot(code, used, bodyStart, receiver, plan);
             used = Local(code, used, 0x21, scratch);
 
             code[used++] = 0x02; // block
@@ -51,6 +44,19 @@ namespace PortableCompiler
             }
             code[used++] = 0x00; // Only linker-created descriptors can reach here.
             code[used++] = 0x0b; // end block
+            return used;
+        }
+
+        internal static int ModuleSlot(byte[] code, int used, int bodyStart, int receiver, RuntimeReflectionPlan plan)
+        {
+            used = Local(code, used, 0x20, receiver);
+            code[used++] = 0xfb;
+            code[used++] = 22; // ref.cast to the deferred descriptor heap
+            used = WasmIndexFixups.Write(code, used, bodyStart, plan.HeapFixups);
+            code[used++] = 0xfb;
+            code[used++] = 2; // struct.get module slot
+            used = WasmIndexFixups.Write(code, used, bodyStart, plan.HeapFixups);
+            code[used++] = 0;
             return used;
         }
 

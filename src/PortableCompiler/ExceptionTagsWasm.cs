@@ -4,10 +4,12 @@ namespace PortableCompiler
     {
         internal const int OverflowExportSize = 12, DivideExportSize = 16;
         internal const int IndexExportSize = 19, NullExportSize = 17, InvalidCastExportSize = 15, ArgumentExportSize = 12;
-        internal const int OverflowTag = 0, DivideTag = 1, IndexTag = 2, NullTag = 3, InvalidCastTag = 4, ArgumentTag = 5, Count = 6;
-        // Decision 0054: a thrown managed object travels on tag 6 with an (eqref) payload. The six
-        // payload-free tags keep their indices and catch_ref paths; the object tag follows them.
+        internal const int OverflowTag = 0, DivideTag = 1, IndexTag = 2, NullTag = 3, InvalidCastTag = 4, ArgumentTag = 5;
+        internal const int ArgumentNullTag = 7, ArgumentNullExportSize = 16, Count = 7;
+        // Decision 0054 keeps managed objects on tag 6. New fixed tags follow
+        // it without shifting the previous binary indices.
         internal const int ObjectTag = 6, ObjectExportSize = 10, ObjectTagTypeBytes = 4;
+        internal static int FixedTag(int ordinal) => ordinal < ObjectTag ? ordinal : ordinal + 1;
 
         internal static int WriteObjectTagType(byte[] output, int cursor)
         {
@@ -154,6 +156,17 @@ namespace PortableCompiler
             code[used++] = (byte)'t';
             code[used++] = 4;
             code[used++] = ArgumentTag;
+            return used;
+        }
+
+        internal static int WriteArgumentNullExport(byte[] code, int used)
+        {
+            const string name = "argumentNull";
+            code[used++] = (byte)(1 + name.Length);
+            code[used++] = 0;
+            for (int i = 0; i < name.Length; i++) code[used++] = (byte)name[i];
+            code[used++] = 4;
+            code[used++] = ArgumentNullTag;
             return used;
         }
 

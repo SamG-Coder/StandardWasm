@@ -71,8 +71,11 @@ index identifies the same assembly at compile time and runtime. The host
 appends pages for its scratch space and resource bytes. It keeps each
 published resource address stable until its Wasm instance is released.
 At the lookup boundary, -8 denotes a null name and -9 denotes an empty
-name after applying Windows termination rules. The managed binding must
-translate these results to the corresponding CLR exceptions.
+name after applying Windows termination rules. The generated lookup
+raises typed ArgumentNullException and ArgumentException respectively.
+The ArgumentException catch mask includes its ArgumentNullException
+subtype. Linked resources and invalid host responses stop execution while
+their managed semantics remain outside this binding.
 
 Native pointers and resources share memory index zero. A module with
 native indirection can request only `standardwasm:resources.memory`.

@@ -166,7 +166,7 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[16];
+            var frameShape = new int[17];
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * 3];
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
@@ -334,14 +334,6 @@ namespace PortableCompiler
                     if (functions < 0)
                         return functions;
 
-                    // Until the native failure statuses can raise the matching
-                    // managed exceptions, do not publish a partial stream body.
-                    if (resourceOpen)
-                    {
-                        if (location.Length != 0) location[2] = ResourceStreamMetadata.NativeCallOffset;
-                        return -2;
-                    }
-
                     if (location.Length != 0) location[2] = -1;
                     int maximum = body[2];
                     if (maximum > 0 && body[1] > int.MaxValue / maximum)
@@ -362,7 +354,13 @@ namespace PortableCompiler
                     }
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
                         result, signatures, offsets, arities, location, catchRegion, outgoingNulls, objects, virtualTypes, allocatedStates);
-                    if (status < 0) return status;
+                    if (status < 0)
+                        return resourceOpen && status == -1 ? -2 : status;
+                    if (resourceOpen)
+                    {
+                        hostUse[0] = hostUse[0] | WasmImports.Resources;
+                        exceptionTags |= ExceptionTypes.Argument | ExceptionTypes.ArgumentNull;
+                    }
                     if (virtualUsed[0] != 0)
                     {
                         functions = LinkVirtualCalls(bundle, records, depths, states, allocatedStates, maximum, virtualTypes,
@@ -390,6 +388,11 @@ namespace PortableCompiler
                     capacity += narrowParameters * 16;
                     if (initializerGuard >= 0 || initializerPrologue >= 0)
                         capacity += TypeInitializerWasm.Capacity;
+                    if (resourceOpen)
+                    {
+                        if (capacity > int.MaxValue - 320) return -3;
+                        capacity += 320;
+                    }
                     int classBytes = objects[0] * 12;
                     if (classBytes > int.MaxValue - capacity) return -3;
                     capacity += classBytes;
@@ -501,6 +504,7 @@ namespace PortableCompiler
                     frameShape[13] = initializerGuard + 1;
                     frameShape[14] = initializers.Epoch + 1;
                     frameShape[15] = initializers.Active + 1;
+                    frameShape[16] = resourceOpen ? ((hostFeatures & WasmImports.Console) != 0 ? ConsoleWasm.ImportCount + 1 : 1) : 0;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
@@ -740,6 +744,8 @@ namespace PortableCompiler
                     if (reflectionMember == ReflectionMembers.ResourceStream)
                     {
                         int status = reflection.BindResource(bundle);
+                        if (status < 0) return status;
+                        status = reflection.Bind(bundle, globals, literals, literalSize);
                         if (status < 0) return status;
                         int targetOwner = reflection.ResourceOwner;
                         int row = reflection.ResourceOpen;
