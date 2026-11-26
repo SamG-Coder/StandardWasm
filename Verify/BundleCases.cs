@@ -67,19 +67,23 @@ internal static class BundleCases
 
         byte[] concat = Manifest(aliasedType, nameof(TextIdentityProbe.Kernels.ConcatLength));
         Reject("aliased String with missing dependency", Pack(text), -4, concat);
-        // Nominal linking now accepts managed return and receiver types from bundled dependencies.
-        // Both results distinguish calls to the aliased assembly from the platform string intrinsics.
-        CheckAliased(nameof(TextIdentityProbe.Kernels.ConcatLength), TextIdentityProbe.Kernels.ConcatLength());
-        CheckAliased(nameof(TextIdentityProbe.Kernels.Construct), TextIdentityProbe.Kernels.Construct());
-
-        void CheckAliased(string name, int expected)
-        {
-            byte[] selection = Manifest(aliasedType, name);
-            int length = BundleDemo.CompileBundle(aliased, selection, output);
-            if (length <= 0) throw new InvalidOperationException($"Aliased String {name} returned {length}.");
-            AddCase("aliased String " + name, new[] { Encode(aliased), Encode(selection) }, [], expected,
-                Convert.ToHexString(output.AsSpan(0, length)).ToLowerInvariant());
-        }
+        // Main rejected this call (-2) because linked calls could not return a string. The stack's
+        // linked references (#125) lower platform strings across DLLs, so the third-party
+        // Concat(string, string) now compiles. Its result must still match the CLR, which runs the
+        // third-party body, not the BCL Concat.
+        int concatLinked = BundleDemo.CompileBundle(aliased, concat, output);
+        if (concatLinked <= 0) throw new InvalidOperationException($"Aliased String Concat returned {concatLinked}.");
+        AddCase("aliased String with string return type", new[] { Encode(aliased), Encode(concat) }, [],
+            TextIdentityProbe.Kernels.ConcatLength(),
+            Convert.ToHexString(output.AsSpan(0, concatLinked)).ToLowerInvariant());
+        // Likewise, the stack's linked objects (#127, #131) construct a third-party class and call its
+        // instance members. The CLR returns the third-party Length (99), not a BCL string length.
+        byte[] construct = Manifest(aliasedType, nameof(TextIdentityProbe.Kernels.Construct));
+        int constructLinked = BundleDemo.CompileBundle(aliased, construct, output);
+        if (constructLinked <= 0) throw new InvalidOperationException($"Aliased String constructor returned {constructLinked}.");
+        AddCase("aliased String constructor", new[] { Encode(aliased), Encode(construct) }, [],
+            TextIdentityProbe.Kernels.Construct(),
+            Convert.ToHexString(output.AsSpan(0, constructLinked)).ToLowerInvariant());
 
         void Reject(string name, byte[] bundle, int expected, byte[] selection = null)
         {

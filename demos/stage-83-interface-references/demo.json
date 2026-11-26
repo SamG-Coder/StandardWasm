@@ -1,0 +1,1 @@
+{"assembly":"InterfaceDemo","exportType":"InterfaceDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["InterfaceContracts.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":32768,"arguments":[5]},"expected":5}

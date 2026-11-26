@@ -1,0 +1,1 @@
+{"assembly":"FloatFieldDemo","exportType":"FloatFieldDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["FloatFieldDependency.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":32768,"arguments":[16777217,16777219]},"expected":3}

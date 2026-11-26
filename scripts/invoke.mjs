@@ -10,7 +10,8 @@ const managedTags = [
     ["\0divideByZero", "System.DivideByZeroException"],
     ["\0indexOutOfRange", "System.IndexOutOfRangeException"],
     ["\0nullReference", "System.NullReferenceException"],
-    ["\0invalidCast", "System.InvalidCastException"]
+    ["\0invalidCast", "System.InvalidCastException"],
+    ["\0argument", "System.ArgumentException"]
 ];
 
 export function managedExceptionType(exports, error) {

@@ -1,0 +1,1 @@
+{"assembly":"PrimitiveGenericDemo","exportType":"PrimitiveGenericDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["PrimitiveGenericDependency.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":65536,"arguments":[5]},"expected":28}

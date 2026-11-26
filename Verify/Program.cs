@@ -9,6 +9,12 @@ if (args is ["--portable-audit", var request, var output])
     return;
 }
 
+if (args is ["--native-storage-oracle", var nativeOracle])
+{
+    NativeStorageCases.Write32BitOracle(nativeOracle);
+    return;
+}
+
 var cases = new List<object>();
 // Each case records the CLR result. expected == null means the CLR threw one of the exceptions below,
 // and the Wasm module must trap. Wasm has no typed exceptions yet, so the exception type name is kept
@@ -78,6 +84,7 @@ DiagnosticCases.Add(cases);
 PlatformIdentityCases.Add(cases);
 WideStorageCases.Add(cases);
 PortableFloatCases.Add(cases);
+PortableMathCases.Add(cases);
 ResizeCases.Add(cases);
 TextBoxCases.Add(cases);
 SharedWinFormsCases.Add(cases);
@@ -108,6 +115,35 @@ NullStackCases.Add(cases);
 LinkedFieldCases.Add(cases);
 ForeignFieldTypeCases.Add(cases);
 NominalCastCases.Add(cases);
+BaseExceptionCases.Add(cases);
+NullThrowCases.Add(cases);
+BareCatchCases.Add(cases);
+InheritedLayoutCases.Add(cases);
+InitializerReachabilityCases.Add(cases);
+StrongNameCases.Add(cases);
+ForwardingCases.Add(cases);
+CoreRootGuardCases.Add(cases);
+StaticLayoutCases.Add(cases);
+InterfaceReferenceCases.Add(cases);
+NativeStorageCases.Add(cases);
+NestedReferenceCases.Add(cases);
+GenericLayoutCases.Add(cases);
+PackedFieldCases.Add(cases);
+VolatileFieldCases.Add(cases);
+PointerFieldCases.Add(cases);
+EmbeddedValueCases.Add(cases);
+EnumFieldCases.Add(cases);
+ValueBaseCases.Add(cases);
+TypedPointerCases.Add(cases);
+FloatFieldCases.Add(cases);
+PrimitiveGenericCases.Add(cases);
+ByRefPermissionCases.Add(cases);
+ValueConstraintCases.Add(cases);
+NamedValueCases.Add(cases);
+ExplicitScalarCases.Add(cases);
+NestedOverlayCases.Add(cases);
+EnumArgumentCases.Add(cases);
+HandleConstraintCases.Add(cases);
 
 // Integer division (stage 08). The grid crosses every signed boundary with every divisor boundary.
 // The unsigned high-bit patterns (0x80000000, 0x80000001, 0xFFFFFFFE, 0xFFFFFFFF) are the same values
@@ -157,4 +193,5 @@ RemainderCases.Add(cases);
 MathCases.Add(cases);
 ArrayCases.Add(cases);
 CultureProbe.Write(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args.Single()))!, "culture-probe", "MathIntrinsics.dll"));
+// The stack's shared-blob oracle format replaces main's plain JSON array; scripts/oracle.mjs reads both.
 OracleWriter.Write(args.Single(), cases);

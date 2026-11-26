@@ -34,7 +34,7 @@ run.addEventListener("click", async () => {
         run.disabled = false;
     }
     const frameworkFiles = [...framework.files];
-    const timeout = frameworkFiles.length ? 300 : 15;
+    const timeout = frameworkFiles.length ? 600 : 15;
     const deadline = setTimeout(() => finish("error", `The local entry did not finish within ${timeout} seconds.`), timeout * 1000);
     const cancel = () => {
         clearTimeout(deadline);

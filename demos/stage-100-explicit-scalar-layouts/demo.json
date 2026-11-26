@@ -1,0 +1,1 @@
+{"assembly":"ScalarOverlayDemo","exportType":"ScalarOverlayDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["ScalarOverlayDependency.dll"]},{"name":"MiddleWrite"}],"generated":{"bundle":true,"capacity":65536,"arguments":[305419896,-2]},"expected":318766712}

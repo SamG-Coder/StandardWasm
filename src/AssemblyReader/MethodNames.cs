@@ -2,20 +2,13 @@ namespace PeLibrary
 {
     internal static class MethodNames
     {
-        internal static bool HasInitializer(byte[] image, int[] layout, int[] heaps, int count)
+        internal static bool IsInitializer(byte[] image, int[] layout, int[] heaps, int row)
         {
-            for (int row = 1; row <= count; row++)
-            {
-                int offset = MethodDefinitions.ReadColumn(image, layout, row, 3);
-                if (offset <= 0 || offset > heaps[3] - 7)
-                    continue;
-                int start = heaps[2] + offset;
-                // ".cctor" followed by the heap terminator.
-                if (ImageBytes.U32(image, (uint)start) == 0x7463632e &&
-                    ImageBytes.U16(image, (uint)start + 4) == 0x726f && image[start + 6] == 0)
-                    return true;
-            }
-            return false;
+            int offset = MethodDefinitions.ReadColumn(image, layout, row, 3);
+            if (offset <= 0 || offset > heaps[3] - 7) return false;
+            int start = heaps[2] + offset;
+            return ImageBytes.U32(image, (uint)start) == 0x7463632e &&
+                ImageBytes.U16(image, (uint)start + 4) == 0x726f && image[start + 6] == 0;
         }
 
         // This demo lookup is scoped to a unique name across the module.

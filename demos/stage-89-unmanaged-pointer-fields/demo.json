@@ -1,0 +1,1 @@
+{"assembly":"PointerFieldDemo","exportType":"PointerFieldDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["PointerFieldDependency.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":32768,"arguments":[5]},"expected":5}

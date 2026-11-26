@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal static int Analyze(int[] records, int[] depths, byte[] states, int maximum,
             int[] frame, int result, int[] signatures, int[] offsets, int[] arities, int[] location, int[] catchRegion,
-            byte[] outgoingNulls)
+            byte[] outgoingNulls, int[] objects)
         {
             if (depths.Length == 0)
                 return -1;
@@ -45,11 +45,17 @@ namespace PortableCompiler
                     stack[i] = states[pc * maximum + i];
                 if (kind == Return)
                 {
-                    if (result == Void ? depth != 0 : depth != 1 || !Assignable(stack[0], result))
+                    if (result == Void ? depth != 0 : depth != 1 || !Assignable(stack[0], result, objects))
                         return -1;
                     continue;
                 }
 
+                if (kind == ThrowNull)
+                {
+                    if (depth == 0) return -1;
+                    if (stack[depth - 1] != NullValue) return -2;
+                    continue; // throw has no normal successor and clears the evaluation stack.
+                }
                 if (kind == Rethrow || kind == EndFinally) continue; // Unwinding drops the evaluation stack.
 
                 int next;
@@ -60,22 +66,23 @@ namespace PortableCompiler
                 }
                 else if (kind == ExchangeHandlerField)
                 {
-                    if (!Match(stack, depth, (byte)(records[slot + 3] >> 8)) ||
+                    if ((depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(records[slot + 3]), objects)) ||
                         frame[records[slot + BranchIl.Width + 1]] != EventHandlerReference ||
                         frame[records[slot + 2 * BranchIl.Width + 1]] != EventHandlerReference)
                         return -1;
                     next = Push(stack, depth - 1, EventHandlerReference);
                 }
                 else next = Transition(stack, depth, kind, operand, records[slot + 3], frame,
-                    signatures, offsets, arities);
+                    signatures, offsets, arities, objects);
                 if (next < 0)
                     return next;
                 if (outgoingNulls.Length != 0)
                     for (int i = 0; i < next; i++)
-                        outgoingNulls[pc * maximum + i] = stack[i] == NullValue ? (byte)1 : (byte)0;
+                        outgoingNulls[pc * maximum + i] = stack[i] == NullValue ? (byte)1 :
+                            stack[i] == NativeZero ? (byte)2 : (byte)0;
                 if (kind == Branch || kind == Conditional || kind == Leave)
                 {
-                    head = Edge(operand, next, maximum, stack, depths, states, pending, head);
+                    head = Edge(operand, next, maximum, stack, depths, states, pending, head, objects);
                     if (head < 0) return -1;
                 }
                 if (kind == Switch)
@@ -83,13 +90,13 @@ namespace PortableCompiler
                     int count = records[slot + 3];
                     for (int i = 0; i < count; i++)
                     {
-                        head = Edge(SwitchTarget(records, operand, i), next, maximum, stack, depths, states, pending, head);
+                        head = Edge(SwitchTarget(records, operand, i), next, maximum, stack, depths, states, pending, head, objects);
                         if (head < 0) return -1;
                     }
                 }
                 if (kind != Branch && kind != Leave)
                 {
-                    head = Edge(records[slot + 2], next, maximum, stack, depths, states, pending, head);
+                    head = Edge(records[slot + 2], next, maximum, stack, depths, states, pending, head, objects);
                     if (head < 0) return -1;
                 }
             }
@@ -97,9 +104,10 @@ namespace PortableCompiler
         }
 
         private static int Transition(byte[] stack, int depth, int kind, int operand, int extra, int[] frame,
-            int[] signatures, int[] offsets, int[] arities)
+            int[] signatures, int[] offsets, int[] arities, int[] objects)
         {
             if (kind == LoadString) return Push(stack, depth, String);
+            if (kind == ClearValue) return depth;
             if (kind == NullLiteral) return Push(stack, depth, NullValue);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, depth, EventArgsReference);
             if (kind == CombineHandler || kind == RemoveHandler)
@@ -109,7 +117,8 @@ namespace PortableCompiler
             if (kind == CastHandler) return Match(stack, depth, EventHandlerReference) ? depth : -1;
             if (kind == CastClass || kind == TestClass)
             {
-                if (depth < 1 || (stack[depth - 1] != NullValue && !IsReference(stack[depth - 1]))) return -1;
+                if (depth < 1 || IsValueType(objects, stack[depth - 1]) ||
+                    (stack[depth - 1] != NullValue && !IsReference(stack[depth - 1]))) return -1;
                 stack[depth - 1] = (byte)operand;
                 return depth;
             }
@@ -133,7 +142,7 @@ namespace PortableCompiler
             {
                 if (operand == EventHandlerReference)
                     return Match(stack, depth, EventArgsReference) && depth >= 3 &&
-                        Assignable(stack[depth - 2], ObjectReference) && Match(stack, depth - 2, EventHandlerReference)
+                        Assignable(stack[depth - 2], ObjectReference, objects) && Match(stack, depth - 2, EventHandlerReference)
                         ? depth - 3 : -1;
                 if (!Match(stack, depth, Delegate)) return -1;
                 return Push(stack, depth - 1, I32);
@@ -143,7 +152,7 @@ namespace PortableCompiler
                 return Push(stack, depth, kind == WideConstant ? I64 : I32);
             if (kind == SingleConstant || kind == DoubleConstant)
                 return Push(stack, depth, kind == SingleConstant ? F32 : F64);
-            if (kind == Store) return depth > 0 && Assignable(stack[depth - 1], frame[operand]) ? depth - 1 : -1;
+            if (kind == Store) return depth > 0 && Assignable(stack[depth - 1], frame[operand], objects) ? depth - 1 : -1;
             if (kind == CheckedConversion)
             {
                 if (depth < 1 || !IsScalar(stack[depth - 1])) return -1;
@@ -155,6 +164,7 @@ namespace PortableCompiler
                 if (depth < 1) return -1;
                 byte source = stack[depth - 1];
                 if (!IsScalar(source)) return -1;
+                if (IsNativeInteger(source) && kind != ConvertInteger && kind != Narrow) return -2;
                 if (kind == Unary)
                     return IsFloat(source) && operand != 0x6c ? -1 : depth;
                 if (kind == ConvertFloat)
@@ -165,7 +175,8 @@ namespace PortableCompiler
                 else
                 {
                     if (IsFloat(source) && (operand == 0xd3 || operand == 0xe0)) return -2;
-                    stack[depth - 1] = kind == ConvertInteger && ConvertsToWide(operand) ? I64 : I32;
+                    stack[depth - 1] = kind == ConvertInteger ?
+                        extra == ProvenNativeZero ? NativeZero : IntegerConversionType(operand) : I32;
                 }
                 return depth;
             }
@@ -176,6 +187,7 @@ namespace PortableCompiler
             {
                 if (depth < 2) return -1;
                 byte type = stack[depth - 1];
+                if (IsNativeInteger(type) || IsNativeInteger(stack[depth - 2])) return -2;
                 return IsInteger(type) && Match(stack, depth - 1, type) ? depth - 1 : -1;
             }
             if (kind == Binary || kind == Conditional)
@@ -184,10 +196,28 @@ namespace PortableCompiler
                 if (depth < needed) return -1;
                 byte type = stack[depth - needed];
                 byte top = stack[depth - 1];
+                if (IsValueType(objects, type) || IsValueType(objects, top)) return -2;
+                if (type == NullPointer || top == NullPointer)
+                {
+                    if (needed == 1) return depth - 1;
+                    if ((type != NullPointer && type != NativeZero) || (top != NullPointer && top != NativeZero))
+                        return -2;
+                    if (kind == Conditional) return extra == 0x46 || extra == 0x47 ? depth - needed : -2;
+                    return operand == 0x46 || operand == 0x4b && top == NativeZero
+                        ? Push(stack, depth - 2, I32) : -2;
+                }
+                if (IsNativeInteger(type) || IsNativeInteger(top))
+                {
+                    // CLI comparisons can mix native int and int32. Both
+                    // use i32 bits here, including the common ldlen test.
+                    if ((!IsNativeInteger(type) && type != I32) || (!IsNativeInteger(top) && top != I32) ||
+                        kind == Binary && !IsComparison(operand)) return -2;
+                    return kind == Binary ? Push(stack, depth - 2, I32) : depth - needed;
+                }
                 if (type == NullValue || top == NullValue || IsReference(type) || IsReference(top))
                 {
                     if (needed == 1) return depth - 1;
-                    if (!ReferenceComparison(type, top)) return -1;
+                    if (!ReferenceComparison(type, top, objects)) return -1;
                     if (kind == Conditional)
                         return extra == 0x46 || extra == 0x47 ? depth - needed : -1;
                     // C# materializes a boolean type test with isinst, ldnull,
@@ -208,6 +238,14 @@ namespace PortableCompiler
                 int remaining = depth - needed;
                 return kind == Binary ? Push(stack, remaining, IsComparison(operand) ? I32 : type) : remaining;
             }
+            if (kind == MathCall)
+            {
+                // Every mapped overload is T(T) or T(T, T) over one numeric stack type.
+                byte type = MathWasm.Type(operand);
+                int arity = MathWasm.Arity(operand);
+                if (!Match(stack, depth, type) || (arity == 2 && !Match(stack, depth - 1, type))) return -1;
+                return Push(stack, depth - arity, type);
+            }
             if (kind == Call || kind == NewObject)
             {
                 int count = arities[operand], offset = offsets[operand];
@@ -216,43 +254,62 @@ namespace PortableCompiler
                 if (start < 0)
                     return -1;
                 for (int i = receiver; i < count; i++)
-                    if (!Assignable(stack[start + i - receiver], signatures[offset + 1 + i]))
+                    if (!Assignable(stack[start + i - receiver], signatures[offset + 1 + i], objects))
                         return -1;
                 int result = kind == NewObject ? signatures[offset + 1] : signatures[offset];
                 return result == Void ? start : Push(stack, start, StackType(result));
             }
             if (kind == BaseCtor)
-                return depth > 0 && stack[depth - 1] >= FirstClass ? depth - 1 : -1;
+                return depth > 0 && stack[depth - 1] >= FirstClass && !IsInterface(objects, stack[depth - 1]) &&
+                    !IsValueType(objects, stack[depth - 1]) ? depth - 1 : -1;
             if (kind == GetField)
             {
-                if (!Match(stack, depth, (byte)(extra >> 8))) return -1;
-                stack[depth - 1] = unchecked((byte)extra);
+                if (depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(extra), objects)) return -1;
+                stack[depth - 1] = StackType(FieldAccess.Storage(extra));
                 return depth;
             }
             if (kind == SetField)
-                return Match(stack, depth - 1, (byte)(extra >> 8)) &&
-                    Assignable(stack[depth - 1], unchecked((byte)extra)) ? depth - 2 : -1;
+                return depth >= 2 && Assignable(stack[depth - 2], FieldAccess.Owner(extra), objects) &&
+                    Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 2 : -1;
+            if (kind == UpdateValue)
+                return depth > 0 && Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 1 : -1;
             if (kind == NewArray || kind == InitializedArray)
             {
-                if (!Match(stack, depth, I32)) return -1;
+                if (!ArrayIndex(stack, depth)) return -1;
                 stack[depth - 1] = (byte)operand;
             }
             else if (kind == ArrayLength)
             {
-                if (depth < 1 || (stack[depth - 1] != NullValue && !IsArray(stack[depth - 1]))) return -1;
-                stack[depth - 1] = I32;
+                if (depth < 1 || (stack[depth - 1] != NullValue && !IsArray(stack[depth - 1]) &&
+                    ArrayElement(objects, stack[depth - 1]) == 0)) return -1;
+                stack[depth - 1] = Native;
             }
             else if (kind == ArrayGet)
             {
+                if (operand == 0x9a)
+                {
+                    if (depth < 2 || !ArrayIndex(stack, depth)) return -1;
+                    int element = ArrayElement(objects, stack[depth - 2]);
+                    if (element == 0 || IsValueType(objects, element)) return -2;
+                    stack[depth - 2] = (byte)element;
+                    return depth - 1;
+                }
                 byte array = ArrayLoadType(operand);
-                if (!Match(stack, depth, I32) || !Match(stack, depth - 1, array)) return -1;
+                if (!ArrayIndex(stack, depth) || !Match(stack, depth - 1, array)) return -1;
                 stack[depth - 2] = ArrayValueType(array);
                 return depth - 1;
             }
             else if (kind == ArraySet)
             {
+                if (operand == 0xa2)
+                {
+                    if (depth < 3 || !ArrayIndex(stack, depth - 1)) return -1;
+                    int element = ArrayElement(objects, stack[depth - 3]);
+                    if (element == 0 || IsValueType(objects, element)) return -2;
+                    return Assignable(stack[depth - 1], element, objects) ? depth - 3 : -1;
+                }
                 byte array = ArrayStoreType(operand);
-                if (!Match(stack, depth, ArrayValueType(array)) || !Match(stack, depth - 1, I32) ||
+                if (!Match(stack, depth, ArrayValueType(array)) || !ArrayIndex(stack, depth - 1) ||
                     !Match(stack, depth - 2, array))
                     return -1;
                 return depth - 3;
@@ -263,6 +320,9 @@ namespace PortableCompiler
         private static bool Match(byte[] stack, int depth, byte type) =>
             depth > 0 && (stack[depth - 1] == type || stack[depth - 1] == NullValue && IsReference(type));
 
+        private static bool ArrayIndex(byte[] stack, int depth) =>
+            depth > 0 && (stack[depth - 1] == I32 || IsNativeInteger(stack[depth - 1]));
+
         private static int Push(byte[] stack, int depth, byte type)
         {
             if (depth >= stack.Length) return -1;
@@ -271,7 +331,7 @@ namespace PortableCompiler
         }
 
         private static int Edge(int pc, int count, int maximum, byte[] stack, int[] depths,
-            byte[] states, int[] pending, int head)
+            byte[] states, int[] pending, int head, int[] objects)
         {
             if (pc >= depths.Length) return -1;
             int offset = pc * maximum;
@@ -288,8 +348,11 @@ namespace PortableCompiler
                 for (int i = 0; i < count; i++)
                 {
                     byte current = states[offset + i], incoming = stack[i];
-                    if (current == incoming || incoming == NullValue && IsReference(current)) continue;
-                    if (current != NullValue || !IsReference(incoming)) return -1;
+                    if (current != incoming && (IsValueType(objects, current) || IsValueType(objects, incoming))) return -1;
+                    if (current == incoming || incoming == NullValue && IsReference(current) ||
+                        incoming == NativeZero && (current == Native || current == NullPointer)) continue;
+                    if ((current != NullValue || !IsReference(incoming)) &&
+                        (current != NativeZero || (incoming != Native && incoming != NullPointer))) return -1;
                     states[offset + i] = incoming;
                     changed = true;
                 }

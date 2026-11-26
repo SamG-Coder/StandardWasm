@@ -30,11 +30,29 @@
     <ProjectReference Include="../demos/stage-27-portable-diagnostics/DiagnosticLibrary.csproj" />
     <ProjectReference Include="../demos/stage-28-wide-storage/WideStorageLibrary.csproj" />
     <ProjectReference Include="../demos/stage-30-portable-floats/PortableReals.csproj" />
+    <ProjectReference Include="../demos/stage-40-portable-math/PortableMath.csproj" />
+    <!-- Built for PortableMathCases, but not referenced: its third-party System.Math must stay invisible here. -->
+    <ProjectReference Include="../demos/stage-40-portable-math/identity/MathIdentityProbe/MathIdentityProbe.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../demos/stage-31-resize-winforms/ResizeLibrary.csproj" />
     <ProjectReference Include="../demos/stage-32-winforms-textbox/Model/ProfileModel.csproj" />
     <ProjectReference Include="../demos/stage-34-shared-winforms-source/ProfileBrowser.csproj" Aliases="BrowserForms" />
     <ProjectReference Include="../demos/stage-35-managed-control-tree/ReferenceLibrary.csproj" />
     <ProjectReference Include="../demos/stage-36-managed-events/EventLibrary.csproj" />
+    <Compile Remove="Fixtures/**/*.cs" />
+    <!-- A separate alias: main's ThirdParty alias also covers ThirdPartyText, which defines its own System.String. -->
+    <ProjectReference Include="Fixtures/PlatformIdentity/ThirdPartyTypes/ThirdPartyTypes.csproj" Aliases="PlatformThirdParty" />
+    <ProjectReference Include="Fixtures/PlatformIdentity/PlatformIdentityProbe/PlatformIdentityProbe.csproj" />
+    <ProjectReference Include="../demos/stage-21-managed-formatting/identity/ThirdPartyText/ThirdPartyText.csproj" Aliases="ThirdParty" />
+    <ProjectReference Include="../demos/stage-21-managed-formatting/identity/TextIdentityProbe/TextIdentityProbe.csproj" />
+    <ProjectReference Include="../demos/stage-15-managed-instances/identity/ObjectIdentityProbe/ObjectIdentityProbe.csproj" />
+    <ProjectReference Include="../demos/stage-18-long-integers/LongIntegers.csproj" />
+    <ProjectReference Include="../demos/stage-20-floating-point/FloatingPoint.csproj" />
+    <ProjectReference Include="../demos/stage-25-switch-dispatch/SwitchDispatch.csproj" />
+    <ProjectReference Include="../demos/stage-33-float-remainder/FloatRemainder.csproj" />
+    <ProjectReference Include="../demos/stage-29-math-intrinsics/MathIntrinsics.csproj" />
+    <ProjectReference Include="../demos/stage-37-primitive-arrays/PrimitiveArrays.csproj" />
+    <ProjectReference Include="../demos/stage-16-managed-delegates/identity/ThirdPartyFunc/ThirdPartyFunc.csproj" Aliases="ThirdParty" />
+    <ProjectReference Include="../demos/stage-16-managed-delegates/identity/FuncIdentityProbe/FuncIdentityProbe.csproj" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../demos/stage-39-portable-primitive-arrays/PrimitiveStorage.csproj" />
@@ -61,20 +79,52 @@
     <ProjectReference Include="../demos/stage-62-null-stack/NullStack.csproj" />
     <ProjectReference Include="../demos/stage-63-linked-fields/LinkedFields.csproj" />
     <ProjectReference Include="../demos/stage-64-foreign-field-types/ForeignFieldTypes.csproj" />
+    <ProjectReference Include="../demos/stage-66-base-exception-catches/BaseExceptionHandlers.csproj" />
+    <ProjectReference Include="../demos/stage-67-null-throw/NullThrow.csproj" />
+    <ProjectReference Include="../demos/stage-68-bare-catch/BareCatch.csproj" />
+    <ProjectReference Include="../demos/stage-75-inherited-layouts/HierarchyDemo.csproj" />
+    <ProjectReference Include="../demos/stage-76-initializer-reachability/InitializerReachability.csproj" />
+    <ProjectReference Include="../demos/stage-76-initializer-reachability/Module/ModuleInitFixture.csproj" />
+    <ProjectReference Include="../demos/stage-78-strong-names/StrongNameDemo.csproj" />
+    <ProjectReference Include="../demos/stage-80-type-forwarding/ForwardingDemo.csproj" />
+    <ProjectReference Include="../demos/stage-82-static-field-layout/FieldLayoutDemo.csproj" />
+    <ProjectReference Include="../demos/stage-83-interface-references/InterfaceDemo.csproj" />
+    <ProjectReference Include="../demos/stage-84-native-sized-storage/NativeLayout.csproj" />
+    <ProjectReference Include="../demos/stage-85-nested-references/NestedDemo.csproj" />
+    <ProjectReference Include="../demos/stage-86-closed-generic-layouts/GenericStorageDemo.csproj" />
+    <ProjectReference Include="../demos/stage-87-packed-integer-fields/PackedFieldDemo.csproj" />
+    <ProjectReference Include="../demos/stage-90-volatile-field-signatures/VolatileFieldDemo.csproj" />
+    <ProjectReference Include="../demos/stage-89-unmanaged-pointer-fields/PointerFieldDemo.csproj" />
+    <ProjectReference Include="../demos/stage-91-embedded-value-types/EmbeddedValueDemo.csproj" />
+    <ProjectReference Include="../demos/stage-92-nominal-enums/EnumFieldDemo.csproj" />
+    <ProjectReference Include="../demos/stage-93-typed-pointer-fields/TypedPointerDemo.csproj" />
+    <ProjectReference Include="../demos/stage-94-floating-point-fields/FloatFieldDemo.csproj" />
+    <ProjectReference Include="../demos/stage-96-primitive-generic-layouts/PrimitiveGenericDemo.csproj" />
+    <ProjectReference Include="../demos/stage-97-byref-like-permission/ByRefPermissionFixture.csproj" />
+    <ProjectReference Include="../demos/stage-103-handle-generic-constraints/HandleConstraintDemo.csproj" />
+    <ProjectReference Include="../demos/stage-102-nominal-enum-arguments/EnumArgumentDemo.csproj" />
+    <ProjectReference Include="../demos/stage-101-nested-overlay-views/NestedOverlayDemo.csproj" />
+    <ProjectReference Include="../demos/stage-100-explicit-scalar-layouts/ScalarOverlayDemo.csproj" />
+    <ProjectReference Include="../demos/stage-99-named-value-arguments/NamedValueDemo.csproj" />
+    <ProjectReference Include="../demos/stage-98-nonnullable-value-constraints/ValueConstraintDemo.csproj" />
+    <PackageReference Include="Mono.Cecil" Version="0.11.6" />
+    <ProjectReference Include="../demos/stage-78-strong-names/Alternate/Alternate.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />
-    <Compile Remove="Fixtures/**/*.cs" />
-    <ProjectReference Include="Fixtures/PlatformIdentity/ThirdPartyTypes/ThirdPartyTypes.csproj" Aliases="PlatformIdentityThirdParty" />
-    <ProjectReference Include="Fixtures/PlatformIdentity/PlatformIdentityProbe/PlatformIdentityProbe.csproj" />
-    <ProjectReference Include="../demos/stage-21-managed-formatting/identity/ThirdPartyText/ThirdPartyText.csproj" Aliases="ThirdParty" />
-    <ProjectReference Include="../demos/stage-21-managed-formatting/identity/TextIdentityProbe/TextIdentityProbe.csproj" />
-    <ProjectReference Include="../demos/stage-15-managed-instances/identity/ObjectIdentityProbe/ObjectIdentityProbe.csproj" />
-    <ProjectReference Include="../demos/stage-18-long-integers/LongIntegers.csproj" />
-    <ProjectReference Include="../demos/stage-20-floating-point/FloatingPoint.csproj" />
-    <ProjectReference Include="../demos/stage-25-switch-dispatch/SwitchDispatch.csproj" />
-    <ProjectReference Include="../demos/stage-33-float-remainder/FloatRemainder.csproj" />
-    <ProjectReference Include="../demos/stage-29-math-intrinsics/MathIntrinsics.csproj" />
-    <ProjectReference Include="../demos/stage-37-primitive-arrays/PrimitiveArrays.csproj" />
-    <ProjectReference Include="../demos/stage-16-managed-delegates/identity/ThirdPartyFunc/ThirdPartyFunc.csproj" Aliases="ThirdParty" />
-    <ProjectReference Include="../demos/stage-16-managed-delegates/identity/FuncIdentityProbe/FuncIdentityProbe.csproj" />
   </ItemGroup>
+  <Target Name="CopyStrongNameAlternate" AfterTargets="Build">
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)../demos/stage-78-strong-names/Alternate/bin/$(Configuration)/netstandard2.0/SignedDependency.dll"
+          DestinationFiles="$(OutDir)StrongNameAlternate.dll" />
+  </Target>
+  <Target Name="CopyForwardingVerification" AfterTargets="Build">
+    <ItemGroup>
+      <ForwardingFixture Include="$(MSBuildThisFileDirectory)../demos/stage-80-type-forwarding/bin/$(Configuration)/netstandard2.0/forwarded/*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ForwardingFixture)" DestinationFolder="$(OutDir)forwarding" />
+  </Target>
+  <Target Name="CopyNestedForwardingVerification" AfterTargets="Build">
+    <ItemGroup>
+      <NestedForwardedFixture Include="$(MSBuildThisFileDirectory)../demos/stage-85-nested-references/bin/$(Configuration)/netstandard2.0/forwarded/*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(NestedForwardedFixture)" DestinationFolder="$(OutDir)nested-forwarding" />
+  </Target>
 </Project>

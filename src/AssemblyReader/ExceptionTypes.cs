@@ -6,8 +6,8 @@ namespace PeLibrary
     {
         internal const int Overflow = 1, DivideByZero = 2, Arithmetic = Overflow | DivideByZero;
 
-        internal const int IndexOutOfRange = 4, NullReference = 8, InvalidCast = 16;
-        internal const int Supported = Arithmetic | IndexOutOfRange | NullReference | InvalidCast;
+        internal const int IndexOutOfRange = 4, NullReference = 8, InvalidCast = 16, Argument = 32;
+        internal const int Supported = Arithmetic | IndexOutOfRange | NullReference | InvalidCast | Argument;
 
         internal static int CatchMask(byte[] image, int[] heaps, int[] methods, int token)
         {
@@ -31,6 +31,22 @@ namespace PeLibrary
                 return 0;
 
             // Match little-endian ASCII type names, including their terminators.
+            // C# encodes a bare catch as a catch of the platform System.Object.
+            if (Fits(name, 7, limit) && U32(image, n) == 0x656a624f &&
+                U16(image, n + 4) == 0x7463 && image[n + 6] == 0)
+                return Supported;
+            // All currently emitted managed tags represent subclasses of SystemException.
+            // Dispatch still catches only those tags, so engine traps stay outside this mask.
+            if (Fits(name, 10, limit) && U32(image, n) == 0x65637845 &&
+                U32(image, n + 4) == 0x6f697470 && U16(image, n + 8) == 0x006e)
+                return Supported;
+            if (Fits(name, 16, limit) && U32(image, n) == 0x74737953 &&
+                U32(image, n + 4) == 0x78456d65 && U32(image, n + 8) == 0x74706563 &&
+                U32(image, n + 12) == 0x006e6f69)
+                return Supported;
+            if (Fits(name, 18, limit) && U32(image, n) == 0x75677241 && U32(image, n + 4) == 0x746e656d &&
+                U32(image, n + 8) == 0x65637845 && U32(image, n + 12) == 0x6f697470 && U16(image, n + 16) == 0x006e)
+                return Argument;
             if (Fits(name, 18, limit) && U32(image, n) == 0x7265764f && U32(image, n + 4) == 0x776f6c66 &&
                 U32(image, n + 8) == 0x65637845 && U32(image, n + 12) == 0x6f697470 && U16(image, n + 16) == 0x006e)
                 return Overflow;

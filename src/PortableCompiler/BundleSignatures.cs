@@ -7,7 +7,7 @@ namespace PortableCompiler
     {
         internal static int Match(byte[] main, byte[] bundle, int[] ranges,
             byte[] caller, int[] callerLayout, int[] callerHeaps, int callerOwner, int callerSignature,
-            byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner, int targetSignature, bool field)
+            byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner, int targetSignature, bool field, int[] objects, int context = 0)
         {
             var next = new int[1];
             int left = Start(caller, callerHeaps, callerSignature, next, field);
@@ -20,7 +20,18 @@ namespace PortableCompiler
 
             // A field has exactly one type, without a parameter count.
             int count = 0;
-            if (!field)
+            if (field)
+            {
+                next[0] = left;
+                int leftModifier = ObjectLayouts.ReadFieldModifier(caller, callerHeaps, callerLayout, next, leftEnd);
+                if (leftModifier < 0) return leftModifier;
+                left = next[0];
+                next[0] = right;
+                int rightModifier = ObjectLayouts.ReadFieldModifier(target, targetHeaps, targetLayout, next, rightEnd);
+                if (leftModifier != rightModifier) return 0;
+                right = next[0];
+            }
+            else
             {
                 count = CompressedUnsigned(caller, left, leftEnd, next);
                 left = next[0];
@@ -36,8 +47,29 @@ namespace PortableCompiler
             {
                 if (left >= leftEnd || right >= rightEnd) return 0;
                 int element = caller[left++];
-                if (target[right++] != element) return 0;
-                if (element == 0x12)
+                int other = target[right++];
+                if (element != other)
+                {
+                    if (element == 0x12 && other == 0x1c)
+                    {
+                        int token = CompressedUnsigned(caller, left, leftEnd, next);
+                        left = next[0];
+                        int status = ObjectIdentity(main, bundle, ranges, caller, callerLayout, callerHeaps,
+                            callerOwner, token, leftClass);
+                        if (status <= 0) return status;
+                    }
+                    else if (element == 0x1c && other == 0x12)
+                    {
+                        int token = CompressedUnsigned(target, right, rightEnd, next);
+                        right = next[0];
+                        int status = ObjectIdentity(main, bundle, ranges, target, targetLayout, targetHeaps,
+                            targetOwner, token, rightClass);
+                        if (status <= 0) return status;
+                    }
+                    else return 0;
+                    continue;
+                }
+                if (element == 0x12 || element == 0x11)
                 {
                     int leftToken = CompressedUnsigned(caller, left, leftEnd, next);
                     left = next[0];
@@ -57,13 +89,101 @@ namespace PortableCompiler
                 else if (element == 0x1d)
                 {
                     // Exact element encodings distinguish signed and unsigned arrays.
-                    if (left >= leftEnd || right >= rightEnd || ArrayTypeRefs.Storage(caller[left]) == 0 ||
-                        caller[left++] != target[right++]) return 0;
+                    if (left >= leftEnd || right >= rightEnd) return 0;
+                    if (ArrayTypeRefs.Storage(caller[left]) != 0 && ArrayTypeRefs.Storage(target[right]) != 0)
+                    {
+                        if (caller[left++] != target[right++]) return 0;
+                        continue;
+                    }
+                    int match = MatchReference(main, bundle, ranges, caller, callerLayout, callerHeaps, callerOwner,
+                        target, targetLayout, targetHeaps, targetOwner, left - 1, leftEnd, right - 1, rightEnd, objects, next, context);
+                    if (match <= 0) return match;
+                    left = next[0];
+                    right = match;
                 }
-                else if ((element < 1 || element > 0x0e) && element != 0x1c)
+                else if (element == 0x15 || element == 0x13 && context != 0)
+                {
+                    int match = MatchReference(main, bundle, ranges, caller, callerLayout, callerHeaps, callerOwner,
+                        target, targetLayout, targetHeaps, targetOwner, left - 1, leftEnd, right - 1, rightEnd, objects, next, context);
+                    if (match <= 0) return match;
+                    left = next[0];
+                    right = match;
+                }
+                else if (element == PointerStorage.Element)
+                {
+                    int match = PointerSignatures.Match(main, bundle, ranges, caller, callerLayout, callerHeaps,
+                        callerOwner, target, targetLayout, targetHeaps, targetOwner, left, leftEnd, right, rightEnd,
+                        leftClass, rightClass, next);
+                    if (match <= 0) return match;
+                    left = next[0];
+                    right = match;
+                }
+                else if ((element < 1 || element > 0x0e) && !NativeStorage.IsIntegerElement(element) && element != 0x1c)
                     return 0;
             }
             return left == leftEnd && right == rightEnd ? 1 : 0;
+        }
+
+        private static int MatchReference(byte[] main, byte[] bundle, int[] ranges, byte[] caller, int[] callerLayout,
+            int[] callerHeaps, int callerOwner, byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner,
+            int left, int leftEnd, int right, int rightEnd, int[] objects, int[] next, int context)
+        {
+            int leftStart = left, rightStart = right;
+            next[0] = left;
+            int leftType = ManagedReferenceSignatures.Read(main, bundle, ranges, caller, callerLayout, callerHeaps,
+                callerOwner, next, leftEnd, context, objects, 0);
+            if (leftType < 0) return leftType;
+            left = next[0];
+            next[0] = right;
+            int rightType = ManagedReferenceSignatures.Read(main, bundle, ranges, target, targetLayout, targetHeaps,
+                targetOwner, next, rightEnd, context, objects, 0);
+            right = next[0];
+            next[0] = left;
+            if (leftType != rightType) return 0;
+
+            // Layout canonicalizes named primitives. Member linkage still
+            // requires the primitive spelling used by the definition.
+            if (!SamePrimitiveEncoding(caller, target, leftStart, left, rightStart, right)) return 0;
+            return right;
+        }
+
+        private static bool SamePrimitiveEncoding(byte[] left, byte[] right, int l, int leftEnd, int r, int rightEnd)
+        {
+            var cursor = new int[1];
+            while (l < leftEnd && r < rightEnd)
+            {
+                int a = left[l++], b = right[r++];
+                if ((a == 0x11 && GenericScalar.Key(b) != 0) || (b == 0x11 && GenericScalar.Key(a) != 0))
+                    return false;
+                l = NextTypeNode(left, l, leftEnd, a, cursor);
+                r = NextTypeNode(right, r, rightEnd, b, cursor);
+            }
+            return l == leftEnd && r == rightEnd;
+        }
+
+        private static int NextTypeNode(byte[] image, int at, int end, int kind, int[] cursor)
+        {
+            // The signature reader already validated these tokens and counts.
+            if (kind == 0x15)
+            {
+                CompressedUnsigned(image, at + 1, end, cursor); // Declaring TypeDefOrRef.
+                CompressedUnsigned(image, cursor[0], end, cursor); // Argument count.
+                return cursor[0];
+            }
+            if (kind == 0x11 || kind == 0x12 || kind == 0x13)
+            {
+                CompressedUnsigned(image, at, end, cursor);
+                return cursor[0];
+            }
+            return at;
+        }
+
+        private static int ObjectIdentity(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+            int[] layout, int[] heaps, int owner, int coded, int[] symbol)
+        {
+            int status = AssemblyBundle.ClassIdentity(main, bundle, ranges, image, layout, heaps, owner, coded, symbol);
+            if (status < 0) return status;
+            return symbol[0] == AssemblyBundle.ObjectOwner ? 1 : 0;
         }
 
         private static int Start(byte[] image, int[] heaps, int index, int[] next, bool field)

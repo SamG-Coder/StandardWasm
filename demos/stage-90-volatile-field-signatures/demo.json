@@ -1,0 +1,1 @@
+{"assembly":"VolatileFieldDemo","exportType":"VolatileFieldDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["VolatileFieldDependency.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":32768,"arguments":[5]},"expected":32}

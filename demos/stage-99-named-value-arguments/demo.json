@@ -1,0 +1,1 @@
+{"assembly":"NamedValueDemo","exportType":"NamedValueDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["NamedValueDependency.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":65536,"arguments":[5]},"expected":19}

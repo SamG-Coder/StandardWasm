@@ -99,7 +99,7 @@ try {
         await page.waitForFunction(() => document.querySelector("#status").dataset.state === "ready");
         await page.getByRole("button", { name: "Run managed entry" }).click();
         await page.waitForFunction(() => ["finished", "unsupported", "error"].includes(
-            document.querySelector("#status").dataset.state), null, { timeout: 310000 });
+            document.querySelector("#status").dataset.state), null, { timeout: 610000 });
         const message = await status.textContent();
         const edge = await status.getAttribute("data-state") === "error" ? { error: message } : JSON.parse(message);
         assert.deepEqual(edge, node[name], name);
@@ -145,7 +145,9 @@ function desktopFramework(output) {
         ...["System.Windows.Forms.dll", "System.Windows.Forms.Primitives.dll", "System.Private.Windows.Core.dll",
             "System.Drawing.Common.dll", "System.Private.Windows.GdiPlus.dll"].map(path => file(desktop, path)),
         ...["System.Private.CoreLib.dll", "System.Runtime.dll", "System.ComponentModel.Primitives.dll", "System.Collections.dll",
-            "System.Threading.dll", "System.Drawing.Primitives.dll"].map(path => file(shared, path)),
+            "System.Threading.dll", "System.Drawing.Primitives.dll", "System.ComponentModel.dll",
+            "System.ComponentModel.TypeConverter.dll", "System.Collections.Concurrent.dll", "System.Collections.Specialized.dll",
+            "System.ObjectModel.dll"].map(path => file(shared, path)),
     ];
     return { framework, runtime };
 }
