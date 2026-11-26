@@ -4,6 +4,12 @@ using ArrayLibrary;
 using ByteLibrary;
 using IntegerDivision;
 
+if (args is ["--portable-audit", var request, var output])
+{
+    PortableAuditRows.Write(request, output);
+    return;
+}
+
 var cases = new List<object>();
 // Each case records the CLR result. expected == null means the CLR threw one of the exceptions below,
 // and the Wasm module must trap. Wasm has no typed exceptions yet, so the exception type name is kept
