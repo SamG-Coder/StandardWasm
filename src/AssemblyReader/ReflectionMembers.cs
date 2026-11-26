@@ -5,13 +5,14 @@ namespace PeLibrary
 {
     internal static class ReflectionMembers
     {
-        internal const int TypeModule = 1, TypeAssembly = 2, ModuleAssembly = 3, ModuleName = 4, ResourceStream = 5;
+        internal const int TypeModule = 1, TypeAssembly = 2, ModuleAssembly = 3, ModuleName = 4, ResourceStream = 5, ExecutingAssembly = 6;
 
-        internal static int Identify(byte[] image, int[] heaps, int[] layout, int row)
+        internal static int Identify(byte[] image, int[] heaps, int[] layout, int row, bool staticCall)
         {
             var member = new int[AssemblyReferences.SymbolWidth];
             if (AssemblyReferences.ReadMember(image, heaps, layout, row, member) < 0 ||
                 member[AssemblyReferences.Depth] != 0) return 0;
+            if (staticCall && !MatchesAscii(image, heaps, (uint)member[4], "GetExecutingAssembly")) return 0;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
             if (first < 0) return 0;
@@ -20,7 +21,13 @@ namespace PeLibrary
 
             uint heap = (uint)heaps[2], length = (uint)heaps[3], name = (uint)member[4];
             int kind = 0, result = 0;
-            if (owner == Assembly)
+            if (staticCall)
+            {
+                if (owner != Assembly) return 0;
+                kind = ExecutingAssembly;
+                result = Assembly;
+            }
+            else if (owner == Assembly)
             {
                 if (!MatchesAscii(image, heaps, name, "GetManifestResourceStream")) return 0;
                 kind = ResourceStream;
@@ -49,7 +56,8 @@ namespace PeLibrary
             int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
             int start = next[0];
             int parameters = kind == ResourceStream ? 1 : 0;
-            if (size < 3 || size > limit - start || image[start] != 0x20 || image[start + 1] != parameters) return 0;
+            int convention = staticCall ? 0 : 0x20;
+            if (size < 3 || size > limit - start || image[start] != convention || image[start + 1] != parameters) return 0;
             if (result == String) return size == 3 && image[start + 2] == 0x0e ? kind : 0;
             if (image[start + 2] != 0x12) return 0;
             int end = start + size;

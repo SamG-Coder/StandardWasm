@@ -804,7 +804,19 @@ namespace PortableCompiler
                         records[slot] = BranchIl.TypeFromHandle;
                         continue;
                     }
-                    int reflectionMember = opcode == 0x6f && !addressed ? ReflectionMembers.Identify(image, heaps, layout, member) : 0;
+                    int reflectionMember = !addressed && (opcode == 0x28 || opcode == 0x6f)
+                        ? ReflectionMembers.Identify(image, heaps, layout, member, opcode == 0x28) : 0;
+                    if (reflectionMember == ReflectionMembers.ExecutingAssembly)
+                    {
+                        int status = reflection.Bind(bundle, globals, literals, literalSize);
+                        if (status < 0) return status;
+                        // The executing method retains the assembly of its authored IL.
+                        // Slot zero is reserved for symbolic types without an image.
+                        records[slot] = BranchIl.LoadStaticField;
+                        records[slot + 1] = reflection.Slots[(owner + 1) * RuntimeReflectionPlan.Width + RuntimeReflectionPlan.Assembly];
+                        records[slot + 3] = RuntimeTypeMetadata.Assembly;
+                        continue;
+                    }
                     if (reflectionMember == ReflectionMembers.ResourceStream)
                     {
                         int status = reflection.BindResource(bundle);
