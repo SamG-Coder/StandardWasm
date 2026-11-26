@@ -33,7 +33,12 @@ const files = new Map([
 const server = createServer((request, response) => {
     const asset = files.get(request.url.split("?")[0]);
     if (!asset) { response.writeHead(404).end(); return; }
-    response.writeHead(200, { "Content-Type": asset[0] });
+    const headers = { "Content-Type": asset[0] };
+    if (benchmark) {
+        headers["Cross-Origin-Opener-Policy"] = "same-origin";
+        headers["Cross-Origin-Embedder-Policy"] = "require-corp";
+    }
+    response.writeHead(200, headers);
     response.end(readFileSync(asset[1]));
 });
 
