@@ -130,6 +130,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [124 · Closed generic bases](stage-124-closed-generic-bases/README.md) | `npm run demo -- stage-124-closed-generic-bases` | Substitute and reserve closed generic base classes from original managed DLLs |
 | [125 · Runtime type handles](stage-125-runtime-type-handles/README.md) | `npm run demo -- stage-125-runtime-type-handles` | Compare canonical TypeDef and TypeRef identities from managed DLLs |
 | [126 · Managed exception objects](stage-126-managed-exception-objects/README.md) | `npm run demo -- stage-126-managed-exception-objects` | Throw and catch linked exception classes against the x86 CLR; filters stay diagnosed |
+| [127 · Friend-assembly methods](stage-127-friend-methods/README.md) | `npm run demo -- stage-127-friend-methods` | Bind internal and protected internal methods through InternalsVisibleTo; ungranted calls stay diagnosed |
 
 ## Adding a stage
 
