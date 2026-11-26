@@ -1,5 +1,6 @@
 // Represent signed i64 bit patterns as decimal strings to keep the JS boundary exact.
-export const decode = value => value?.i64 !== undefined ? BigInt(value.i64) : value;
+export const decode = value => value?.i64 !== undefined ? BigInt(value.i64)
+    : value?.f64 !== undefined ? Number(value.f64) : value;
 
 export function invoke(exports, method, inputs) {
     const args = inputs.map(input => {

@@ -179,7 +179,7 @@ namespace PortableCompiler
                         return -2;
                     if (owner != 0)
                         for (int i = 0; i < locals; i++)
-                            if (!IsInteger(frame[parameters + i])) return -2;
+                            if (!IsScalar(frame[parameters + i])) return -2;
                 }
                 if (body[1] > (int.MaxValue - 32) / 64)
                     return -2;
@@ -203,9 +203,9 @@ namespace PortableCompiler
                         return -2;
                     var depths = new int[body[1]];
                     var states = new byte[body[1] * maximum];
-                    if (!StackDepths.Analyze(records, depths, states, maximum, frame,
-                        result, signatures, offsets, arities, location))
-                        return -1;
+                    status = StackDepths.Analyze(records, depths, states, maximum, frame,
+                        result, signatures, offsets, arities, location);
+                    if (status < 0) return status;
 
                     if (location.Length != 0) location[2] = -1;
                     int capacity = body[1] * 64 + 32;
@@ -267,7 +267,8 @@ namespace PortableCompiler
                 if (kind == 0) continue;
                 if (location.Length != 0) location[2] = slot / BranchIl.Width;
                 if (owner != 0 && kind >= BranchIl.NewArray && kind != BranchIl.Narrow && kind != BranchIl.MemberCall &&
-                    kind != BranchIl.WideConstant && kind != BranchIl.ConvertInteger && kind != BranchIl.Switch)
+                    kind != BranchIl.WideConstant && kind != BranchIl.ConvertInteger && kind != BranchIl.Switch &&
+                    kind != BranchIl.SingleConstant && kind != BranchIl.DoubleConstant && kind != BranchIl.ConvertFloat)
                     return -2; // The dependency backend currently admits only scalar state.
                 if (kind == BranchIl.NewArray)
                 {
@@ -445,9 +446,9 @@ namespace PortableCompiler
 
         private static bool IsScalarSignature(byte[] types, int offset, int arity)
         {
-            if (!IsInteger(types[offset]) && types[offset] != Void) return false;
+            if (!IsScalar(types[offset]) && types[offset] != Void) return false;
             for (int index = 1; index <= arity; index++)
-                if (!IsInteger(types[offset + index])) return false;
+                if (!IsScalar(types[offset + index])) return false;
             return true;
         }
 

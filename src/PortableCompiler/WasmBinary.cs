@@ -244,7 +244,7 @@ namespace PortableCompiler
         }
 
         private static int ValueWidth(byte type) =>
-            type == Void ? 0 : type == I32 || type == I64 || type == MethodPointer ? 1 :
+            type == Void ? 0 : IsScalar(type) || type == MethodPointer ? 1 :
                 HeapType(type) <= 63 ? 2 : 3;
 
         internal static int ValueType(byte[] output, int cursor, byte type)
@@ -253,6 +253,8 @@ namespace PortableCompiler
                 output[cursor++] = 0x7f;
             else if (type == I64)
                 output[cursor++] = 0x7e;
+            else if (IsFloat(type))
+                output[cursor++] = type == F32 ? (byte)0x7d : (byte)0x7c;
             else
             {
                 output[cursor++] = 0x63; // ref null

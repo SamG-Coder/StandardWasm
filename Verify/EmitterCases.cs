@@ -28,7 +28,7 @@ internal static class EmitterCases
         VerifyMethod("Mix", pairs, a => Kernels.Mix(a[0], a[1]));
         VerifyMethod("Quotient", pairs, a => Kernels.Quotient(a[0], a[1]));
 
-        Reject("unsupported floating-point signature", rows["UnsupportedSignature"], 256, -2);
+        Reject("unsupported short signature", rows["UnsupportedSignature"], 256, -2);
         Reject("method call", rows["UnsupportedCall"], 256, -2);
         Reject("insufficient capacity", rows["DemoKernel"], 8, -3);
         Reject("missing row", 0, 256, -1);
