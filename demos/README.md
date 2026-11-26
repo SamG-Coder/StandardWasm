@@ -51,6 +51,17 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [52 · Typed array bounds exceptions](stage-52-array-bounds-exceptions/README.md) | `npm run demo -- stage-52-array-bounds-exceptions` | Rethrow(0, -1) = -202 |
 | [53 · Typed null reference exceptions](stage-53-typed-null-access/README.md) | `npm run demo -- stage-53-typed-null-access` | ReadArray(0, -1) = -102 |
 | [54 · Nested finally and exceptional cleanup](stage-54-finally/README.md) | `npm run demo -- stage-54-finally` | CatchAfterCleanup(0) = 1234 |
+| [55 · Allocation and delegate exceptions](stage-55-allocation-delegates/README.md) | `npm run demo -- stage-55-allocation-delegates` | AllocationCleanup(-1) = -17 |
+| [56 · Typed null failures in instance calls](stage-56-instance-null/README.md) | `npm run demo -- stage-56-instance-null` | CallCleanup(0, 2) = -101 |
+| [57 · Linked exception regions](stage-57-linked-exceptions/README.md) | `npm run demo -- stage-57-linked-exceptions` | Run(18, 0, 4) = 116 |
+| [58 · Linked arrays and strings](stage-58-linked-references/README.md) | `npm run demo -- stage-58-linked-references` | Alias(0, 7) = 797 |
+| [59 · Assembly-scoped object layouts](stage-59-linked-objects/README.md) | `npm run demo -- stage-59-linked-objects` | Run(5) = 47 |
+| [60 · Class signatures across DLLs](stage-60-nominal-linking/README.md) | `npm run demo -- stage-60-nominal-linking` | Run(5, 3) = 325 |
+| [61 · Constructors and instance calls across DLLs](stage-61-linked-instances/README.md) | `npm run demo -- stage-61-linked-instances` | Run(5, 3) = 1110 |
+| [62 · Null references at branch joins](stage-62-null-stack/README.md) | `npm run demo -- stage-62-null-stack` | Loop(4) = 20 |
+| [63 · Instance fields across DLLs](stage-63-linked-fields/README.md) | `npm run demo -- stage-63-linked-fields` | Run(5) = 33 |
+| [64 · Fields with types declared in another DLL](stage-64-foreign-field-types/README.md) | `npm run demo -- stage-64-foreign-field-types` | Run(17) = 35 |
+| [65 · Managed reference casts](stage-65-nominal-casts/README.md) | `npm run demo -- stage-65-nominal-casts` | Run(7) = 13 |
 
 ## Adding a stage
 

@@ -78,7 +78,7 @@ internal static class SenderIdentityCases
                 {
                     module = "BootstrapLibrary", method = "Compile", fixture = name,
                     inputs = new object[] { input, row },
-                    generated = new { capacity, arguments = values == null ? Array.Empty<int>() : new[] { value }, hex },
+                    generated = new { capacity, arguments = values == null ? Array.Empty<int>() : new[] { value }, hex, exceptionType = exception },
                     expected, exception
                 });
             }

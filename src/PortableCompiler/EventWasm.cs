@@ -184,7 +184,7 @@ namespace PortableCompiler
         {
             int index = scratch, length = scratch + 1;
             // The caller's spill holds the snapshot for the entire invocation.
-            // array.len traps for a null delegate before any callback executes.
+            // The caller checks null after evaluating the event arguments.
             used = Length(code, used, list);
             used = Local(code, used, 0x21, length);
             used = Const(code, used, 0);

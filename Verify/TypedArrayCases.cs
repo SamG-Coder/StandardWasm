@@ -26,7 +26,7 @@ internal static class TypedArrayCases
             int? expected;
             string exceptionType = null;
             try { expected = ArrayKernels.Route(value, count); }
-            catch (ArithmeticException) { expected = null; }
+            catch (ArithmeticException error) { expected = null; exceptionType = error.GetType().FullName; }
             catch (IndexOutOfRangeException error) { expected = null; exceptionType = error.GetType().FullName; }
             cases.Add(new
             {
