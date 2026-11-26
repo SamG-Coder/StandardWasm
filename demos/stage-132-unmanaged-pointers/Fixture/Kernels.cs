@@ -117,6 +117,20 @@ namespace UnmanagedPointerFixture
             return found == null ? -1 : (int)(found - data);
         }
 
+        // A null literal used directly as the address: ldc.i4.0; conv.u; ldind.u1.
+        public static int ReadNullLiteral()
+        {
+            try { return *(byte*)null; }
+            catch (System.NullReferenceException) { return -17; }
+        }
+
+        // The same for a store: ldc.i4.0; conv.u; ldc.i4.s; stind.i4.
+        public static int WriteNullLiteral()
+        {
+            try { *(int*)null = 42; return 0; }
+            catch (System.NullReferenceException) { return -23; }
+        }
+
         // A null pointer read raises NullReferenceException on the CLR.
         public static int ReadNull()
         {

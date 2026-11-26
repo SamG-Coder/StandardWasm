@@ -135,15 +135,16 @@ namespace PortableCompiler
             if (kind == LoadString) return Push(stack, allocated, depth, String);
             if (kind == LoadTypeToken) return Push(stack, allocated, depth, PeLibrary.RuntimeTypeMetadata.Handle);
             // Only an unmanaged pointer (a native int, decision 0060) addresses memory 0.
-            // A managed byref or a proven null literal address stays a diagnostic.
+            // A proven null (NativeZero) spills as Native and raises NullReferenceException
+            // at run time, as on the CLR. A managed byref stays a diagnostic.
             if (kind == LoadIndirect)
             {
-                if (depth < 1 || stack[depth - 1] != Native) return -2;
+                if (depth < 1 || !IsNativeInteger(stack[depth - 1])) return -2;
                 return Push(stack, allocated, depth - 1, IndirectType(operand));
             }
             if (kind == StoreIndirect)
             {
-                if (depth < 2 || stack[depth - 2] != Native || !IndirectValue(operand, stack[depth - 1])) return -2;
+                if (depth < 2 || !IsNativeInteger(stack[depth - 2]) || !IndirectValue(operand, stack[depth - 1])) return -2;
                 return depth - 2;
             }
             if (kind == TypeFromHandle)
@@ -390,7 +391,7 @@ namespace PortableCompiler
         private static bool IndirectValue(int opcode, int value) =>
             opcode == 0x55 ? value == I64 :
             opcode == 0x56 || opcode == 0x57 ? value == F32 || value == F64 :
-            opcode == 0xdf ? value == Native || value == I32 :
+            opcode == 0xdf ? IsNativeInteger(value) || value == I32 :
             value == I32;
 
         private static bool Match(int[] stack, int depth, int type) =>

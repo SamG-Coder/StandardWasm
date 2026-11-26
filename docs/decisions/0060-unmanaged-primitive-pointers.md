@@ -36,8 +36,9 @@ null-only reference, so no pointer could be dereferenced.
 - `stind.r4` and `stind.r8` convert between f32 and f64 when the value has
   the other width.
 - Only an unmanaged pointer (a native int on the stack) addresses memory.
-  `ldind.ref`, `stind.ref`, managed byrefs and a null literal used directly as
-  an address stay located diagnostics.
+  A null literal used directly as an address, such as `*(byte*)null`, is a
+  proven-null native int and raises the typed exception at run time. `ldind.ref`,
+  `stind.ref` and managed byrefs stay located diagnostics.
 - **Null.** Address 0 is null on the CLR and here, and the host never places
   data at 0. Each load and store tests its address and raises the typed
   `NullReferenceException` for 0. The store test runs after both operands are
