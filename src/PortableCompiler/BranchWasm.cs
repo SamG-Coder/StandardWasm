@@ -343,12 +343,17 @@ namespace PortableCompiler
                         used = Gc(code, used, 1, type); // struct.new_default
                         used = Local(code, used, 0x22, temp);
                     }
+                    if (kind == Call && records[slot + 3] != 0)
+                    {
+                        // The receiver and arguments have already been evaluated.
+                        // Keep callvirt's managed null check before calling the known body.
+                        int target = Spill(spills, maximum, states[state + first], first);
+                        used = GuardNull(code, used, target);
+                    }
                     for (int i = receiver; i < arity; i++)
                     {
                         int argument = first + i - receiver;
                         used = Local(code, used, 0x20, Spill(spills, maximum, states[state + argument], argument));
-                        if (i == 0 && records[slot + 3] != 0)
-                            code[used++] = 0xd4; // callvirt null-check on a known nonvirtual target
                     }
                     code[used++] = 0x10;
                     used = WasmBinary.Unsigned(code, used, operand);
@@ -366,6 +371,8 @@ namespace PortableCompiler
                     byte owner = (byte)(records[slot + 3] >> 8);
                     int receiver = Spill(spills, maximum, owner, top);
                     int oldValue = Spill(spills, maximum, EventHandlerReference, top);
+                    // The fused ldflda permits only side-effect-free loads after this check.
+                    used = GuardNull(code, used, receiver);
                     used = Local(code, used, 0x20, receiver);
                     used = Gc(code, used, 2, owner); // struct.get
                     used = WasmBinary.Unsigned(code, used, operand);
