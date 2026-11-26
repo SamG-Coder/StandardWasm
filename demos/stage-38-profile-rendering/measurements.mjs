@@ -34,13 +34,15 @@ function summarize(values, count) {
     assert.ok(values.every(value => Number.isFinite(value) && value >= 0), "Invalid timing sample");
     const sorted = [...values].sort((a, b) => a - b);
     const percentile = fraction => sorted[Math.ceil(sorted.length * fraction) - 1];
-    return { median: percentile(.5), p95: percentile(.95), count };
+    return { median: percentile(.5), p95: percentile(.95), mean: values.reduce((sum, value) => sum + value, 0) / count, count };
 }
 
 export async function recordProfileTiming(page, engine, output) {
     const { samples, repeats, warmup, values } = timingOptions;
     const count = samples * repeats;
     const browser = await page.evaluate(options => window.profileTiming.sample(options), timingOptions);
+    assert.equal(browser.clock.crossOriginIsolated, true);
+    assert.ok(Number.isFinite(browser.clock.observedStepMs) && browser.clock.observedStepMs > 0);
     const native = JSON.parse(readFileSync(output + "/native.json", "utf8"));
     assert.equal(native.sampleCount, count);
     assert.equal(native.warmup, warmup);
@@ -64,13 +66,12 @@ export async function recordProfileTiming(page, engine, output) {
     const drivers = driverQuery.status === 0 && driverQuery.stdout.trim() ? JSON.parse(driverQuery.stdout) : null;
     const evidence = {
         engine, node: process.version, runtime: native.runtime, platform: native.platform, cpu: cpus()[0]?.model.trim(), drivers,
-        adapter: browser.adapter, width: browser.width, height: browser.height,
+        adapter: browser.adapter, clock: browser.clock, width: browser.width, height: browser.height,
         workload: timingOptions, parity,
         native: { updateMs: summarize(native.updateMs, count), refreshMs: summarize(native.refreshMs, count) },
         webgpu: {
             updateMs: summarize(metrics.webgpu.updateMs, count),
-            submitMs: summarize(metrics.webgpu.submitMs, count),
-            queueDrainMs: summarize(metrics.webgpu.queueDrainMs, repeats)
+            submitMs: summarize(metrics.webgpu.submitMs, count)
         },
         canvas2d: {
             updateMs: summarize(metrics.canvas2d.updateMs, count),

@@ -215,12 +215,25 @@ if (verify) {
         assert.deepEqual(resized, desktop.resized);
 
         const timing = await page.evaluate(() => window.measureRendering());
+        await page.screenshot({ path: artifacts + "/browser.png" });
+
+        await page.setViewportSize({ width: 360, height: 640 });
+        await page.evaluate(() => new Promise(resolve =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        const narrowViewport = await page.locator("#surface").evaluate(canvas => {
+            const { width, height } = canvas.getBoundingClientRect();
+            return { width, height, bufferWidth: canvas.width, bufferHeight: canvas.height };
+        });
+        const { width, height, bufferWidth, bufferHeight } = narrowViewport;
+        assert.deepEqual([bufferWidth, bufferHeight], [420, 240]);
+        assert.ok(width > 0 && width < bufferWidth, "The narrow viewport must shrink the displayed surface.");
+        assert.ok(Math.abs(height - width * bufferHeight / bufferWidth) <= 1,
+            "The Canvas buffer must scale uniformly in a narrow viewport: " + JSON.stringify(narrowViewport));
         assert.deepEqual(errors, []);
         const evidence = {
             engine: browser.version(), sequence, controlCounts, dynamicBounds,
-            labelLeft: positions, movedEdgePixels: movedEdge, changedLabelPixels: changed, insertedPixels: inserted, instances, resized, expandedTiming, ...timing
+            labelLeft: positions, movedEdgePixels: movedEdge, changedLabelPixels: changed, insertedPixels: inserted, instances, resized, narrowViewport, expandedTiming, ...timing
         };
-        await page.screenshot({ path: artifacts + "/browser.png" });
         writeFileSync(artifacts + "/timing.json", JSON.stringify(evidence, null, 2) + "\n");
         console.log(JSON.stringify(evidence, null, 2));
     } finally {

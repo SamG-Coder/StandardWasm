@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Defines a class named System.Int16 so the compiler must tell it apart from the CLI primitive int16. -->
+  <PropertyGroup><TargetFramework>netstandard2.0</TargetFramework><NoWarn>CS0436</NoWarn></PropertyGroup>
+</Project>
