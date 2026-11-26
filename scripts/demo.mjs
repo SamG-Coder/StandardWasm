@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { compile, run } from "./toolchain.mjs";
-import { invoke, invokeGenerated } from "./invoke.mjs";
+import { decode, invoke, invokeGenerated } from "./invoke.mjs";
 import { demoInputs, listDemos } from "./demos.mjs";
 
 const demos = listDemos();
@@ -21,5 +21,5 @@ const { instance } = await WebAssembly.instantiate(readFileSync(demo.wasm));
 const result = (demo.generated
         ? await invokeGenerated(instance.exports, demoInputs(demo), demo.generated)
         : invoke(instance.exports, demo.method, demoInputs(demo)));
-assert.equal(result, demo.expected);
-console.log(demo.stage + ": " + demo.method + "(" + demo.inputs.map(input => input?.file === "bundle" ? demo.assembly + ".dll and dependencies" : input?.file === "self" ? demo.assembly + ".dll" : input?.name ?? input).join(", ") + ") = " + result);
+assert.equal(result, decode(demo.expected));
+console.log(demo.stage + ": " + demo.method + "(" + demo.inputs.map(input => input?.file === "bundle" ? demo.assembly + ".dll and dependencies" : input?.file === "self" ? demo.assembly + ".dll" : input?.name ?? decode(input)).join(", ") + ") = " + result);
