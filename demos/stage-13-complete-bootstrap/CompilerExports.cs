@@ -20,6 +20,13 @@ namespace BootstrapLibrary
             PortableCompiler.MethodCompiler.CompileModuleDetailed(image, entries, output, location);
         public static int CompileBundleDetailed(byte[] bundle, byte[] entries, byte[] output, int[] location) =>
             PortableCompiler.MethodCompiler.CompileBundleDetailed(bundle, entries, output, location);
+        public static int ReadWebcilEntryToken(byte[] image)
+        {
+            int token = PeLibrary.WebcilLocator.ReadEntryToken(image);
+            if (token < 0 || (token & 0xffffff) > PeLibrary.CompressedTables.Find(image, new int[4]))
+                return -1;
+            return token;
+        }
         public static int BootstrapKernel(int value) => value * 2 + 1;
     }
 }

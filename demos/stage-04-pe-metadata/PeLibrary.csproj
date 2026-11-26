@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/AssemblyReader/PeLocator.cs" Link="PeLocator.cs" />
+    <Compile Include="../../src/AssemblyReader/WebcilLocator.cs" Link="WebcilLocator.cs" />
     <Compile Include="../../src/AssemblyReader/ImageBytes.cs" Link="ImageBytes.cs" />
   </ItemGroup>
 </Project>
