@@ -161,6 +161,7 @@ namespace PortableCompiler
                 if (depth < 1) return -1;
                 byte source = stack[depth - 1];
                 if (!IsScalar(source)) return -1;
+                if (source == Native && kind != ConvertInteger && kind != Narrow) return -2;
                 if (kind == Unary)
                     return IsFloat(source) && operand != 0x6c ? -1 : depth;
                 if (kind == ConvertFloat)
@@ -171,7 +172,7 @@ namespace PortableCompiler
                 else
                 {
                     if (IsFloat(source) && (operand == 0xd3 || operand == 0xe0)) return -2;
-                    stack[depth - 1] = kind == ConvertInteger && ConvertsToWide(operand) ? I64 : I32;
+                    stack[depth - 1] = kind == ConvertInteger ? IntegerConversionType(operand) : I32;
                 }
                 return depth;
             }
@@ -182,6 +183,7 @@ namespace PortableCompiler
             {
                 if (depth < 2) return -1;
                 byte type = stack[depth - 1];
+                if (type == Native || stack[depth - 2] == Native) return -2;
                 return IsInteger(type) && Match(stack, depth - 1, type) ? depth - 1 : -1;
             }
             if (kind == Binary || kind == Conditional)
@@ -190,6 +192,14 @@ namespace PortableCompiler
                 if (depth < needed) return -1;
                 byte type = stack[depth - needed];
                 byte top = stack[depth - 1];
+                if (type == Native || top == Native)
+                {
+                    // Native arithmetic and mixed-width numeric operations
+                    // need CLI-specific validation. Same-kind comparisons
+                    // and truth tests use the wasm32 bits directly.
+                    if (type != top || kind == Binary && !IsComparison(operand)) return -2;
+                    return kind == Binary ? Push(stack, depth - 2, I32) : depth - needed;
+                }
                 if (type == NullValue || top == NullValue || IsReference(type) || IsReference(top))
                 {
                     if (needed == 1) return depth - 1;
@@ -240,25 +250,25 @@ namespace PortableCompiler
                     Assignable(stack[depth - 1], unchecked((byte)extra), objects) ? depth - 2 : -1;
             if (kind == NewArray || kind == InitializedArray)
             {
-                if (!Match(stack, depth, I32)) return -1;
+                if (!ArrayIndex(stack, depth)) return -1;
                 stack[depth - 1] = (byte)operand;
             }
             else if (kind == ArrayLength)
             {
                 if (depth < 1 || (stack[depth - 1] != NullValue && !IsArray(stack[depth - 1]))) return -1;
-                stack[depth - 1] = I32;
+                stack[depth - 1] = Native;
             }
             else if (kind == ArrayGet)
             {
                 byte array = ArrayLoadType(operand);
-                if (!Match(stack, depth, I32) || !Match(stack, depth - 1, array)) return -1;
+                if (!ArrayIndex(stack, depth) || !Match(stack, depth - 1, array)) return -1;
                 stack[depth - 2] = ArrayValueType(array);
                 return depth - 1;
             }
             else if (kind == ArraySet)
             {
                 byte array = ArrayStoreType(operand);
-                if (!Match(stack, depth, ArrayValueType(array)) || !Match(stack, depth - 1, I32) ||
+                if (!Match(stack, depth, ArrayValueType(array)) || !ArrayIndex(stack, depth - 1) ||
                     !Match(stack, depth - 2, array))
                     return -1;
                 return depth - 3;
@@ -268,6 +278,9 @@ namespace PortableCompiler
 
         private static bool Match(byte[] stack, int depth, byte type) =>
             depth > 0 && (stack[depth - 1] == type || stack[depth - 1] == NullValue && IsReference(type));
+
+        private static bool ArrayIndex(byte[] stack, int depth) =>
+            depth > 0 && (stack[depth - 1] == I32 || stack[depth - 1] == Native);
 
         private static int Push(byte[] stack, int depth, byte type)
         {

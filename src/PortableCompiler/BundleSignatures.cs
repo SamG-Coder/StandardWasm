@@ -81,7 +81,7 @@ namespace PortableCompiler
                     if (left >= leftEnd || right >= rightEnd || ArrayTypeRefs.Storage(caller[left]) == 0 ||
                         caller[left++] != target[right++]) return 0;
                 }
-                else if ((element < 1 || element > 0x0e) && element != 0x1c)
+                else if ((element < 1 || element > 0x0e) && !NativeStorage.IsIntegerElement(element) && element != 0x1c)
                     return 0;
             }
             return left == leftEnd && right == rightEnd ? 1 : 0;

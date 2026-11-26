@@ -259,7 +259,7 @@ namespace PortableCompiler
                 {
                     byte source = states[state + top];
                     byte target = kind == Unary ? source : kind == ConvertFloat ? FloatWasm.Target(operand) :
-                        kind == ConvertInteger && ConvertsToWide(operand) ? I64 : I32;
+                        kind == ConvertInteger ? IntegerConversionType(operand) : I32;
                     used = Local(code, used, 0x20, Spill(spills, maximum, source, top));
                     if (kind == Unary && IsFloat(source))
                         code[used++] = source == F32 ? (byte)0x8c : (byte)0x9a;
@@ -269,8 +269,8 @@ namespace PortableCompiler
                         // signed saturating i32 conversion before masking.
                         used = FloatWasm.Convert(code, used, kind == Narrow ? 0x69 : operand, source, target);
                     }
-                    else if (source != target)
-                        code[used++] = target == I32 ? (byte)0xa7 : operand == 0x6a ? (byte)0xac : (byte)0xad;
+                    else if ((source == I64) != (target == I64))
+                        code[used++] = source == I64 ? (byte)0xa7 : operand == 0x6a ? (byte)0xac : (byte)0xad;
                     if (kind == Narrow)
                     {
                         if (operand == 0x67 || operand == 0x68)
@@ -418,18 +418,19 @@ namespace PortableCompiler
                 }
                 else if (kind == NewArray || kind == InitializedArray)
                 {
+                    int length = Spill(spills, maximum, states[state + top], top);
                     if (kind == InitializedArray)
                         used = Const(code, used, records[slot + 3]);
                     else
                     {
                         // Wasm allocation interprets its length as unsigned. The CLI
                         // raises overflow for a negative length before allocation.
-                        used = Local(code, used, 0x20, spills + top);
+                        used = Local(code, used, 0x20, length);
                         used = Const(code, used, 0);
                         code[used++] = 0x48; // i32.lt_s
                         used = ExceptionTagsWasm.ThrowIf(code, used);
                     }
-                    used = Local(code, used, 0x20, spills + top);
+                    used = Local(code, used, 0x20, length);
                     used = Gc(code, used, kind == NewArray ? 7 : 9, operand); // default or passive data
                     if (kind == InitializedArray) code[used++] = 0; // shared data segment index
                     used = Local(code, used, 0x21, Spill(spills, maximum, (byte)operand, top));
@@ -441,12 +442,13 @@ namespace PortableCompiler
                     used = Local(code, used, 0x20, reference);
                     code[used++] = 0xfb;
                     code[used++] = 0x0f;
-                    used = Local(code, used, 0x21, spills + top);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, Native, top));
                 }
                 else if (kind == ArrayGet)
                 {
                     byte array = ArrayLoadType(operand);
-                    int reference = Spill(spills, maximum, states[state + top - 1], top - 1), index = spills + top;
+                    int reference = Spill(spills, maximum, states[state + top - 1], top - 1);
+                    int index = Spill(spills, maximum, states[state + top], top);
                     used = GuardNull(code, used, reference);
                     used = GuardArrayIndex(code, used, reference, index, false);
                     used = Local(code, used, 0x20, reference);
@@ -461,7 +463,8 @@ namespace PortableCompiler
                 else if (kind == ArraySet)
                 {
                     byte array = ArrayStoreType(operand);
-                    int reference = Spill(spills, maximum, states[state + top - 2], top - 2), index = spills + top - 1;
+                    int reference = Spill(spills, maximum, states[state + top - 2], top - 2);
+                    int index = Spill(spills, maximum, states[state + top - 1], top - 1);
                     used = GuardNull(code, used, reference);
                     used = GuardArrayIndex(code, used, reference, index, false);
                     used = Local(code, used, 0x20, reference);
@@ -597,7 +600,7 @@ namespace PortableCompiler
         }
 
         internal static byte NumericOpcode(int instruction, byte type) =>
-            (byte)(type == I32 ? instruction : instruction + (IsComparison(instruction) ? 0x0b : 0x12));
+            (byte)(type == I64 ? instruction + (IsComparison(instruction) ? 0x0b : 0x12) : instruction);
 
         internal static int IsMinAndMinusOne(byte[] code, int used, byte type, int left, int right)
         {

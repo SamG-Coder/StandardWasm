@@ -5,12 +5,13 @@ namespace PortableCompiler
 {
     internal static class CheckedConversionWasm
     {
-        internal static byte Result(int opcode) => TargetWidth(opcode) == 64 ? I64 : I32;
+        internal static byte Result(int opcode) => NativeTarget(opcode) ? Native : TargetWidth(opcode) == 64 ? I64 : I32;
 
         internal static int Emit(byte[] code, int used, int opcode, byte source, int input, int output)
         {
-            bool unsignedSource = opcode <= 0x89;
-            bool unsignedTarget = unsignedSource ? opcode >= 0x86 : (opcode & 1) == 0;
+            bool unsignedSource = opcode <= 0x8b;
+            bool unsignedTarget = NativeTarget(opcode) ? (opcode & 1) != 0 :
+                unsignedSource ? opcode >= 0x86 : (opcode & 1) == 0;
             int width = TargetWidth(opcode);
             byte target = Result(opcode);
             if (IsFloat(source))
@@ -26,8 +27,8 @@ namespace PortableCompiler
 
             used = Guard(code, used, input, source, unsignedSource, width, unsignedTarget);
             used = Local(code, used, 0x20, input);
-            if (source == I64 && target == I32) code[used++] = 0xa7; // i32.wrap_i64
-            else if (source == I32 && target == I64)
+            if (source == I64 && target != I64) code[used++] = 0xa7; // i32.wrap_i64
+            else if (source != I64 && target == I64)
                 code[used++] = unsignedSource ? (byte)0xad : (byte)0xac; // i64.extend_i32_u/s
             return Local(code, used, 0x21, output);
         }
@@ -86,6 +87,8 @@ namespace PortableCompiler
                 : FloatWasm.Literal(code, used, source, 0, sign | ((1023 + exponent) << 20));
 
         private static int TargetWidth(int opcode) =>
-            8 << (opcode <= 0x89 ? (opcode - 0x82) & 3 : (opcode - 0xb3) >> 1);
+            NativeTarget(opcode) ? 32 : 8 << (opcode <= 0x89 ? (opcode - 0x82) & 3 : (opcode - 0xb3) >> 1);
+
+        private static bool NativeTarget(int opcode) => opcode == 0x8a || opcode == 0x8b || opcode == 0xd4 || opcode == 0xd5;
     }
 }

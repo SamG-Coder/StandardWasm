@@ -264,7 +264,7 @@ namespace PortableCompiler
                     kind = CheckedInteger;
                     operand = op;
                 }
-                else if (op >= 0x82 && op <= 0x89 || op >= 0xb3 && op <= 0xba)
+                else if (op >= 0x82 && op <= 0x8b || op >= 0xb3 && op <= 0xba || op == 0xd4 || op == 0xd5)
                 {
                     kind = CheckedConversion;
                     operand = op;
@@ -362,7 +362,6 @@ namespace PortableCompiler
         internal static bool IsSignedIntegerDivision(int instruction, byte type) =>
             (instruction == 0x6d || instruction == 0x6f) && SignatureTypes.IsInteger(type);
 
-        internal static bool ConvertsToWide(int instruction) => instruction == 0x6a || instruction == 0x6e;
 
         private static int SignedByte(int value) => (value ^ 128) - 128;
 

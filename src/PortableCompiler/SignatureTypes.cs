@@ -7,7 +7,7 @@ namespace PortableCompiler
     {
         internal const byte Void = 0, I32 = 1, Bytes = ArrayTypeRefs.Bytes, Ints = ArrayTypeRefs.Ints, Delegate = 4,
             MethodPointer = 5, String = 6, Chars = ArrayTypeRefs.Packed16, I64 = WideStorage.Scalar, Longs = WideStorage.Array,
-            F32 = 10, F64 = 11, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles;
+            F32 = 10, F64 = 11, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles, Native = NativeStorage.Scalar;
 
         // Signature and frame tags keep the CLI storage width. Narrow types
         // live above the byte range reserved for evaluation stack types.
@@ -19,7 +19,10 @@ namespace PortableCompiler
 
         internal static bool IsFloat(int type) => type == F32 || type == F64;
 
-        internal static bool IsScalar(int type) => IsInteger(type) || IsFloat(type);
+        internal static bool IsScalar(int type) => IsInteger(type) || IsFloat(type) || type == Native;
+
+        internal static byte IntegerConversionType(int opcode) =>
+            opcode == 0x6a || opcode == 0x6e ? I64 : opcode == 0xd3 || opcode == 0xe0 ? Native : I32;
 
         // Widen supported class references without allocating or losing sender identity.
         // Boxing and other CLR reference conversions use separate IL operations.
@@ -109,6 +112,8 @@ namespace PortableCompiler
                     types[target] = Signed8 + element - 4;
                 else if (WideStorage.IsIntegerElement(element))
                     types[target] = I64;
+                else if (NativeStorage.IsIntegerElement(element))
+                    types[target] = Native;
                 else if (element == 0x0c || element == 0x0d)
                     types[target] = element == 0x0c ? F32 : F64;
                 else if (element == 0x0e)

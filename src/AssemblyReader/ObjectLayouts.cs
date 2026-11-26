@@ -5,7 +5,7 @@ namespace PeLibrary
     internal static class ObjectLayouts
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
-        internal const int FirstClass = ArrayTypeRefs.Doubles + 1, MaxClasses = 256 - FirstClass;
+        internal const int FirstClass = NativeStorage.Scalar + 1, MaxClasses = 256 - FirstClass;
         private const int Header = 3, Width = 10, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         internal const int FieldMapStart = Header + MaxClasses * Width;
@@ -100,6 +100,7 @@ namespace PeLibrary
             if (size == 2 && element == 0x0e) return 6;
             if (size == 2 && element == 0x1c) return ObjectReference;
             if (size == 2 && WideStorage.IsIntegerElement(element)) return WideStorage.Scalar;
+            if (size == 2 && NativeStorage.IsIntegerElement(element)) return NativeStorage.Scalar;
             if (size == 3 && element == 0x1d)
             {
                 byte type = ArrayTypeRefs.Storage(image[blob + 3]);

@@ -395,7 +395,7 @@ namespace PortableCompiler
         internal static int ValueType(byte[] output, int cursor, int slot)
         {
             byte type = StackType(slot);
-            if (type == I32 || type == MethodPointer)
+            if (type == I32 || type == MethodPointer || type == Native)
                 output[cursor++] = 0x7f;
             else if (type == I64)
                 output[cursor++] = 0x7e;
