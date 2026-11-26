@@ -148,11 +148,11 @@ namespace PortableCompiler
                 for (int parameter = 1; parameter <= arities[index]; parameter++)
                 {
                     int type = signatures[offsets[index] + parameter];
-                    if (type == VoidPointer || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
+                    if (type == NullPointer || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
                         return -2;
                 }
                 int result = signatures[offsets[index]];
-                if (result == VoidPointer || ObjectLayouts.IsValueType(objects, result)) return -2;
+                if (result == NullPointer || ObjectLayouts.IsValueType(objects, result)) return -2;
                 exports[export] = index;
             }
             var body = new int[6];
@@ -726,7 +726,7 @@ namespace PortableCompiler
 
         // Class slots have already resolved to an assembly-qualified layout.
         private static bool IsSharedBundleType(int type) =>
-            IsScalar(type) || type == String || type == ObjectReference || type == VoidPointer || IsArray(StackType(type)) ||
+            IsScalar(type) || type == String || type == ObjectReference || type == NullPointer || IsArray(StackType(type)) ||
             (type >= ObjectLayouts.FirstClass && type < Signed8);
 
         private static bool IsSharedBundleSignature(int[] types, int offset, int arity)

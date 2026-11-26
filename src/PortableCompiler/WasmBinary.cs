@@ -408,7 +408,7 @@ namespace PortableCompiler
         }
 
         private static int ValueWidth(int type) =>
-            type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference || type == VoidPointer ? 1 :
+            type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference || type == NullPointer ? 1 :
                 HeapType(StackType(type)) <= 63 ? 2 : 3;
 
         internal static int ValueType(byte[] output, int cursor, int slot)
@@ -416,7 +416,7 @@ namespace PortableCompiler
             byte type = StackType(slot);
             if (type == I32 || type == MethodPointer || IsNativeInteger(type))
                 output[cursor++] = 0x7f;
-            else if (type == VoidPointer)
+            else if (type == NullPointer)
                 output[cursor++] = NullSpillWasm.NullRef; // Only the null pointer inhabits the browser storage type.
             else if (type == I64)
                 output[cursor++] = 0x7e;

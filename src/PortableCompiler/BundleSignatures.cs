@@ -111,10 +111,12 @@ namespace PortableCompiler
                 }
                 else if (element == PointerStorage.Element)
                 {
-                    if (!PointerStorage.IsVoidPointer(caller, left, leftEnd) ||
-                        !PointerStorage.IsVoidPointer(target, right, rightEnd)) return 0;
-                    left++;
-                    right++;
+                    int match = PointerSignatures.Match(main, bundle, ranges, caller, callerLayout, callerHeaps,
+                        callerOwner, target, targetLayout, targetHeaps, targetOwner, left, leftEnd, right, rightEnd,
+                        leftClass, rightClass, next);
+                    if (match <= 0) return match;
+                    left = next[0];
+                    right = match;
                 }
                 else if ((element < 1 || element > 0x0e) && !NativeStorage.IsIntegerElement(element) && element != 0x1c)
                     return 0;

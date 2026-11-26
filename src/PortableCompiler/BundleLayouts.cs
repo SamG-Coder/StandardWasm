@@ -95,8 +95,12 @@ namespace PortableCompiler
                 {
                     int end = reference[1];
                     reference[0] = -reference[0];
-                    storage = ManagedReferenceSignatures.Read(main, bundle, ranges, image, layout, heaps,
-                        owner, reference, end, type, objects, 0);
+                    if (image[reference[0]] == PointerStorage.Element)
+                        storage = PointerSignatures.ReadStorage(main, bundle, ranges, image, layout, heaps,
+                            owner, reference[0] + 1, end, reference);
+                    else
+                        storage = ManagedReferenceSignatures.Read(main, bundle, ranges, image, layout, heaps,
+                            owner, reference, end, type, objects, 0);
                     if (storage >= 0 && reference[0] != end) return -1;
                 }
                 else if (reference[0] != 0)

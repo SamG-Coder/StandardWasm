@@ -36,7 +36,7 @@ namespace PortableCompiler
                 byte target = states[successor * maximum + i];
                 int source = outgoingNulls[pc * maximum + i];
                 if (source == 0 || source == 1 && target == NullValue ||
-                    source == 2 && target != VoidPointer) continue;
+                    source == 2 && target != NullPointer) continue;
                 if (code.Length == 0)
                 {
                     if (used > int.MaxValue - 8) return int.MaxValue;

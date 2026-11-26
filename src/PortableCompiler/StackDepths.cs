@@ -197,10 +197,10 @@ namespace PortableCompiler
                 byte type = stack[depth - needed];
                 byte top = stack[depth - 1];
                 if (IsValueType(objects, type) || IsValueType(objects, top)) return -2;
-                if (type == VoidPointer || top == VoidPointer)
+                if (type == NullPointer || top == NullPointer)
                 {
                     if (needed == 1) return depth - 1;
-                    if ((type != VoidPointer && type != NativeZero) || (top != VoidPointer && top != NativeZero))
+                    if ((type != NullPointer && type != NativeZero) || (top != NullPointer && top != NativeZero))
                         return -2;
                     if (kind == Conditional) return extra == 0x46 || extra == 0x47 ? depth - needed : -2;
                     return operand == 0x46 || operand == 0x4b && top == NativeZero
@@ -342,9 +342,9 @@ namespace PortableCompiler
                     byte current = states[offset + i], incoming = stack[i];
                     if (current != incoming && (IsValueType(objects, current) || IsValueType(objects, incoming))) return -1;
                     if (current == incoming || incoming == NullValue && IsReference(current) ||
-                        incoming == NativeZero && (current == Native || current == VoidPointer)) continue;
+                        incoming == NativeZero && (current == Native || current == NullPointer)) continue;
                     if ((current != NullValue || !IsReference(incoming)) &&
-                        (current != NativeZero || (incoming != Native && incoming != VoidPointer))) return -1;
+                        (current != NativeZero || (incoming != Native && incoming != NullPointer))) return -1;
                     states[offset + i] = incoming;
                     changed = true;
                 }

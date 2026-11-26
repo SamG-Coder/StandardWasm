@@ -8,7 +8,7 @@ namespace PortableCompiler
         internal const byte Void = 0, I32 = 1, Bytes = ArrayTypeRefs.Bytes, Ints = ArrayTypeRefs.Ints, Delegate = 4,
             MethodPointer = 5, String = 6, Chars = ArrayTypeRefs.Packed16, I64 = WideStorage.Scalar, Longs = WideStorage.Array,
             F32 = 10, F64 = 11, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles, Native = NativeStorage.Scalar;
-        internal const byte VoidPointer = PointerStorage.VoidPointer, NativeZero = PointerStorage.NativeZero;
+        internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
 
         // Signature and frame tags keep the CLI storage width. Narrow types
         // live above the byte range reserved for evaluation stack types.
@@ -52,7 +52,7 @@ namespace PortableCompiler
             if (source == expected) return true;
             if (ObjectLayouts.IsValueType(objects, source) || ObjectLayouts.IsValueType(objects, expected)) return false;
             return source == NullValue && IsReference(expected) ||
-                source == NativeZero && (target == Native || target == VoidPointer) ||
+                source == NativeZero && (target == Native || target == NullPointer) ||
                 target == ObjectLayouts.ObjectReference && IsObjectReference(source) ||
                 ObjectLayouts.Inherits(objects, source, expected) || ObjectLayouts.Implements(objects, source, expected);
         }
@@ -123,9 +123,11 @@ namespace PortableCompiler
                     types[target] = Native;
                 else if (element == PointerStorage.Element)
                 {
-                    if (!PointerStorage.IsVoidPointer(image, cursor, end)) return -2;
-                    cursor++;
-                    types[target] = VoidPointer;
+                    int storage = PointerSignatures.ReadStorage(main, bundle, ranges, image, methods, heap,
+                        assembly, cursor, end, next);
+                    if (storage < 0) return storage;
+                    cursor = next[0];
+                    types[target] = storage;
                 }
                 else if (element == 0x0c || element == 0x0d)
                     types[target] = element == 0x0c ? F32 : F64;

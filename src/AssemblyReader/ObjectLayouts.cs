@@ -157,8 +157,6 @@ namespace PeLibrary
             size = end - blob;
             reference[0] = 0;
             byte element = image[blob + 1];
-            if (size == 3 && element == PointerStorage.Element && PointerStorage.IsVoidPointer(image, blob + 2, end))
-                return PointerStorage.VoidPointer;
             if (size == 2 && (element == 8 || element == 9)) return 1;
             if (size == 2 && element >= 2 && element <= 7) return NarrowStorage.FromElement(element);
             if (size == 2 && element == 0x0e) return 6;
@@ -170,7 +168,7 @@ namespace PeLibrary
                 byte type = ArrayTypeRefs.Storage(image[blob + 2]);
                 if (type != 0) return type;
             }
-            if (element == 0x15 || element == 0x13 || element == 0x1d)
+            if (element == 0x15 || element == 0x13 || element == 0x1d || element == PointerStorage.Element)
             {
                 reference[0] = -blob - 1;
                 reference[1] = end;

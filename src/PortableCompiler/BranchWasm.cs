@@ -297,7 +297,7 @@ namespace PortableCompiler
                     byte resultType = IsComparison(operand) ? I32 : width;
                     int left = Spill(spills, maximum, type, top - 1);
                     int right = Spill(spills, maximum, states[state + top], top);
-                    if (type == VoidPointer || rightType == VoidPointer)
+                    if (type == NullPointer || rightType == NullPointer)
                     {
                         // Admitted pointer operands can only denote null.
                         // The validator accepted equality or a null test.
@@ -530,7 +530,7 @@ namespace PortableCompiler
                         byte type = states[state + top];
                         bool compares = IsComparison(comparison);
                         byte leftType = compares ? states[state + top - 1] : type;
-                        if (type == VoidPointer || leftType == VoidPointer)
+                        if (type == NullPointer || leftType == NullPointer)
                             used = Const(code, used, comparison == 0x45 || comparison == 0x46 ? 1 : 0);
                         else
                         {
@@ -654,7 +654,7 @@ namespace PortableCompiler
 
         internal static int LoadOperand(byte[] code, int used, int local, byte source, int target)
         {
-            if (source != NativeZero || target != VoidPointer) return Local(code, used, 0x20, local);
+            if (source != NativeZero || target != NullPointer) return Local(code, used, 0x20, local);
             code[used++] = 0xd0; // ref.null none
             code[used++] = NullSpillWasm.NullRef;
             return used;
