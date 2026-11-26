@@ -79,7 +79,21 @@ B remains the fallback if no strategy works. It is correct and as fast on these 
   - **Budget plus JSPI yield** is the only measure that lowers synchronous-loop peaks, and it does so in both engines.
   - **Combined,** they give the lowest worst case (110 MiB in Edge for both patterns, 157 MiB in Node), but the bound is set by the engine's GC schedule, not by StandardWasm.
 
-  **Consequence:** C can be made practical with ballast plus a budgeted JSPI yield, but it cannot guarantee a memory bound. Before C is normative, B needs a matching measurement. B's collector can run synchronously in its own allocation slow path, which gives a hard bound at the cost of root scanning. The choice is between a soft bound with Wasm GC (C) and a hard bound with a custom collector (B). It needs that measured comparison, and Codex's review, rather than a default.
+  **Model B measured on the same churn** (`pressure-b.wat`). Every object lives in linear memory, roots sit on a shadow stack, and a precise mark-sweep collector runs synchronously in the allocation slow path once 32 MiB has been allocated since the last collection. A 10,000-node list stays live and is traced by every collection.
+
+  | B | Node yielding | Node sync | Edge yielding | Edge sync |
+  | --- | --- | --- | --- | --- |
+  | no collection | 626.5 MiB | 313.9 | 626.5 | 313.9 |
+  | collect every 32 MiB | **33.4 MiB**, 19 collections, max pause 0.07 ms | **33.4**, 9 collections, 22 ms total | **33.4**, max pause 0.2 ms | **33.4**, 20 ms total |
+
+  The live list was intact after every collection. Edge pause figures are at the page's 0.1 ms timer resolution.
+
+  **Consequence.** On memory, B is clearly stronger. It enforces the budget exactly (live data + budget), even inside one synchronous call, where C peaked at 110–157 MiB at best. Its collections were cheap here. The comparison is not finished, though, because this probe flatters B in two ways:
+  - Its live heap is 10,000 small nodes. Pause time grows with the live heap, and WinForms plus CoreLib will hold far more objects, so a realistic-size heap must be measured (mark time per live object, worst-case pause).
+  - Every reference held by JavaScript (DOM handles, callbacks, WebGPU objects) must become an explicit root or handle table under B. Under C, Wasm GC handles cycles through JS for free.
+
+  B also needs precise stack maps for every compiled frame (shadow-stack spilling of references at every call), and that costs code size and speed in all compiled code, not just allocation. Next experiment: a B collector over a realistic live heap (≥ 1 M objects with a reference graph) plus the cost of shadow-stack reference spilling on the stage 77 access probes. Then C vs B is decided with Codex.
+
 - **Allocator.** A size-class free-list allocator with zero-initialization (the CLR guarantees zeroed arrays) and growth via `memory.grow`. The prototypes use bump and single-size LIFO allocators.
 - **Interior pointers into class fields.** Pinning a field of a class instance (`fixed (int* p = &obj.Field)`) isn't covered, because class instances stay in Wasm GC. Whole-program compilation could find every type whose fields are ever pinned and give those types C-style storage. That needs its own fixture.
 - **Diagnostics until implemented.** IL that pins or takes the address of managed memory remains an explicit unsupported diagnostic at the method and IL offset.

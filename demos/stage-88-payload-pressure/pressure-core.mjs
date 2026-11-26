@@ -53,3 +53,30 @@ export async function measurePressure(bytes) {
             results.push(await runOne(bytes, strategy, pattern));
     return results;
 }
+
+// Model B: all objects in linear memory with a synchronous mark-sweep in the allocation slow path (pressure-b.wat).
+// A 10,000-node list stays live and is traced by every collection; its sum must survive (49,995,000).
+export async function measureModelB(bytes) {
+    const results = [];
+    for (const budget of [0, 32 << 20])
+        for (const pattern of patterns) {
+            const { instance: { exports: x } } = await WebAssembly.instantiate(bytes,
+                { host: { now: () => performance.now() } });
+            x.configure(budget);
+            x.buildLive(10000);
+            const start = performance.now();
+            let exhausted = false;
+            for (let round = 0; round < pattern.rounds && !exhausted; round++) {
+                exhausted = x.churn(pattern.perRound) === -1;
+                if (pattern.rounds > 1) await new Promise(resolve => setTimeout(resolve, 0));
+            }
+            results.push({
+                strategy: budget ? `B: collect every ${budget >> 20} MiB` : "B: no collection",
+                pattern: pattern.name, allocatedMiB: pattern.rounds * pattern.perRound / 16, peakMiB: x.pages() / 16,
+                ms: +(performance.now() - start).toFixed(1), collections: x.collections(),
+                maxPauseMs: +(x.maxPauseUs() / 1000).toFixed(2), totalPauseMs: +(x.totalPauseUs() / 1000).toFixed(1),
+                liveIntact: x.liveSum() === 49995000, exhausted
+            });
+        }
+    return results;
+}

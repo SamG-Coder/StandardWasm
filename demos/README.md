@@ -35,7 +35,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [73 · Windows executable intake](stage-73-executable-intake/README.md) | `npm run demo -- stage-73-executable-intake` | Node and Edge recover the original managed entry and manifests |
 | [74 · Run a dropped .NET entry point](stage-74-executable-entry/README.md) | `npm run demo -- stage-74-executable-entry` | Original console publishes run through the generated compiler |
 | [77 · Pointer memory-model experiment](stage-77-pointer-memory-model/README.md) | `npm run demo -- stage-77-pointer-memory-model` | Model A fails 5 aliasing cases; models B and C match all 34 CLR cases in Node and Edge |
-| [88 · Payload memory-pressure experiment](stage-88-payload-pressure/README.md) | `npm run demo -- stage-88-payload-pressure` | No strategy holds a 32 MiB budget; ballast and a JSPI-budgeted yield lower peaks |
+| [88 · Payload memory-pressure experiment](stage-88-payload-pressure/README.md) | `npm run demo -- stage-88-payload-pressure` | Model C strategies lower peaks but none holds 32 MiB; model B's collector holds about 33 MiB |
 
 ## Adding a stage
 

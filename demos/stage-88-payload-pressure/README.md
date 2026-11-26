@@ -13,4 +13,6 @@ This is an experiment for [decision 0025](../../docs/decisions/0025-pinnable-mem
 
 The two patterns are 200 yielding rounds and one synchronous call. Each line reports peak linear memory, time, payloads freed, and how often the slow path yielded and found the budget still exceeded. Each configuration is capped at 60 seconds.
 
-Expected: no strategy holds the 32 MiB budget. Ballast helps Edge for yielding code. Only the budgeted yield lowers synchronous peaks. Results go to `artifacts/payload-pressure/results.json`. The runner exits on its own and is not part of `npm test`.
+`pressure-b.wat` runs the same churn under model B (all objects in linear memory, with a precise mark-sweep in the allocation slow path) and traces a 10,000-node live list on every collection.
+
+Expected: no model C strategy holds the 32 MiB budget, while model B with collection holds about 33 MiB with sub-millisecond pauses. Ballast helps Edge for yielding code. Only the budgeted yield lowers synchronous peaks. Results go to `artifacts/payload-pressure/results.json`. The runner exits on its own and is not part of `npm test`.
