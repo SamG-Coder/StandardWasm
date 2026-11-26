@@ -50,7 +50,7 @@ export async function openStandalonePublish(files) {
         if (!asset) throw Error("Add the original boot assembly: " + path);
         const bytes = readWebcil(asset.bytes);
         if (await sha256(asset.bytes) !== file.hash) throw Error("Boot assembly digest mismatch: " + path);
-        managed.set(file.virtualPath, { path, bytes, hash: file.hash, original: asset });
+        managed.set(file.virtualPath, { path, bytes, hash: file.hash, original: asset, loadedFromBytes: true });
     }
 
     const entry = managed.get(boot.mainAssemblyName + ".wasm");
