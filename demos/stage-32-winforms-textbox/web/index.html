@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Profile</title>
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <main>
+        <header><h1 id="title"></h1><span id="renderer">Starting</span></header>
+        <section id="profile" aria-labelledby="title">
+            <canvas id="surface" aria-hidden="true"></canvas>
+            <label id="prompt" for="name"></label>
+            <input id="name" type="text" autocomplete="off">
+            <button id="clear" type="button"></button>
+            <output id="preview" aria-live="polite"></output>
+        </section>
+        <p id="error" role="alert" hidden></p>
+    </main>
+    <script type="module" src="./app.mjs"></script>
+</body>
+</html>

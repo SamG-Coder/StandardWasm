@@ -29,3 +29,5 @@ See [Stage 19](../stage-19-runtime-controls/README.md) for runtime layout and ma
 See [Stage 20](../stage-20-managed-strings/README.md) for the managed string representation and tests.
 
 See [Stage 22](../stage-22-dynamic-controls/README.md) for insertion, removal and focus behavior.
+
+The [resize fixture](../stage-31-resize-winforms/README.md) covers the shared C# resize logic, native client bounds, and WebGPU and input behavior across size changes.

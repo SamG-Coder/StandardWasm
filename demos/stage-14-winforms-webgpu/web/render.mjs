@@ -14,6 +14,10 @@ export function createTextLayer(model) {
     const paint = canvas.getContext("2d");
     return {
         canvas,
+        resize() {
+            canvas.width = model.width;
+            canvas.height = model.height;
+        },
         update(texts) {
             paint.clearRect(0, 0, model.width, model.height);
             for (const control of model.controls) {
@@ -44,6 +48,10 @@ export function canvasBaseline(model, text, canvas = new OffscreenCanvas(model.w
     const activeColor = rgb(tones.active);
     const states = new Uint8Array(model.capacity ?? model.controls.length);
     return {
+        resize() {
+            canvas.width = model.width;
+            canvas.height = model.height;
+        },
         updateControl(index, control) {
             initialColors[index] = rgb(controlTone(control, false));
             states[index] = 0;
@@ -159,18 +167,27 @@ export async function webgpuRenderer(canvas, model, text) {
             alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha" }
         } }] }
     });
-    const extent = [model.width, model.height];
-    const texture = device.createTexture({
-        size: extent, format: "rgba8unorm",
-        usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
-    });
-    const bindings = device.createBindGroup({
-        layout: textPipeline.getBindGroupLayout(0),
-        entries: [
-            { binding: 0, resource: device.createSampler({ magFilter: "linear", minFilter: "linear" }) },
-            { binding: 1, resource: texture.createView() }
-        ]
-    });
+    const sampler = device.createSampler({ magFilter: "linear", minFilter: "linear" });
+    let extent, texture, bindings;
+    function resize() {
+        if (canvas.width !== model.width) canvas.width = model.width;
+        if (canvas.height !== model.height) canvas.height = model.height;
+        extent = [model.width, model.height];
+        const previous = texture;
+        texture = device.createTexture({
+            size: extent, format: "rgba8unorm",
+            usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
+        });
+        bindings = device.createBindGroup({
+            layout: textPipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: sampler },
+                { binding: 1, resource: texture.createView() }
+            ]
+        });
+        previous?.destroy();
+    }
+    resize();
 
     const [r, g, b] = tones.background;
     return {
@@ -179,6 +196,7 @@ export async function webgpuRenderer(canvas, model, text) {
             fallback: adapter.info.isFallbackAdapter },
         finished: () => device.queue.onSubmittedWorkDone(),
         lost: device.lost,
+        resize,
         dispose() {
             context.unconfigure();
             device.destroy();

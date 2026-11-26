@@ -32,8 +32,10 @@ foreach (var method in handlers.GetMethods(System.Reflection.BindingFlags.Static
 }
 byte[] dll = File.ReadAllBytes(handlers.Assembly.Location);
 var wasm = new byte[32768];
-int length = CompilerExports.CompileModule(dll, manifest.ToArray(), wasm);
+var location = CompilerExports.CreateDiagnostic();
+int length = CompilerExports.CompileModuleDetailed(dll, manifest.ToArray(), wasm, location);
 if (length <= 0)
-    throw new InvalidOperationException($"Handler compilation failed with status {length}.");
+    throw new InvalidOperationException($"Handler compilation failed with status {length} " +
+        $"(assembly {location[0]}, MethodDef row {location[1]}, IL offset {location[2]}).");
 File.WriteAllBytes(args[1], wasm.AsSpan(0, length).ToArray());
 File.WriteAllText(args[0], JsonSerializer.Serialize(resources));

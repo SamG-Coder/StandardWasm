@@ -44,6 +44,10 @@ async function start() {
     canvas.width = model.width;
     canvas.height = model.height;
     form.style.width = model.width + "px";
+    form.style.height = model.height + "px";
+    const minimumWidth = model.width;
+    form.style.minWidth = "min(" + minimumWidth + "px, calc(100vw - 2rem))";
+    form.style.minHeight = model.height + "px";
     document.querySelector("#title").textContent = title;
 
     const texts = new Map(model.controls.map(c => [c.name, c.text]));
@@ -72,7 +76,7 @@ async function start() {
         button.style.height = 100 * c.height / model.height + "%";
     }
 
-    function repaint() {
+    function repaint(resized = false) {
         const count = exports.ControlCount(tree);
         if (count > model.capacity)
             throw Error("The managed tree exceeded the renderer capacity.");
@@ -86,7 +90,7 @@ async function start() {
             if (changedSlot) {
                 gpu.updateControl(index, control);
                 baseline.updateControl(index, control);
-            } else if (moved) {
+            } else if (moved || resized) {
                 gpu.updateBounds(index, control);
             }
             if (control.kind !== "button") continue;
@@ -102,7 +106,7 @@ async function start() {
                 buttons.set(control.name, button);
                 form.append(button);
                 place(button, control);
-            } else if (moved) {
+            } else if (moved || resized) {
                 place(button, control);
             }
         }
@@ -119,7 +123,9 @@ async function start() {
             buttons.get(exports.DefaultButton(tree))?.focus();
 
         model.controls = next;
-        form.dataset.labelLeft = String(next.find(control => control.name === keys.result).x);
+        const label = next.find(control => control.name === keys.result);
+        form.dataset.labelLeft = String(label.x);
+        form.dataset.labelBounds = JSON.stringify([label.x, label.y, label.width, label.height]);
         form.dataset.controlCount = String(next.length);
         result.value = readText(exports.LabelText(state));
         texts.set(keys.result, result.value);
@@ -138,6 +144,31 @@ async function start() {
         }
     });
     repaint();
+
+    const observer = new ResizeObserver(([entry]) => {
+        try {
+            const { inlineSize, blockSize } = entry.contentBoxSize[0];
+            const narrow = inlineSize < minimumWidth;
+            const wasScaled = form.classList.contains("scaled");
+            form.classList.toggle("scaled", narrow);
+            // Scale rather than resize the managed layout below its minimum.
+            // On exit, wait for the observer to report the unscaled height.
+            if (narrow || wasScaled) return;
+            exports.Resize(tree, Math.round(inlineSize), Math.round(blockSize));
+            const width = exports.ClientWidth(tree), height = exports.ClientHeight(tree);
+            if (width === model.width && height === model.height) return;
+            model.width = width;
+            model.height = height;
+            text.resize();
+            baseline.resize();
+            gpu.resize();
+            repaint(true);
+        } catch (error) {
+            observer.disconnect();
+            report(error);
+        }
+    });
+    observer.observe(form);
 
     // Measure the main-thread draw call only with immutable geometry and cached text.
     // GPU queue completion has different semantics and is reported independently.

@@ -1,0 +1,1 @@
+{"assembly":"ReferenceLibrary","exportType":"ReferenceLibrary.ReferenceDemo","method":"Compile","inputs":[{"file":"self"},{"name":"Chain"}],"generated":{"capacity":16384,"arguments":[41]},"expected":41}
