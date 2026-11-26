@@ -629,6 +629,12 @@ namespace PortableCompiler
                     used = WasmBinary.Unsigned(code, used, operand);
                     code[used++] = 0x0b;
                 }
+                else if (kind == PinString)
+                {
+                    used = Utf16MemoryWasm.Pin(code, used, operand, scratch,
+                        scratch + 3, scratch + 4, Spill(spills, maximum, spillFlags, Native, depth),
+                        stackPointer, stackBase, stackLimit, pcLocal);
+                }
                 else if (kind == LocalAllocate)
                 {
                     int size = Spill(spills, maximum, spillFlags, states[state + top], top);

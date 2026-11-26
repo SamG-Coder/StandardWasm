@@ -4,7 +4,7 @@ namespace PeLibrary
 {
     internal static class StringMetadata
     {
-        internal const int Length = 1, Character = 2, Concat = 3, FromChars = 4, OrdinalEquals = 5, Empty = 6;
+        internal const int Length = 1, Character = 2, Concat = 3, FromChars = 4, OrdinalEquals = 5, Empty = 6, PinnableReference = 7;
 
         internal static int CopyLiteral(byte[] image, int[] streams, int tokenOffset, byte[] bytes, int used)
         {
@@ -69,6 +69,9 @@ namespace PeLibrary
                 0x74706d45, 0x79, 0) && U16(image, signature) == 0x0602 && image[signature + 2] == 0x0e)
                 return Empty;
             if (!Fits(sig, 4, (uint)streams[1])) return 0;
+            if (MatchesAscii(image, streams, name, "GetPinnableReference") &&
+                PinnableSignature(image, streams, methods, counts, (int)signature))
+                return PinnableReference;
             n = (uint)streams[2] + name;
             if (Fits(name, 7, (uint)streams[3]) && U32(image, n) == 0x636e6f43 &&
                 U16(image, n + 4) == 0x7461 && image[n + 6] == 0 &&
@@ -97,6 +100,26 @@ namespace PeLibrary
                 image[signature + 4] == 8)
                 return Character;
             return 0;
+        }
+
+        private static bool PinnableSignature(byte[] image, int[] heaps, int[] methods, int[] counts, int offset)
+        {
+            var next = new int[1];
+            int end = heaps[0] + heaps[1];
+            int length = CompressedUnsigned(image, offset, end, next);
+            int at = next[0];
+            if (length < 6 || length > end - at || image[at] != 0x20 ||
+                image[at + 1] != 0 || image[at + 2] != 0x1f) return false;
+            end = at + length;
+            int modifier = CompressedUnsigned(image, at + 3, end, next);
+            int tail = next[0];
+            if ((modifier & 3) != 1 || end - tail != 2 || U16(image, (uint)tail) != 0x0310) return false;
+            var reference = new int[AssemblyReferences.SymbolWidth];
+            return AssemblyReferences.ReadType(image, heaps, methods, modifier >> 2, reference) >= 0 &&
+                reference[AssemblyReferences.Depth] == 0 &&
+                MatchesAscii(image, heaps, (uint)reference[2], "InAttribute") &&
+                MatchesAscii(image, heaps, (uint)reference[3], "System.Runtime.InteropServices") &&
+                PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, reference[AssemblyReferences.AssemblyRow]);
         }
 
         private static uint Index(byte[] image, uint at, int width) => width == 2 ? U16(image, at) : U32(image, at);
