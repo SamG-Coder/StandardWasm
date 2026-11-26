@@ -1,0 +1,1 @@
+{"assembly":"LongIntegers","exportType":"LongIntegers.Wide","method":"SumOfCubes","inputs":[1000],"expected":{"i64":"250500250000"}}

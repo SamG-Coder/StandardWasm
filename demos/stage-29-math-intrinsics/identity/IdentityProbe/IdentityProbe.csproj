@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>netstandard2.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <!-- The alias keeps the third-party System.Math distinct from the BCL type in C#. -->
+    <ProjectReference Include="../ThirdPartyMath/ThirdPartyMath.csproj" Aliases="Custom" />
+  </ItemGroup>
+</Project>
