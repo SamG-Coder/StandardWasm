@@ -6,8 +6,8 @@ namespace PeLibrary
     {
         internal const int Overflow = 1, DivideByZero = 2, Arithmetic = Overflow | DivideByZero;
 
-        internal const int IndexOutOfRange = 4, NullReference = 8, InvalidCast = 16;
-        internal const int Supported = Arithmetic | IndexOutOfRange | NullReference | InvalidCast;
+        internal const int IndexOutOfRange = 4, NullReference = 8, InvalidCast = 16, Argument = 32;
+        internal const int Supported = Arithmetic | IndexOutOfRange | NullReference | InvalidCast | Argument;
 
         internal static int CatchMask(byte[] image, int[] heaps, int[] methods, int token)
         {
@@ -40,6 +40,9 @@ namespace PeLibrary
                 U32(image, n + 4) == 0x78456d65 && U32(image, n + 8) == 0x74706563 &&
                 U32(image, n + 12) == 0x006e6f69)
                 return Supported;
+            if (Fits(name, 18, limit) && U32(image, n) == 0x75677241 && U32(image, n + 4) == 0x746e656d &&
+                U32(image, n + 8) == 0x65637845 && U32(image, n + 12) == 0x6f697470 && U16(image, n + 16) == 0x006e)
+                return Argument;
             if (Fits(name, 18, limit) && U32(image, n) == 0x7265764f && U32(image, n + 4) == 0x776f6c66 &&
                 U32(image, n + 8) == 0x65637845 && U32(image, n + 12) == 0x6f697470 && U16(image, n + 16) == 0x006e)
                 return Overflow;
