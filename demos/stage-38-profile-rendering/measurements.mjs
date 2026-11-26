@@ -78,7 +78,7 @@ export async function recordProfileTiming(page, engine, output) {
     const webgpuTiming = renderer => ({
         updateMs: summarize(renderer.updateMs, count),
         submitMs: summarize(renderer.submitMs, count),
-        queueDrainMs: summarize(renderer.queueDrainMs, repeats),
+        ...(regional ? { queueDrainMs: summarize(renderer.queueDrainMs, repeats) } : {}),
         ...(redraw ? { paintMs: summarize(renderer.paintMs, count) } : {})
     });
     const fullPixels = browser.width * browser.height;
