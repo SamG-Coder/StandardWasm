@@ -10,6 +10,10 @@ namespace StructCopyFixture
     public struct Inner { public int Tag; public int Spare; public long Value; }
     public struct Outer { public int S; public int Tail; public Inner In; }
 
+    // A byte-backed enum field is a 1-byte scalar in memory (Codex review of #296).
+    public enum Marker : byte { None, Alpha = 7, Beta = 200 }
+    public struct Tagged { public Marker Kind; public byte Low; public short Mid; public int Count; }
+
     public static unsafe class Kernels
     {
         public static int CopyIn(Rect* p)
@@ -57,6 +61,26 @@ namespace StructCopyFixture
             int sum = 0;
             for (int i = 0; i < count; i++) sum = unchecked(sum * 7 + destination[i].Top);
             return sum;
+        }
+
+        public static int EnumCopyIn(Tagged* p)
+        {
+            Tagged t = *p;
+            return (int)t.Kind * 100000 + t.Low * 1000 + t.Count % 1000;
+        }
+
+        public static int EnumCopyOut(Tagged* p)
+        {
+            var t = new Tagged { Kind = Marker.Beta, Low = 3, Mid = -2, Count = 42 };
+            *p = t;
+            return (int)p->Kind + p->Count + p->Mid;
+        }
+
+        // The struct-pointer field path (Stage 143) with an enum field.
+        public static int EnumField(Tagged* p)
+        {
+            p->Kind = Marker.Alpha;
+            return (int)p->Kind * 10 + p->Low;
         }
 
         public static int NullCopy()

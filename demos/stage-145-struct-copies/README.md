@@ -17,6 +17,8 @@ The kernels cover:
 - a nested struct read, modified as a whole value and written back
 - a `dst[i] = src[i]` array copy, including an empty one
 - a copy from a null pointer, which raises `NullReferenceException` and is caught
+- a struct with a `byte`-backed enum field: whole copies in and out, and `p->Kind` read and
+  written through the struct pointer
 
 ECMA-335 leaves padding bytes unspecified, so the structs here have no padding. The design is
 decision 0073.

@@ -24,6 +24,9 @@ Run("NestedCopy", Pattern(5), [Pointer(64)]);
 Run("CopyArray", Pattern(5), [Pointer(0), Pointer(128), Int(6)]);
 Run("CopyArray", Pattern(9), [Pointer(0), Pointer(128), Int(0)]);
 Run("NullCopy", Pattern(5), []);
+Run("EnumCopyIn", Pattern(5), [Pointer(16)]);
+Run("EnumCopyOut", Pattern(5), [Pointer(24)]);
+Run("EnumField", Pattern(5), [Pointer(40)]);
 
 File.WriteAllText(Path.Combine(evidence, "oracle.json"), JsonSerializer.Serialize(new
 {

@@ -30,6 +30,14 @@ initializer guards do. A nested aggregate uses its own type's spill local at the
 instruction's depth. That slot holds the outer struct, so the nested type's
 bank there is free.
 
+## Enum fields
+
+An enum-typed field is a scalar of its underlying width, both in memory and in
+the managed registry. The layout reports its underlying `ldind` (for example
+`ldind.u1` for a `byte` enum) rather than treating it as a nested struct. This
+covers whole-struct copies and decision 0071's `p->F` field access, which would
+otherwise use a 4-byte load or store (Codex's review of #296).
+
 ## Padding
 
 ECMA-335 leaves padding bytes unspecified. The CLR copies them along with the
