@@ -15,4 +15,4 @@ with the full-width inputs on the 32-bit CLR.
 
 Native arithmetic, native arrays, pointer dereference, external calling
 conventions and executing CoreLib delegates need separate work.
-See [ECMA-335, Partition III](https://www.ecma-international.org/wp-content/uploads/ECMA-335_6th_edition_june_2012.pdf).
+See the [browser native integer decision](../../docs/decisions/0027-native-integer-width.md).
