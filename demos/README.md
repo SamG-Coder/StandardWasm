@@ -70,6 +70,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [78 · Strong-named assembly identity](stage-78-strong-names/README.md) | `npm run demo -- stage-78-strong-names` | A compiled DLL binds a signed dependency by its public key token |
 | [80 · CLR type forwarding](stage-80-type-forwarding/README.md) | `npm run demo -- stage-80-type-forwarding` | An unchanged caller follows a signed type facade to its implementation |
 | [81 · CoreLib object root](stage-81-corelib-object-root/README.md) | `npm run demo -- stage-81-corelib-object-root` | The installed CoreLib constructor chain agrees with the CLR |
+| [82 · Static fields and instance layout](stage-82-static-field-layout/README.md) | `npm run demo -- stage-82-static-field-layout` | Static fields do not shift inherited instance storage |
 
 ## Adding a stage
 

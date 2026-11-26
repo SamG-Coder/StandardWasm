@@ -86,8 +86,7 @@ namespace PeLibrary
             int strings = methods[2], blobs = methods[3];
             uint at = (uint)(table + (row - 1) * (2 + strings + blobs));
             uint flags = U16(image, at);
-            if ((flags & 0x50) == 0x50) return 0; // A literal has no instance storage.
-            if ((flags & 0x10) != 0) return -2;
+            if ((flags & 0x10) != 0) return 0; // Static fields have no instance storage.
             uint sig = ReadIndex(image, at + (uint)(2 + strings), blobs);
             if (!Fits(sig, 3, (uint)streams[1])) return -1;
             uint blob = (uint)streams[0] + sig;
