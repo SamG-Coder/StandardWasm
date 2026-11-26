@@ -51,6 +51,13 @@ namespace RuntimeTypeDemo
         private static object WidenType() => typeof(Marker);
 
         public static int RequiresTypeTest() => WidenType() is Type ? 1 : 0;
+
+        public static int BoxHandle()
+        {
+            RuntimeTypeHandle handle = default;
+            object boxed = handle;
+            return boxed == null ? 0 : 1;
+        }
     }
 
     public static class Demo

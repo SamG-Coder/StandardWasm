@@ -30,9 +30,9 @@ namespace PeLibrary
                 if (Named(image, heap, heapSize, name, 6, 0x69727453, 0x676e, 0)) // String
                     return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly) ? String : 0;
                 if (Named(image, heap, heapSize, name, 4, 0x65707954, 0, 0)) // Type
-                    return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly) ? Type : 0;
+                    return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly, includeRuntimeExtensions: false) ? Type : 0;
                 if (Named17(image, heap, heapSize, name, 0x746e7552, 0x54656d69, 0x48657079, 0x6c646e61, 0x65)) // RuntimeTypeHandle
-                    return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly) ? TypeHandle : 0;
+                    return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly, includeRuntimeExtensions: false) ? TypeHandle : 0;
                 return 0;
             }
             if (Named(image, heap, heapSize, space, 9, 0x74737953, 0x492e6d65, 0x4f) && // System.IO
@@ -41,7 +41,7 @@ namespace PeLibrary
             if (Named17(image, heap, heapSize, space, 0x74737953, 0x522e6d65, 0x656c6665, 0x6f697463, 0x6e) && // System.Reflection
                 (Named(image, heap, heapSize, name, 10, 0x626d654d, 0x6e497265, 0x6f66) || // MemberInfo
                  Named(image, heap, heapSize, name, 8, 0x65707954, 0x6f666e49, 0))) // TypeInfo
-                return PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, assembly) ? TypeBase : 0;
+                return PlatformAssemblyIdentity.IsReflectionAssembly(image, streams, methods, counts, assembly) ? TypeBase : 0;
             return 0;
         }
 

@@ -28,6 +28,11 @@ internal static class RuntimeTypeCases
         if (Kernels.RequiresTypeTest() != 1) throw new InvalidOperationException("CLR type-test fixture changed.");
         Reject(nameof(Kernels.RequiresTypeTest), bundle, encoded, OpCodes.Isinst, -2);
 
+        if (Kernels.BoxHandle() != 1) throw new InvalidOperationException("CLR handle boxing fixture changed.");
+        Reject(nameof(Kernels.BoxHandle), bundle, encoded, OpCodes.Box, -2);
+
+        RuntimeTypeScopeCases.Add(cases);
+
         void Check(string name, Func<int, int> oracle, int[] values = null)
         {
             byte[] entries = BundleCases.Manifest(typeof(Kernels), name);
