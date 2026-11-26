@@ -16,10 +16,11 @@ namespace PortableCompiler
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostImports, int reflectionHeapFixup)
+            byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostFeatures, int reflectionHeapFixup)
         {
             // Imported functions precede defined functions in the Wasm index
             // space. Emitted bodies already include this offset in their calls.
+            int hostImports = WasmImports.FunctionCount(hostFeatures);
             int argumentArray = EntryArgumentsWasm.ArgumentArray(exports, arities, offsets, types, objects);
             if (!ValueFieldsWasm.CheckLayouts(objects)) return -2;
             int typeOffset = objects[0] + FirstClassHeap;
@@ -78,14 +79,14 @@ namespace PortableCompiler
             if (hasRemainder) typeEntries++;
             if (tagCount != 0) typeEntries++;
             if (objectTag) typeEntries++;
-            if (hostImports != 0) typeEntries += ConsoleWasm.ImportCount;
+            typeEntries += hostImports;
             if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
             if (hasDescriptors) typeEntries++;
             int prefix = UnsignedSize(typeEntries) + 70 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (tagCount != 0) prefix += 3; // () -> () exception payload
             if (objectTag) prefix += ExceptionTagsWasm.ObjectTagTypeBytes; // (eqref) -> () managed object payload
-            if (hostImports != 0) prefix += ConsoleWasm.TypeBytes;
+            prefix += WasmImports.TypeBytes(hostFeatures);
             if (argumentArray != 0) prefix += EntryArgumentsWasm.TypeBytes(argumentArray);
             if (hasDescriptors) prefix += RuntimeTypeWasm.DescriptorBytes;
             if (classBytes > output.Length - prefix) return -3;
@@ -101,7 +102,7 @@ namespace PortableCompiler
             // Host import and argument builder types follow every existing type.
             int objectTagType = tagType + 1;
             int importType = tagType + (tagCount != 0 ? 1 : 0) + (objectTag ? 1 : 0);
-            int builderType = importType + (hostImports != 0 ? ConsoleWasm.ImportCount : 0);
+            int builderType = importType + hostImports;
             // Append the optional descriptor type to keep the existing ABI indices stable.
             int descriptorHeap = builderType + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0);
             if (argumentArray != 0)
@@ -162,8 +163,8 @@ namespace PortableCompiler
 
             int remaining = output.Length - 8;
             remaining = Reserve(remaining, typeSize);
-            int importSize = hostImports != 0 ? ConsoleWasm.SectionSize(importType) : 0;
-            if (hostImports != 0)
+            int importSize = WasmImports.Size(hostFeatures, importType);
+            if (hostFeatures != 0)
                 remaining = Reserve(remaining, importSize);
             remaining = Reserve(remaining, functionSize);
             if (thunks[0] != 0)
@@ -336,13 +337,13 @@ namespace PortableCompiler
                 output[cursor++] = 0;
             }
             if (objectTag) cursor = ExceptionTagsWasm.WriteObjectTagType(output, cursor);
-            if (hostImports != 0) cursor = ConsoleWasm.WriteTypes(output, cursor);
+            cursor = WasmImports.WriteTypes(output, cursor, hostFeatures);
             if (argumentArray != 0) cursor = EntryArgumentsWasm.WriteTypes(output, cursor, argumentArray);
             if (hasDescriptors) cursor = RuntimeTypeWasm.WriteDescriptor(output, cursor);
-            if (hostImports != 0)
+            if (hostFeatures != 0)
             {
                 cursor = Section(output, cursor, 2, importSize);
-                cursor = ConsoleWasm.WriteImports(output, cursor, importType);
+                cursor = WasmImports.WriteEntries(output, cursor, hostFeatures, importType);
             }
 
             cursor = Section(output, cursor, 3, functionSize);

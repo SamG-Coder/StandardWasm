@@ -57,6 +57,15 @@ must apply the null-terminated UTF-16 name rules before this lookup.
 The x86 CLR resolves a valid name followed by U+0000 and a suffix to
 the original resource. A leading U+0000 raises ArgumentException.
 
+Generated resource imports use the `standardwasm:resources` module.
+Its `memory` import supplies the instance's wasm32 linear memory.
+`reserveName` takes a UTF-16 code-unit count and returns a scratch
+address. `locate` takes the bundle owner, scratch address and code-unit
+count and returns the byte length and stable address packed into an
+i64. Negative results identify a lookup diagnostic. The compiler keeps
+console function indices stable when both import groups are present,
+and the memory entry does not occupy a function index.
+
 [CoreCLR 10.0.10](https://github.com/dotnet/runtime/blob/v10.0.10/src/coreclr/System.Private.CoreLib/src/System/Reflection/RuntimeAssembly.cs)
 gets the payload through its native resource lookup and returns a read-only
 manifest stream. Keep the embedded image alive while a stream owns its

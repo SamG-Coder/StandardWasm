@@ -54,12 +54,12 @@ namespace PortableCompiler
             return images == null ? -1 : CompileProgram(images, entries, output, location, 0);
         }
 
-        // Host imports occupy the lowest Wasm function indices, and emitted
-        // bodies already contain call indices. A program that turns out to use
-        // the console is therefore compiled again with the imports reserved.
+        // Imported functions precede defined functions. Discovery can add
+        // a host feature, so re-emit with its function indices reserved.
         private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location,
-            int hostImports)
+            int hostFeatures)
         {
+            int hostImports = WasmImports.FunctionCount(hostFeatures);
             CompileLocation.Clear(location);
             byte[] image = bundle.Get(0);
             var entryOffsets = new int[entries.Length / 9];
@@ -508,8 +508,8 @@ namespace PortableCompiler
                 bodyOffsets[current] = length;
                 length += used;
             }
-            if (hostUse[0] != 0 && hostImports == 0)
-                return CompileProgram(bundle, entries, output, location, ConsoleWasm.ImportCount);
+            if ((hostUse[0] & ~hostFeatures) != 0)
+                return CompileProgram(bundle, entries, output, location, hostFeatures | hostUse[0]);
             length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, length, hostImports, location);
             if (length < 0) return length;
             if (initializers.Epoch >= 0)
@@ -539,7 +539,7 @@ namespace PortableCompiler
             }
             CompileLocation.Clear(location);
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostImports, reflection.HeapFixups[0]);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0]);
         }
 
         private static int LinkOperands(BundleImages bundle, byte[] image, int[] layout,
@@ -772,7 +772,7 @@ namespace PortableCompiler
                         if (opcode != (accessor ? 0x28 : 0x6f)) return -2;
                         records[slot] = accessor ? BranchIl.ConsoleWriter : BranchIl.ConsoleWrite;
                         records[slot + 1] = accessor ? ConsoleWasm.Stream(consoleMember) : consoleMember;
-                        hostUse[0] = 1;
+                        hostUse[0] = hostUse[0] | WasmImports.Console;
                         continue;
                     }
                     // call Object::.ctor runs the empty base constructor; newobj allocates a
