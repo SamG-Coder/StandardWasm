@@ -14,7 +14,7 @@ namespace PortableCompiler
 
         internal static int Begin(byte[] code, int used)
         {
-            // The object block is outermost, so its label follows the six fixed ones.
+            // The object block is outermost, so its label follows the fixed ones.
             // A plain catch delivers only the (eqref) payload, so the block needs no
             // multi-value type index, and the fixed tags keep their catch_ref paths.
             code[used++] = 0x02;
@@ -32,7 +32,7 @@ namespace PortableCompiler
             for (int tag = 0; tag < ExceptionTagsWasm.Count; tag++)
             {
                 code[used++] = 1; // catch_ref
-                code[used++] = (byte)tag;
+                code[used++] = (byte)ExceptionTagsWasm.FixedTag(tag);
                 code[used++] = (byte)tag;
             }
             code[used++] = 0; // catch
@@ -52,7 +52,7 @@ namespace PortableCompiler
                 code[used++] = 0x0b; // tag destination
                 // Remaining fixed blocks plus the object block lie between here and the pc loop.
                 int loop = ExceptionTagsWasm.Count - tag;
-                used = Dispatch(code, used, pc, region, tag, loop, saveHandlers, objects);
+                used = Dispatch(code, used, pc, region, ExceptionTagsWasm.FixedTag(tag), loop, saveHandlers, objects);
             }
             code[used++] = 0x0b; // object destination: [eqref]
             return DispatchObject(code, used, pc, region, saveHandlers, objects);

@@ -11,6 +11,15 @@ namespace PeLibrary
         internal static uint U32(byte[] bytes, uint offset) =>
             U16(bytes, offset) | (U16(bytes, offset + 2) << 16);
 
+        internal static bool MatchesAscii(byte[] image, int[] heaps, uint index, string expected)
+        {
+            if (index == 0 || !Fits(index, (uint)(expected.Length + 1), (uint)heaps[3])) return false;
+            uint offset = (uint)heaps[2] + index;
+            for (int i = 0; i < expected.Length; i++)
+                if (image[offset + (uint)i] != expected[i]) return false;
+            return image[offset + (uint)expected.Length] == 0;
+        }
+
         internal static int CompressedUnsigned(byte[] image, int cursor, int end, int[] next)
         {
             if (cursor >= end)

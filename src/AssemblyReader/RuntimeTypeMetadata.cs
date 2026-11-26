@@ -4,21 +4,25 @@ namespace PeLibrary
 {
     internal static class RuntimeTypeMetadata
     {
-        internal const int Type = NativeStorage.Vector + 1, Handle = Type + 1;
+        internal const int Type = NativeStorage.Vector + 1, Handle = Type + 1, Module = Handle + 1, Assembly = Module + 1;
 
-        internal static bool IsStorage(int type) => type == Type || type == Handle;
+        internal static bool IsStorage(int type) => type == Handle || IsReference(type);
+        internal static bool IsReference(int type) => type == Type || type == Module || type == Assembly;
 
         internal static int Storage(byte[] image, int[] heaps, int[] layout, int coded, bool valueType)
         {
             int kind = Kind(image, heaps, layout, coded);
-            return valueType ? (kind == PlatformTypeReferences.TypeHandle ? Handle : 0) :
-                (kind == PlatformTypeReferences.Type ? Type : 0);
+            if (valueType) return kind == PlatformTypeReferences.TypeHandle ? Handle : 0;
+            if (kind == PlatformTypeReferences.Type) return Type;
+            if (kind == PlatformTypeReferences.Module) return Module;
+            return kind == PlatformTypeReferences.Assembly ? Assembly : 0;
         }
 
         internal static bool RequiresReflectionCast(byte[] image, int[] heaps, int[] layout, int coded)
         {
             int kind = Kind(image, heaps, layout, coded);
-            return kind == PlatformTypeReferences.Type || kind == PlatformTypeReferences.TypeBase;
+            return kind == PlatformTypeReferences.Type || kind == PlatformTypeReferences.TypeBase ||
+                kind == PlatformTypeReferences.Module || kind == PlatformTypeReferences.Assembly;
         }
 
         private static int Kind(byte[] image, int[] heaps, int[] layout, int coded)
@@ -27,6 +31,19 @@ namespace PeLibrary
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
             return first < 0 ? 0 : PlatformTypeReferences.Identify(image, heaps, layout, counts, first, coded >> 2);
+        }
+
+        // CoreLib constructors and fields refer to the concrete implementation
+        // by TypeDef. The runtime-created object uses the same canonical
+        // Assembly descriptor when retained by a managed resource stream.
+        internal static bool IsRuntimeAssemblyDefinition(byte[] image, int[] heaps, int[] layout, int coded)
+        {
+            if ((coded & 3) != 0) return false;
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            return first >= 0 &&
+                ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2, "System.Reflection", "RuntimeAssembly") &&
+                PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts);
         }
 
         internal static bool ValidDefinition(byte[] image, int[] heaps, int row)

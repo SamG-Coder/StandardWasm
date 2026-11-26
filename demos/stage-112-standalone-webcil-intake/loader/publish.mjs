@@ -50,7 +50,7 @@ export async function openStandalonePublish(files) {
         if (!asset) throw Error("Add the original boot assembly: " + path);
         const bytes = readWebcil(asset.bytes);
         if (await sha256(asset.bytes) !== file.hash) throw Error("Boot assembly digest mismatch: " + path);
-        managed.set(file.virtualPath, { path, bytes, hash: file.hash, original: asset });
+        managed.set(file.virtualPath, { path, bytes, hash: file.hash, original: asset, loadedFromBytes: true });
     }
 
     const entry = managed.get(boot.mainAssemblyName + ".wasm");
@@ -73,7 +73,7 @@ export async function inspectStandaloneEntry(compilerBytes, selection) {
 
     const entryToken = compiler.ReadWebcilEntryToken(upload(selection.entry.bytes));
     if (entryToken < 0) throw Error("No managed Webcil MethodDef entry point was found.");
-    const [bundle, manifest] = packEntry(selection.entry, selection.companions, entryToken & 0xffffff);
+    const [bundle, manifest] = packEntry(selection.entry, selection.companions, entryToken & 0xffffff, compiler.BundleModuleOrigins?.() === 1);
     const location = compiler.CreateDiagnostic();
     const output = compiler.CreateBytes(1 << 20);
     const compilerStatus = compiler.CompileBundleDetailed(upload(bundle), upload(manifest), output, location);

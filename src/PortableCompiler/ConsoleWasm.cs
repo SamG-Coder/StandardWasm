@@ -94,15 +94,12 @@ namespace PortableCompiler
             return cursor;
         }
 
-        // The import section payload for the given first type index.
-        internal static int SectionSize(int firstType) =>
-            1 + 2 * (1 + ModuleNameLength + 1 + 1) + 5 + 7 +
+        internal static int ImportEntryBytes(int firstType) =>
+            2 * (1 + ModuleNameLength + 1 + 1) + 5 + 7 +
             WasmBinary.UnsignedSize(firstType) + WasmBinary.UnsignedSize(firstType + 1);
 
-        // count is the import section's entry count: these two, plus any memory import.
-        internal static int WriteImports(byte[] output, int cursor, int firstType, int count = 2)
+        internal static int WriteEntries(byte[] output, int cursor, int firstType)
         {
-            output[cursor++] = (byte)count;
             cursor = Import(output, cursor);
             output[cursor++] = 5;
             output[cursor++] = 0x77; // write

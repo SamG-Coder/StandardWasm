@@ -85,7 +85,23 @@ namespace PortableCompiler
                     next = Push(stack, allocated, depth - 1, EventHandlerReference);
                 }
                 else if (kind == VirtualCall)
-                    next = CallShape(stack, allocated, depth, virtualTypes, operand, records[slot + 3], 0, objects);
+                {
+                    int arity = records[slot + 3];
+                    next = CallShape(stack, allocated, depth, virtualTypes, operand, arity, 0, objects);
+                    // An unlowered reflection member is valid IL, but a
+                    // compiler descriptor cannot be sent to an upstream body.
+                    if (next < 0 && depth >= arity && PeLibrary.RuntimeTypeMetadata.IsReference(stack[depth - arity]))
+                        return -2;
+                }
+                else if (kind == ReadReflection)
+                {
+                    int receiver = operand == PeLibrary.ReflectionMembers.TypeModule ||
+                        operand == PeLibrary.ReflectionMembers.TypeAssembly ? PeLibrary.RuntimeTypeMetadata.Type : PeLibrary.RuntimeTypeMetadata.Module;
+                    int resultType = operand == PeLibrary.ReflectionMembers.TypeModule ? PeLibrary.RuntimeTypeMetadata.Module :
+                        operand == PeLibrary.ReflectionMembers.ModuleName ? String : PeLibrary.RuntimeTypeMetadata.Assembly;
+                    if (depth == 0 || !Assignable(stack[depth - 1], receiver, objects)) return -2;
+                    next = Push(stack, allocated, depth - 1, resultType);
+                }
                 else next = Transition(stack, allocated, depth, kind, operand, records[slot + 3], frame,
                     signatures, offsets, arities, objects);
                 if (next < 0)
@@ -165,7 +181,7 @@ namespace PortableCompiler
                 if (writer < 0 || stack[writer] != PeLibrary.ConsoleStorage.Writer) return -1;
                 return writer == depth - 1 || Match(stack, depth, String) ? writer : -1;
             }
-            if (kind == ClearValue) return depth;
+            if (kind == ClearValue || kind == ResourceLookup) return depth;
             if (kind == NullLiteral) return Push(stack, allocated, depth, NullValue);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, allocated, depth, EventArgsReference);
             if (kind == NewRootObject) return Push(stack, allocated, depth, ObjectReference);
@@ -180,6 +196,9 @@ namespace PortableCompiler
                     (stack[depth - 1] != NullValue && !IsReference(stack[depth - 1]))) return -1;
                 return Push(stack, allocated, depth - 1, operand);
             }
+            if (kind == StringEquals)
+                return Match(stack, depth, String) && Match(stack, depth - 1, String)
+                    ? Push(stack, allocated, depth - 2, I32) : -1;
             if (kind == JoinStrings)
                 return Match(stack, depth, String) && Match(stack, depth - 1, String)
                     ? Push(stack, allocated, depth - 2, String) : -1;

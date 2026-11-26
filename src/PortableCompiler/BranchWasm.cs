@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects, int[] fieldInitializers)
+            byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -24,6 +24,7 @@ namespace PortableCompiler
             int activeInitializers = frameShape[15] - 1;
             // Stage 137 (decision 0065): a frame that uses localloc owns a slice of the shadow stack.
             int stackPointer = frameShape[16] - 1, stackBase = frameShape[17] - 1, stackLimit = frameShape[18] - 1;
+            int resourceFunction = frameShape[19] - 1;
             bool hasNull = outgoingNulls.Length != 0;
             int spillKinds = PeLibrary.ConsoleStorage.Writer + classes;
             // V8 counts parameters together with function locals. Reject
@@ -33,18 +34,20 @@ namespace PortableCompiler
                 continuations > MaxLocals) return -2;
             int spills = arguments + locals + (hasNull ? 1 : 0);
             int fixedLocals = spills + classes + (stringScratch ? 5 : 0) +
-                (eventScratch ? 6 : 0) + 1 + 2 * exceptionLocals + continuations;
+                (eventScratch ? 6 : 0) + (resourceFunction >= 0 ? 7 : 0) + 1 + 2 * exceptionLocals + continuations +
+                (stackPointer >= 0 ? 1 : 0);
             if (fixedLocals > MaxLocals || maximum > (MaxLocals - fixedLocals) / spillKinds) return -2;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
             int eventLocals = scratch + (stringScratch ? 5 : 0);
-            int pcLocal = eventLocals + (eventScratch ? 6 : 0);
+            int resourceLocals = eventLocals + (eventScratch ? 6 : 0);
+            int pcLocal = resourceLocals + (resourceFunction >= 0 ? 7 : 0);
             int continuationBase = pcLocal + 1 + exceptionLocals;
             // Thrown managed objects (decision 0054) mirror the exnref locals: a scratch
             // eqref followed by one saved object per clause.
             int objectBase = continuationBase + continuations;
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
-                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (exceptionLocals != 0 ? 1 : 0) +
+                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
                 (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0));
             // The saved shadow-stack pointer follows every other local.
             int stackFrame = objectBase + exceptionLocals;
@@ -90,6 +93,15 @@ namespace PortableCompiler
                 code[used++] = 0x7f;
                 code[used++] = 1; // unpublished output array
                 used = WasmBinary.ValueType(code, used, EventHandlerReference);
+            }
+            if (resourceFunction >= 0)
+            {
+                code[used++] = 1;
+                used = WasmBinary.ValueType(code, used, Chars);
+                code[used++] = 5; // owner, length, address, copy index, status
+                code[used++] = 0x7f;
+                code[used++] = 1;
+                code[used++] = 0x7e; // packed result
             }
             code[used++] = 1;
             code[used++] = 0x7f;
@@ -187,6 +199,27 @@ namespace PortableCompiler
                     used = Local(code, used, 0x21, Spill(spills, maximum, PeLibrary.RuntimeTypeMetadata.Handle, depth));
                 }
                 // TypeFromHandle changes the CLI category while retaining the reference in the same spill.
+                else if (kind == ReadReflection)
+                {
+                    int source = states[state + top];
+                    int target = operand == PeLibrary.ReflectionMembers.ModuleName ? String : ObjectReference;
+                    int receiver = Spill(spills, maximum, source, top);
+                    used = GuardNull(code, used, receiver);
+                    used = RuntimeReflectionWasm.Read(code, used, frameShape[7], operand, receiver,
+                        Spill(spills, maximum, target, top), pcLocal, reflection);
+                }
+                else if (kind == ResourceLookup)
+                {
+                    used = RuntimeReflectionWasm.ModuleSlot(code, used, frameShape[7], 0, reflection);
+                    used = Const(code, used, 1);
+                    code[used++] = 0x6b; // descriptor slot to zero-based bundle owner
+                    used = Local(code, used, 0x21, resourceLocals + 1);
+                    used = ResourceWasm.LookupNative(code, used, resourceLocals + 1, 1,
+                        resourceLocals, resourceLocals + 2, resourceFunction,
+                        records[slot + 3], resourceLocals + 5, resourceLocals + 6);
+                    used = Local(code, used, 0x21, operand);
+                    used = ResourceWasm.ThrowForFailure(code, used, resourceLocals + 5);
+                }
                 else if (kind == LoadString)
                 {
                     int characters = records[slot + 3];
@@ -220,6 +253,12 @@ namespace PortableCompiler
                     }
                     else used = Gc(code, used, 1, EventArgsReference); // struct.new_default
                     used = Local(code, used, 0x21, Spill(spills, maximum, EventArgsReference, depth));
+                }
+                else if (kind == StringEquals)
+                {
+                    int left = Spill(spills, maximum, states[state + top - 1], top - 1);
+                    int right = Spill(spills, maximum, states[state + top], top);
+                    used = StringWasm.OrdinalEquals(code, used, left, right, spills + top - 1, scratch);
                 }
                 else if (kind == JoinStrings || kind == StringFromChars)
                 {

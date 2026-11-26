@@ -16,42 +16,13 @@ namespace PeLibrary
             if (peStart < 0)
                 return Invalid;
             uint pe = (uint)peStart;
-            uint sectionCount = U16(image, pe + 6);
-            uint optionalSize = U16(image, pe + 20);
-            uint optional = pe + 24;
-            uint sections = optional + optionalSize;
-
-            uint directory;
-            uint magic = U16(image, optional);
-            if (magic == 0x10b)
-                directory = 96;
-            else if (magic == 0x20b)
-                directory = 112;
-            else
-                return Unsupported;
-            if (optionalSize < directory)
-                return Invalid;
-            if (U32(image, optional + directory - 4) <= 14)
-                return NoCli;
-            if (optionalSize < directory + 15 * 8)
-                return Invalid;
-
-            uint cliEntry = optional + directory + 14 * 8;
-            uint cliRva = U32(image, cliEntry);
-            uint cliSize = U32(image, cliEntry + 4);
-            if (cliRva == 0 && cliSize == 0)
-                return NoCli;
-            if (cliRva == 0 || cliSize < 72)
-                return Invalid;
-            uint headerSize = U32(image, optional + 60);
-            if (cliRva < headerSize)
-                return Unsupported;
-            int cli = MapRange(image, sections + 8, sectionCount, 40, 0, cliRva, cliSize);
+            int cli = LocatePeCli(image, pe);
             if (cli < 0)
-                return Invalid;
-            uint declaredCliHeaderSize = U32(image, (uint)cli);
-            if (declaredCliHeaderSize < 72 || declaredCliHeaderSize > cliSize)
-                return Invalid;
+                return -cli;
+            uint optional = pe + 24;
+            uint headerSize = U32(image, optional + 60);
+            uint sections = optional + U16(image, pe + 20);
+            uint sectionCount = U16(image, pe + 6);
 
             uint metadataRva = U32(image, (uint)cli + 8);
             uint metadataSize = U32(image, (uint)cli + 12);
@@ -67,6 +38,73 @@ namespace PeLibrary
             location[0] = metadata;
             location[1] = (int)metadataSize;
             return 0;
+        }
+
+        // A resource directory is a file-backed range in the CLI image,
+        // separate from the metadata tables that name its individual entries.
+        internal static int LocateResources(byte[] image, int[] location)
+        {
+            int cli;
+            if (WebcilLocator.HasSignature(image))
+                cli = WebcilLocator.LocateCli(image);
+            else
+            {
+                int pe = ReadPeStart(image);
+                if (pe < 0) return -1;
+                cli = LocatePeCli(image, (uint)pe);
+            }
+            if (cli < 0) return -1;
+            uint rva = U32(image, (uint)cli + 24);
+            uint size = U32(image, (uint)cli + 28);
+            if (rva == 0 && size == 0) return -4;
+            if (rva == 0 || size < 4) return -1;
+            int start = MapImageRange(image, rva, size);
+            if (start < 0) return -1;
+            location[0] = start;
+            location[1] = (int)size;
+            return 0;
+        }
+
+        // Negative values carry the public LocateMetadata status.
+        private static int LocatePeCli(byte[] image, uint pe)
+        {
+            uint sectionCount = U16(image, pe + 6);
+            uint optionalSize = U16(image, pe + 20);
+            uint optional = pe + 24;
+            uint sections = optional + optionalSize;
+
+            uint directory;
+            uint magic = U16(image, optional);
+            if (magic == 0x10b)
+                directory = 96;
+            else if (magic == 0x20b)
+                directory = 112;
+            else
+                return -Unsupported;
+            if (optionalSize < directory)
+                return -Invalid;
+            if (U32(image, optional + directory - 4) <= 14)
+                return -NoCli;
+            if (optionalSize < directory + 15 * 8)
+                return -Invalid;
+
+            uint cliEntry = optional + directory + 14 * 8;
+            uint cliRva = U32(image, cliEntry);
+            uint cliSize = U32(image, cliEntry + 4);
+            if (cliRva == 0 && cliSize == 0)
+                return -NoCli;
+            if (cliRva == 0 || cliSize < 72)
+                return -Invalid;
+            uint headerSize = U32(image, optional + 60);
+            if (cliRva < headerSize)
+                return -Unsupported;
+            int cli = MapRange(image, sections + 8, sectionCount, 40, 0, cliRva, cliSize);
+            if (cli < 0)
+                return -Invalid;
+            uint declaredCliHeaderSize = U32(image, (uint)cli);
+            if (declaredCliHeaderSize < 72 || declaredCliHeaderSize > cliSize)
+                return -Invalid;
+            return cli;
         }
 
         internal static int MapImageRange(byte[] image, uint rva, uint size)
