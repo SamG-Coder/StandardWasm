@@ -6,7 +6,7 @@ namespace PortableCompiler
 {
     internal static class VirtualSlots
     {
-        internal static int SelectVirtualBody(byte[] main, byte[] bundle, int[] ranges, int[] objects,
+        internal static int SelectVirtualBody(BundleImages bundle, int[] objects,
             int actual, int declared, int owner, int row, int[] symbol)
         {
             int receiver = actual == NullValue ? declared : actual;
@@ -21,7 +21,7 @@ namespace PortableCompiler
                 ancestors[count++] = type;
             }
 
-            byte[] source = AssemblyBundle.Load(main, bundle, ranges, owner);
+            byte[] source = bundle.Get(owner);
             var sourceLayout = new int[4];
             var sourceHeaps = new int[8];
             if (CompressedTables.FindWithHeaps(source, sourceLayout, sourceHeaps) < 0) return -1;
@@ -43,7 +43,7 @@ namespace PortableCompiler
             {
                 int type = ancestors[i];
                 int targetOwner = AssemblyOf(objects, type), typeRow = TypeDef(objects, type);
-                byte[] image = AssemblyBundle.Load(main, bundle, ranges, targetOwner);
+                byte[] image = bundle.Get(targetOwner);
                 if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
                 explicitSlot = VirtualSlotMetadata.HasNamedMethodImpl(image, heaps, layout, typeRow,
                     source, sourceHeaps, name);
@@ -60,7 +60,7 @@ namespace PortableCompiler
                     int candidateName = MethodDefinitions.ReadColumn(image, layout, candidate, 3);
                     if (!AssemblyReferences.SameString(source, sourceHeaps, name, image, heaps, candidateName)) continue;
                     int blob = MethodDefinitions.ReadColumn(image, layout, candidate, 4);
-                    int match = BundleSignatures.Match(main, bundle, ranges, source, sourceLayout, sourceHeaps, owner,
+                    int match = BundleSignatures.Match(bundle, source, sourceLayout, sourceHeaps, owner,
                         signature, image, layout, heaps, targetOwner, blob, false, objects);
                     if (match < 0) return match;
                     if (match == 0) continue;
