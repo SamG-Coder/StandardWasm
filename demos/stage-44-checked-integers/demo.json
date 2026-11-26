@@ -1,0 +1,1 @@
+{"assembly":"CheckedIntegers","exportType":"CheckedIntegers.CheckedDemo","method":"Compile","inputs":[{"file":"self"},{"name":"MulI32"}],"generated":{"capacity":8192,"arguments":[-12,7]},"expected":-84}

@@ -7,27 +7,40 @@ namespace PortableCompiler
     internal static class WasmBinary
     {
         internal const int ScalarThunkType = 2, EventThunkType = 8, EventEntryHeap = 9, EventHandlerHeap = 10;
-        private const int WideArrayHeap = 6, EventArgsHeap = 7, FirstClassHeap = EventHandlerHeap + 1;
+        private const int WideArrayHeap = 6, EventArgsHeap = 7, SingleArrayHeap = 11, DoubleArrayHeap = 12;
+        private const int FirstClassHeap = DoubleArrayHeap + 1;
 
-        internal static int WriteModule(byte[] output, int[] arities, int[] offsets, byte[] types, int[] sizes, int functions, byte[] bodies,
+        internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize, bool eventArgsEmpty)
+            byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup, int exceptionTags)
         {
             int typeOffset = objects[0] + FirstClassHeap;
-            int totalFunctions = functions + thunks[0];
+            bool hasRemainder = remainderFixup != 0;
+            bool overflow = (exceptionTags & ExceptionTypes.Overflow) != 0;
+            bool divide = (exceptionTags & ExceptionTypes.DivideByZero) != 0;
+            bool bounds = (exceptionTags & ExceptionTypes.IndexOutOfRange) != 0;
+            bool nullReference = (exceptionTags & ExceptionTypes.NullReference) != 0;
+            bool invalidCast = (exceptionTags & ExceptionTypes.InvalidCast) != 0;
+            // Tag indices stay stable even when lower tags are unused.
+            int tagCount = invalidCast ? ExceptionTagsWasm.Count : nullReference ? ExceptionTagsWasm.NullTag + 1 :
+                bounds ? ExceptionTagsWasm.IndexTag + 1 : divide ? ExceptionTagsWasm.DivideTag + 1 : overflow ? 1 : 0;
+            int remainderIndex = functions + thunks[0];
+            int totalFunctions = remainderIndex + (hasRemainder ? 1 : 0);
+            var remainderBody = new byte[hasRemainder ? FloatRemainderWasm.BodyCapacity : 0];
+            int remainderSize = hasRemainder ? FloatRemainderWasm.WriteBody(remainderBody) : 0;
             int classBytes = 0;
-            bool recursive = false;
+            // Separate singleton groups with identical structs canonicalize to
+            // the same Wasm type. Preserve class identity by group position.
+            bool recursive = objects[0] != 0;
             for (int i = 0; i < objects[0]; i++)
             {
-                int slot = 1 + i * Width;
-                int first = objects[slot + 1], fields = objects[slot + 2];
+                int classType = FirstClass + i, fields = FieldCount(objects, classType);
                 int size = 1, stored = 0;
                 for (int field = 0; field < fields; field++)
                 {
-                    int type = FieldType(objects, first + field);
+                    int type = FieldTypeAt(objects, classType, field);
                     if (type == 0) continue;
                     size += 1 + ValueWidth((byte)type);
-                    if (type >= FirstClass) recursive = true;
                     stored++;
                 }
                 size += UnsignedSize(stored);
@@ -38,17 +51,26 @@ namespace PortableCompiler
             // types retain individual indices for fields and function signatures.
             // The entry and invocation list also share one fixed recursive type group.
             int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 1;
-            int prefix = UnsignedSize(typeEntries) + 57 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+            if (hasRemainder) typeEntries++;
+            if (tagCount != 0) typeEntries++;
+            int prefix = UnsignedSize(typeEntries) + 63 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+            if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
+            if (tagCount != 0) prefix += 3; // () -> () exception payload
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;
             int functionSize = UnsignedSize(totalFunctions) + thunks[0];
             int codeSize = UnsignedSize(totalFunctions);
+            if (hasRemainder)
+            {
+                functionSize += UnsignedSize(typeOffset + functions);
+                codeSize += UnsignedSize(remainderSize) + remainderSize;
+            }
             // Use one type per function in discovery order. Accumulate against
             // destination capacity before any writes, guarding size arithmetic.
             for (int i = 0; i < functions; i++)
             {
                 int shape = offsets[i];
-                byte result = types[shape];
+                int result = types[shape];
                 int type = 2 + UnsignedSize(arities[i]) + ValueWidth(result);
                 for (int parameter = 0; parameter < arities[i]; parameter++)
                     type += ValueWidth(types[shape + 1 + parameter]);
@@ -61,7 +83,13 @@ namespace PortableCompiler
                 codeSize += code;
                 functionSize += index;
             }
-            int exportSize = UnsignedSize(exports.Length);
+            int exportCount = exports.Length + (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) +
+                (nullReference ? 1 : 0) + (invalidCast ? 1 : 0);
+            int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
+                (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
+                (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0);
+            int tagType = typeOffset + functions + (hasRemainder ? 1 : 0);
+            int tagSize = 1 + tagCount * (1 + UnsignedSize(tagType));
             for (int i = 0; i < exports.Length; i++)
             {
                 int name = (int)ImageBytes.U32(names, (uint)entryOffsets[i] + 4);
@@ -89,6 +117,8 @@ namespace PortableCompiler
             remaining = Reserve(remaining, functionSize);
             if (thunks[0] != 0)
                 remaining = Reserve(remaining, tableSize);
+            if (tagCount != 0)
+                remaining = Reserve(remaining, tagSize);
             if (eventArgsEmpty)
                 remaining = Reserve(remaining, 8);
             remaining = Reserve(remaining, exportSize);
@@ -101,6 +131,7 @@ namespace PortableCompiler
             if (remaining < 0 || (literalSize != 0 && (dataOverhead > remaining ||
                 literalSize > remaining - dataOverhead || Reserve(remaining, dataOverhead + literalSize) < 0)))
                 return -3;
+            if (hasRemainder) FloatRemainderWasm.ResolveCalls(bodies, remainderFixup, remainderIndex);
 
             output[0] = 0;
             output[1] = 0x61;
@@ -174,6 +205,12 @@ namespace PortableCompiler
             output[cursor++] = 0x63;
             output[cursor++] = EventEntryHeap;
             output[cursor++] = 1;
+            output[cursor++] = 0x5e; // f32 array
+            output[cursor++] = 0x7d;
+            output[cursor++] = 1;
+            output[cursor++] = 0x5e; // f64 array
+            output[cursor++] = 0x7c;
+            output[cursor++] = 1;
             if (recursive)
             {
                 output[cursor++] = 0x4e;
@@ -181,16 +218,15 @@ namespace PortableCompiler
             }
             for (int i = 0; i < objects[0]; i++)
             {
-                int slot = 1 + i * Width;
-                int first = objects[slot + 1], fields = objects[slot + 2];
+                int classType = FirstClass + i, fields = FieldCount(objects, classType);
                 output[cursor++] = 0x5f; // struct
                 int stored = 0;
                 for (int field = 0; field < fields; field++)
-                    if (FieldType(objects, first + field) != 0) stored++;
+                    if (FieldTypeAt(objects, classType, field) != 0) stored++;
                 cursor = Unsigned(output, cursor, stored);
                 for (int field = 0; field < fields; field++)
                 {
-                    int fieldType = FieldType(objects, first + field);
+                    int fieldType = FieldTypeAt(objects, classType, field);
                     if (fieldType == 0) continue;
                     cursor = ValueType(output, cursor, (byte)fieldType);
                     output[cursor++] = 1;
@@ -203,10 +239,17 @@ namespace PortableCompiler
                 cursor = Unsigned(output, cursor, arities[type]);
                 for (int i = 0; i < arities[type]; i++)
                     cursor = ValueType(output, cursor, types[shape + i + 1]);
-                byte result = types[shape];
+                int result = types[shape];
                 output[cursor++] = result == Void ? (byte)0 : (byte)1;
                 if (result != Void)
                     cursor = ValueType(output, cursor, result);
+            }
+            if (hasRemainder) cursor = FloatRemainderWasm.WriteType(output, cursor);
+            if (tagCount != 0)
+            {
+                output[cursor++] = 0x60;
+                output[cursor++] = 0;
+                output[cursor++] = 0;
             }
 
             cursor = Section(output, cursor, 3, functionSize);
@@ -215,6 +258,7 @@ namespace PortableCompiler
                 cursor = Unsigned(output, cursor, i + typeOffset);
             for (int i = 0; i < thunks[0]; i++)
                 output[cursor++] = arities[thunks[i + 1]] == 3 ? (byte)EventThunkType : (byte)ScalarThunkType;
+            if (hasRemainder) cursor = Unsigned(output, cursor, typeOffset + functions);
             if (thunks[0] != 0)
             {
                 cursor = Section(output, cursor, 4, tableSize);
@@ -222,6 +266,17 @@ namespace PortableCompiler
                 output[cursor++] = 0x70;
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, thunks[0]);
+            }
+            if (tagCount != 0)
+            {
+                // Tag sections precede globals and exports despite section ID 13.
+                cursor = Section(output, cursor, 13, tagSize);
+                output[cursor++] = (byte)tagCount;
+                for (int tag = 0; tag < tagCount; tag++)
+                {
+                    output[cursor++] = 0; // exception attribute
+                    cursor = Unsigned(output, cursor, tagType);
+                }
             }
 
             if (eventArgsEmpty)
@@ -236,7 +291,7 @@ namespace PortableCompiler
                 output[cursor++] = 0x0b;
             }
             cursor = Section(output, cursor, 7, exportSize);
-            cursor = Unsigned(output, cursor, exports.Length);
+            cursor = Unsigned(output, cursor, exportCount);
             for (int i = 0; i < exports.Length; i++)
             {
                 int source = entryOffsets[i];
@@ -247,6 +302,11 @@ namespace PortableCompiler
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, exports[i]);
             }
+            if (overflow) cursor = ExceptionTagsWasm.WriteOverflowExport(output, cursor);
+            if (divide) cursor = ExceptionTagsWasm.WriteDivideExport(output, cursor);
+            if (bounds) cursor = ExceptionTagsWasm.WriteIndexExport(output, cursor);
+            if (nullReference) cursor = ExceptionTagsWasm.WriteNullExport(output, cursor);
+            if (invalidCast) cursor = ExceptionTagsWasm.WriteInvalidCastExport(output, cursor);
 
             if (thunks[0] != 0)
             {
@@ -298,6 +358,11 @@ namespace PortableCompiler
                 cursor = Unsigned(output, cursor, function);
                 output[cursor++] = 0x0b;
             }
+            if (hasRemainder)
+            {
+                cursor = Unsigned(output, cursor, remainderSize);
+                for (int i = 0; i < remainderSize; i++) output[cursor++] = remainderBody[i];
+            }
             if (literalSize != 0)
             {
                 cursor = Section(output, cursor, 11, dataOverhead + literalSize);
@@ -310,12 +375,13 @@ namespace PortableCompiler
             return cursor;
         }
 
-        private static int ValueWidth(byte type) =>
+        private static int ValueWidth(int type) =>
             type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference ? 1 :
-                HeapType(type) <= 63 ? 2 : 3;
+                HeapType(StackType(type)) <= 63 ? 2 : 3;
 
-        internal static int ValueType(byte[] output, int cursor, byte type)
+        internal static int ValueType(byte[] output, int cursor, int slot)
         {
+            byte type = StackType(slot);
             if (type == I32 || type == MethodPointer)
                 output[cursor++] = 0x7f;
             else if (type == I64)
@@ -336,6 +402,7 @@ namespace PortableCompiler
             type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
                 type == EventArgsReference ? EventArgsHeap :
                 type == EventHandlerReference ? EventHandlerHeap :
+                type == Singles ? SingleArrayHeap : type == Doubles ? DoubleArrayHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;
 
         private static int ThunkSize(int receiver, int function, int arity) =>

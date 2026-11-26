@@ -67,9 +67,19 @@ internal static class BundleCases
 
         byte[] concat = Manifest(aliasedType, nameof(TextIdentityProbe.Kernels.ConcatLength));
         Reject("aliased String with missing dependency", Pack(text), -4, concat);
-        Reject("aliased String with unsupported return type", aliased, -2, concat);
-        Reject("aliased String constructor", aliased, -2,
-            Manifest(aliasedType, nameof(TextIdentityProbe.Kernels.Construct)));
+        // Nominal linking now accepts managed return and receiver types from bundled dependencies.
+        // Both results distinguish calls to the aliased assembly from the platform string intrinsics.
+        CheckAliased(nameof(TextIdentityProbe.Kernels.ConcatLength), TextIdentityProbe.Kernels.ConcatLength());
+        CheckAliased(nameof(TextIdentityProbe.Kernels.Construct), TextIdentityProbe.Kernels.Construct());
+
+        void CheckAliased(string name, int expected)
+        {
+            byte[] selection = Manifest(aliasedType, name);
+            int length = BundleDemo.CompileBundle(aliased, selection, output);
+            if (length <= 0) throw new InvalidOperationException($"Aliased String {name} returned {length}.");
+            AddCase("aliased String " + name, new[] { Encode(aliased), Encode(selection) }, [], expected,
+                Convert.ToHexString(output.AsSpan(0, length)).ToLowerInvariant());
+        }
 
         void Reject(string name, byte[] bundle, int expected, byte[] selection = null)
         {

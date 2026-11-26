@@ -100,6 +100,12 @@ export async function invokeGenerated(exports, inputs, generated, reportDiagnost
             units[index] = String.fromCharCode(exports.TextCodeUnit(value, index));
         return units.join("");
     } catch (error) {
+        if (generated.exceptionType != null) {
+            const actual = managedExceptionType(instance.exports, error);
+            if (actual !== generated.exceptionType)
+                throw Error("Expected " + generated.exceptionType + ", got " + (actual ?? String(error)), { cause: error });
+            return null;
+        }
         if (!(error instanceof WebAssembly.RuntimeError)) throw error;
         return null;
     }

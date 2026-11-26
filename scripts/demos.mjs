@@ -33,7 +33,10 @@ export function demoInputs(demo) {
             return { bytes: Array.from(Buffer.concat(parts)) };
         }
         if (input?.file === "self") return { bytes: Array.from(readFileSync(demo.dll)) };
-        if (typeof input?.name === "string") return { name: Array.from(Buffer.from(input.name, "utf8")) };
+        if (typeof input?.name === "string") {
+            const bytes = Array.from(Buffer.from(input.name, "utf8"));
+            return demo.generated ? { name: bytes } : { bytes };
+        }
         return input;
     });
 }

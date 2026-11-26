@@ -5,7 +5,8 @@ namespace PeLibrary
     internal static class PlatformAssemblyIdentity
     {
         // Validate the exact AssemblyRef name, token and neutral culture.
-        internal static bool IsPlatformAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row)
+        internal static bool IsPlatformAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row,
+            bool netstandardOnly = false)
         {
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 35);
             if (table < 0 || row < 1 || row > counts[35]) return false;
@@ -23,6 +24,7 @@ namespace PeLibrary
             if (low == 0xff137bcc && high == 0x51dd2dcd) // netstandard
                 return Fits(name, 12, size) && U32(image, n) == 0x7374656e &&
                     U32(image, n + 4) == 0x646e6174 && U32(image, n + 8) == 0x647261;
+            if (netstandardOnly) return false;
             if (low == 0x565c7ab7 && high == 0x89e03419) // mscorlib
                 return Fits(name, 9, size) && U32(image, n) == 0x6f63736d &&
                     U32(image, n + 4) == 0x62696c72 && image[n + 8] == 0;

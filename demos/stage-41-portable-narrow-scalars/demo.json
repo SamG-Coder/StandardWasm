@@ -1,0 +1,1 @@
+{"assembly":"NarrowScalars","exportType":"NarrowScalars.ScalarDemo","method":"Compile","inputs":[{"file":"self"},{"name":"ReadSigned"}],"generated":{"capacity":8192,"arguments":[255,32768]},"expected":-32769}

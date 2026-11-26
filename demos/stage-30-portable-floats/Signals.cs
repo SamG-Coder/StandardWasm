@@ -31,6 +31,10 @@ namespace PortableReals
         public static uint TruncateUnsigned(float value) => unchecked((uint)value);
         public static long TruncateWide(double value) => unchecked((long)value);
         public static ulong TruncateUnsignedWide(double value) => unchecked((ulong)value);
+        public static int ToByteDouble(double value) => unchecked((byte)value);
+        public static int ToByteSingle(float value) => unchecked((byte)value);
+        public static int ToUInt16Double(double value) => unchecked((ushort)value);
+        public static int ToUInt16Single(float value) => unchecked((ushort)value);
         public static float FloatFromUnsigned(ulong value) => value;
         public static float FloatThroughDouble(ulong value) => (float)(double)value;
         public static double DoubleFromSigned(long value) => value;
@@ -42,6 +46,20 @@ namespace PortableReals
             FloatDependency.Scale.Adjust(sample, delta) + FloatDependency.Scale.Adjust(sample, (float)delta);
 
         public static double Remainder(double left, double right) => left % right;
+        public static float RemainderSingle(float left, float right) => left % right;
+        public static int RemainderWithCallback(double left, double right)
+        {
+            var callback = new RemainderCallback();
+            System.Func<int> read = callback.Read;
+            return (int)(left % right) + read();
+        }
+
         public static int CheckedTruncate(double value) => checked((int)value);
+        public static int CheckedToByte(double value) => checked((byte)value);
+
+        private sealed class RemainderCallback
+        {
+            internal int Read() => (int)Remainder(9.5, 4.0);
+        }
     }
 }

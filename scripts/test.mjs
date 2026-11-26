@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { decode, invoke, invokeGenerated } from "./invoke.mjs";
 import { demoInputs, listDemos } from "./demos.mjs";
 import { chromium } from "playwright-core";
+import { oracleCases } from "./oracle.mjs";
 import { compile, root, run } from "./toolchain.mjs";
 import { verify } from "./verify.mjs";
 
@@ -84,29 +85,10 @@ const rejectedCulture = spawnSync("dotnet", ["run", "-c", "Release", "--no-build
 assert.equal(rejectedCulture.status, 1);
 assert.match(rejectedCulture.stderr, /Measures::Sqrt\(System\.Double\) at IL_[0-9a-f]+ \([a-z.0-9]+\): Unsupported value type: System\.Double in netstandard/);
 assert.equal(existsSync("artifacts/unsupported-culture.wat"), false);
-const cases = JSON.parse(readFileSync("artifacts/oracle.json"));
+const browserOracle = readFileSync("artifacts/oracle.json");
+const cases = oracleCases(JSON.parse(browserOracle));
 console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases,
     bytes => writeFileSync("artifacts/StandardWasm.Compiler.wasm", bytes)));
-
-// Generated cases often share whole assembly images. Send each byte
-// array once so parsing the CLR oracle does not exhaust the renderer.
-const images = [];
-const imageIds = new Map();
-const browserCases = cases.map(test => ({
-    ...test,
-    inputs: test.inputs.map(input => {
-        if (!Array.isArray(input?.bytes)) return input;
-        const key = Buffer.from(input.bytes).toString("base64");
-        let image = imageIds.get(key);
-        if (image === undefined) {
-            image = images.length;
-            imageIds.set(key, image);
-            images.push(input);
-        }
-        return { image };
-    })
-}));
-const browserOracle = JSON.stringify({ cases: browserCases, images });
 
 const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const browser = await chromium.launch({
@@ -118,6 +100,7 @@ try {
     const assets = new Map([
         // Passing the parsed byte arrays through Playwright can exceed the Node heap.
         ["/oracle.json", ["application/json", browserOracle]],
+        ["/oracle.mjs", ["text/javascript", readFileSync("scripts/oracle.mjs")]],
         ["/bootstrap.mjs", ["text/javascript", readFileSync("scripts/bootstrap.mjs")]],
         ["/invoke.mjs", ["text/javascript", readFileSync("scripts/invoke.mjs")]],
         ["/verify.mjs", ["text/javascript", readFileSync("scripts/verify.mjs")]],
@@ -130,8 +113,8 @@ try {
     });
     await page.goto("http://standardwasm.test/");
     const result = await page.evaluate(async () => {
-        const { cases, images } = await (await fetch("/oracle.json")).json();
-        for (const test of cases) test.inputs = test.inputs.map(input => input?.image === undefined ? input : images[input.image]);
+        const { oracleCases } = await import("/oracle.mjs");
+        const cases = oracleCases(await (await fetch("/oracle.json")).json());
         const { verify } = await import("/verify.mjs");
         return verify(async name => (await fetch("/" + name)).arrayBuffer(), cases);
     });

@@ -31,4 +31,5 @@ const displayedInputs = demo.inputs.map(input => {
     if (input?.file === "self") return demo.assembly + ".dll";
     return input?.name ?? decode(input);
 });
-console.log(demo.stage + ": " + demo.method + "(" + displayedInputs.join(", ") + ") = " + result);
+const display = result === null && demo.generated?.exceptionType ? demo.generated.exceptionType : result;
+console.log(demo.stage + ": " + demo.method + "(" + displayedInputs.join(", ") + ") = " + display);

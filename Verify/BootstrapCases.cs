@@ -44,6 +44,7 @@ internal static class BootstrapCases
         Reject("truncated export name", aliases[..^1], -1);
         Reject("missing method definition", Manifest([("missing", 0)]), -1);
         Reject("unsupported name bytes", Manifest([("line\nbreak", kernel)]), -2);
+        Reject("reserved overflow export", Manifest([("\0overflow", kernel)]), -2);
 
         int Row(string name) => type.GetMethod(name)!.MetadataToken & 0xffffff;
 
