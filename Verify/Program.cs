@@ -123,4 +123,5 @@ PrimitiveGenericCases.Add(cases);
 ByRefPermissionCases.Add(cases);
 ValueConstraintCases.Add(cases);
 NamedValueCases.Add(cases);
+ExplicitScalarCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

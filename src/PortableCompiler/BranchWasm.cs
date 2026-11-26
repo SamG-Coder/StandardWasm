@@ -429,22 +429,31 @@ namespace PortableCompiler
                         byte source = states[state + top];
                         used = LoadOperand(code, used, Spill(spills, maximum, source, top), source, storage);
                     }
-                    // struct.set truncates packed cells to their storage
-                    // width. The load selects the CLI extension to int32.
-                    int instruction = kind == GetField ? FieldAccess.LoadInstruction(storage) : 5;
-                    used = Gc(code, used, instruction, type);
-                    used = WasmBinary.Unsigned(code, used, operand);
+                    if (IsExplicitValue(objects, type))
+                        used = ExplicitValueWasm.Load(code, used, type, operand, storage);
+                    else
+                    {
+                        // Packed cells truncate on assignment. The load selects the CLI extension.
+                        int instruction = kind == GetField ? FieldAccess.LoadInstruction(storage) : 5;
+                        used = Gc(code, used, instruction, type);
+                        used = WasmBinary.Unsigned(code, used, operand);
+                    }
                     if (kind == GetField) used = Local(code, used, 0x21, Spill(spills, maximum, StackType(storage), top));
                 }
                 else if (kind == ClearValue)
                     used = ValueFieldsWasm.Clear(code, used, frame[operand], operand);
                 else if (kind == UpdateValue)
                 {
-                    int type = FieldAccess.Owner(records[slot + 3]);
+                    int descriptor = records[slot + 3];
+                    int type = FieldAccess.Owner(descriptor);
                     int local = records[slot + BranchIl.Width + 1] - 1;
                     byte source = states[state + top];
-                    used = ValueFieldsWasm.Update(code, used, objects, type, local, temporaries + type - FirstClass,
-                        operand, Spill(spills, maximum, source, top), source);
+                    int replacement = Spill(spills, maximum, source, top);
+                    if (IsExplicitValue(objects, type))
+                        used = ExplicitValueWasm.Update(code, used, type, local, operand, FieldAccess.Storage(descriptor), replacement, source);
+                    else
+                        used = ValueFieldsWasm.Update(code, used, objects, type, local, temporaries + type - FirstClass,
+                            operand, replacement, source);
                 }
                 else if (kind == NewArray || kind == InitializedArray)
                 {

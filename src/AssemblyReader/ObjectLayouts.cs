@@ -10,6 +10,7 @@ namespace PeLibrary
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         private const int Arguments = 10, Arity = 11, Element = 12;
         private const int ValueShape = 0x40000000, NullableShape = 0x20000000;
+        private const int FieldStorageBits = 9, FieldStorageMask = (1 << FieldStorageBits) - 1;
         internal const int FieldMapStart = Header + MaxClasses * Width;
 
         // The header stores the type count, occupied field slots and occupied
@@ -58,18 +59,22 @@ namespace PeLibrary
             if (valueBase == 2)
                 return valueType && (flags & 0x138) == 0x100
                     ? EnumStorage.Read(image, streams, methods, fields, (int)first, (int)end) : -2;
-            if ((flags & 0x18) != (valueType ? 8u : 0u)) return -2;
+            uint layout = flags & 0x18;
+            if (valueType ? layout != 8 && layout != 0x10 : layout != 0) return -2;
             if (valueType)
             {
-                // Managed field access uses the declared value shape. Raw
-                // packing and explicit layout require a separate memory ABI.
+                // Sequential values use declared managed fields. Explicit
+                // field offsets are validated separately before lowering.
                 if ((flags & 0x120) != 0x100 || valueBase != 1)
                     return -2;
                 int attributed = ValueTypeAttributes.CheckByRefLike(image, streams, methods, counts,
                     row, refs, refWidth, defs, defWidth);
                 if (attributed < 0) return attributed;
-                int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]));
-                if (supported < 0) return supported;
+                if (layout == 8)
+                {
+                    int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]));
+                    if (supported < 0) return supported;
+                }
                 baseType = 0;
                 flags |= ValueShape;
                 if (IsPlatformNullable(image, streams, methods, counts, def)) flags |= NullableShape;
@@ -284,6 +289,9 @@ namespace PeLibrary
             type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & 0x20) != 0;
         internal static bool IsValueType(int[] registry, int type) =>
             type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & ValueShape) != 0;
+        internal static bool IsExplicitValue(int[] registry, int type) =>
+            IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & 0x18) == 0x10;
+
         internal static bool IsNullableValueType(int[] registry, int type) =>
             IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & NullableShape) != 0;
 
@@ -347,6 +355,7 @@ namespace PeLibrary
 
         internal static int LayoutFieldCount(int[] registry, int type)
         {
+            if (IsExplicitValue(registry, type)) return 1;
             int count = 0;
             for (int current = type; current != 0; current = Parent(registry, current))
                 count += FieldCount(registry, current);
@@ -355,6 +364,9 @@ namespace PeLibrary
 
         internal static int LayoutFieldType(int[] registry, int type, int index)
         {
+            // The GC type stores shared bytes in one immutable i64. Its CLI
+            // field metadata and bit offsets remain independently addressable.
+            if (IsExplicitValue(registry, type)) return WideStorage.Scalar;
             // Base fields are the prefix required by Wasm struct subtyping.
             int current = type;
             while (true)
@@ -369,10 +381,13 @@ namespace PeLibrary
         internal static int FieldCount(int[] registry, int type) => registry[Slot(type) + Fields];
 
         internal static int FieldTypeAt(int[] registry, int type, int offset) =>
-            registry[registry[Slot(type) + Storage] + offset];
+            registry[registry[Slot(type) + Storage] + offset] & FieldStorageMask;
 
         internal static void SetFieldType(int[] registry, int type, int offset, int fieldType) =>
             registry[registry[Slot(type) + Storage] + offset] = fieldType;
+
+        internal static void SetExplicitField(int[] registry, int type, int index, int storage, int offset) =>
+            SetFieldType(registry, type, index, storage | ((offset + 1) << FieldStorageBits));
 
         internal static int FieldType(int[] registry, int type, int row) =>
             FieldTypeAt(registry, type, row - registry[Slot(type) + FirstField]);
@@ -383,6 +398,8 @@ namespace PeLibrary
             int index = field - registry[slot + FirstField], storage = registry[slot + Storage];
             if (index < 0 || index >= registry[slot + Fields] || registry[storage + index] == 0)
                 return -1;
+            if (IsExplicitValue(registry, type))
+                return (registry[storage + index] >> FieldStorageBits) - 1;
             int ordinal = 0;
             for (int parent = Parent(registry, type); parent != 0; parent = Parent(registry, parent))
                 for (int i = 0; i < FieldCount(registry, parent); i++)

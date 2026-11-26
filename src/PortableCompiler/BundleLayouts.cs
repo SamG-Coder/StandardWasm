@@ -87,6 +87,10 @@ namespace PortableCompiler
             int fields = ObjectLayouts.FieldCount(objects, type);
             int first = ObjectLayouts.FirstRow(objects, type);
             int table = ObjectLayouts.TableOf(objects, type);
+            bool overlay = ObjectLayouts.IsExplicitValue(objects, type);
+            int[] offsets = new int[overlay ? fields : 0];
+            int limit = overlay ? ExplicitValueLayouts.Read(image, heaps, layout, ObjectLayouts.TypeDef(objects, type), first, offsets) : 0;
+            if (limit < 0) return limit;
             for (int offset = 0; offset < fields; offset++)
             {
                 int storage = ObjectLayouts.ReadStorage(image, heaps, layout, table, first + offset, reference);
@@ -106,7 +110,15 @@ namespace PortableCompiler
                 else if (reference[0] != 0)
                     storage = RegisterType(main, bundle, ranges, image, layout, heaps, owner, reference[0], objects, reference[1] == 1);
                 if (storage < 0) return storage;
-                ObjectLayouts.SetFieldType(objects, type, offset, storage);
+                if (overlay && storage != 0)
+                {
+                    int width = ExplicitValueLayouts.Width(storage);
+                    int start = offsets[offset] - 1;
+                    if (start < 0) return -1;
+                    if (width == 0 || start > limit - width) return -2;
+                    ObjectLayouts.SetExplicitField(objects, type, offset, storage, start);
+                }
+                else ObjectLayouts.SetFieldType(objects, type, offset, storage);
             }
             return type;
         }

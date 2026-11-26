@@ -86,6 +86,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [97 · Generic byref-like permission](stage-97-byref-like-permission/README.md) | `npm run demo -- stage-97-byref-like-permission` | Ordinary arguments bind to .NET 10 generic definitions with AllowByRefLike |
 | [98 · Non-nullable value constraints](stage-98-nonnullable-value-constraints/README.md) | `npm run demo -- stage-98-nonnullable-value-constraints` | Closed struct constraints and original CoreLib Nullable field layout |
 | [99 · Named value arguments](stage-99-named-value-arguments/README.md) | `npm run demo -- stage-99-named-value-arguments` | Closed generics with linked sequential struct arguments |
+| [100 · Explicit scalar layouts](stage-100-explicit-scalar-layouts/README.md) | `npm run demo -- stage-100-explicit-scalar-layouts` | Shared bytes for overlapping scalar fields |
 
 ## Adding a stage
 
