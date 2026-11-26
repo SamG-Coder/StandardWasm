@@ -398,7 +398,7 @@ namespace PortableCompiler
                         int operation = records[slot + 1];
                         if ((kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect) && depths[pc] != 0)
                             linearMemory = true;
-                        // PROTOTYPE: p->F loads and stores also address memory 0.
+                        // Stage 140 (decision 0066): p->F loads and stores also address memory 0.
                         if ((kind == BranchIl.GetField || kind == BranchIl.SetField) && depths[pc] != 0 &&
                             records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
                             IsNativeInteger(states[pc * maximum + depths[pc] - 1 - (kind == BranchIl.SetField ? 2 : 1)]))
@@ -663,7 +663,7 @@ namespace PortableCompiler
                         int type = ObjectLayouts.Find(objects, owner, fieldOwner, new int[0]);
                         if (type == 0)
                             type = BundleLayouts.Register(bundle, image, layout, heaps, owner, fieldOwner, objects);
-                        // PROTOTYPE: a struct reached only through S* has no class layout.
+                        // Stage 140 (decision 0066): a struct reached only through S* has no class layout.
                         if (type == -2)
                             type = BundleLayouts.RegisterValue(bundle, image, layout, heaps, owner, fieldOwner, objects);
                         if (type < 0) return type;
@@ -673,7 +673,7 @@ namespace PortableCompiler
                         records[slot + 3] = FieldAccess.Encode(type, ObjectLayouts.FieldType(objects, type, field));
                         if (ObjectLayouts.IsValueType(objects, type) && records.Length > slot + 2 * BranchIl.Width + 3)
                         {
-                            // PROTOTYPE: the same field through an S* address in memory 0.
+                            // Stage 140 (decision 0066): the same field through an S* address in memory 0.
                             var native = new int[2];
                             if (NativeValueLayouts.Field(bundle, owner, fieldOwner, field, native) == 0)
                             {
@@ -683,7 +683,7 @@ namespace PortableCompiler
                         }
                     }
                     int descriptor = records[slot + 3];
-                    // PROTOTYPE: a recorded native offset means an S* receiver may reach this field.
+                    // Stage 140 (decision 0066): a recorded native offset means an S* receiver may reach this field.
                     bool pointerField = records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0;
                     if (kind == BranchIl.SetField)
                     {

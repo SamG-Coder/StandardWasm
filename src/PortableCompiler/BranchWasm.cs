@@ -590,7 +590,7 @@ namespace PortableCompiler
                     records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
                     IsNativeInteger(states[state + (kind == SetField ? top - 1 : top)]))
                 {
-                    // PROTOTYPE: p->F in memory 0. The field offset is the memarg offset.
+                    // Stage 140 (decision 0066): p->F in memory 0. The field offset is the memarg offset.
                     int offset = records[slot + 2 * BranchIl.Width + 2] - 1, load = records[slot + 2 * BranchIl.Width + 3];
                     int receiver = kind == SetField ? top - 1 : top;
                     int address = Spill(spills, maximum, Native, receiver);

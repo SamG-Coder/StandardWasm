@@ -22,7 +22,7 @@ namespace PortableCompiler
             if (pointee < 0) return pointee;
             if (pointee > 0 && image[position] == 0x11)
             {
-                // PROTOTYPE: a single-level pointer to a blittable sequential struct is an address.
+                // Stage 140 (decision 0066): a single-level pointer to a blittable sequential struct is an address.
                 var identity = new int[2];
                 if (AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, pointee, identity) >= 0 &&
                     NativeValueLayouts.Measure(bundle, identity[0], identity[1], new int[2]) == 0)
