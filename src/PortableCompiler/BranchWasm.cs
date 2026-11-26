@@ -249,6 +249,12 @@ namespace PortableCompiler
                     used = NormalizeSlot(code, used, frame[operand]);
                     used = Local(code, used, 0x21, operand);
                 }
+                else if (kind == CastClass || kind == TestClass)
+                {
+                    byte type = (byte)operand;
+                    used = ReferenceCastWasm.Emit(code, used, Spill(spills, maximum, states[state + top], top),
+                        Spill(spills, maximum, type, top), type, kind == CastClass);
+                }
                 else if (kind == Unary || kind == Narrow || kind == ConvertInteger || kind == ConvertFloat)
                 {
                     byte source = states[state + top];
@@ -313,7 +319,11 @@ namespace PortableCompiler
                         used = NumericLocal(code, used, right, rightType, width);
                         if (type == I64 && IsShift(operand)) code[used++] = 0xad;
                         if (IsFloat(width)) used = FloatWasm.Binary(code, used, operand, width);
-                        else if (ReferenceComparison(type, rightType)) code[used++] = 0xd3; // ref.eq
+                        else if (ReferenceComparison(type, rightType))
+                        {
+                            code[used++] = 0xd3; // ref.eq
+                            if (operand == 0x4b) code[used++] = 0x45; // cgt.un against null is not-equal
+                        }
                         else code[used++] = NumericOpcode(operand, type);
                     }
                     used = Local(code, used, 0x21, Spill(spills, maximum, resultType, top - 1));
