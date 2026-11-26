@@ -112,6 +112,35 @@ namespace StackAllocFixture
             return block[0];
         }
 
+        // The allocation is never reached: no memory is reserved.
+        public static int Untaken(int flag)
+        {
+            if (flag != 0)
+            {
+                byte* block = stackalloc byte[16];
+                block[0] = 1;
+                return block[0];
+            }
+            return 79;
+        }
+
+        // The outer frame enters before the region exists; the callee reserves it. The outer
+        // frame's later allocation and its release must reuse that one reservation.
+        public static int OuterAfterInner(int n)
+        {
+            int inner = Inner(n);
+            byte* block = stackalloc byte[64];
+            block[63] = (byte)n;
+            return inner * 10 + block[63];
+        }
+
+        // CoreCLR returns null for a zero-sized stackalloc.
+        public static int ZeroIsNull(int count)
+        {
+            byte* block = stackalloc byte[count];
+            return block == null ? 1 : 0;
+        }
+
         // Wasm only: 600 KiB stays allocated when the nested Exhaust traps, so the frame
         // never releases it. The next host call must still find an empty shadow stack.
         public static int ExhaustAfterPartial()
