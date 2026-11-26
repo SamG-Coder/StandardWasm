@@ -1,0 +1,1 @@
+{"assembly":"LinkedFields","exportType":"LinkedFields.LinkDemo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["FieldLeft.dll","FieldRight.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":32768,"arguments":[5]},"expected":33}

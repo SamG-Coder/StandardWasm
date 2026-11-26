@@ -1,0 +1,1 @@
+{"assembly":"ArrayBounds","exportType":"ArrayBounds.BoundsDemo","method":"Compile","inputs":[{"file":"self"},{"name":"Rethrow"}],"generated":{"capacity":8192,"arguments":[0,-1]},"expected":-202}

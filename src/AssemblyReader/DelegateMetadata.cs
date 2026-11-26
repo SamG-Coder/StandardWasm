@@ -73,7 +73,8 @@ namespace PeLibrary
             if (!Fits(name, 7, (uint)streams[3]) || !Fits(ns, 7, (uint)streams[3])) return -1;
             uint n = (uint)streams[2] + name, s = (uint)streams[2] + ns;
             if (U32(image, n) != 0x636e7546 || U16(image, n + 4) != 0x3160 || image[n + 6] != 0 ||
-                U32(image, s) != 0x74737953 || U16(image, s + 4) != 0x6d65 || image[s + 6] != 0)
+                U32(image, s) != 0x74737953 || U16(image, s + 4) != 0x6d65 || image[s + 6] != 0 ||
+                !PlatformAssemblyIdentity.IsPlatformAssembly(image, streams, methods, counts, (int)(resolution >> 2)))
                 return -1;
             return args + 2;
         }
