@@ -56,6 +56,14 @@ namespace GenericBodyDemo
         public static int Text(int value) => new Holder<string>(value < 0 ? null : "abc").Get().Length + value;
 
         public static int GenericMethod(int value) => new Holder<int>(value).Echo(value);
+        public static int NullGenericMethod()
+        {
+            Holder<int> receiver = null;
+            int evaluated = 0;
+            try { receiver.Echo(++evaluated); }
+            catch (System.NullReferenceException) { return evaluated; }
+            return -1;
+        }
 
         public static int Virtual(int value) => new Holder<int>(value).Describe();
     }

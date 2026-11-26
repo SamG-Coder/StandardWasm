@@ -43,6 +43,7 @@ namespace PortableCompiler
         // sizeof <type>: lowered to an int32 Constant once the layout is measured.
         internal const int SizeOf = 112; // clear of the reflection kinds 73–75 (Stage 131)
         internal const int ProvenNativeZero = 2;
+        internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
 
@@ -211,9 +212,10 @@ namespace PortableCompiler
                         kind = op == 0x7e ? LoadStaticField : StoreStaticField;
                         comparison = table == 0x0a ? 1 : 0;
                     }
-                    else if (table == 0x2b && op == 0x28)
+                    else if (table == 0x2b && (op == 0x28 || op == 0x6f))
                     {
                         kind = MethodSpecCall;
+                        comparison = op == 0x6f ? MethodSpecCallvirt : 0;
                     }
                     else if (table == 0x0a)
                     {
@@ -444,7 +446,9 @@ namespace PortableCompiler
         {
             int slot = offset * Width;
             int kind = records[slot];
-            if (kind == ConvertFloat || kind == ConvertInteger || kind == Load || kind == MethodSpecCall)
+            if (kind == MethodSpecCall)
+                records[slot + 3] = records[slot + 3] | 1;
+            else if (kind == ConvertFloat || kind == ConvertInteger || kind == Load)
                 records[slot + 3] = 1;
             return records[slot] != 0;
         }

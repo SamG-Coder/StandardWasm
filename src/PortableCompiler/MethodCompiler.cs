@@ -777,6 +777,7 @@ namespace PortableCompiler
                 }
                 if (kind == BranchIl.MethodSpecCall)
                 {
+                    bool checkReceiver = (records[slot + 3] & BranchIl.MethodSpecCallvirt) != 0;
                     var counts = new int[45];
                     if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;
                     var spec = new int[MethodSpecifications.Width];
@@ -788,12 +789,11 @@ namespace PortableCompiler
                     int[] targetLayout = layout, targetHeaps = heaps;
                     if ((method & 1) != 0)
                     {
-                        // Closed generic instance receivers have no lowering yet.
-                        if (bundle.Length == 0 || MemberHasThis(image, heaps, layout, row)) return -2;
+                        if (bundle.Length == 0 || (checkReceiver && !MemberHasThis(image, heaps, layout, row))) return -2;
                         if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
                         if (callerType < 0) return -1;
                         var symbol = new int[5];
-                        status = AssemblyBundle.Resolve(bundle, image, layout, heaps, owner, row, 0x28, false, objects, symbol,
+                        status = AssemblyBundle.Resolve(bundle, image, layout, heaps, owner, row, checkReceiver ? 0x6f : 0x28, false, objects, symbol,
                             context, callerType, methodArity: spec[MethodSpecifications.Arity], callerMethodArguments: methodArguments);
                         if (status < 0) return status;
                         targetOwner = symbol[0];
@@ -810,7 +810,10 @@ namespace PortableCompiler
                         if (targetType < 0) return targetType;
                         if (context != 0 && targetType == ObjectLayouts.TypeDef(objects, context)) targetContext = context;
                     }
-                    if ((MethodDefinitions.ReadColumn(targetImage, targetLayout, row, 2) & 0x10) == 0) return -2;
+                    int methodFlags = MethodDefinitions.ReadColumn(targetImage, targetLayout, row, 2);
+                    bool instance = (methodFlags & 0x10) == 0;
+                    // Generic virtual slots and value receivers need their own dispatch or location ABI.
+                    if ((checkReceiver && !instance) || (methodFlags & 0x40) != 0) return -2;
                     var types = new int[spec[MethodSpecifications.Arity]];
                     status = MethodInstantiations.ReadArguments(bundle, image, layout, heaps, owner,
                         context, objects, methodArguments, spec, types);
@@ -833,13 +836,18 @@ namespace PortableCompiler
                             owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions, methodArguments: types);
                         if (functions < 0) return functions;
                         function = functions - 1;
+                        if (instance)
+                        {
+                            int receiver = signatures[offsets[function] + 1];
+                            if (!IsObjectReference(receiver) || ObjectLayouts.IsValueType(objects, receiver)) return -2;
+                        }
                         // Reserve before decoding the body so self-recursion reuses the slot.
                         instantiations.Record(function, owners.Length, types);
                     }
                     records[slot] = BranchIl.Call;
                     records[slot + 1] = function;
-                    // A branch-target marker on MethodSpec is not a callvirt flag.
-                    records[slot + 3] = 0;
+                    // A nonvirtual callvirt still tests the receiver after argument evaluation.
+                    records[slot + 3] = checkReceiver ? 1 : 0;
                     continue;
                 }
                 if (kind == BranchIl.FieldToken || kind == BranchIl.InitializeValue)

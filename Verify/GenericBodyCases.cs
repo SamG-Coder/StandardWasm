@@ -27,6 +27,7 @@ internal static class GenericBodyCases
             Check(nameof(Kernels.Lifecycle), [value], () => Kernels.Lifecycle(value));
             Check(nameof(Kernels.Shared), [value], () => Kernels.Shared(value));
             Check(nameof(Kernels.Text), [value], () => Kernels.Text(value));
+            Check(nameof(Kernels.GenericMethod), [value], () => Kernels.GenericMethod(value));
         }
         int[] operands = [int.MinValue, -7, -2, -1, 0, 1, 2, 7, int.MaxValue];
         foreach (int left in operands)
@@ -37,10 +38,10 @@ internal static class GenericBodyCases
                 Check(nameof(Kernels.Compare), [left, right], () => Kernels.Compare(left, right));
             }
 
-        // Generic method parameters and virtual dispatch stay separately tracked.
-        if (Kernels.GenericMethod(3) != 3 || Kernels.Virtual(3) != 1)
+        Check(nameof(Kernels.NullGenericMethod), [], Kernels.NullGenericMethod);
+        // Receiver checks on nonvirtual calls and virtual dispatch are separate.
+        if (Kernels.Virtual(3) != 1)
             throw new InvalidOperationException("The CLR generic body rejection fixtures did not execute.");
-        Reject("generic method", nameof(Kernels.GenericMethod), OpCodes.Call, -2);
         Reject("virtual member", nameof(Kernels.Virtual), OpCodes.Callvirt, -2);
 
         void Check(string name, int[] arguments, Func<int> clr)

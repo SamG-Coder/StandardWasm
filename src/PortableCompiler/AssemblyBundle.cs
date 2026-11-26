@@ -89,7 +89,7 @@ namespace PortableCompiler
                     ? BundleSignatures.Match(bundle, caller, layout, heaps, owner, reference[5],
                         target, targetLayout, targetHeaps, matched, signature, false, objects, closed)
                     : GenericMethodSignatures.Match(bundle, caller, layout, heaps, owner, reference[5],
-                        target, targetLayout, targetHeaps, matched, signature, methodArity);
+                        target, targetLayout, targetHeaps, matched, signature, methodArity, !isStatic);
                 if (match < 0) return match;
                 if (match == 0) continue;
                 // Bind the declaration. The caller may defer virtual slot

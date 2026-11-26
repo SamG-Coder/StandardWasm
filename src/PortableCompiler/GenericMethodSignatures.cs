@@ -7,13 +7,13 @@ namespace PortableCompiler
     {
         internal static int Match(BundleImages bundle,
             byte[] caller, int[] callerLayout, int[] callerHeaps, int callerOwner, int callerSignature,
-            byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner, int targetSignature, int arity)
+            byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner, int targetSignature, int arity, bool instance = false)
         {
             var left = new int[1];
             var right = new int[1];
-            int leftEnd = Start(caller, callerHeaps, callerSignature, left, arity);
+            int leftEnd = Start(caller, callerHeaps, callerSignature, left, arity, instance);
             if (leftEnd <= 0) return leftEnd;
-            int rightEnd = Start(target, targetHeaps, targetSignature, right, arity);
+            int rightEnd = Start(target, targetHeaps, targetSignature, right, arity, instance);
             if (rightEnd <= 0) return 0;
             int parameters = CompressedUnsigned(caller, left[0], leftEnd, left);
             if (parameters < 0 || parameters >= leftEnd - left[0]) return -1;
@@ -78,14 +78,14 @@ namespace PortableCompiler
             return left[0] == leftEnd && right[0] == rightEnd ? 1 : 0;
         }
 
-        internal static int Start(byte[] image, int[] heaps, int index, int[] next, int arity)
+        internal static int Start(byte[] image, int[] heaps, int index, int[] next, int arity, bool instance = false)
         {
             if (index <= 0 || index >= heaps[1]) return -1;
             int limit = heaps[0] + heaps[1];
             int size = CompressedUnsigned(image, heaps[0] + index, limit, next);
             int start = next[0];
             if (size < (arity == 0 ? 3 : 4) || size > limit - start) return -1;
-            if (image[start] != (arity == 0 ? 0 : 0x10)) return 0;
+            if (image[start] != ((arity == 0 ? 0 : 0x10) | (instance ? 0x20 : 0))) return 0;
             int end = start + size;
             next[0] = start + 1;
             if (arity == 0) return end;
