@@ -15,7 +15,8 @@ A dispatcher tests the nominal Wasm GC types from derived to base and
 tail-calls the selected body. The caller checks null with the same typed
 managed exception as a direct `callvirt`. The dispatcher's unreachable
 fallback guards its closed-world invariant. Dynamic dispatch requires
-entry signatures that cannot introduce an arbitrary host-created managed
-object. Managed interface calls, dynamic assembly loading and constrained
+entry signatures that cannot exchange managed classes, class arrays,
+interfaces or delegates with the host. A returned mutable alias can also
+let a foreign Wasm instance inject a compatible type. Managed interface calls, dynamic assembly loading and constrained
 value calls have separate binding requirements. Unsupported explicit
 method mappings retain their diagnostics when encountered.

@@ -29,6 +29,19 @@ namespace RuntimeDispatchDemo
             catch (NullReferenceException) { return -123; }
         }
 
+        public static Item ExposeManagedReference(int input)
+        {
+            int result = Read(Choose(input), input);
+            return new ItemForHost(result);
+        }
+
+        private sealed class ItemForHost : Item
+        {
+            private int captured;
+            public ItemForHost(int value) { captured = value; }
+            public override int Read(int input) => unchecked(captured + input);
+        }
+
         public static int HiddenSlot(int input) => ReadHidden(new HiddenLeaf(), input);
 
         // The only allocation of LateItem is inside a virtual override

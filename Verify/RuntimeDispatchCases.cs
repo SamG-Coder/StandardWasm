@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Reflection.Emit;
 using BootstrapLibrary;
 using DispatchDependency;
 using RuntimeDispatchDemo;
@@ -17,6 +19,24 @@ internal static class RuntimeDispatchCases
         Check(nameof(Kernels.HiddenSlot), Kernels.HiddenSlot);
         Check(nameof(Kernels.DiscoveredOverride), Kernels.DiscoveredOverride);
         Check(nameof(Kernels.NullOnly), Kernels.NullOnly);
+
+        // A class escaping to another Wasm instance can keep a mutable alias.
+        // That class and its children are outside this closed-world ABI.
+        byte[] exposed = BundleCases.Manifest(typeof(Kernels), nameof(Kernels.ExposeManagedReference));
+        MethodInfo read = typeof(Kernels).GetMethod("Read", BindingFlags.NonPublic | BindingFlags.Static)!;
+        int call = IlOffsets.Find(read.GetMethodBody()!.GetILAsByteArray()!, OpCodes.Callvirt);
+        int[] expectedLocation = [0, read.MetadataToken & 0xffffff, call];
+        Array.Fill(output, (byte)0xa5);
+        int rejected = CompilerExports.CompileBundleDetailed(bundle, exposed, output, location);
+        if (call < 0 || rejected != -2 || !location.SequenceEqual(expectedLocation) || output.Any(value => value != 0xa5))
+            throw new InvalidOperationException($"Escaping a managed class returned {rejected} at [{string.Join(", ", location)}].");
+        cases.Add(new
+        {
+            module = "BootstrapLibrary", method = "CompileBundle", fixture = "runtime class exported managed reference",
+            inputs = new[] { encodedBundle, Encode(exposed) },
+            generated = new { capacity, bundle = true, arguments = Array.Empty<int>(), reject = true, diagnostic = expectedLocation },
+            expected = rejected
+        });
 
         void Check(string name, Func<int, int> oracle)
         {

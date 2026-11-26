@@ -8,5 +8,6 @@ signature matching, and the returned reference preserves receiver identity.
 The CLR, Node and Edge suite also compares checked constructor failures,
 null receiver exceptions, and argument evaluation before the receiver
 check. The stage covers public constructors and known instance bodies
-on supported sealed classes. Dispatch through inheritance and interfaces
-requires separate runtime support.
+on supported sealed classes. Class virtual calls also preserve the original
+managed null exception. See [Stage 122](../stage-122-runtime-class-dispatch/README.md)
+for runtime override selection.

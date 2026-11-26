@@ -153,11 +153,14 @@ namespace PortableCompiler
                 for (int parameter = 1; parameter <= arities[index]; parameter++)
                 {
                     int type = signatures[offsets[index] + parameter];
-                    if (CanImportClass(objects, type)) externalObjects = true;
+                    if (CanExchangeClass(objects, type)) externalObjects = true;
                     if (type == NullPointer || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
                         return -2;
                 }
                 int result = signatures[offsets[index]];
+                // A foreign Wasm caller can mutate an escaped class or array
+                // that still has an alias inside the linked application.
+                if (CanExchangeClass(objects, result)) externalObjects = true;
                 if (result == NullPointer || ObjectLayouts.IsValueType(objects, result)) return -2;
                 exports[export] = index;
             }
@@ -1008,7 +1011,7 @@ namespace PortableCompiler
             return true;
         }
 
-        private static bool CanImportClass(int[] objects, int type)
+        private static bool CanExchangeClass(int[] objects, int type)
         {
             while (type >= ObjectLayouts.FirstClass)
             {
@@ -1016,7 +1019,7 @@ namespace PortableCompiler
                 if (element == 0) return !ObjectLayouts.IsValueType(objects, type);
                 type = element;
             }
-            return type == ObjectLayouts.ObjectReference;
+            return type == ObjectLayouts.ObjectReference || type == Delegate || type == EventHandlerReference;
         }
 
         private static int NextSignature(int[] offsets, int[] arities, int functions) =>
