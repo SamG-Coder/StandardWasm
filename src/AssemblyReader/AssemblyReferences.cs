@@ -4,15 +4,15 @@ namespace PeLibrary
 {
     internal static class AssemblyReferences
     {
-        internal const int SymbolWidth = 12;
+        internal const int SymbolWidth = 13;
         private const int FullKey = 6, KeyStart = 7, KeyLength = 8;
         private const int Leaf = 9;
-        internal const int Depth = 10, AssemblyRow = 11;
+        internal const int Depth = 10, AssemblyRow = 11, GenericParent = 12;
 
         // Version byte offset, assembly/type/namespace/member string indexes,
         // signature blob index, then key kind and its validated byte range.
         // The type name slots identify the outer type for forwarder lookup.
-        internal static int ReadMember(byte[] image, int[] streams, int[] methods, int row, int[] reference)
+        internal static int ReadMember(byte[] image, int[] streams, int[] methods, int row, int[] reference, bool allowClosedField = false)
         {
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
@@ -24,12 +24,37 @@ namespace PeLibrary
             int parentWidth = memberWidth - strings - blobs;
             uint member = (uint)(table + (row - 1) * memberWidth);
             uint parent = Index(image, member, parentWidth);
-            if ((parent & 7) != 1) return -2; // TypeRef only.
-            int status = ReadTypeReference(image, streams, methods, counts, first, (int)(parent >> 3), reference);
-            if (status < 0) return status;
+            if (allowClosedField && (parent & 7) == 4)
+            {
+                int blob = TypeSpecBlob(image, streams, methods, counts, (int)(parent >> 3));
+                if (blob < 0) return blob;
+                reference[GenericParent] = blob;
+            }
+            else
+            {
+                if ((parent & 7) != 1) return -2;
+                int status = ReadTypeReference(image, streams, methods, counts, first, (int)(parent >> 3), reference);
+                if (status < 0) return status;
+            }
             reference[4] = (int)Index(image, member + (uint)parentWidth, strings);
             reference[5] = (int)Index(image, member + (uint)(parentWidth + strings), blobs);
             return 0;
+        }
+
+        internal static int TypeSpecBlob(byte[] image, int[] streams, int[] methods, int row)
+        {
+            var counts = new int[45];
+            if (MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts) < 0) return -1;
+            return TypeSpecBlob(image, streams, methods, counts, row);
+        }
+
+        private static int TypeSpecBlob(byte[] image, int[] streams, int[] methods, int[] counts, int row)
+        {
+            int table = MetadataTableRows.TableStart(streams, methods, counts, 27);
+            if (table < 0 || row < 1 || row > counts[27]) return -1;
+            int width = methods[3];
+            int index = (int)Index(image, (uint)(table + (row - 1) * width), width);
+            return index > 0 && index < streams[1] ? index : -1;
         }
 
         internal static int ReadType(byte[] image, int[] streams, int[] methods, int row, int[] reference)

@@ -17,9 +17,21 @@ namespace PortableCompiler
             {
                 uint token = unchecked((uint)records[next + 1]);
                 uint table = token >> 24;
-                if (table != 1 && table != 2) return -2;
-                int coded = (int)((token & 0xffffff) << 2) | (table == 1 ? 1 : 0);
-                int initialized = BundleLayouts.RegisterType(main, bundle, ranges, image, layout, heaps, owner, coded, objects, true);
+                int row = (int)(token & 0xffffff);
+                int initialized;
+                if (table == 0x1b)
+                {
+                    int blob = AssemblyReferences.TypeSpecBlob(image, heaps, layout, row);
+                    if (blob < 0) return blob;
+                    initialized = ManagedReferenceSignatures.ReadInstantiation(main, bundle, ranges, image, layout, heaps,
+                        owner, blob, objects);
+                }
+                else
+                {
+                    if (table != 1 && table != 2) return -2;
+                    int coded = row << 2 | (table == 1 ? 1 : 0);
+                    initialized = BundleLayouts.RegisterType(main, bundle, ranges, image, layout, heaps, owner, coded, objects, true);
+                }
                 if (initialized < 0 || initialized != type) return -2;
                 records[slot] = ClearValue;
                 records[slot + 2] = records[next + 2];

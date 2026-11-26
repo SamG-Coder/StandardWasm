@@ -89,16 +89,35 @@ namespace PortableCompiler
             int[] layout, int[] heaps, int owner, int member, bool write, int[] objects, int[] field)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
-            int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference);
+            int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedField: true);
             if (status < 0) return status;
             var binding = new int[2];
             var targetLayout = new int[4];
             var targetHeaps = new int[8];
             var range = new int[2];
-            byte[] target = ResolveType(main, bundle, ranges, caller, heaps, layout, reference, true,
-                binding, targetLayout, targetHeaps, range);
-            int matched = binding[0], declaringType = binding[1];
-            if (declaringType < 0) return declaringType;
+            byte[] target;
+            int matched, declaringType, type = 0;
+            int parent = reference[AssemblyReferences.GenericParent];
+            if (parent != 0)
+            {
+                type = ManagedReferenceSignatures.ReadInstantiation(main, bundle, ranges, caller, layout, heaps,
+                    owner, parent, objects);
+                if (type < ObjectLayouts.FirstClass) return type < 0 ? type : -2;
+                matched = ObjectLayouts.AssemblyOf(objects, type);
+                declaringType = ObjectLayouts.TypeDef(objects, type);
+                target = AssemblyBundle.Load(main, bundle, ranges, matched);
+                if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
+                range[0] = ObjectLayouts.FirstRow(objects, type);
+                range[1] = range[0] + ObjectLayouts.FieldCount(objects, type);
+            }
+            else
+            {
+                target = ResolveType(main, bundle, ranges, caller, heaps, layout, reference, true,
+                    binding, targetLayout, targetHeaps, range);
+                matched = binding[0];
+                declaringType = binding[1];
+                if (declaringType < 0) return declaringType;
+            }
 
             int table = AssemblyReferences.FieldTable(target, targetHeaps, targetLayout);
             if (table < 0) return table;
@@ -110,7 +129,7 @@ namespace PortableCompiler
                 if (!AssemblyReferences.SameString(caller, heaps, reference[4], target, targetHeaps, definition[1]))
                     continue;
                 int match = BundleSignatures.Match(main, bundle, ranges, caller, layout, heaps, owner, reference[5],
-                    target, targetLayout, targetHeaps, matched, definition[2], true, objects);
+                    target, targetLayout, targetHeaps, matched, definition[2], true, objects, type);
                 if (match < 0) return match;
                 if (match == 0) continue;
                 if ((definition[0] & 0x17) != 6 || (write && (definition[0] & 0x20) != 0)) return -2;
@@ -118,7 +137,7 @@ namespace PortableCompiler
                 row = candidate;
             }
             if (row == 0) return -6;
-            int type = ObjectLayouts.Find(objects, matched, declaringType, new int[0]);
+            if (type == 0) type = ObjectLayouts.Find(objects, matched, declaringType, new int[0]);
             if (type == 0)
                 type = BundleLayouts.Register(main, bundle, ranges, target, targetLayout, targetHeaps, matched, declaringType, objects);
             if (type < 0) return type;

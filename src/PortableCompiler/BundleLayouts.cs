@@ -99,8 +99,8 @@ namespace PortableCompiler
                         storage = PointerSignatures.ReadStorage(main, bundle, ranges, image, layout, heaps,
                             owner, reference[0] + 1, end, reference);
                     else
-                        storage = ManagedReferenceSignatures.Read(main, bundle, ranges, image, layout, heaps,
-                            owner, reference, end, type, objects, 0);
+                        storage = ManagedReferenceSignatures.ReadStorage(main, bundle, ranges, image, layout, heaps,
+                            owner, reference, end, type, objects);
                     if (storage >= 0 && reference[0] != end) return -1;
                 }
                 else if (reference[0] != 0)
@@ -135,19 +135,19 @@ namespace PortableCompiler
         }
 
         internal static int RegisterInstantiation(byte[] main, byte[] bundle, int[] ranges, byte[] image,
-            int[] layout, int[] heaps, int owner, int coded, int[] objects, int[] arguments)
+            int[] layout, int[] heaps, int owner, int coded, int[] objects, int[] arguments, bool valueType)
         {
             var symbol = new int[2];
             int status = AssemblyBundle.ClassIdentity(main, bundle, ranges, image, layout, heaps, owner, coded, symbol);
             if (status < 0) return status;
             if (symbol[0] == AssemblyBundle.ObjectOwner) return -2;
             if (symbol[0] == owner)
-                return RegisterClosed(main, bundle, ranges, image, layout, heaps, owner, symbol[1], objects, arguments);
+                return RegisterClosed(main, bundle, ranges, image, layout, heaps, owner, symbol[1], objects, arguments, valueType);
             byte[] target = AssemblyBundle.Load(main, bundle, ranges, symbol[0]);
             var targetLayout = new int[4];
             var targetHeaps = new int[8];
             if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
-            return RegisterClosed(main, bundle, ranges, target, targetLayout, targetHeaps, symbol[0], symbol[1], objects, arguments);
+            return RegisterClosed(main, bundle, ranges, target, targetLayout, targetHeaps, symbol[0], symbol[1], objects, arguments, valueType);
         }
 
         internal static int RegisterReference(byte[] main, byte[] bundle, int[] ranges, byte[] image,

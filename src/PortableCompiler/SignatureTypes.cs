@@ -141,8 +141,8 @@ namespace PortableCompiler
                     if (storage == 0)
                     {
                         next[0] = cursor - 1;
-                        storage = ManagedReferenceSignatures.Read(main, bundle, ranges, image, methods, heap,
-                            assembly, next, end, receiver, objects, 0);
+                        storage = ManagedReferenceSignatures.ReadStorage(main, bundle, ranges, image, methods, heap,
+                            assembly, next, end, receiver, objects);
                         if (storage < 0) return storage;
                         cursor = next[0];
                     }
@@ -160,8 +160,8 @@ namespace PortableCompiler
                     else
                     {
                         next[0] = cursor - 1;
-                        int type = ManagedReferenceSignatures.Read(main, bundle, ranges, image, methods, heap,
-                            assembly, next, end, receiver, objects, 0);
+                        int type = ManagedReferenceSignatures.ReadStorage(main, bundle, ranges, image, methods, heap,
+                            assembly, next, end, receiver, objects);
                         if (type < 0) return type;
                         cursor = next[0];
                         types[target] = type;

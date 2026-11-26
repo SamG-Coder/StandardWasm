@@ -7,7 +7,7 @@ namespace PortableCompiler
     {
         internal static int Match(byte[] main, byte[] bundle, int[] ranges,
             byte[] caller, int[] callerLayout, int[] callerHeaps, int callerOwner, int callerSignature,
-            byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner, int targetSignature, bool field, int[] objects)
+            byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner, int targetSignature, bool field, int[] objects, int context = 0)
         {
             var next = new int[1];
             int left = Start(caller, callerHeaps, callerSignature, next, field);
@@ -90,21 +90,21 @@ namespace PortableCompiler
                 {
                     // Exact element encodings distinguish signed and unsigned arrays.
                     if (left >= leftEnd || right >= rightEnd) return 0;
-                    if (ArrayTypeRefs.Storage(caller[left]) != 0)
+                    if (ArrayTypeRefs.Storage(caller[left]) != 0 && ArrayTypeRefs.Storage(target[right]) != 0)
                     {
                         if (caller[left++] != target[right++]) return 0;
                         continue;
                     }
                     int match = MatchReference(main, bundle, ranges, caller, callerLayout, callerHeaps, callerOwner,
-                        target, targetLayout, targetHeaps, targetOwner, left - 1, leftEnd, right - 1, rightEnd, objects, next);
+                        target, targetLayout, targetHeaps, targetOwner, left - 1, leftEnd, right - 1, rightEnd, objects, next, context);
                     if (match <= 0) return match;
                     left = next[0];
                     right = match;
                 }
-                else if (element == 0x15)
+                else if (element == 0x15 || element == 0x13 && context != 0)
                 {
                     int match = MatchReference(main, bundle, ranges, caller, callerLayout, callerHeaps, callerOwner,
-                        target, targetLayout, targetHeaps, targetOwner, left - 1, leftEnd, right - 1, rightEnd, objects, next);
+                        target, targetLayout, targetHeaps, targetOwner, left - 1, leftEnd, right - 1, rightEnd, objects, next, context);
                     if (match <= 0) return match;
                     left = next[0];
                     right = match;
@@ -126,16 +126,16 @@ namespace PortableCompiler
 
         private static int MatchReference(byte[] main, byte[] bundle, int[] ranges, byte[] caller, int[] callerLayout,
             int[] callerHeaps, int callerOwner, byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner,
-            int left, int leftEnd, int right, int rightEnd, int[] objects, int[] next)
+            int left, int leftEnd, int right, int rightEnd, int[] objects, int[] next, int context)
         {
             next[0] = left;
             int leftType = ManagedReferenceSignatures.Read(main, bundle, ranges, caller, callerLayout, callerHeaps,
-                callerOwner, next, leftEnd, 0, objects, 0);
+                callerOwner, next, leftEnd, context, objects, 0);
             if (leftType < 0) return leftType;
             left = next[0];
             next[0] = right;
             int rightType = ManagedReferenceSignatures.Read(main, bundle, ranges, target, targetLayout, targetHeaps,
-                targetOwner, next, rightEnd, 0, objects, 0);
+                targetOwner, next, rightEnd, context, objects, 0);
             right = next[0];
             next[0] = left;
             return leftType == rightType ? right : 0;

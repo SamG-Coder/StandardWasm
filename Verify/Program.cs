@@ -119,4 +119,5 @@ EmbeddedValueCases.Add(cases);
 EnumFieldCases.Add(cases);
 TypedPointerCases.Add(cases);
 FloatFieldCases.Add(cases);
+PrimitiveGenericCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);
