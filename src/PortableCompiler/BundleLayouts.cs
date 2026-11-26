@@ -11,10 +11,11 @@ namespace PortableCompiler
         }
 
         private static int RegisterClosed(byte[] main, byte[] bundle, int[] ranges, byte[] image,
-            int[] layout, int[] heaps, int owner, int row, int[] objects, int[] arguments, bool valueType = false)
+            int[] layout, int[] heaps, int owner, int row, int[] objects, int[] arguments, bool valueType = false, bool enumIdentity = false)
         {
             int type = ReserveTree(main, bundle, ranges, image, layout, heaps, owner, row, objects, arguments, new int[0], 0, valueType);
-            if (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0]) return type;
+            if (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0])
+                return enumIdentity && type > 0 ? ObjectLayouts.RegisterEnum(objects, owner, row, type) : type;
             return Complete(main, bundle, ranges, image, layout, heaps, owner, type, objects);
         }
 
@@ -167,7 +168,7 @@ namespace PortableCompiler
             => RegisterType(main, bundle, ranges, image, layout, heaps, owner, coded, objects, false);
 
         internal static int RegisterType(byte[] main, byte[] bundle, int[] ranges, byte[] image,
-            int[] layout, int[] heaps, int owner, int coded, int[] objects, bool valueType)
+            int[] layout, int[] heaps, int owner, int coded, int[] objects, bool valueType, bool enumIdentity = false)
         {
             int platformType = valueType ? 0 : EventMetadata.Reference(image, heaps, layout, coded);
             if (platformType != 0) return platformType;
@@ -177,12 +178,12 @@ namespace PortableCompiler
             if (status < 0) return status;
             if (symbol[0] == AssemblyBundle.ObjectOwner) return valueType ? -2 : ObjectLayouts.ObjectReference;
             if (symbol[0] == owner)
-                return RegisterClosed(main, bundle, ranges, image, layout, heaps, owner, symbol[1], objects, new int[0], valueType);
+                return RegisterClosed(main, bundle, ranges, image, layout, heaps, owner, symbol[1], objects, new int[0], valueType, enumIdentity);
             byte[] target = AssemblyBundle.Load(main, bundle, ranges, symbol[0]);
             var targetLayout = new int[4];
             var targetHeaps = new int[8];
             if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
-            return RegisterClosed(main, bundle, ranges, target, targetLayout, targetHeaps, symbol[0], symbol[1], objects, new int[0], valueType);
+            return RegisterClosed(main, bundle, ranges, target, targetLayout, targetHeaps, symbol[0], symbol[1], objects, new int[0], valueType, enumIdentity);
         }
     }
 }

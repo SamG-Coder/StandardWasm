@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal static int ReadStorage(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps,
             int owner, int[] next, int end, int context, int[] objects) =>
-            GenericScalar.Storage(Read(main, bundle, ranges, image, layout, heaps, owner, next, end, context, objects, 0));
+            ObjectLayouts.SignatureStorage(objects, Read(main, bundle, ranges, image, layout, heaps, owner, next, end, context, objects, 0));
 
         internal static int ReadInstantiation(byte[] main, byte[] bundle, int[] ranges, byte[] image,
             int[] layout, int[] heaps, int owner, int blob, int[] objects)
@@ -42,10 +42,8 @@ namespace PortableCompiler
                 if (primitive > 0) return GenericScalar.Key(primitive);
                 if (primitive != -2) return primitive;
 
-                int type = BundleLayouts.RegisterType(main, bundle, ranges, image, layout, heaps, owner, token, objects, true);
-                if (type < 0) return type;
-                // Generic arguments carry their defining assembly and TypeDef identity through the layout registry.
-                return ObjectLayouts.IsValueType(objects, type) ? type : -2;
+                int type = BundleLayouts.RegisterType(main, bundle, ranges, image, layout, heaps, owner, token, objects, true, true);
+                return type;
             }
             if (element == 0x0e) return String;
             if (element == 0x1c) return ObjectLayouts.ObjectReference;
@@ -60,6 +58,8 @@ namespace PortableCompiler
             {
                 int item = Read(main, bundle, ranges, image, layout, heaps, owner, next, end, context, objects, depth + 1);
                 if (item < 0) return item;
+                // An enum vector needs separate nominal identity and array lowering.
+                if (ObjectLayouts.IsEnumKey(item)) return -2;
                 return GenericScalar.IsScalar(item) ? GenericScalar.VectorKey(item) : ObjectLayouts.RegisterArray(objects, item);
             }
             if (element != 0x15 || at + 1 >= end) return -2;

@@ -6,15 +6,42 @@ namespace PeLibrary
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
         internal const int FirstClass = PointerStorage.NativeZero + 1, MaxClasses = 256 - FirstClass;
-        private const int Header = 3, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
+        private const int Header = 4, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         private const int Arguments = 10, Arity = 11, Element = 12;
         private const int ValueShape = 0x40000000, NullableShape = 0x20000000;
         private const int FieldStorageBits = 9, FieldStorageMask = (1 << FieldStorageBits) - 1;
+        private const int EnumHead = 3, EnumKeyBase = 0x300;
         internal const int FieldMapStart = Header + MaxClasses * Width;
 
-        // The header stores the type count, occupied field slots and occupied
-        // auxiliary slots. Field slices and auxiliary data grow inward.
+        // The header stores the type count, occupied field and auxiliary slots,
+        // and the enum identity list head. Field and auxiliary data grow inward.
+        internal static int RegisterEnum(int[] registry, int assembly, int row, int storage)
+        {
+            for (int entry = registry[EnumHead]; entry != 0; entry = registry[entry + 3])
+            {
+                if (registry[entry] != assembly || registry[entry + 1] != row) continue;
+                return entry + EnumKeyBase;
+            }
+
+            int start = registry.Length - registry[2] - 4;
+            if (start < FieldMapStart + registry[1]) return -3;
+            registry[start] = assembly;
+            registry[start + 1] = row;
+            registry[start + 2] = storage;
+            registry[start + 3] = registry[EnumHead];
+            registry[EnumHead] = start;
+            registry[2] = registry[2] + 4;
+            return start + EnumKeyBase;
+        }
+
+        // Enum keys never become heap types or evaluation-stack tags. Their
+        // defining identity survives substitution until storage is requested.
+        internal static bool IsEnumKey(int key) => key >= EnumKeyBase;
+
+        internal static int SignatureStorage(int[] registry, int key) =>
+            IsEnumKey(key) ? registry[key - EnumKeyBase + 2] : GenericScalar.Storage(key);
+
         internal static int Find(int[] registry, int assembly, int row, int[] arguments)
         {
             for (int i = 0; i < registry[0]; i++)

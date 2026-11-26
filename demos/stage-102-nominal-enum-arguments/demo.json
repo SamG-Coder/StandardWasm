@@ -1,0 +1,1 @@
+{"assembly":"EnumArgumentDemo","exportType":"EnumArgumentDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["EnumArgumentDependency.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":65536,"arguments":[5]},"expected":11}
