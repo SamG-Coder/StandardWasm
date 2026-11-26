@@ -135,7 +135,7 @@ namespace PortableCompiler
                 target = bundle.Get(matched);
                 if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
                 range[0] = ObjectLayouts.FirstRow(objects, type);
-                range[1] = range[0] + ObjectLayouts.FieldCount(objects, type);
+                range[1] = range[0] + ObjectLayouts.DeclaredFieldCount(objects, type);
             }
             else
             {

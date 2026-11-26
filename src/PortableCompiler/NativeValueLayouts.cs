@@ -34,10 +34,10 @@ namespace PortableCompiler
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0 || type < 1 || type > counts[2]) return -1;
-            // [InlineArray] repeats its field and ref structs hold byrefs: neither is
-            // measured from its declared field rows (decision 0071).
-            int attributes = ObjectLayouts.CheckValueAttributes(image, heaps, layout, type);
-            if (attributes < 0) return attributes;
+            // [InlineArray(n)] repeats its single declared field n times (Stage 138); ref structs
+            // hold byrefs and stay diagnosed (decision 0071).
+            int inlineLength = ObjectLayouts.CheckValueAttributes(image, heaps, layout, type);
+            if (inlineLength < 0) return inlineLength;
 
             int strings = layout[2];
             int fieldIndex = counts[4] < 65536 ? 2 : 4;
@@ -105,6 +105,8 @@ namespace PortableCompiler
                 if (size > align) align = size;
             }
             if (offset == 0) { result[0] = 1; result[1] = 1; return 0; }
+            // The CLR lays out n elements of the one declared field back to back.
+            if (inlineLength > 0) offset = (offset + align - 1) / align * align * inlineLength;
             result[0] = (offset + align - 1) / align * align;
             result[1] = align;
             return 0;

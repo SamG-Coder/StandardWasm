@@ -26,10 +26,11 @@ its 4-byte native width.
   its underlying size.
 - **Still diagnosed:** other auto-layout and explicit-layout structs, `Pack` and
   `Size`, structs with reference fields, `sizeof(T)` over a generic parameter,
-  and structs with a layout-changing attribute. `[InlineArray(n)]` repeats its
-  declared field n times, and `IsByRefLike` structs hold byrefs. Their declared
-  field rows don't give the size. Once Stage 138 (#292) lands, an inline array
-  measures as n times its element.
+  and `IsByRefLike` structs, which hold byrefs.
+- **Inline arrays.** `[InlineArray(n)]` (Stage 138, decision 0066) repeats its
+  single declared field n times, so it measures as n times the aligned element.
+  The x86 CLR agrees: `int`×3 = 12, `byte`×5 = 5, `{byte, long}`×2 = 32, and a
+  struct holding the 12-byte one = 16.
 - **Ground truth.** The x86 CLR 10.0.10: `{byte, long}` = 16, `{byte, void*,
   byte*}` = 12 (24 on x64), `{char, bool}` = 4, empty = 1.
 
