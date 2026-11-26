@@ -278,7 +278,7 @@ namespace PortableCompiler
                     }
                     else
                     {
-                        if (operand == 0x6d || operand == 0x6f)
+                        if (IsSignedIntegerDivision(operand, type))
                             used = OverflowWasm.ThrowIf(code, IsMinAndMinusOne(code, used, type, left, right));
                         used = NumericLocal(code, used, left, type, width);
                         used = NumericLocal(code, used, right, rightType, width);

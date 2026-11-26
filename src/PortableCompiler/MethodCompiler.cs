@@ -260,8 +260,8 @@ namespace PortableCompiler
                         int operation = records[slot + 1];
                         if (depths[pc] != 0 &&
                             (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion ||
-                             kind == BranchIl.Binary && (operation == 0x6d || operation == 0x6f) &&
-                             IsInteger(states[pc * maximum + depths[pc] - 2])))
+                             kind == BranchIl.Binary &&
+                             BranchIl.IsSignedIntegerDivision(operation, states[pc * maximum + depths[pc] - 2])))
                         {
                             if (capacity > int.MaxValue - 48) return -3;
                             capacity += 48;

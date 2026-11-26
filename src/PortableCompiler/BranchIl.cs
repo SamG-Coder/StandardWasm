@@ -340,6 +340,9 @@ namespace PortableCompiler
 
         internal static bool IsComparison(int instruction) => instruction >= 0x46 && instruction <= 0x4f;
 
+        internal static bool IsSignedIntegerDivision(int instruction, byte type) =>
+            (instruction == 0x6d || instruction == 0x6f) && SignatureTypes.IsInteger(type);
+
         internal static bool ConvertsToWide(int instruction) => instruction == 0x6a || instruction == 0x6e;
 
         private static int SignedByte(int value) => (value ^ 128) - 128;
