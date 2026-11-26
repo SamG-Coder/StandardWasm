@@ -6,6 +6,7 @@ namespace PortableCompiler
 {
     internal static class BranchWasm
     {
+        private const int ObjectLocationBank = PeLibrary.ConsoleStorage.Writer + 1;
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
             byte[] outgoingNulls, int[] objects, int[] fieldInitializers)
@@ -23,7 +24,7 @@ namespace PortableCompiler
             int prologue = frameShape[12] - 1, guard = frameShape[13] - 1, epoch = frameShape[14] - 1;
             int activeInitializers = frameShape[15] - 1;
             bool hasNull = outgoingNulls.Length != 0;
-            int spillKinds = PeLibrary.ConsoleStorage.Writer + classes;
+            int spillKinds = ObjectLocationBank + classes;
             // V8 counts parameters together with function locals. Reject
             // before emitting a body that Node and Edge cannot instantiate.
             const int MaxLocals = 50000;
@@ -62,9 +63,10 @@ namespace PortableCompiler
                 for (int kind = I32; kind <= spillKinds; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
-                    int type = kind == NativeZero ? NativeVector : kind;
-                    if (kind > PeLibrary.ConsoleStorage.Writer)
-                        type = FirstClass + kind - PeLibrary.ConsoleStorage.Writer - 1;
+                    int type = kind == NativeZero ? NativeVector :
+                        kind == ObjectLocationBank ? ObjectLocation : kind;
+                    if (kind > ObjectLocationBank)
+                        type = FirstClass + kind - ObjectLocationBank - 1;
                     used = WasmBinary.ValueType(code, used, Representation(objects, type));
                 }
             }
@@ -522,6 +524,27 @@ namespace PortableCompiler
                     used = WasmBinary.Unsigned(code, used, operand);
                     code[used++] = 0x0b;
                 }
+                else if (kind == ObjectElementAddress)
+                {
+                    int array = Spill(spills, maximum, states[state + top - 1], top - 1);
+                    int index = Spill(spills, maximum, states[state + top], top);
+                    int resultSpill = Spill(spills, maximum, ObjectLocation, top - 1);
+                    used = ManagedObjectLocationWasm.TakeElement(code, used, array, index, resultSpill);
+                }
+                else if (kind == LoadObjectIndirect)
+                {
+                    int address = Spill(spills, maximum, ObjectLocation, top);
+                    used = ManagedObjectLocationWasm.AccessElement(code, used, address, operand);
+                    used = Gc(code, used, 0x0b, operand); // array.get
+                    used = Local(code, used, 0x21, Spill(spills, maximum, ObjectReference, top));
+                }
+                else if (kind == StoreObjectIndirect)
+                {
+                    int address = Spill(spills, maximum, ObjectLocation, top - 1);
+                    used = ManagedObjectLocationWasm.AccessElement(code, used, address, operand);
+                    used = Local(code, used, 0x20, Spill(spills, maximum, states[state + top], top));
+                    used = Gc(code, used, 0x0e, operand); // array.set
+                }
                 else if (kind == LoadIndirect)
                 {
                     int address = Spill(spills, maximum, Native, top);
@@ -764,14 +787,14 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int GuardNull(byte[] code, int used, int reference, int tag = ExceptionTagsWasm.NullTag)
+        internal static int GuardNull(byte[] code, int used, int reference, int tag = ExceptionTagsWasm.NullTag)
         {
             used = Local(code, used, 0x20, reference);
             code[used++] = 0xd1; // ref.is_null
             return ExceptionTagsWasm.ThrowIf(code, used, tag);
         }
 
-        private static int GuardArrayIndex(byte[] code, int used, int reference, int index, bool wrapped)
+        internal static int GuardArrayIndex(byte[] code, int used, int reference, int index, bool wrapped)
         {
             // A managed null check precedes this helper, even for negative indices.
             used = Local(code, used, 0x20, index);
@@ -844,8 +867,9 @@ namespace PortableCompiler
         private static int SpillBank(int type) =>
             // NativeZero already spills as Native. Use its otherwise vacant bank
             // for native arrays without increasing the engine's local pressure.
+            type == ObjectLocation ? ObjectLocationBank - 1 :
             PeLibrary.RuntimeTypeMetadata.IsStorage(type) ? ObjectReference - 1 :
-            type >= FirstClass ? PeLibrary.ConsoleStorage.Writer + type - FirstClass :
+            type >= FirstClass ? ObjectLocationBank + type - FirstClass :
                 (type == NativeZero ? Native : type == NativeVector ? NativeZero : type) - 1;
 
         internal static int LoadOperand(byte[] code, int used, int local, int source, int target)

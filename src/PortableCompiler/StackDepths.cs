@@ -137,6 +137,18 @@ namespace PortableCompiler
             // Only an unmanaged pointer (a native int, decision 0060) addresses memory 0.
             // A proven null (NativeZero) spills as Native and raises NullReferenceException
             // at run time, as on the CLR. A managed byref stays a diagnostic.
+            if (kind == ObjectElementAddress)
+            {
+                if (depth < 2 || !ArrayIndex(stack, depth)) return -1;
+                int array = stack[depth - 2];
+                if (array != operand && array != NullValue) return -2;
+                return Push(stack, allocated, depth - 2, ObjectLocation);
+            }
+            if (kind == LoadObjectIndirect)
+                return Match(stack, depth, ObjectLocation) ? Push(stack, allocated, depth - 1, ObjectReference) : -2;
+            if (kind == StoreObjectIndirect)
+                return Match(stack, depth - 1, ObjectLocation) &&
+                    Assignable(stack[depth - 1], ObjectReference, objects) ? depth - 2 : -2;
             if (kind == LoadIndirect)
             {
                 if (depth < 1 || !IsNativeInteger(stack[depth - 1])) return -2;

@@ -9,6 +9,9 @@ namespace PortableCompiler
             MethodPointer = 5, String = 6, Chars = ArrayTypeRefs.Packed16, I64 = WideStorage.Scalar, Longs = WideStorage.Array,
             F32 = FloatStorage.Single, F64 = FloatStorage.Double, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles, Native = NativeStorage.Scalar,
             NativeVector = NativeStorage.Vector;
+        // A location is a traced alias with invariant element type, outside
+        // the ordinary Object/reference conversion lattice.
+        internal const int ObjectLocation = 0x80;
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
 
         // Signature and frame tags keep the CLI storage width. Narrow types
@@ -140,6 +143,11 @@ namespace PortableCompiler
                     types[target] = String;
                 else if (element == 0x1c)
                     types[target] = ObjectLayouts.ObjectReference;
+                else if (element == 0x10 && (locals || i > 0) && cursor < end && image[cursor] == 0x1c)
+                {
+                    cursor++;
+                    types[target] = ObjectLocation;
+                }
                 else if (element == 0x1d && cursor < end)
                 {
                     int storage = ArrayTypeRefs.Storage(image[cursor]);
