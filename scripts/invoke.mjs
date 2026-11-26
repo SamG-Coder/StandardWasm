@@ -23,7 +23,22 @@ export async function invokeGenerated(exports, inputs, generated) {
     // The host only moves bytes and asks the engine to validate and execute the result.
     const [image, selection] = inputs;
     let length;
-    if (generated.multiExport) {
+    if (generated.bundle) {
+        let entries = selection;
+        if (Array.isArray(selection?.name)) {
+            const bundle = Uint8Array.from(image.bytes);
+            const length = new DataView(bundle.buffer).getUint32(0, true);
+            const primary = { bytes: Array.from(bundle.subarray(4, 4 + length)) };
+            const row = invoke(exports, "FindRow", [primary, { bytes: selection.name }]);
+            if (row < 1) throw Error("Bundle fixture method was not found");
+            const manifest = new Uint8Array(11);
+            new DataView(manifest.buffer).setUint32(0, row, true);
+            manifest[4] = 3;
+            manifest.set([114, 117, 110], 8);
+            entries = { bytes: Array.from(manifest) };
+        }
+        length = invoke(exports, "CompileBundle", [image, entries, output]);
+    } else if (generated.multiExport) {
         length = invoke(exports, "CompileModule", [image, selection, output]);
     } else {
         const row = Array.isArray(selection?.name)

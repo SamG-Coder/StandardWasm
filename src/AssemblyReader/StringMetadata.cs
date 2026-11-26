@@ -34,7 +34,7 @@ namespace PeLibrary
             int first = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
             if (first < 0 || row < 1 || row > counts[10])
                 return 0;
-            int table = DelegateMetadata.TableStart(streams, methods, counts, 10);
+            int table = MetadataTableRows.TableStart(streams, methods, counts, 10);
             if (table < 0) return 0;
             int strings = methods[2], blobs = methods[3];
             int width = StandaloneSignatures.Width(counts, 10, strings, blobs);

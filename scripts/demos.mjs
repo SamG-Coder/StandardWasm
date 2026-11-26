@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { root } from "./toolchain.mjs";
 
 export function listDemos() {
@@ -22,6 +22,16 @@ export function listDemos() {
 
 export function demoInputs(demo) {
     return demo.inputs.map(input => {
+        if (input?.file === "bundle") {
+            const images = [readFileSync(demo.dll), ...input.dependencies.map(name =>
+                readFileSync(join(dirname(demo.dll), name)))];
+            const parts = images.flatMap(bytes => {
+                const header = Buffer.alloc(4);
+                header.writeUInt32LE(bytes.length);
+                return [header, bytes];
+            });
+            return { bytes: Array.from(Buffer.concat(parts)) };
+        }
         if (input?.file === "self") return { bytes: Array.from(readFileSync(demo.dll)) };
         if (typeof input?.name === "string") return { name: Array.from(Buffer.from(input.name, "utf8")) };
         return input;

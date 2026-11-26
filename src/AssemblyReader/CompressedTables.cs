@@ -9,6 +9,7 @@ namespace PeLibrary
 
         internal static int FindWithHeaps(byte[] image, int[] layout, int[] heaps)
         {
+            for (int i = 0; i < heaps.Length; i++) heaps[i] = 0;
             var root = new int[2];
             if (PeLocator.LocateMetadata(image, root) != 0)
                 return MethodDefinitions.Malformed;
