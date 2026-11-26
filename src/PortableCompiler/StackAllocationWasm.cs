@@ -13,7 +13,7 @@ namespace PortableCompiler
         // Function prologue: initialize the region once, then save $sp.
         internal static int Begin(byte[] code, int used, int sp, int @base, int limit, int frame, int scratch)
         {
-            Global(code, ref used, 0x23, sp);
+            used = Global(code, used, 0x23, sp);
             code[used++] = 0x45; // i32.eqz
             code[used++] = 0x04; code[used++] = 0x40;
             used = BranchWasm.Const(code, used, Pages);
@@ -25,17 +25,17 @@ namespace PortableCompiler
             used = BranchWasm.Local(code, used, 0x20, scratch);
             used = BranchWasm.Const(code, used, 16);
             code[used++] = 0x74; // i32.shl: pages to bytes
-            Global(code, ref used, 0x24, @base);
-            Global(code, ref used, 0x23, @base);
+            used = Global(code, used, 0x24, @base);
+            used = Global(code, used, 0x23, @base);
             used = BranchWasm.Const(code, used, Pages << 16);
             code[used++] = 0x6a;
-            Global(code, ref used, 0x24, limit);
-            Global(code, ref used, 0x23, limit);
-            Global(code, ref used, 0x24, sp);
+            used = Global(code, used, 0x24, limit);
+            used = Global(code, used, 0x23, limit);
+            used = Global(code, used, 0x24, sp);
             code[used++] = 0x0b;
             used = BranchWasm.Const(code, used, 0);
             used = BranchWasm.Local(code, used, 0x21, scratch);
-            Global(code, ref used, 0x23, sp);
+            used = Global(code, used, 0x23, sp);
             return BranchWasm.Local(code, used, 0x21, frame);
         }
 
@@ -45,12 +45,12 @@ namespace PortableCompiler
         internal static int Allocate(byte[] code, int used, int sp, int @base, int size, int result, int scratch)
         {
             used = BranchWasm.Local(code, used, 0x20, size);
-            Global(code, ref used, 0x23, sp);
-            Global(code, ref used, 0x23, @base);
+            used = Global(code, used, 0x23, sp);
+            used = Global(code, used, 0x23, @base);
             code[used++] = 0x6b; // i32.sub
             code[used++] = 0x4b; // i32.gt_u
             code[used++] = 0x04; code[used++] = 0x40; code[used++] = 0x00; code[used++] = 0x0b;
-            Global(code, ref used, 0x23, sp);
+            used = Global(code, used, 0x23, sp);
             used = BranchWasm.Local(code, used, 0x20, size);
             used = BranchWasm.Const(code, used, 15);
             code[used++] = 0x6a;
@@ -58,11 +58,11 @@ namespace PortableCompiler
             code[used++] = 0x71; // align up to 16
             code[used++] = 0x6b;
             used = BranchWasm.Local(code, used, 0x22, scratch);
-            Global(code, ref used, 0x23, @base);
+            used = Global(code, used, 0x23, @base);
             code[used++] = 0x49; // i32.lt_u
             code[used++] = 0x04; code[used++] = 0x40; code[used++] = 0x00; code[used++] = 0x0b;
             used = BranchWasm.Local(code, used, 0x20, scratch);
-            Global(code, ref used, 0x24, sp);
+            used = Global(code, used, 0x24, sp);
             used = BranchWasm.Local(code, used, 0x20, scratch);
             used = BranchWasm.Const(code, used, 0);
             used = BranchWasm.Local(code, used, 0x20, size);
@@ -75,14 +75,16 @@ namespace PortableCompiler
         internal static int Release(byte[] code, int used, int sp, int frame)
         {
             used = BranchWasm.Local(code, used, 0x20, frame);
-            Global(code, ref used, 0x24, sp);
+            used = Global(code, used, 0x24, sp);
             return used;
         }
 
-        private static void Global(byte[] code, ref int used, byte instruction, int index)
+        // No ref parameters: the compiler must compile itself, and managed byrefs (#273)
+        // are not lowered yet.
+        private static int Global(byte[] code, int used, byte instruction, int index)
         {
             code[used++] = instruction;
-            used = WasmBinary.Unsigned(code, used, index);
+            return WasmBinary.Unsigned(code, used, index);
         }
     }
 }
