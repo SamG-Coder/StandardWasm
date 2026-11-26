@@ -73,7 +73,7 @@ export function readBundle(bytes, offset, payloadStart) {
         if (compressed) throw Error("Compressed .NET bundle entries are not supported: " + path);
         if (start < payloadStart || start > offset || size > offset - start)
             throw Error("Invalid .NET bundle entry range: " + path);
-        entries.push({ path, kind, start, size, bytes: bytes.subarray(start, start + size) });
+        entries.push({ path, kind, start, size, bytes: bytes.subarray(start, start + size), loadedFromBytes: true });
     }
 
     function headerEntry(kind, start, size) {

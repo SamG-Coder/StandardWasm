@@ -22,57 +22,84 @@ namespace PortableCompiler
             Length = length;
         }
 
+        // A zero image length reserves the optional versioned prefix without
+        // changing the original sequence of [length, image] records.
+        private const uint ModuleOrigins = 0x314f4d53; // SMO1
+
         internal byte[] Get(int owner) => images[owner].Bytes;
+
+        // A supplied basename is UTF-16 little endian. A null name denotes a
+        // module loaded from bytes, with no physical file path.
+        internal byte[] FileName(int owner) => images[owner].FileName;
 
         internal static BundleImages Single(byte[] image)
         {
             var images = new BundleImage[1];
-            images[0] = new BundleImage(image);
+            images[0] = new BundleImage(image, null);
             return new BundleImages(images, 1, 0);
         }
 
         internal static BundleImages Unpack(byte[] packed)
         {
-            // Validate every range before copying any payload. The repeated
-            // pass below uses those same length prefixes without retaining
-            // access to the caller's packed buffer.
-            int count = CountImages(packed);
+            bool origins = packed.Length >= 8 && U32(packed, 0) == 0 && U32(packed, 4) == ModuleOrigins;
+            int start = origins ? 8 : 0;
+            int header = origins ? 8 : 4;
+            // Validate every range and basename before copying any payload.
+            int count = CountImages(packed, start, header, origins);
             if (count == 0) return null;
             var images = new BundleImage[count];
-            int cursor = 0;
+            int cursor = start;
             for (int owner = 0; owner < count; owner++)
             {
-                int size = ImageLength(packed, cursor);
-                if (size == 0) return null;
-                cursor += 4;
-                var image = new byte[size];
-                for (int i = 0; i < image.Length; i++)
-                    image[i] = packed[cursor + i];
-                images[owner] = new BundleImage(image);
-                cursor += image.Length;
+                int size = (int)U32(packed, (uint)cursor);
+                int nameSize = origins ? (int)U32(packed, (uint)cursor + 4) : 0;
+                cursor += header;
+                byte[] image = Copy(packed, cursor, size);
+                cursor += size;
+                byte[] name = nameSize == 0 ? null : Copy(packed, cursor, nameSize);
+                images[owner] = new BundleImage(image, name);
+                cursor += nameSize;
             }
-            return cursor == packed.Length ? new BundleImages(images, count, packed.Length) : null;
+            return new BundleImages(images, count, packed.Length);
         }
 
-        private static int CountImages(byte[] packed)
+        private static byte[] Copy(byte[] source, int start, int size)
         {
-            int count = 0, cursor = 0;
+            var copy = new byte[size];
+            for (int i = 0; i < size; i++) copy[i] = source[start + i];
+            return copy;
+        }
+
+        private static int CountImages(byte[] packed, int cursor, int header, bool origins)
+        {
+            int count = 0;
+            uint limit = (uint)packed.Length;
             while (cursor < packed.Length)
             {
-                int length = ImageLength(packed, cursor);
-                if (length == 0) return 0;
-                cursor += 4 + length;
+                if (!Fits((uint)cursor, (uint)header, limit)) return 0;
+                uint size = U32(packed, (uint)cursor);
+                uint nameSize = origins ? U32(packed, (uint)cursor + 4) : 0;
+                uint start = (uint)(cursor + header);
+                if (size == 0 || !Fits(start, size, limit) || !Fits(start + size, nameSize, limit))
+                    return 0;
+                if (nameSize != 0 && !ValidFileName(packed, start + size, nameSize)) return 0;
+                cursor = (int)(start + size + nameSize);
                 count++;
             }
             return count;
         }
 
-        private static int ImageLength(byte[] packed, int cursor)
+        private static bool ValidFileName(byte[] packed, uint start, uint size)
         {
-            int remaining = packed.Length - cursor;
-            if (remaining < 4) return 0;
-            uint length = U32(packed, (uint)cursor);
-            return length <= (uint)(remaining - 4) ? (int)length : 0;
+            if ((size & 1) != 0) return false;
+            if (size == 2 && U16(packed, start) == '.' ||
+                size == 4 && U32(packed, start) == 0x002e002e) return false;
+            for (uint offset = 0; offset < size; offset += 2)
+            {
+                uint unit = U16(packed, start + offset);
+                if (unit == 0 || unit == '/' || unit == '\\' || unit == ':') return false;
+            }
+            return true;
         }
     }
 
@@ -80,7 +107,12 @@ namespace PortableCompiler
     internal sealed class BundleImage
     {
         internal readonly byte[] Bytes;
+        internal readonly byte[] FileName;
 
-        internal BundleImage(byte[] bytes) { Bytes = bytes; }
+        internal BundleImage(byte[] bytes, byte[] fileName)
+        {
+            Bytes = bytes;
+            FileName = fileName;
+        }
     }
 }

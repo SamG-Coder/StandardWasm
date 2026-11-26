@@ -37,6 +37,80 @@ namespace PortableCompiler
             return Wrap(code, used);
         }
 
+        // Compare the UTF-16 code units exactly. Equal references include
+        // the null/null case and need no character access.
+        internal static int OrdinalEquals(byte[] code, int used, int left, int right, int result, int scratch)
+        {
+            int a = scratch, b = scratch + 1, length = scratch + 3, index = scratch + 4;
+            used = Zero(code, used);
+            used = Local(code, used, 0x21, result);
+            code[used++] = 0x02; code[used++] = 0x40; // comparison block
+            used = Local(code, used, 0x20, left);
+            used = Local(code, used, 0x20, right);
+            code[used++] = 0xd3; // ref.eq
+            code[used++] = 0x04; code[used++] = 0x40;
+            used = SetTrue(code, used, result);
+            code[used++] = 0x0c; code[used++] = 1; // equal
+            code[used++] = 0x0b;
+            used = Local(code, used, 0x20, left);
+            code[used++] = 0xd1; // ref.is_null
+            used = Local(code, used, 0x20, right);
+            code[used++] = 0xd1;
+            code[used++] = 0x72; // i32.or
+            code[used++] = 0x0d; code[used++] = 0; // unequal
+
+            used = Local(code, used, 0x20, left);
+            used = Unwrap(code, used);
+            used = Local(code, used, 0x21, a);
+            used = Local(code, used, 0x20, right);
+            used = Unwrap(code, used);
+            used = Local(code, used, 0x21, b);
+            used = Length(code, used, a);
+            used = Local(code, used, 0x22, length);
+            used = Length(code, used, b);
+            code[used++] = 0x47; // i32.ne
+            code[used++] = 0x0d; code[used++] = 0; // unequal lengths
+            used = Zero(code, used);
+            used = Local(code, used, 0x21, index);
+
+            code[used++] = 0x03; code[used++] = 0x40; // compare each unit
+            used = Local(code, used, 0x20, index);
+            used = Local(code, used, 0x20, length);
+            code[used++] = 0x46; // i32.eq
+            code[used++] = 0x04; code[used++] = 0x40;
+            used = SetTrue(code, used, result);
+            code[used++] = 0x0c; code[used++] = 2; // equal
+            code[used++] = 0x0b;
+            used = Character(code, used, a, index);
+            used = Character(code, used, b, index);
+            code[used++] = 0x47;
+            code[used++] = 0x0d; code[used++] = 1; // unequal
+            used = Local(code, used, 0x20, index);
+            code[used++] = 0x41; code[used++] = 1;
+            code[used++] = 0x6a; // i32.add
+            used = Local(code, used, 0x21, index);
+            code[used++] = 0x0c; code[used++] = 0;
+            code[used++] = 0x0b; // loop
+            code[used++] = 0x0b; // comparison
+            return used;
+        }
+
+        private static int SetTrue(byte[] code, int used, int result)
+        {
+            code[used++] = 0x41; code[used++] = 1;
+            return Local(code, used, 0x21, result);
+        }
+
+        private static int Character(byte[] code, int used, int array, int index)
+        {
+            used = Local(code, used, 0x20, array);
+            used = Local(code, used, 0x20, index);
+            code[used++] = 0xfb;
+            code[used++] = 0x0d; // array.get_u on packed Char[]
+            code[used++] = 4;
+            return used;
+        }
+
         internal static int Wrap(byte[] code, int used)
         {
             code[used++] = 0xfb;

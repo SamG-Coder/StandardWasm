@@ -11,25 +11,7 @@ namespace PortableCompiler
         internal static int Call(byte[] code, int used, int bodyStart, int[] head)
         {
             code[used++] = 0x10;
-            // Store the preceding fixup in the unpublished five-byte call operand.
-            int previous = head[0];
-            head[0] = bodyStart + used + 1;
-            for (int shift = 0; shift < 32; shift += 8)
-                code[used++] = unchecked((byte)(previous >> shift));
-            code[used++] = 0;
-            return used;
-        }
-
-        internal static void ResolveCalls(byte[] bodies, int head, int function)
-        {
-            while (head != 0)
-            {
-                int cursor = head - 1;
-                head = unchecked((int)PeLibrary.ImageBytes.U32(bodies, (uint)cursor));
-                for (int shift = 0; shift < 28; shift += 7)
-                    bodies[cursor++] = (byte)(((function >> shift) & 0x7f) | 0x80);
-                bodies[cursor] = (byte)(function >> 28);
-            }
+            return WasmIndexFixups.Write(code, used, bodyStart, head);
         }
 
         internal static int WriteType(byte[] output, int cursor)

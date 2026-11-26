@@ -50,7 +50,7 @@ namespace PeLibrary
             return PeLocator.MapRange(image, HeaderSize, count, SectionSize, tableEnd, rva, size);
         }
 
-        private static int LocateCli(byte[] image)
+        internal static int LocateCli(byte[] image)
         {
             if ((uint)image.Length < HeaderSize || !HasSignature(image))
                 return -1;
