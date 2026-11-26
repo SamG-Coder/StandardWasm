@@ -19,7 +19,9 @@ export function compile(dll, exportType, output) {
         run("dotnet", ["run", "--project", "Compiler", "-c", "Release", "--", resolve(dll), exportType, wat]);
         const wasm = join(work, "module.wasm");
         run(process.execPath, ["node_modules/binaryen/bin/wasm-as", wat,
-            "--enable-gc", "--enable-reference-types", "--enable-tail-call", "-o", wasm]);
+            "--enable-gc", "--enable-reference-types", "--enable-tail-call",
+            // trunc_sat (Wasm 2.0) gives the saturating float-to-int conversions that .NET 9+ defines.
+            "--enable-nontrapping-float-to-int", "-o", wasm]);
         const binary = readFileSync(wasm);
         if (!WebAssembly.validate(binary)) throw Error("Host engine rejected the module");
         // Publish only after both the assembler and the executing engine have validated the module.

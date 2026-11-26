@@ -1,0 +1,1 @@
+{"assembly":"PrimitiveArrays","exportType":"PrimitiveArrays.Buffers","method":"CountPrimes","inputs":[100],"expected":25}
