@@ -14,8 +14,17 @@ namespace PortableCompiler
             int typeSize = UnsignedSize(functions + typeOffset) + 17;
             for (int i = 0; i < objects[0]; i++)
             {
-                int fields = objects[1 + i * Width + 2];
-                int size = 1 + UnsignedSize(fields) + fields * 2;
+                int slot = 1 + i * Width;
+                int first = objects[slot + 1], fields = objects[slot + 2];
+                int size = 1, stored = 0;
+                for (int field = 0; field < fields; field++)
+                {
+                    int type = FieldType(objects, first + field);
+                    if (type == 0) continue;
+                    size += 1 + ValueWidth((byte)type);
+                    stored++;
+                }
+                size += UnsignedSize(stored);
                 if (size > output.Length - typeSize) return -3;
                 typeSize += size;
             }
@@ -102,12 +111,18 @@ namespace PortableCompiler
             output[cursor++] = 0;
             for (int i = 0; i < objects[0]; i++)
             {
-                int fields = objects[1 + i * Width + 2];
+                int slot = 1 + i * Width;
+                int first = objects[slot + 1], fields = objects[slot + 2];
                 output[cursor++] = 0x5f; // struct
-                cursor = Unsigned(output, cursor, fields);
+                int stored = 0;
+                for (int field = 0; field < fields; field++)
+                    if (FieldType(objects, first + field) != 0) stored++;
+                cursor = Unsigned(output, cursor, stored);
                 for (int field = 0; field < fields; field++)
                 {
-                    output[cursor++] = 0x7f;
+                    int fieldType = FieldType(objects, first + field);
+                    if (fieldType == 0) continue;
+                    cursor = ValueType(output, cursor, (byte)fieldType);
                     output[cursor++] = 1;
                 }
             }
