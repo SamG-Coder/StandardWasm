@@ -64,7 +64,11 @@ internal static class CoreRootGuardCases
         }
     }
 
-    private static byte[] Image(string name, byte[] key, bool nonemptyConstructor = false, int? nativeWidth = 4)
+    internal static byte[] RuntimeTypeCoreLibImage() =>
+        Image("System.Private.CoreLib", typeof(object).Assembly.GetName().GetPublicKey()!, includeType: true);
+
+    private static byte[] Image(string name, byte[] key, bool nonemptyConstructor = false, int? nativeWidth = 4,
+        bool includeType = false)
     {
         // Emit only the metadata seen by the compiler. The regular Stage 81
         // oracle separately exercises the installed CoreLib on the CLR.
@@ -88,6 +92,10 @@ internal static class CoreRootGuardCases
         if (nativeWidth != null)
             metadata.AddTypeDefinition(TypeAttributes.Public | TypeAttributes.Sealed, metadata.GetOrAddString("System"),
                 metadata.GetOrAddString("IntPtr"), root, fields, MetadataTokens.MethodDefinitionHandle(SizeRow));
+
+        if (includeType)
+            metadata.AddTypeDefinition(TypeAttributes.Public | TypeAttributes.Abstract, metadata.GetOrAddString("System"),
+                metadata.GetOrAddString("Type"), root, fields, MetadataTokens.MethodDefinitionHandle(SizeRow + 1));
 
         var bodies = new BlobBuilder();
         var bodyStream = new MethodBodyStreamEncoder(bodies);

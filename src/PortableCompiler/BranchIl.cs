@@ -23,6 +23,7 @@ namespace PortableCompiler
         // constructor's receiver: [S, arguments] -> []. The operand is the
         // function and the auxiliary field is the addressed frame index.
         internal const int ConstructValue = 66;
+        internal const int LoadTypeToken = 67, TypeFromHandle = 68;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
@@ -242,9 +243,16 @@ namespace PortableCompiler
                     if (length - pc < 4) return -1;
                     uint token = ImageBytes.U32(image, (uint)(start + pc));
                     pc += 4;
-                    if (token >> 24 != 4) return -2;
-                    kind = FieldToken;
                     operand = (int)(token & 0xffffff);
+                    uint table = token >> 24;
+                    if (table == 4) kind = FieldToken;
+                    else if (table == 1 || table == 2)
+                    {
+                        if (operand == 0) return -1;
+                        kind = LoadTypeToken;
+                        operand = (operand << 2) | (table == 1 ? 1 : 0);
+                    }
+                    else return -2;
                 }
                 else if (op == 0x8e) kind = ArrayLength;
                 else if (op >= 0x90 && op <= 0x9a)
