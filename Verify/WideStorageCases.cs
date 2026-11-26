@@ -74,7 +74,7 @@ internal static class WideStorageCases
                 module = "BootstrapLibrary", method = "Compile", fixture = method,
                 inputs = new object[] { encoded, compiled.Row },
                 generated = new { capacity, arguments, hex = compiled.Hex,
-                    exceptionType = exception == typeof(OverflowException).FullName ? null : exception },
+                    exceptionType = exception },
                 expected, exception
             });
         }

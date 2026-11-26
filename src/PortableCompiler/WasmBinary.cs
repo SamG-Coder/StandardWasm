@@ -20,25 +20,27 @@ namespace PortableCompiler
             bool divide = (exceptionTags & ExceptionTypes.DivideByZero) != 0;
             bool bounds = (exceptionTags & ExceptionTypes.IndexOutOfRange) != 0;
             bool nullReference = (exceptionTags & ExceptionTypes.NullReference) != 0;
+            bool invalidCast = (exceptionTags & ExceptionTypes.InvalidCast) != 0;
             // Tag indices stay stable even when lower tags are unused.
-            int tagCount = nullReference ? ExceptionTagsWasm.Count : bounds ? 3 : divide ? 2 : overflow ? 1 : 0;
+            int tagCount = invalidCast ? ExceptionTagsWasm.Count : nullReference ? ExceptionTagsWasm.NullTag + 1 :
+                bounds ? ExceptionTagsWasm.IndexTag + 1 : divide ? ExceptionTagsWasm.DivideTag + 1 : overflow ? 1 : 0;
             int remainderIndex = functions + thunks[0];
             int totalFunctions = remainderIndex + (hasRemainder ? 1 : 0);
             var remainderBody = new byte[hasRemainder ? FloatRemainderWasm.BodyCapacity : 0];
             int remainderSize = hasRemainder ? FloatRemainderWasm.WriteBody(remainderBody) : 0;
             int classBytes = 0;
-            bool recursive = false;
+            // Separate singleton groups with identical structs canonicalize to
+            // the same Wasm type. Preserve class identity by group position.
+            bool recursive = objects[0] != 0;
             for (int i = 0; i < objects[0]; i++)
             {
-                int slot = 1 + i * Width;
-                int first = objects[slot + 1], fields = objects[slot + 2];
+                int classType = FirstClass + i, fields = FieldCount(objects, classType);
                 int size = 1, stored = 0;
                 for (int field = 0; field < fields; field++)
                 {
-                    int type = FieldType(objects, first + field);
+                    int type = FieldTypeAt(objects, classType, field);
                     if (type == 0) continue;
                     size += 1 + ValueWidth((byte)type);
-                    if (type >= FirstClass) recursive = true;
                     stored++;
                 }
                 size += UnsignedSize(stored);
@@ -81,10 +83,11 @@ namespace PortableCompiler
                 codeSize += code;
                 functionSize += index;
             }
-            int exportCount = exports.Length + (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) + (nullReference ? 1 : 0);
+            int exportCount = exports.Length + (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) +
+                (nullReference ? 1 : 0) + (invalidCast ? 1 : 0);
             int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
                 (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
-                (nullReference ? ExceptionTagsWasm.NullExportSize : 0);
+                (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0);
             int tagType = typeOffset + functions + (hasRemainder ? 1 : 0);
             int tagSize = 1 + tagCount * (1 + UnsignedSize(tagType));
             for (int i = 0; i < exports.Length; i++)
@@ -215,16 +218,15 @@ namespace PortableCompiler
             }
             for (int i = 0; i < objects[0]; i++)
             {
-                int slot = 1 + i * Width;
-                int first = objects[slot + 1], fields = objects[slot + 2];
+                int classType = FirstClass + i, fields = FieldCount(objects, classType);
                 output[cursor++] = 0x5f; // struct
                 int stored = 0;
                 for (int field = 0; field < fields; field++)
-                    if (FieldType(objects, first + field) != 0) stored++;
+                    if (FieldTypeAt(objects, classType, field) != 0) stored++;
                 cursor = Unsigned(output, cursor, stored);
                 for (int field = 0; field < fields; field++)
                 {
-                    int fieldType = FieldType(objects, first + field);
+                    int fieldType = FieldTypeAt(objects, classType, field);
                     if (fieldType == 0) continue;
                     cursor = ValueType(output, cursor, (byte)fieldType);
                     output[cursor++] = 1;
@@ -304,6 +306,7 @@ namespace PortableCompiler
             if (divide) cursor = ExceptionTagsWasm.WriteDivideExport(output, cursor);
             if (bounds) cursor = ExceptionTagsWasm.WriteIndexExport(output, cursor);
             if (nullReference) cursor = ExceptionTagsWasm.WriteNullExport(output, cursor);
+            if (invalidCast) cursor = ExceptionTagsWasm.WriteInvalidCastExport(output, cursor);
 
             if (thunks[0] != 0)
             {
