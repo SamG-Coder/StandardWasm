@@ -46,12 +46,16 @@ namespace PortableCompiler
             (IsObjectReference(left) && IsObjectReference(right) &&
                 (Assignable(left, right, objects) || Assignable(right, left, objects)));
 
-        internal static bool Assignable(byte source, int target, int[] objects) =>
-            source == StackType(target) || source == NullValue && IsReference(StackType(target)) ||
-            source == NativeZero && (target == Native || target == VoidPointer) ||
-            target == ObjectLayouts.ObjectReference && IsObjectReference(source) ||
-            ObjectLayouts.Inherits(objects, source, StackType(target)) ||
-            ObjectLayouts.Implements(objects, source, StackType(target));
+        internal static bool Assignable(byte source, int target, int[] objects)
+        {
+            byte expected = StackType(target);
+            if (source == expected) return true;
+            if (ObjectLayouts.IsValueType(objects, source) || ObjectLayouts.IsValueType(objects, expected)) return false;
+            return source == NullValue && IsReference(expected) ||
+                source == NativeZero && (target == Native || target == VoidPointer) ||
+                target == ObjectLayouts.ObjectReference && IsObjectReference(source) ||
+                ObjectLayouts.Inherits(objects, source, expected) || ObjectLayouts.Implements(objects, source, expected);
+        }
 
         internal static byte FloatWidth(byte left, byte right) => left == F64 || right == F64 ? F64 : F32;
 
@@ -161,13 +165,13 @@ namespace PortableCompiler
                         types[target] = type;
                     }
                 }
-                else if (element == 0x12)
+                else if (element == 0x12 || element == 0x11)
                 {
                     int coded = CompressedUnsigned(image, cursor, end, next);
                     if (coded <= 0) return -2;
                     cursor = next[0];
-                    int type = BundleLayouts.RegisterReference(main, bundle, ranges, image, methods,
-                        heap, assembly, coded, objects);
+                    int type = BundleLayouts.RegisterType(main, bundle, ranges, image, methods,
+                        heap, assembly, coded, objects, element == 0x11);
                     if (type < 0) return type;
                     types[target] = type;
                 }

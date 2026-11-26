@@ -148,9 +148,11 @@ namespace PortableCompiler
                 for (int parameter = 1; parameter <= arities[index]; parameter++)
                 {
                     int type = signatures[offsets[index] + parameter];
-                    if (type == VoidPointer || ObjectLayouts.IsInterface(objects, type)) return -2;
+                    if (type == VoidPointer || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
+                        return -2;
                 }
-                if (signatures[offsets[index]] == VoidPointer) return -2;
+                int result = signatures[offsets[index]];
+                if (result == VoidPointer || ObjectLayouts.IsValueType(objects, result)) return -2;
                 exports[export] = index;
             }
             var body = new int[6];
@@ -246,7 +248,7 @@ namespace PortableCompiler
                         return status;
                     functions = LinkOperands(main, bundle, ranges, image, layout, heaps, owner, source,
                         parameters == 0 ? 0 : signatures[signature + 1], records, owners, rows,
-                        bases, indices, arities, offsets, signatures, objects, thunks, literals, literalSize, functions, location);
+                        bases, indices, arities, offsets, signatures, objects, thunks, literals, literalSize, functions, location, frame, catchRegion);
                     if (functions < 0)
                         return functions;
 
@@ -313,6 +315,12 @@ namespace PortableCompiler
                                 int unwindBytes = catchRegion.Length / ExceptionClauses.Width * 32;
                                 if (capacity > int.MaxValue - unwindBytes) return -3;
                                 capacity += unwindBytes;
+                            }
+                            if (kind == BranchIl.UpdateValue)
+                            {
+                                int fields = ObjectLayouts.FieldCount(objects, FieldAccess.Owner(records[slot + 3]));
+                                if (fields > (int.MaxValue - capacity) / 16) return -3;
+                                capacity += fields * 16;
                             }
                             int tags = 0;
                             if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion || kind == BranchIl.NewArray)
@@ -387,7 +395,7 @@ namespace PortableCompiler
 
         private static int LinkOperands(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,
             int[] heaps, int owner, int callerRow, int callerReceiver, int[] records, int[] owners, int[] rows, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
-            byte[] literals, int[] literalSize, int functions, int[] location)
+            byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses)
         {
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
             {
@@ -422,11 +430,20 @@ namespace PortableCompiler
                     records[slot + 1] = type;
                     continue;
                 }
-                if (kind == BranchIl.MethodSpecCall || kind == BranchIl.FieldToken) return -2;
+                if (kind == BranchIl.LocalAddress)
+                {
+                    int lowered = ValueOperands.LowerLocal(main, bundle, ranges, image, layout, heaps,
+                        owner, records, slot, frame, objects, clauses);
+                    if (lowered < 0) return lowered;
+                    continue;
+                }
+                if (kind == BranchIl.MethodSpecCall || kind == BranchIl.FieldToken || kind == BranchIl.InitializeValue)
+                    return -2;
                 if (kind == BranchIl.GetField || kind == BranchIl.SetField || kind == BranchIl.FieldAddress)
                 {
                     int field = records[slot + 1];
-                    if (records[slot + 3] != 0)
+                    bool linked = records[slot + 3] != 0;
+                    if (linked)
                     {
                         if (bundle.Length == 0) return -2;
                         var linkedField = new int[2];
@@ -435,18 +452,40 @@ namespace PortableCompiler
                         if (status < 0) return status;
                         records[slot + 1] = linkedField[0];
                         records[slot + 3] = linkedField[1];
-                        continue;
                     }
-                    int fieldOwner = ObjectLayouts.Owner(image, heaps, layout, field, true);
-                    if (fieldOwner < 0) return -1;
-                    int type = BundleLayouts.Register(main, bundle, ranges, image, layout, heaps, owner, fieldOwner, objects);
-                    if (type < 0) return type;
-                    int fieldIndex = ObjectLayouts.FieldOrdinal(objects, type, field);
-                    if (fieldIndex < 0) return -1;
-                    records[slot + 1] = fieldIndex;
-                    records[slot + 3] = FieldAccess.Encode(type, ObjectLayouts.FieldType(objects, type, field));
-                    if (kind == BranchIl.FieldAddress && !LinkExchange(image, heaps, layout, records, slot))
-                        return -2;
+                    else
+                    {
+                        int fieldOwner = ObjectLayouts.Owner(image, heaps, layout, field, true);
+                        if (fieldOwner < 0) return -1;
+                        int type = ObjectLayouts.Find(objects, owner, fieldOwner, new int[0]);
+                        if (type == 0)
+                            type = BundleLayouts.Register(main, bundle, ranges, image, layout, heaps, owner, fieldOwner, objects);
+                        if (type < 0) return type;
+                        int fieldIndex = ObjectLayouts.FieldOrdinal(objects, type, field);
+                        if (fieldIndex < 0) return -1;
+                        records[slot + 1] = fieldIndex;
+                        records[slot + 3] = FieldAccess.Encode(type, ObjectLayouts.FieldType(objects, type, field));
+                    }
+                    int descriptor = records[slot + 3];
+                    if (kind == BranchIl.SetField)
+                    {
+                        int local = records[slot + BranchIl.Width + 1] - 1;
+                        if (ObjectLayouts.IsValueType(objects, FieldAccess.Owner(descriptor)))
+                        {
+                            if (local < 0 || frame[local] != FieldAccess.Owner(descriptor)) return -2;
+                            records[slot] = BranchIl.UpdateValue;
+                        }
+                        else if (local >= 0) return -2;
+                    }
+                    if (kind == BranchIl.FieldAddress)
+                    {
+                        int next = records[slot + 2];
+                        if (ObjectLayouts.IsValueType(objects, FieldAccess.Storage(descriptor)) &&
+                            next < records.Length / BranchIl.Width && records[next * BranchIl.Width] == BranchIl.GetField &&
+                            !ValueOperands.Entry(records, next, clauses))
+                            records[slot] = BranchIl.GetField;
+                        else if (linked || !LinkExchange(image, heaps, layout, records, slot)) return -2;
+                    }
                     continue;
                 }
                 if (kind == BranchIl.LoadString)

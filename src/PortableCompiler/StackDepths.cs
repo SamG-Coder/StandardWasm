@@ -82,7 +82,7 @@ namespace PortableCompiler
                             stack[i] == NativeZero ? (byte)2 : (byte)0;
                 if (kind == Branch || kind == Conditional || kind == Leave)
                 {
-                    head = Edge(operand, next, maximum, stack, depths, states, pending, head);
+                    head = Edge(operand, next, maximum, stack, depths, states, pending, head, objects);
                     if (head < 0) return -1;
                 }
                 if (kind == Switch)
@@ -90,13 +90,13 @@ namespace PortableCompiler
                     int count = records[slot + 3];
                     for (int i = 0; i < count; i++)
                     {
-                        head = Edge(SwitchTarget(records, operand, i), next, maximum, stack, depths, states, pending, head);
+                        head = Edge(SwitchTarget(records, operand, i), next, maximum, stack, depths, states, pending, head, objects);
                         if (head < 0) return -1;
                     }
                 }
                 if (kind != Branch && kind != Leave)
                 {
-                    head = Edge(records[slot + 2], next, maximum, stack, depths, states, pending, head);
+                    head = Edge(records[slot + 2], next, maximum, stack, depths, states, pending, head, objects);
                     if (head < 0) return -1;
                 }
             }
@@ -107,6 +107,7 @@ namespace PortableCompiler
             int[] signatures, int[] offsets, int[] arities, int[] objects)
         {
             if (kind == LoadString) return Push(stack, depth, String);
+            if (kind == ClearValue) return depth;
             if (kind == NullLiteral) return Push(stack, depth, NullValue);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, depth, EventArgsReference);
             if (kind == CombineHandler || kind == RemoveHandler)
@@ -116,7 +117,8 @@ namespace PortableCompiler
             if (kind == CastHandler) return Match(stack, depth, EventHandlerReference) ? depth : -1;
             if (kind == CastClass || kind == TestClass)
             {
-                if (depth < 1 || (stack[depth - 1] != NullValue && !IsReference(stack[depth - 1]))) return -1;
+                if (depth < 1 || IsValueType(objects, stack[depth - 1]) ||
+                    (stack[depth - 1] != NullValue && !IsReference(stack[depth - 1]))) return -1;
                 stack[depth - 1] = (byte)operand;
                 return depth;
             }
@@ -194,6 +196,7 @@ namespace PortableCompiler
                 if (depth < needed) return -1;
                 byte type = stack[depth - needed];
                 byte top = stack[depth - 1];
+                if (IsValueType(objects, type) || IsValueType(objects, top)) return -2;
                 if (type == VoidPointer || top == VoidPointer)
                 {
                     if (needed == 1) return depth - 1;
@@ -249,7 +252,8 @@ namespace PortableCompiler
                 return result == Void ? start : Push(stack, start, StackType(result));
             }
             if (kind == BaseCtor)
-                return depth > 0 && stack[depth - 1] >= FirstClass && !IsInterface(objects, stack[depth - 1]) ? depth - 1 : -1;
+                return depth > 0 && stack[depth - 1] >= FirstClass && !IsInterface(objects, stack[depth - 1]) &&
+                    !IsValueType(objects, stack[depth - 1]) ? depth - 1 : -1;
             if (kind == GetField)
             {
                 if (depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(extra), objects)) return -1;
@@ -259,6 +263,8 @@ namespace PortableCompiler
             if (kind == SetField)
                 return depth >= 2 && Assignable(stack[depth - 2], FieldAccess.Owner(extra), objects) &&
                     Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 2 : -1;
+            if (kind == UpdateValue)
+                return depth > 0 && Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 1 : -1;
             if (kind == NewArray || kind == InitializedArray)
             {
                 if (!ArrayIndex(stack, depth)) return -1;
@@ -317,7 +323,7 @@ namespace PortableCompiler
         }
 
         private static int Edge(int pc, int count, int maximum, byte[] stack, int[] depths,
-            byte[] states, int[] pending, int head)
+            byte[] states, int[] pending, int head, int[] objects)
         {
             if (pc >= depths.Length) return -1;
             int offset = pc * maximum;
@@ -334,6 +340,7 @@ namespace PortableCompiler
                 for (int i = 0; i < count; i++)
                 {
                     byte current = states[offset + i], incoming = stack[i];
+                    if (current != incoming && (IsValueType(objects, current) || IsValueType(objects, incoming))) return -1;
                     if (current == incoming || incoming == NullValue && IsReference(current) ||
                         incoming == NativeZero && (current == Native || current == VoidPointer)) continue;
                     if ((current != NullValue || !IsReference(incoming)) &&

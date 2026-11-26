@@ -417,8 +417,13 @@ namespace PortableCompiler
                     int storage = FieldAccess.Storage(descriptor);
                     int address = kind == GetField ? top : top - 1;
                     int reference = Spill(spills, maximum, states[state + address], address);
-                    used = GuardNull(code, used, reference);
-                    used = Local(code, used, 0x20, reference);
+                    if (IsValueType(objects, type))
+                        used = ValueFieldsWasm.Materialize(code, used, type, reference);
+                    else
+                    {
+                        used = GuardNull(code, used, reference);
+                        used = Local(code, used, 0x20, reference);
+                    }
                     if (kind == SetField)
                     {
                         byte source = states[state + top];
@@ -426,12 +431,20 @@ namespace PortableCompiler
                     }
                     // struct.set truncates packed cells to their storage
                     // width. The load selects the CLI extension to int32.
-                    int instruction = 5;
-                    if (kind == GetField)
-                        instruction = storage == Signed8 || storage == Signed16 ? 3 : IsNarrow(storage) ? 4 : 2;
+                    int instruction = kind == GetField ? FieldAccess.LoadInstruction(storage) : 5;
                     used = Gc(code, used, instruction, type);
                     used = WasmBinary.Unsigned(code, used, operand);
                     if (kind == GetField) used = Local(code, used, 0x21, Spill(spills, maximum, StackType(storage), top));
+                }
+                else if (kind == ClearValue)
+                    used = ValueFieldsWasm.Clear(code, used, frame[operand], operand);
+                else if (kind == UpdateValue)
+                {
+                    int type = FieldAccess.Owner(records[slot + 3]);
+                    int local = records[slot + BranchIl.Width + 1] - 1;
+                    byte source = states[state + top];
+                    used = ValueFieldsWasm.Update(code, used, objects, type, local, temporaries + type - FirstClass,
+                        operand, Spill(spills, maximum, source, top), source);
                 }
                 else if (kind == NewArray || kind == InitializedArray)
                 {
@@ -639,7 +652,7 @@ namespace PortableCompiler
         internal static int Spill(int first, int maximum, byte type, int depth) =>
             type == NullValue ? first - 1 : first + ((type == NativeZero ? Native : type) - 1) * maximum + depth;
 
-        private static int LoadOperand(byte[] code, int used, int local, byte source, int target)
+        internal static int LoadOperand(byte[] code, int used, int local, byte source, int target)
         {
             if (source != NativeZero || target != VoidPointer) return Local(code, used, 0x20, local);
             code[used++] = 0xd0; // ref.null none
@@ -667,7 +680,7 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int Gc(byte[] code, int used, int instruction, int type)
+        internal static int Gc(byte[] code, int used, int instruction, int type)
         {
             code[used++] = 0xfb;
             code[used++] = (byte)instruction;
