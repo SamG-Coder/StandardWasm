@@ -1,0 +1,1 @@
+{"assembly":"EventLibrary","exportType":"EventLibrary.EventDemo","method":"Compile","inputs":[{"file":"self"},{"name":"SubscriptionOrder"}],"generated":{"capacity":32768,"arguments":[]},"expected":12112}
