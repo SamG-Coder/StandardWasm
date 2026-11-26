@@ -639,14 +639,14 @@ namespace PortableCompiler
                     if (kind == BranchIl.Store) return -2;
                     int lowered = ValueOperands.LowerReceiver(bundle, image, layout, heaps,
                         owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses, readOnlyReceiver);
-                    if (lowered < 0) return lowered;
+                    if (lowered < 0) return ManagedObjectCopy(records, slot, location, lowered);
                     continue;
                 }
                 if (kind == BranchIl.LocalAddress)
                 {
                     int lowered = ValueOperands.LowerLocal(bundle, image, layout, heaps,
                         owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses);
-                    if (lowered < 0) return lowered;
+                    if (lowered < 0) return ManagedObjectCopy(records, slot, location, lowered);
                     continue;
                 }
                 if (kind == BranchIl.LoadObject || kind == BranchIl.StoreObject || kind == BranchIl.InitializeValue)
@@ -1276,6 +1276,26 @@ namespace PortableCompiler
                 type = element;
             }
             return type == ObjectLayouts.ObjectReference || type == Delegate || type == EventHandlerReference;
+        }
+
+        // A managed address consumed by ldobj or stobj (for example `this = new S(...)`, #271)
+        // is diagnosed at that instruction, which is where it was rejected before Stage 145
+        // decoded them. initobj keeps its diagnostic at the address load.
+        private static int ManagedObjectCopy(int[] records, int slot, int[] location, int status)
+        {
+            int next = records[slot + 2] * BranchIl.Width;
+            for (int step = 0; step < 16 && next < records.Length; step++)
+            {
+                int kind = records[next];
+                if (kind == BranchIl.LoadObject || kind == BranchIl.StoreObject)
+                {
+                    if (location.Length != 0) location[2] = next / BranchIl.Width;
+                    return status;
+                }
+                if (kind == BranchIl.Return || kind == BranchIl.Branch || kind == BranchIl.Conditional) break;
+                next = records[next + 2] * BranchIl.Width;
+            }
+            return status;
         }
 
         private static int NextSignature(int[] offsets, int[] arities, int functions) =>
