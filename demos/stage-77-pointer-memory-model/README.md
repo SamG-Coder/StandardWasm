@@ -21,4 +21,12 @@ This is an experiment, not a compiler stage. It backs [decision 0025](../../docs
 
 `measure-core.mjs` runs the scenarios and cost probes in Node and in Edge.
 
-Expected: A fails the 5 `FixedAliasing` cases. B and C pass all 34 in both engines. C's 20,000 tracked payloads are all reported dead after collection. Measurements go to `artifacts/pointer-memory-model/results.json`. The runner exits on its own and is not part of `npm test`.
+Two probes cover model C's lifetime and memory behavior:
+- `liveness.wat` keeps a `Span` alive after its array variable is gone while freed payloads are reused, with and without the owner carried in the `Span`.
+- `pressure.wat` churns 64 KiB arrays without forced collection.
+
+Expected:
+- A fails the 5 `FixedAliasing` cases. B and C pass all 34 in both engines.
+- C's 20,000 tracked payloads are all reported dead after collection.
+- The owner-carrying `Span` still reads 90; the ownerless one reads 17 (use after free).
+- The pressure lines report peak linear memory: much higher in Edge than in Node, and the full allocation for a synchronous loop. Measurements go to `artifacts/pointer-memory-model/results.json`. The runner exits on its own and is not part of `npm test`.

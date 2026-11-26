@@ -61,3 +61,50 @@ async function reclaim(x, gc) {
     liveRegistries.splice(liveRegistries.indexOf(registry), 1);
     return { allocated: count, freed, registerMs, gcRounds: rounds, gcAvailable: !!gc };
 }
+
+// Liveness and reuse (Codex review on #171). A Span outlives its array variable while freed payloads are reused.
+// keepOwner = 1 carries the wrapper in the Span (the adopted rule); keepOwner = 0 is the ownerless representation.
+export async function liveness(bytes, gc) {
+    const results = [];
+    for (const keepOwner of [1, 0]) {
+        let x, freed = 0;
+        const registry = new FinalizationRegistry(p => { freed++; x.free(p); });
+        liveRegistries.push(registry);
+        ({ instance: { exports: x } } = await WebAssembly.instantiate(bytes,
+            { host: { track: (owner, p) => registry.register(owner, p) } }));
+        x.hold(0x5a, keepOwner);
+        for (let round = 0; round < 30; round++) {
+            gc?.();
+            await new Promise(resolve => setTimeout(resolve, 10));
+            x.churn(50, 0x11);
+        }
+        results.push({ keepOwner: !!keepOwner, spanByte: x.read(0), expected: 0x5a, freed, gcAvailable: !!gc });
+        liveRegistries.splice(liveRegistries.indexOf(registry), 1);
+    }
+    return results;
+}
+
+// Memory pressure without forced collection: 64 KiB payloads are allocated and dropped, either in rounds that yield
+// to the event loop or in one synchronous loop. Linear memory never shrinks, so its final size is the peak.
+export async function pressure(bytes) {
+    const results = [];
+    for (const [rounds, perRound] of [[200, 50], [1, 5000]]) {
+        let x, freed = 0;
+        const registry = new FinalizationRegistry(p => { freed++; x.free(p); });
+        liveRegistries.push(registry);
+        ({ instance: { exports: x } } = await WebAssembly.instantiate(bytes,
+            { host: { track: (owner, p) => registry.register(owner, p) } }));
+        let exhausted = false;
+        for (let round = 0; round < rounds && !exhausted; round++) {
+            exhausted = x.churn(perRound) === -1;
+            if (rounds > 1) await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        const freedWhenDone = freed;
+        await new Promise(resolve => setTimeout(resolve, 200));
+        results.push({ pattern: rounds > 1 ? `${rounds} yielding rounds of ${perRound}` : `one synchronous loop of ${perRound}`,
+            allocatedMiB: rounds * perRound / 16, peakMiB: x.pages() / 16, freedWhenDone, freedAfter200ms: freed,
+            allocations: rounds * perRound, exhausted });
+        liveRegistries.splice(liveRegistries.indexOf(registry), 1);
+    }
+    return results;
+}

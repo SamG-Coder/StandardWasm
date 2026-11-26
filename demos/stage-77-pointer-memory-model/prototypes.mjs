@@ -13,7 +13,7 @@ const models = {
   (type $B (array (mut i8)))
   (type $I (array (mut i32)))
   (type $C (array (mut i16)))`,
-        B: "(ref $B)", I: "(ref $I)", C: "(ref $C)",
+        B: "(ref $B)", I: "(ref $I)", C: "(ref $C)", S: "(ref $B)",
         helpers: `
   (func $newB (param $n i32) (result (ref $B)) (array.new_default $B (local.get $n)))
   (func $newI (param $n i32) (result (ref $I)) (array.new_default $I (local.get $n)))
@@ -58,9 +58,10 @@ const models = {
       (local.set $i (i32.add (local.get $i) (i32.const 1))) (br $copy)))
     (local.get $p))
   (func $unpinC (param $a (ref $C)) (param $p i32))
-  ;; A Span over a GC array is (array, offset). It cannot share the pointer representation used for stackalloc.
-  (func $sliceSetB (param $a (ref $B)) (param $offset i32) (param $i i32) (param $v i32)
-    (array.set $B (local.get $a) (i32.add (local.get $offset) (local.get $i)) (local.get $v)))`
+  ;; A Span over a GC array is (owner array, offset). It cannot share the pointer representation used for stackalloc.
+  (func $spanBase (param $a (ref $B)) (param $offset i32) (result i32) (local.get $offset))
+  (func $spanSet (param $owner (ref $B)) (param $base i32) (param $i i32) (param $v i32)
+    (array.set $B (local.get $owner) (i32.add (local.get $base) (local.get $i)) (local.get $v)))`
     },
 
     // B: every object lives in linear memory as [length:i32][payload]. A reference is an address, `fixed` is the
@@ -68,7 +69,7 @@ const models = {
     // prototype does not implement (bump allocation only).
     B: {
         types: "",
-        B: "i32", I: "i32", C: "i32",
+        B: "i32", I: "i32", C: "i32", S: "i32",
         helpers: linearHelpers(
             "(i32.load (local.get $a))",
             "(i32.add (local.get $a) (i32.const 4))",
@@ -83,7 +84,7 @@ const models = {
     C: {
         types: `
   (type $Obj (struct (field $ptr i32) (field $len i32)))`,
-        B: "(ref $Obj)", I: "(ref $Obj)", C: "(ref $Obj)",
+        B: "(ref $Obj)", I: "(ref $Obj)", C: "(ref $Obj)", S: "(ref $Obj)",
         helpers: linearHelpers(
             "(struct.get $Obj $len (local.get $a))",
             "(struct.get $Obj $ptr (local.get $a))",
@@ -111,9 +112,11 @@ function linearHelpers(length, payload, allocate, ref) {
         access("C", 1, "i32.load16_u", "i32.store16") + `
   (func $lenB (param $a ${ref}) (result i32) ${length})
   (func $lenC (param $a ${ref}) (result i32) ${length})
-  ;; A Span over the array is a plain (address, length), the same representation as a stackalloc Span.
-  (func $sliceSetB (param $a ${ref}) (param $offset i32) (param $i i32) (param $v i32)
-    (i32.store8 (i32.add (i32.add ${payload} (local.get $offset)) (local.get $i)) (local.get $v)))`;
+  ;; A Span over the array is (owner, address). Element access uses only the address, the same as a stackalloc
+  ;; Span. The owner is carried so the payload stays alive while the Span is live (Codex review on #171).
+  (func $spanBase (param $a ${ref}) (param $offset i32) (result i32) (i32.add ${payload} (local.get $offset)))
+  (func $spanSet (param $owner ${ref}) (param $base i32) (param $i i32) (param $v i32)
+    (i32.store8 (i32.add (local.get $base) (local.get $i)) (local.get $v)))`;
 }
 
 // Scenario bodies follow demos/stage-77-pointer-memory-model/Patterns.cs line by line.
@@ -174,10 +177,13 @@ const scenarios = m => `
     (call $unpinC (local.get $s) (local.get $p))
     (local.get $sum))
 
-  (func (export "SpanSlice") (param $seed i32) (result i32) (local $a ${m.B})
+  ;; window = data.AsSpan(2, 3): the Span is (owner, base). Writes go through the Span alone. The C# then reads data.
+  (func (export "SpanSlice") (param $seed i32) (result i32) (local $a ${m.B}) (local $owner ${m.S}) (local $base i32)
     (local.set $a (call $newB (i32.const 8)))
-    (call $sliceSetB (local.get $a) (i32.const 2) (i32.const 0) (local.get $seed))
-    (call $sliceSetB (local.get $a) (i32.const 2) (i32.const 2) (i32.mul (local.get $seed) (i32.const 2)))
+    (local.set $owner (local.get $a))
+    (local.set $base (call $spanBase (local.get $a) (i32.const 2)))
+    (call $spanSet (local.get $owner) (local.get $base) (i32.const 0) (local.get $seed))
+    (call $spanSet (local.get $owner) (local.get $base) (i32.const 2) (i32.mul (local.get $seed) (i32.const 2)))
     (i32.add (i32.add (i32.mul (call $getB (local.get $a) (i32.const 2)) (i32.const 1000))
                       (call $getB (local.get $a) (i32.const 4))) (i32.const 3)))
 
