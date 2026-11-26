@@ -2,32 +2,14 @@ import { chromium } from "playwright-core";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { serveIntake } from "./server.mjs";
 import { join } from "node:path";
 import { root, run } from "../../scripts/toolchain.mjs";
 import { openExecutable } from "./loader/intake.mjs";
 
-const pageRoot = join(root, "demos/stage-73-executable-intake");
-const files = new Map([
-    ["/", "web/index.html"],
-    ["/web/intake-ui.mjs", "web/intake-ui.mjs"],
-    ["/loader/intake.mjs", "loader/intake.mjs"],
-    ["/loader/pe.mjs", "loader/pe.mjs"],
-    ["/loader/bundle.mjs", "loader/bundle.mjs"]
-]);
-const server = createServer((request, response) => {
-    const path = files.get(request.url);
-    if (request.method !== "GET" || !path) { response.writeHead(404).end(); return; }
-    response.writeHead(200, { "Content-Type": path.endsWith(".html") ? "text/html" : "text/javascript" });
-    response.end(readFileSync(join(pageRoot, path)));
-});
 const serve = process.argv.includes("--serve");
 if (!serve && process.platform !== "win32") throw Error("The Stage 72 fixture requires Windows.");
-await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(serve ? 5173 : 0, "127.0.0.1", resolve);
-});
-const url = "http://127.0.0.1:" + server.address().port;
+const { url, close } = await serveIntake(serve ? 5173 : 0);
 
 if (serve) {
     console.log("Executable intake at " + url);
@@ -35,7 +17,7 @@ if (serve) {
     try {
         await verify();
     } finally {
-        await new Promise(resolve => server.close(resolve));
+        await close();
     }
 }
 
