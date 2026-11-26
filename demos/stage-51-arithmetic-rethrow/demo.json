@@ -1,0 +1,1 @@
+{"assembly":"RethrowHandlers","exportType":"RethrowHandlers.RethrowDemo","method":"Compile","inputs":[{"file":"self"},{"name":"RetainOuter"}],"generated":{"capacity":8192,"arguments":[2147483647,0]},"expected":-101}
