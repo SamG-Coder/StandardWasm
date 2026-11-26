@@ -5,7 +5,7 @@ namespace PortableCompiler
 {
     internal static class WasmGlobals
     {
-        internal static int Size(int[] globals, int[] objects)
+        internal static int Size(int[] globals, int[] objects, int descriptorHeap)
         {
             int count = globals[0];
             if (count == 0) return 0;
@@ -14,8 +14,11 @@ namespace PortableCompiler
             {
                 int type = ObjectLayouts.Representation(objects, StaticFields.Storage(globals, index));
                 int width = WasmBinary.ValueWidth(type);
-                int init = StaticFields.Owner(globals, index) == StaticFields.EventOwner ? 3 :
-                    type == F32 ? 5 : type == F64 ? 9 : IsScalar(type) || type == ObjectLayouts.ObjectReference ? 2 : width;
+                int owner = StaticFields.Owner(globals, index);
+                int init = RuntimeTypeTokens.IsDescriptorOwner(owner)
+                    ? RuntimeTypeWasm.InitializerSize(descriptorHeap, RuntimeTypeTokens.ModuleSlot(owner), StaticFields.Row(globals, index))
+                    : owner == StaticFields.EventOwner ? 3 :
+                        type == F32 ? 5 : type == F64 ? 9 : IsScalar(type) || type == ObjectLayouts.ObjectReference ? 2 : width;
                 int entry = width + init + 2; // mutability and end opcode
                 if (entry > int.MaxValue - size) return int.MaxValue;
                 size += entry;
@@ -23,17 +26,21 @@ namespace PortableCompiler
             return size;
         }
 
-        internal static int Write(byte[] output, int cursor, int[] globals, int[] objects)
+        internal static int Write(byte[] output, int cursor, int[] globals, int[] objects, int descriptorHeap)
         {
             int count = globals[0];
             cursor = WasmBinary.Unsigned(output, cursor, count);
             for (int index = 0; index < count; index++)
             {
                 int type = ObjectLayouts.Representation(objects, StaticFields.Storage(globals, index));
-                bool eventArgs = StaticFields.Owner(globals, index) == StaticFields.EventOwner;
+                int owner = StaticFields.Owner(globals, index);
+                bool eventArgs = owner == StaticFields.EventOwner;
+                bool descriptor = RuntimeTypeTokens.IsDescriptorOwner(owner);
                 cursor = WasmBinary.ValueType(output, cursor, type);
-                output[cursor++] = eventArgs ? (byte)0 : (byte)1;
-                if (eventArgs)
+                output[cursor++] = eventArgs || descriptor ? (byte)0 : (byte)1;
+                if (descriptor)
+                    cursor = RuntimeTypeWasm.WriteInitializer(output, cursor, descriptorHeap, RuntimeTypeTokens.ModuleSlot(owner), StaticFields.Row(globals, index));
+                else if (eventArgs)
                 {
                     output[cursor++] = 0xfb;
                     output[cursor++] = 1; // struct.new_default

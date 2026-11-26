@@ -145,6 +145,13 @@ namespace PortableCompiler
                     else used = Const(code, used, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, pushed, depth));
                 }
+                else if (kind == LoadTypeToken)
+                {
+                    code[used++] = 0x23; // global.get canonical runtime type descriptor
+                    used = WasmBinary.Unsigned(code, used, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, PeLibrary.RuntimeTypeMetadata.Handle, depth));
+                }
+                // TypeFromHandle changes the CLI category while retaining the reference in the same spill.
                 else if (kind == LoadString)
                 {
                     int characters = records[slot + 3];
@@ -535,7 +542,15 @@ namespace PortableCompiler
                     if (kind == GetField) used = Local(code, used, 0x21, Spill(spills, maximum, StackType(storage), top));
                 }
                 else if (kind == ClearValue)
-                    used = ValueFieldsWasm.Clear(code, used, frame[operand], operand);
+                {
+                    if (frame[operand] == PeLibrary.RuntimeTypeMetadata.Handle)
+                    {
+                        code[used++] = 0xd0; // ref.null eq
+                        code[used++] = 0x6d;
+                        used = Local(code, used, 0x21, operand);
+                    }
+                    else used = ValueFieldsWasm.Clear(code, used, frame[operand], operand);
+                }
                 else if (kind == UpdateValue)
                 {
                     int descriptor = records[slot + 3];
@@ -762,6 +777,7 @@ namespace PortableCompiler
         private static int SpillBank(int type) =>
             // NativeZero already spills as Native. Use its otherwise vacant bank
             // for native arrays without increasing the engine's local pressure.
+            PeLibrary.RuntimeTypeMetadata.IsStorage(type) ? ObjectReference - 1 :
             type >= FirstClass ? PeLibrary.ConsoleStorage.Writer + type - FirstClass :
                 (type == NativeZero ? Native : type == NativeVector ? NativeZero : type) - 1;
 

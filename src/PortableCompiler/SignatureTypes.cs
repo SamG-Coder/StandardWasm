@@ -32,7 +32,7 @@ namespace PortableCompiler
         // Widen supported class references without allocating or losing sender identity.
         // Boxing and other CLR reference conversions use separate IL operations.
         internal static bool IsObjectReference(int type) =>
-            type >= ObjectLayouts.FirstClass ||
+            type == RuntimeTypeMetadata.Type || type >= ObjectLayouts.FirstClass ||
             type >= ObjectLayouts.ObjectReference && type <= ObjectLayouts.EventHandlerReference;
 
         // Zero denotes the CLI null literal in a live stack slot and void in a method signature.
@@ -189,8 +189,10 @@ namespace PortableCompiler
                     int coded = CompressedUnsigned(image, cursor, end, next);
                     if (coded <= 0) return -2;
                     cursor = next[0];
-                    int type = BundleLayouts.RegisterType(bundle, image, methods,
-                        heap, assembly, coded, objects, element == 0x11);
+                    bool valueType = element == 0x11;
+                    int type = RuntimeTypeMetadata.Storage(image, heap, methods, coded, valueType);
+                    if (type == 0)
+                        type = BundleLayouts.RegisterType(bundle, image, methods, heap, assembly, coded, objects, valueType);
                     if (type < 0) return type;
                     types[target] = type;
                 }

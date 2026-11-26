@@ -9,13 +9,14 @@ namespace PortableCompiler
         private const int Width = 3;
 
         internal static int Owner(int[] globals, int index) => globals[1 + index * Width];
+        internal static int Row(int[] globals, int index) => globals[2 + index * Width];
         internal static int Storage(int[] globals, int index) => globals[3 + index * Width];
 
         internal static int Register(int[] globals, int owner, int row, int storage)
         {
             int count = globals[0];
             for (int index = 0; index < count; index++)
-                if (Owner(globals, index) == owner && globals[2 + index * Width] == row)
+                if (Owner(globals, index) == owner && Row(globals, index) == row)
                     return index;
 
             int slot = 1 + count * Width;

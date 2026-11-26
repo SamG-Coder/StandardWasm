@@ -1,0 +1,15 @@
+# Stage 125 · Runtime type handles
+
+Run `npm run demo -- stage-125-runtime-type-handles`. For input 5,
+the compiled kernel compares a TypeRef in the main assembly with a
+TypeDef in the dependency and returns 1.
+
+`npm test` compares the original managed fixtures on the CLR, Node and
+Edge. Cases cover repeated references, identically named types in different
+assemblies, a default runtime handle, and a type with a throwing initializer.
+The host comparison checks that a numeric object never aliases a Type.
+The compiler reports unsupported constructed type tokens and missing
+dependencies at their IL offsets. Runtime reflection casts also retain a
+diagnostic.
+
+See [decision 0053](../../docs/decisions/0053-runtime-type-handles.md).

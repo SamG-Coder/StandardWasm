@@ -1,0 +1,1 @@
+{"assembly":"RuntimeTypeDemo","exportType":"RuntimeTypeDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["RuntimeTypeDependency.dll"]},{"name":"Linked"}],"generated":{"bundle":true,"capacity":65536,"arguments":[5]},"expected":1}
