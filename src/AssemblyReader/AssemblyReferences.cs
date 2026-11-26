@@ -56,10 +56,27 @@ namespace PeLibrary
             int parentWidth = memberWidth - strings - blobs;
             uint member = (uint)(table + (row - 1) * memberWidth);
             uint parent = Index(image, member, parentWidth);
-            int typeRow = (int)(parent >> 3);
             if ((parent & 7) != 1) return -2; // TypeRef only.
-            if (typeRow < 1 || typeRow > counts[1]) return -1;
+            int status = ReadTypeReference(image, streams, methods, counts, first, (int)(parent >> 3), reference);
+            if (status < 0) return status;
+            reference[4] = (int)Index(image, member + (uint)parentWidth, strings);
+            reference[5] = (int)Index(image, member + (uint)(parentWidth + strings), blobs);
+            return 0;
+        }
 
+        internal static int ReadType(byte[] image, int[] streams, int[] methods, int row, int[] reference)
+        {
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
+            if (first < 0) return -1;
+            return ReadTypeReference(image, streams, methods, counts, first, row, reference);
+        }
+
+        private static int ReadTypeReference(byte[] image, int[] streams, int[] methods, int[] counts,
+            int first, int typeRow, int[] reference)
+        {
+            if (typeRow < 1 || typeRow > counts[1]) return -1;
+            int strings = methods[2], blobs = methods[3];
             int scopeWidth = ScopeWidth(counts);
             int typeRefWidth = scopeWidth + 2 * strings;
             int typeRefs = TypeRefStart(image, streams, counts, first, strings);
@@ -82,8 +99,6 @@ namespace PeLibrary
             reference[1] = (int)Index(image, assembly + (uint)(12 + blobs), strings);
             reference[2] = (int)Index(image, type + (uint)scopeWidth, strings);
             reference[3] = (int)Index(image, type + (uint)(scopeWidth + strings), strings);
-            reference[4] = (int)Index(image, member + (uint)parentWidth, strings);
-            reference[5] = (int)Index(image, member + (uint)(parentWidth + strings), blobs);
             return 0;
         }
 
@@ -109,8 +124,8 @@ namespace PeLibrary
             return 1;
         }
 
-        internal static int FindMethod(byte[] source, int[] sourceHeaps, int[] reference,
-            byte[] candidate, int[] heaps, int[] methods)
+        internal static int FindType(byte[] source, int[] sourceHeaps, int[] reference,
+            byte[] candidate, int[] heaps, int[] methods, int[] range)
         {
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(candidate, heaps[4], heaps[5], counts);
@@ -137,23 +152,15 @@ namespace PeLibrary
                 uint end = i == counts[2] - 1 ? (uint)(counts[6] + 1) :
                     Index(candidate, at + (uint)(rowWidth + methodColumn), methodIndex);
                 if (start == 0 || end < start || end > (uint)(counts[6] + 1)) return -1;
-                for (int method = (int)start; method < (int)end; method++)
-                {
-                    int flags = MethodDefinitions.ReadColumn(candidate, methods, method, 2);
-                    if ((flags & 0x17) != 0x16) continue; // Public static.
-                    int methodName = MethodDefinitions.ReadColumn(candidate, methods, method, 3);
-                    int sig = MethodDefinitions.ReadColumn(candidate, methods, method, 4);
-                    if (!SameString(source, sourceHeaps, reference[4], candidate, heaps, methodName) ||
-                        !SameSignature(source, sourceHeaps, reference[5], candidate, heaps, sig))
-                        continue;
-                    if (match != 0) return -5;
-                    match = method;
-                }
+                if (match != 0) return -5;
+                match = i + 1;
+                range[0] = (int)start;
+                range[1] = (int)end;
             }
             return match == 0 ? -6 : match;
         }
 
-        private static bool SameString(byte[] source, int[] sourceHeaps, int a, byte[] target, int[] targetHeaps, int b)
+        internal static bool SameString(byte[] source, int[] sourceHeaps, int a, byte[] target, int[] targetHeaps, int b)
         {
             int leftSize = sourceHeaps[3], rightSize = targetHeaps[3];
             if (a < 0 || b < 0 || a >= leftSize || b >= rightSize) return false;
@@ -165,23 +172,6 @@ namespace PeLibrary
                 if (value == 0) return true;
             }
             return false;
-        }
-
-        private static bool SameSignature(byte[] source, int[] sourceHeaps, int a, byte[] target, int[] targetHeaps, int b)
-        {
-            if (a < 1 || b < 1 || a >= sourceHeaps[1] || b >= targetHeaps[1]) return false;
-            int limitA = sourceHeaps[0] + sourceHeaps[1], limitB = targetHeaps[0] + targetHeaps[1];
-            var next = new int[1];
-            int sizeA = CompressedUnsigned(source, sourceHeaps[0] + a, limitA, next);
-            int startA = next[0];
-            int sizeB = CompressedUnsigned(target, targetHeaps[0] + b, limitB, next);
-            int startB = next[0];
-            if (sizeA < 3 || sizeA != sizeB || sizeA > limitA - startA || sizeA > limitB - startB)
-                return false;
-            if (source[startA] != 0) return false;
-            for (int i = 0; i < sizeA; i++)
-                if (source[startA + i] != target[startB + i]) return false;
-            return true;
         }
 
         private static int TypeRefStart(byte[] image, int[] streams, int[] counts, int first, int strings) =>

@@ -58,7 +58,7 @@ namespace PortableCompiler
 
         // Destination for a method is [result, parameters...]. Local signatures
         // write only their slots. Stack values normalize CLI small integers to i32.
-        internal static int Read(byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly)
+        internal static int Read(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly)
         {
             if (index <= 0 || index >= heap[1])
                 return -2;
@@ -123,7 +123,9 @@ namespace PortableCompiler
                     else
                     {
                         type = EventMetadata.Reference(image, heap, methods, coded);
-                        if (type == 0) return -2;
+                        if (type == 0)
+                            type = AssemblyBundle.RegisterClassReference(main, bundle, ranges, image, methods,
+                                heap, assembly, coded, objects);
                     }
                     if (type < 0) return type;
                     types[target] = type;

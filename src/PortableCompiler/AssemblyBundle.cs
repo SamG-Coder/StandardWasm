@@ -36,11 +36,86 @@ namespace PortableCompiler
         }
 
         internal static int Resolve(byte[] main, byte[] bundle, int[] ranges, byte[] caller,
-            int[] layout, int[] heaps, int member, int[] symbol)
+            int[] layout, int[] heaps, int owner, int member, int[] symbol)
         {
             var reference = new int[6];
             int status = AssemblyReferences.ReadMethod(caller, heaps, layout, member, reference);
             if (status < 0) return status;
+            int matched = FindOwner(main, bundle, ranges, caller, heaps, reference);
+            if (matched < 0) return matched;
+            byte[] target = Load(main, bundle, ranges, matched);
+            var targetLayout = new int[4];
+            var targetHeaps = new int[8];
+            if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
+            var range = new int[2];
+            status = AssemblyReferences.FindType(caller, heaps, reference, target, targetHeaps, targetLayout, range);
+            if (status < 0) return status;
+            int row = 0;
+            for (int candidate = range[0]; candidate < range[1]; candidate++)
+            {
+                int flags = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 2);
+                if ((flags & 0x17) != 0x16) continue; // Public static.
+                int name = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 3);
+                if (!AssemblyReferences.SameString(caller, heaps, reference[4], target, targetHeaps, name))
+                    continue;
+                int signature = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 4);
+                int match = BundleSignatures.Match(main, bundle, ranges, caller, layout, heaps, owner, reference[5],
+                    target, targetLayout, targetHeaps, matched, signature);
+                if (match < 0) return match;
+                if (match == 0) continue;
+                if (row != 0) return -5;
+                row = candidate;
+            }
+            if (row == 0) return -6;
+            symbol[0] = matched;
+            symbol[1] = row;
+            return 0;
+        }
+
+        internal static int ClassIdentity(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+            int[] layout, int[] heaps, int owner, int coded, int[] symbol)
+        {
+            int row = coded >> 2;
+            if (row < 1) return -1;
+            if ((coded & 3) == 0)
+            {
+                symbol[0] = owner;
+                symbol[1] = row;
+                return 0;
+            }
+            if ((coded & 3) != 1 || bundle.Length == 0) return -2;
+            var reference = new int[4];
+            int status = AssemblyReferences.ReadType(image, heaps, layout, row, reference);
+            if (status < 0) return status;
+            int matched = FindOwner(main, bundle, ranges, image, heaps, reference);
+            if (matched < 0) return matched;
+            byte[] target = Load(main, bundle, ranges, matched);
+            var targetLayout = new int[4];
+            var targetHeaps = new int[8];
+            if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
+            row = AssemblyReferences.FindType(image, heaps, reference, target, targetHeaps, targetLayout, new int[2]);
+            if (row < 0) return row;
+            symbol[0] = matched;
+            symbol[1] = row;
+            return 0;
+        }
+
+        internal static int RegisterClassReference(byte[] main, byte[] bundle, int[] ranges, byte[] image,
+            int[] layout, int[] heaps, int owner, int coded, int[] objects)
+        {
+            var symbol = new int[2];
+            int status = ClassIdentity(main, bundle, ranges, image, layout, heaps, owner, coded, symbol);
+            if (status < 0) return status;
+            if (symbol[0] == owner) return ObjectLayouts.Register(image, heaps, layout, objects, owner, symbol[1]);
+            byte[] target = Load(main, bundle, ranges, symbol[0]);
+            var targetLayout = new int[4];
+            var targetHeaps = new int[8];
+            if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
+            return ObjectLayouts.Register(target, targetHeaps, targetLayout, objects, symbol[0], symbol[1]);
+        }
+
+        private static int FindOwner(byte[] main, byte[] bundle, int[] ranges, byte[] caller, int[] heaps, int[] reference)
+        {
             int matched = -1;
             var candidateLayout = new int[4];
             var candidateHeaps = new int[8];
@@ -55,16 +130,7 @@ namespace PortableCompiler
                 if (matched >= 0) return -5;
                 matched = owner;
             }
-            if (matched < 0) return -4;
-
-            byte[] target = Load(main, bundle, ranges, matched);
-            if (CompressedTables.FindWithHeaps(target, candidateLayout, candidateHeaps) < 0)
-                return -1;
-            int row = AssemblyReferences.FindMethod(caller, heaps, reference, target, candidateHeaps, candidateLayout);
-            if (row < 0) return row;
-            symbol[0] = matched;
-            symbol[1] = row;
-            return 0;
+            return matched < 0 ? -4 : matched;
         }
     }
 }

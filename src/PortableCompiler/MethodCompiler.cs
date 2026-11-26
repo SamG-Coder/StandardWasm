@@ -129,7 +129,7 @@ namespace PortableCompiler
                 int index = indices[row] - 1;
                 if (index < 0)
                 {
-                    functions = Register(image, layout, heaps, 0, (int)row, owners, rows, bases, indices,
+                    functions = Register(main, bundle, ranges, image, layout, heaps, 0, (int)row, owners, rows, bases, indices,
                         arities, offsets, signatures, objects, functions);
                     if (functions < 0) return functions;
                     index = functions - 1;
@@ -205,7 +205,7 @@ namespace PortableCompiler
                     int localBlob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, body[3]);
                     if (localBlob < 0)
                         return -1;
-                    locals = SignatureTypes.Read(image, heaps, localBlob, frame, parameters, -1, layout, objects, owner);
+                    locals = SignatureTypes.Read(main, bundle, ranges, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner);
                     if (locals < 0)
                         return locals;
                     if (locals > 0 && body[4] == 0)
@@ -462,7 +462,7 @@ namespace PortableCompiler
                     if (delegateMember == 0 && stringMember == 0 && opcode == 0x28 && bundle.Length != 0)
                     {
                         var symbol = new int[2];
-                        int resolved = AssemblyBundle.Resolve(main, bundle, ranges, image, layout, heaps, member, symbol);
+                        int resolved = AssemblyBundle.Resolve(main, bundle, ranges, image, layout, heaps, owner, member, symbol);
                         if (resolved < 0) return resolved;
                         int targetOwner = symbol[0], targetRow = symbol[1];
                         int linked = indices[bases[targetOwner] + targetRow] - 1;
@@ -473,7 +473,7 @@ namespace PortableCompiler
                             var targetHeaps = new int[8];
                             if (CompressedTables.FindWithHeaps(targetImage, targetLayout, targetHeaps) < 0)
                                 return -1;
-                            functions = Register(targetImage, targetLayout, targetHeaps, targetOwner, targetRow,
+                            functions = Register(main, bundle, ranges, targetImage, targetLayout, targetHeaps, targetOwner, targetRow,
                                 owners, rows, bases, indices, arities, offsets, signatures, objects, functions);
                             if (functions < 0) return functions;
                             linked = functions - 1;
@@ -502,7 +502,7 @@ namespace PortableCompiler
                 int index = indices[bases[owner] + target] - 1;
                 if (index < 0)
                 {
-                    functions = Register(image, layout, heaps, owner, target, owners, rows, bases, indices,
+                    functions = Register(main, bundle, ranges, image, layout, heaps, owner, target, owners, rows, bases, indices,
                         arities, offsets, signatures, objects, functions);
                     if (functions < 0) return functions;
                     index = functions - 1;
@@ -591,11 +591,11 @@ namespace PortableCompiler
             return true;
         }
 
-        private static int Register(byte[] image, int[] layout, int[] heaps, int owner, int row,
+        private static int Register(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps, int owner, int row,
             int[] owners, int[] rows, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int functions)
         {
             int offset = functions == 0 ? 0 : offsets[functions - 1] + arities[functions - 1] + 1;
-            int arity = MethodShape(image, layout, heaps, owner, row, signatures, offset, objects);
+            int arity = MethodShape(main, bundle, ranges, image, layout, heaps, owner, row, signatures, offset, objects);
             if (arity < 0)
                 return arity;
             owners[functions] = owner;
@@ -606,10 +606,10 @@ namespace PortableCompiler
             return functions + 1;
         }
 
-        // These signatures have no metadata tokens. System.Object crosses the
-        // boundary as an opaque eqref, even when its instance is a local class.
+        // Class slots have already resolved to an assembly-qualified layout.
         private static bool IsSharedBundleType(int type) =>
-            IsScalar(type) || type == String || type == ObjectReference || IsArray(StackType(type));
+            IsScalar(type) || type == String || type == ObjectReference || IsArray(StackType(type)) ||
+            (type >= ObjectLayouts.FirstClass && type < Signed8);
 
         private static bool IsSharedBundleSignature(int[] types, int offset, int arity)
         {
@@ -619,7 +619,7 @@ namespace PortableCompiler
             return true;
         }
 
-        private static int MethodShape(byte[] image, int[] layout, int[] heaps, int assembly, int row, int[] types, int offset, int[] objects)
+        private static int MethodShape(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout, int[] heaps, int assembly, int row, int[] types, int offset, int[] objects)
         {
             int attributes = MethodDefinitions.ReadColumn(image, layout, row, 2);
             int implementation = MethodDefinitions.ReadColumn(image, layout, row, 1);
@@ -634,7 +634,7 @@ namespace PortableCompiler
                 if (receiver < 0) return receiver;
             }
             int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
-            return SignatureTypes.Read(image, heaps, signature, types, offset, receiver, layout, objects, assembly);
+            return SignatureTypes.Read(main, bundle, ranges, image, heaps, signature, types, offset, receiver, layout, objects, assembly);
         }
     }
 }
