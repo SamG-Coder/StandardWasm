@@ -137,6 +137,12 @@ namespace PortableCompiler
             // Only an unmanaged pointer (a native int, decision 0060) addresses memory 0.
             // A proven null (NativeZero) spills as Native and raises NullReferenceException
             // at run time, as on the CLR. A managed byref stays a diagnostic.
+            if (kind == LocalAllocate)
+            {
+                // ECMA-335 III.3.47: the size is a native unsigned int (an int32 is accepted).
+                if (depth < 1 || (stack[depth - 1] != Native && stack[depth - 1] != I32)) return -2;
+                return Push(stack, allocated, depth - 1, Native);
+            }
             if (kind == LoadIndirect)
             {
                 if (depth < 1 || !IsNativeInteger(stack[depth - 1])) return -2;
@@ -240,7 +246,15 @@ namespace PortableCompiler
             {
                 if (depth < 2) return -1;
                 int type = stack[depth - 1];
-                if (IsNativeInteger(type) || IsNativeInteger(stack[depth - 2])) return -2;
+                if (IsNativeInteger(type) || IsNativeInteger(stack[depth - 2]))
+                {
+                    // Checked native arithmetic (decision 0065) uses the 4-byte wasm32 width,
+                    // as on the 32-bit CLR. C# scales stackalloc sizes with mul.ovf.un.
+                    if ((!IsNativeInteger(type) && type != I32) ||
+                        (!IsNativeInteger(stack[depth - 2]) && stack[depth - 2] != I32)) return -2;
+                    stack[depth - 2] = Native;
+                    return depth - 1;
+                }
                 return IsInteger(type) && Match(stack, depth - 1, type) ? depth - 1 : -1;
             }
             if (kind == Binary || kind == Conditional)
