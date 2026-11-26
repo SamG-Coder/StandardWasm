@@ -15,8 +15,10 @@ all then test everything", the owner chose **"Up to #229, skip #231
 - Merge in the newer heads that #229 did not contain:
   - the #64 and #79 fixes
   - the re-reviewed #188, #208 and #225 heads
+  - Codex's fixes for #147 (`50c6874`), #181 (`535b5e5`) and #205 (`d5ac5d9`)
   - the side branches #93/#153/#155 and #139
-- Merge in current main and resolve the conflicts.
+- Merge in current main and resolve the conflicts. Main by then included
+  #51 and #55, which were landed through the 0040 collapse procedure.
 - Run the full suite and the stage demos that `npm test` does not cover.
 - Land everything as a single PR into main, then close the stacked PRs as
   superseded.
@@ -25,12 +27,14 @@ This is a one-time deviation from the per-PR READY/APPROVE step in
 AGENTS.md. The individual PRs were reviewed at their own heads, and most
 were approved. The integration PR is tested as a whole, and Codex
 re-attests it after it merges. Open review points do not block the merge.
-They become issues instead:
+The integration includes the fixes Codex pushed for #64, #79, #147, #181
+and #205, but those fixes have no independent review at their own heads
+yet. Each one becomes a follow-up issue for that review:
 
-- #147: a null-receiver `NewDelegate` traps under `catch (Exception)`.
-- #181: neither of the two type-forwarding guards has a fixture.
-- #205: the platform check in `ValueBase` has no fixture.
-- the unreviewed #64 and #79 fixes
+- #147: a null-receiver `NewDelegate` trapped under `catch (Exception)`.
+- #181: neither of the two type-forwarding guards had a fixture.
+- #205: the platform check in `ValueBase` had no fixture.
+- #64 and #79: their REQUEST CHANGES points.
 
 #231 stays out of the integration because of its 4,096-entry cap defect.
 It, and the PRs stacked above it, are rebased onto main separately.

@@ -85,8 +85,14 @@ const rejectedCulture = spawnSync("dotnet", ["run", "-c", "Release", "--no-build
 assert.equal(rejectedCulture.status, 1);
 assert.match(rejectedCulture.stderr, /Measures::Sqrt\(System\.Double\) at IL_[0-9a-f]+ \([a-z.0-9]+\): Unsupported value type: System\.Double in netstandard/);
 assert.equal(existsSync("artifacts/unsupported-culture.wat"), false);
-const browserOracle = readFileSync("artifacts/oracle.json");
-const cases = oracleCases(JSON.parse(browserOracle));
+const rawOracle = JSON.parse(readFileSync("artifacts/oracle.json"));
+// The combined oracle carries tens of MB of assembly bytes. As JSON number arrays they exhaust the
+// Edge renderer, so the page receives the shared blobs as one binary file plus their lengths.
+const blobs = Array.isArray(rawOracle) ? [] : rawOracle.blobs;
+const browserOracle = JSON.stringify(Array.isArray(rawOracle) ? rawOracle
+    : { cases: rawOracle.cases, blobLengths: blobs.map(blob => blob.length) });
+const blobBytes = Buffer.concat(blobs.map(blob => Buffer.from(blob)));
+const cases = oracleCases(rawOracle);
 console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases,
     bytes => writeFileSync("artifacts/StandardWasm.Compiler.wasm", bytes)));
 
@@ -101,6 +107,7 @@ try {
         // Serve the oracle as JSON so the browser can parse the DLL byte arrays
         // without Playwright serializing each individual byte as an argument.
         ["/oracle.json", ["application/json", browserOracle]],
+        ["/blobs.bin", ["application/octet-stream", blobBytes]],
         ["/oracle.mjs", ["text/javascript", readFileSync("scripts/oracle.mjs")]],
         ["/bootstrap.mjs", ["text/javascript", readFileSync("scripts/bootstrap.mjs")]],
         ["/invoke.mjs", ["text/javascript", readFileSync("scripts/invoke.mjs")]],
@@ -115,7 +122,13 @@ try {
     await page.goto("http://standardwasm.test/");
     const result = await page.evaluate(async () => {
         const { oracleCases } = await import("/oracle.mjs");
-        const cases = oracleCases(await (await fetch("/oracle.json")).json());
+        const oracle = await (await fetch("/oracle.json")).json();
+        if (!Array.isArray(oracle)) {
+            const bytes = new Uint8Array(await (await fetch("/blobs.bin")).arrayBuffer());
+            let offset = 0;
+            oracle.blobs = oracle.blobLengths.map(length => Array.from(bytes.subarray(offset, offset += length)));
+        }
+        const cases = oracleCases(oracle);
         const { verify } = await import("/verify.mjs");
         return verify(async name => (await fetch("/" + name)).arrayBuffer(), cases);
     });
