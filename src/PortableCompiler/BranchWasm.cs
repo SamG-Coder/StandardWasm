@@ -13,9 +13,9 @@ namespace PortableCompiler
             byte result = (byte)frameShape[3];
             int classes = frameShape[4];
             bool stringScratch = frameShape[5] != 0;
-            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 8 + classes) + (stringScratch ? 2 : 0));
+            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 1 + I64 + classes) + (stringScratch ? 2 : 0));
             int spills = arguments + locals;
-            int temporaries = spills + (7 + classes) * maximum;
+            int temporaries = spills + (I64 + classes) * maximum;
             int scratch = temporaries + classes;
             int pcLocal = scratch + (stringScratch ? 5 : 0);
             // Keep declared locals in CLI order, then allocate one bank per spill type.
@@ -26,7 +26,7 @@ namespace PortableCompiler
             }
             if (maximum != 0)
             {
-                for (int kind = I32; kind <= Chars + classes; kind++)
+                for (int kind = I32; kind <= I64 + classes; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
                     used = WasmBinary.ValueType(code, used, (byte)kind);
@@ -62,7 +62,7 @@ namespace PortableCompiler
                 code[used++] = 0x04;
                 code[used++] = 0x40;
 
-                if (kind == Load || kind == Constant || kind == Dup)
+                if (kind == Load || kind == Constant || kind == WideConstant || kind == Dup)
                 {
                     byte pushed = I32;
                     if (kind == Load)
@@ -74,6 +74,11 @@ namespace PortableCompiler
                     {
                         pushed = states[state + top];
                         used = Local(code, used, 0x20, Spill(spills, maximum, pushed, top));
+                    }
+                    else if (kind == WideConstant)
+                    {
+                        pushed = I64;
+                        used = WideConst(code, used, operand, records[slot + 3]);
                     }
                     else used = Const(code, used, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, pushed, depth));
@@ -169,19 +174,38 @@ namespace PortableCompiler
                     used = Local(code, used, 0x20, Spill(spills, maximum, frame[operand], top));
                     used = Local(code, used, 0x21, operand);
                 }
-                else if (kind == Unary || kind == Narrow)
+                else if (kind == Unary || kind == Narrow || kind == ConvertInteger)
                 {
-                    used = Local(code, used, 0x20, spills + top);
-                    used = Const(code, used, kind == Narrow ? operand : -1);
-                    code[used++] = kind == Narrow ? (byte)0x71 : (byte)operand;
-                    used = Local(code, used, 0x21, spills + top);
+                    byte source = states[state + top];
+                    byte target = kind == Unary ? source : kind == ConvertInteger && ConvertsToWide(operand) ? I64 : I32;
+                    used = Local(code, used, 0x20, Spill(spills, maximum, source, top));
+                    if (source != target)
+                        code[used++] = target == I32 ? (byte)0xa7 : operand == 0x6a ? (byte)0xac : (byte)0xad;
+                    if (kind == Narrow)
+                    {
+                        used = Const(code, used, operand);
+                        code[used++] = 0x71; // i32.and
+                    }
+                    else if (kind == Unary)
+                    {
+                        used = source == I64 ? WideConst(code, used, -1, -1) : Const(code, used, -1);
+                        code[used++] = NumericOpcode(operand, source);
+                    }
+                    used = Local(code, used, 0x21, Spill(spills, maximum, target, top));
                 }
                 else if (kind == Binary)
                 {
-                    used = Local(code, used, 0x20, spills + top - 1);
-                    used = Local(code, used, 0x20, spills + top);
-                    code[used++] = (byte)operand;
-                    used = Local(code, used, 0x21, spills + top - 1);
+                    byte type = states[state + top - 1];
+                    byte resultType = IsComparison(operand) ? I32 : type;
+                    int left = Spill(spills, maximum, type, top - 1);
+                    int right = Spill(spills, maximum, states[state + top], top);
+                    if (operand == 0x6f)
+                        used = GuardRemainder(code, used, type, left, right);
+                    used = Local(code, used, 0x20, left);
+                    used = Local(code, used, 0x20, right);
+                    if (type == I64 && IsShift(operand)) code[used++] = 0xad;
+                    code[used++] = NumericOpcode(operand, type);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, resultType, top - 1));
                 }
                 else if (kind == Call || kind == NewObject)
                 {
@@ -269,10 +293,17 @@ namespace PortableCompiler
                         int comparison = records[slot + 3];
                         used = Const(code, used, operand);
                         used = Const(code, used, next);
-                        if (comparison != 0 && comparison != 0x45)
-                            used = Local(code, used, 0x20, spills + top - 1);
-                        used = Local(code, used, 0x20, spills + top);
-                        if (comparison != 0) code[used++] = (byte)comparison;
+                        byte type = states[state + top];
+                        if (IsComparison(comparison))
+                            used = Local(code, used, 0x20, Spill(spills, maximum, type, top - 1));
+                        used = Local(code, used, 0x20, Spill(spills, maximum, type, top));
+                        if (IsComparison(comparison)) code[used++] = NumericOpcode(comparison, type);
+                        else if (type == I64)
+                        {
+                            code[used++] = 0x50; // i64.eqz produces the i32 select condition
+                            if (comparison == 0) code[used++] = 0x45;
+                        }
+                        else if (comparison != 0) code[used++] = 0x45;
                         code[used++] = 0x1b;
                     }
                     else used = Const(code, used, kind == Branch ? operand : next);
@@ -285,6 +316,27 @@ namespace PortableCompiler
             code[used++] = 0;
             code[used++] = 0x0b;
             code[used++] = 0;
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        private static byte NumericOpcode(int instruction, byte type) =>
+            (byte)(type == I32 ? instruction : instruction + (IsComparison(instruction) ? 0x0b : 0x12));
+
+        // The CLR throws for MinValue % -1 even though Wasm rem_s returns zero.
+        // Keep the failure observable as a Wasm trap until typed exceptions are available.
+        private static int GuardRemainder(byte[] code, int used, byte type, int left, int right)
+        {
+            used = Local(code, used, 0x20, left);
+            used = type == I64 ? WideConst(code, used, 0, int.MinValue) : Const(code, used, int.MinValue);
+            code[used++] = NumericOpcode(0x46, type);
+            used = Local(code, used, 0x20, right);
+            used = type == I64 ? WideConst(code, used, -1, -1) : Const(code, used, -1);
+            code[used++] = NumericOpcode(0x46, type);
+            code[used++] = 0x71; // i32.and
+            code[used++] = 0x04; // if
+            code[used++] = 0x40; // void
+            code[used++] = 0; // unreachable
             code[used++] = 0x0b;
             return used;
         }
@@ -303,6 +355,12 @@ namespace PortableCompiler
         {
             code[used++] = 0x41;
             return WasmBinary.Signed(code, used, value);
+        }
+
+        private static int WideConst(byte[] code, int used, int low, int high)
+        {
+            code[used++] = 0x42;
+            return WasmBinary.Signed64(code, used, low, high);
         }
 
         private static int Local(byte[] code, int used, byte instruction, int local)

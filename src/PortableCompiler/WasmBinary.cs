@@ -221,7 +221,7 @@ namespace PortableCompiler
                 output[cursor++] = 0;
                 output[cursor++] = 0xfb;
                 output[cursor++] = 22; // ref.cast to the target's concrete receiver
-                cursor = Signed(output, cursor, receiver - Bytes);
+                cursor = Signed(output, cursor, HeapType((byte)receiver));
                 output[cursor++] = 0x10;
                 cursor = Unsigned(output, cursor, function);
                 output[cursor++] = 0x0b;
@@ -239,13 +239,15 @@ namespace PortableCompiler
         }
 
         private static int ValueWidth(byte type) =>
-            type == Void ? 0 : type == I32 || type == MethodPointer ? 1 :
-                type == Delegate || type - Bytes <= 63 ? 2 : 3;
+            type == Void ? 0 : type == I32 || type == I64 || type == MethodPointer ? 1 :
+                HeapType(type) <= 63 ? 2 : 3;
 
         internal static int ValueType(byte[] output, int cursor, byte type)
         {
             if (type == I32 || type == MethodPointer)
                 output[cursor++] = 0x7f;
+            else if (type == I64)
+                output[cursor++] = 0x7e;
             else
             {
                 output[cursor++] = 0x63; // ref null
@@ -255,10 +257,10 @@ namespace PortableCompiler
         }
 
         internal static int HeapType(byte type) =>
-            type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type - Bytes;
+            type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type < FirstClass ? type - Bytes : 6 + type - FirstClass;
 
         private static int ThunkSize(int receiver, int function) =>
-            7 + (receiver - Bytes <= 63 ? 1 : 2) + UnsignedSize(function);
+            7 + (HeapType((byte)receiver) <= 63 ? 1 : 2) + UnsignedSize(function);
 
         private static int Reserve(int remaining, int size)
         {
@@ -292,6 +294,20 @@ namespace PortableCompiler
                 value >>= 7;
             }
             bytes[cursor++] = (byte)value;
+            return cursor;
+        }
+
+        // Keep the compiler bootstrappable with an i32-only seed. An arithmetic
+        // shift of the two words preserves the sign and carries bits across the seam.
+        internal static int Signed64(byte[] bytes, int cursor, int low, int high)
+        {
+            while (!(high == 0 && low >= 0 && low <= 63 || high == -1 && low >= -64 && low < 0))
+            {
+                bytes[cursor++] = (byte)((low & 127) | 128);
+                low = unchecked((int)((uint)low >> 7)) | (high << 25);
+                high >>= 7;
+            }
+            bytes[cursor++] = (byte)(low & 127);
             return cursor;
         }
 

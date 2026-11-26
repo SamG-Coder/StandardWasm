@@ -6,7 +6,7 @@ namespace EmitterLibrary
         public static int Mix(int a, int b) => ~((a ^ -b) >> 5);
         public static int Constant() => int.MinValue;
         public static int Quotient(int dividend, int divisor) => dividend / divisor;
-        public static long UnsupportedSignature(int value) => value;
+        public static double UnsupportedSignature(int value) => value;
         public static int UnsupportedCall(int value) => System.Math.Abs(value);
     }
 }

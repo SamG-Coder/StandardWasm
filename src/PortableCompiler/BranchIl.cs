@@ -6,10 +6,10 @@ namespace PortableCompiler
     {
         internal const int Width = 4;
         internal const int Load = 1, Store = 2, Constant = 3, Unary = 4, Binary = 5,
-            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12, NewArray = 13, ArrayLength = 14, ArrayGet = 15, ArraySet = 16, Narrow = 17, NewObject = 18, GetField = 19, SetField = 20, BaseCtor = 21, LoadFunction = 22, NewDelegate = 23, InvokeDelegate = 24, MemberCall = 25, LoadString = 26, StringLength = 27, StringCharacter = 28, JoinStrings = 29, StringFromChars = 30, NullString = 31;
+            Return = 6, Branch = 7, Conditional = 8, Nop = 9, Dup = 10, Pop = 11, Call = 12, NewArray = 13, ArrayLength = 14, ArrayGet = 15, ArraySet = 16, Narrow = 17, NewObject = 18, GetField = 19, SetField = 20, BaseCtor = 21, LoadFunction = 22, NewDelegate = 23, InvokeDelegate = 24, MemberCall = 25, LoadString = 26, StringLength = 27, StringCharacter = 28, JoinStrings = 29, StringFromChars = 30, NullString = 31, WideConstant = 32, ConvertInteger = 33;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
-        // Record fields are kind, operand, next IL offset and branch comparison.
+        // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
         internal static int Decode(byte[] image, int start, int length, int arguments, int locals, int[] records)
         {
             int pc = 0;
@@ -67,6 +67,14 @@ namespace PortableCompiler
                         operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
                         pc += 4;
                     }
+                }
+                else if (op == 0x21)
+                {
+                    if (length - pc < 8) return -1;
+                    kind = WideConstant;
+                    operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                    comparison = unchecked((int)ImageBytes.U32(image, (uint)(start + pc + 4)));
+                    pc += 8;
                 }
                 else if (op >= 0x2b && op <= 0x44)
                 {
@@ -171,18 +179,19 @@ namespace PortableCompiler
                     kind = Unary;
                     operand = op == 0x65 ? 0x6c : 0x73;
                 }
-                else if (op == 0 || op == 0x69 || op == 0x6d || op == 0xd3 || op == 0xe0)
+                else if (op == 0x69 || op == 0x6a || op == 0x6d || op == 0x6e || op == 0xd3 || op == 0xe0)
                 {
-                    kind = Nop;
-                    operand = op; // conv.i4 and conv.u4 require a live i32 at the top.
+                    kind = ConvertInteger;
+                    operand = op;
                 }
+                else if (op == 0) kind = Nop;
                 else if (op == 0x2a) kind = Return;
                 else if (op == 0x25) kind = Dup;
                 else if (op == 0x26) kind = Pop;
                 else
                 {
                     kind = Binary;
-                    operand = StraightLineIl.Binary(op);
+                    operand = op == 0x5d ? 0x6f : StraightLineIl.Binary(op);
                     if (operand < 0) return -2;
                 }
                 records[slot] = kind;
@@ -200,6 +209,13 @@ namespace PortableCompiler
             }
             return 0;
         }
+
+        // Only the left operand determines shift width. CLI shift counts are i32.
+        internal static bool IsShift(int instruction) => instruction >= 0x74 && instruction <= 0x76;
+
+        internal static bool IsComparison(int instruction) => instruction >= 0x46 && instruction <= 0x4f;
+
+        internal static bool ConvertsToWide(int instruction) => instruction == 0x6a || instruction == 0x6e;
 
         private static int SignedByte(int value) => (value ^ 128) - 128;
 

@@ -81,7 +81,7 @@ export async function invokeGenerated(exports, inputs, generated) {
     if (WebAssembly.Module.imports(module).length) throw Error("Generated module has runtime imports");
     try {
         const exports = instance.exports;
-        const value = exports[generated.export ?? "run"](...generated.arguments);
+        const value = exports[generated.export ?? "run"](...generated.arguments.map(decode));
         if (generated.resultType !== "string") return value;
         const count = exports.TextLength(value);
         const units = new Array(count);
