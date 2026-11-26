@@ -65,6 +65,7 @@
     <ProjectReference Include="../demos/stage-64-foreign-field-types/ForeignFieldTypes.csproj" />
     <ProjectReference Include="../demos/stage-66-base-exception-catches/BaseExceptionHandlers.csproj" />
     <ProjectReference Include="../demos/stage-67-null-throw/NullThrow.csproj" />
+    <ProjectReference Include="../demos/stage-68-bare-catch/BareCatch.csproj" />
     <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />
     <Compile Remove="Fixtures/**/*.cs" />
     <ProjectReference Include="Fixtures/PlatformIdentity/ThirdPartyTypes/ThirdPartyTypes.csproj" Aliases="ThirdParty" />

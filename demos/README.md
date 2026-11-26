@@ -64,6 +64,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [65 · Managed reference casts](stage-65-nominal-casts/README.md) | `npm run demo -- stage-65-nominal-casts` | Run(7) = 13 |
 | [66 · Managed exception base catches](stage-66-base-exception-catches/README.md) | `npm run demo -- stage-66-base-exception-catches` | Rethrow runs cleanup and returns 118 |
 | [67 · Explicit null throws](stage-67-null-throw/README.md) | `npm run demo -- stage-67-null-throw` | A typed null exception runs cleanup and returns 113 |
+| [68 · Bare catch clauses](stage-68-bare-catch/README.md) | `npm run demo -- stage-68-bare-catch` | A bare catch rethrows to a typed handler and returns -301 |
 
 ## Adding a stage
 

@@ -31,6 +31,10 @@ namespace PeLibrary
                 return 0;
 
             // Match little-endian ASCII type names, including their terminators.
+            // C# encodes a bare catch as a catch of the platform System.Object.
+            if (Fits(name, 7, limit) && U32(image, n) == 0x656a624f &&
+                U16(image, n + 4) == 0x7463 && image[n + 6] == 0)
+                return Supported;
             // All currently emitted managed tags represent subclasses of SystemException.
             // Dispatch still catches only those tags, so engine traps stay outside this mask.
             if (Fits(name, 10, limit) && U32(image, n) == 0x65637845 &&
