@@ -57,6 +57,9 @@ namespace PortableCompiler
                 if (parent < 0) return parent;
                 if (parent != 0 && (ObjectLayouts.IsSealed(objects, parent) || ObjectLayouts.IsInterface(objects, parent)))
                     return -2;
+                if (parent != 0 && !ObjectLayouts.HasLayout(objects, parent) &&
+                    ObjectLayouts.RequiresLayoutParent(image, heaps, layout, shape))
+                    return -2;
             }
             // The parent must precede the child in the Wasm recursive type group.
             // Defer all fields until that ordering is fixed, even if a base field

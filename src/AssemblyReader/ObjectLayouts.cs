@@ -87,8 +87,20 @@ namespace PeLibrary
             if (valueBase == 2)
                 return valueType && (flags & 0x138) == 0x100
                     ? EnumStorage.Read(image, streams, methods, fields, (int)first, (int)end) : -2;
+            // LayoutMask: 0 auto, 0x08 sequential, 0x10 explicit, 0x18 reserved.
             uint layout = flags & 0x18;
-            if (valueType ? layout == 0x18 : layout != 0) return -2;
+            // A class may be auto or sequential. Sequential order only matters
+            // to raw-address and interop views, which are diagnosed where they
+            // occur. Managed field access is nominal in both layouts. Explicit
+            // class offsets could overlap references, so they stay unsupported.
+            if (layout == 0x18 || !valueType && layout == 0x10) return -2;
+            if (!valueType && layout == 0x08)
+            {
+                // Pack and ClassSize change the CLR object's byte extent. Keep
+                // them diagnosed rather than silently dropping them.
+                int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]));
+                if (supported < 0) return supported;
+            }
             if (valueType)
             {
                 // Sequential values use declared managed fields. Explicit
@@ -340,6 +352,21 @@ namespace PeLibrary
             type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & ValueShape) != 0;
         internal static bool IsExplicitValue(int[] registry, int type) =>
             IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & 0x18) == 0x10;
+
+        // A sequential class outside the platform CoreLib needs a parent with
+        // layout. CoreCLR throws TypeLoadException for a sequential class
+        // derived from an auto class other than Object. The runtime that ships
+        // a CoreLib defines its own types, so Mono's sequential System.Type
+        // over auto MemberInfo stays loadable.
+        internal static bool RequiresLayoutParent(byte[] image, int[] streams, int[] methods, int[] shape)
+        {
+            if ((shape[4] & (ValueShape | 0x18)) != 0x08) return false;
+            var counts = new int[45];
+            return MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts) < 0 ||
+                !PlatformAssemblyIdentity.IsCoreLibDefinition(image, streams, methods, counts);
+        }
+
+        internal static bool HasLayout(int[] registry, int type) => (registry[Slot(type) + ShapeFlags] & 0x18) != 0;
 
         internal static bool IsAutoValue(int[] registry, int type) =>
             IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & 0x18) == 0;
