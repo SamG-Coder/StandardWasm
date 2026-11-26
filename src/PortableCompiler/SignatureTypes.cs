@@ -90,7 +90,7 @@ namespace PortableCompiler
         // write only their slots. Stack values normalize CLI small integers to i32.
         // context is the closed declaring layout that supplies VAR arguments,
         // or zero when the declaring type is not generic.
-        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context)
+        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context, int[] methodArguments = null)
         {
             if (index <= 0 || index >= heap[1])
                 return -2;
@@ -99,10 +99,19 @@ namespace PortableCompiler
             var next = new int[1];
             int size = CompressedUnsigned(image, heap[0] + index, limit, next);
             int cursor = next[0];
-            if (size < 2 || size > limit - cursor || image[cursor] != (locals ? 7 : receiver == 0 ? 0 : 0x20))
+            int callingConvention = locals ? 7 : receiver == 0 ? 0 : 0x20;
+            if (!locals && methodArguments != null) callingConvention |= 0x10;
+            if (size < 2 || size > limit - cursor || image[cursor] != callingConvention)
                 return -2;
             int end = cursor + size;
-            int count = CompressedUnsigned(image, cursor + 1, end, next);
+            cursor++;
+            if (!locals && methodArguments != null)
+            {
+                int arity = CompressedUnsigned(image, cursor, end, next);
+                if (arity < 1 || arity != methodArguments.Length) return -2;
+                cursor = next[0];
+            }
+            int count = CompressedUnsigned(image, cursor, end, next);
             cursor = next[0];
             if (count < 0 || count > end - cursor)
                 return -2;
@@ -147,7 +156,7 @@ namespace PortableCompiler
                     {
                         next[0] = cursor - 1;
                         storage = ManagedReferenceSignatures.ReadStorage(bundle, image, methods, heap,
-                            assembly, next, end, context, objects);
+                            assembly, next, end, context, objects, methodArguments);
                         if (storage < 0) return storage;
                         cursor = next[0];
                     }
@@ -166,23 +175,22 @@ namespace PortableCompiler
                     {
                         next[0] = cursor - 1;
                         int type = ManagedReferenceSignatures.ReadStorage(bundle, image, methods, heap,
-                            assembly, next, end, context, objects);
+                            assembly, next, end, context, objects, methodArguments);
                         if (type < 0) return type;
                         cursor = next[0];
                         types[target] = type;
                     }
                 }
-                else if (element == 0x13)
+                else if (element == 0x13 || element == 0x1e)
                 {
-                    // A class type parameter takes the storage of the closed
-                    // argument. int and uint share i32 storage here; their
-                    // signed and unsigned semantics stay in the caller's IL.
-                    int number = CompressedUnsigned(image, cursor, end, next);
-                    if (number < 0) return -2;
+                    // VAR and MVAR select distinct argument vectors. Convert
+                    // the CLI type identity to its Wasm slot only after lookup.
+                    next[0] = cursor - 1;
+                    int storage = ManagedReferenceSignatures.ReadStorage(bundle, image, methods, heap,
+                        assembly, next, end, context, objects, methodArguments);
+                    if (storage < 0) return storage;
                     cursor = next[0];
-                    int argument = ObjectLayouts.Argument(objects, context, number);
-                    if (argument < 0) return argument;
-                    types[target] = ObjectLayouts.SignatureStorage(objects, argument);
+                    types[target] = storage;
                 }
                 else if (element == 0x12 || element == 0x11)
                 {

@@ -33,5 +33,7 @@ The first checkpoint compares MethodSpec targets, arities and argument
 bytes with the CLR metadata reader for ordinary .NET Standard DLLs
 and the installed CoreLib images in Node and Edge. This covers both
 MethodDef and MemberRef targets, and argument slices containing the
-declaring and method parameter encodings. Subsequent checkpoints will
-test execution, including recursion and type-argument-dependent locals.
+declaring and method parameter encodings. The compiler also executes
+static MethodDef calls with closed arguments, including recursive calls
+and method-typed locals. MemberRef binding and interface constraints
+remain open before the CoreLib guard can execute.

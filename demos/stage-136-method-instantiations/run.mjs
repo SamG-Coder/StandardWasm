@@ -10,19 +10,23 @@ const base = join(root, "artifacts", "method-instantiations");
 mkdirSync(base, { recursive: true });
 const evidence = mkdtempSync(join(base, "run-"));
 const oracle = join(evidence, "oracle.json"), reader = join(evidence, "Reader.wasm");
+const executionOracle = join(evidence, "execution.json"), compiler = join(evidence, "Compiler.wasm");
 
 for (const project of [join(stage, "Fixture"), join(stage, "Reader"), join(root, "tools", "PortableCompiler.Driver")])
     run("dotnet", ["build", project, "-c", "Release"]);
 const driver = join(root, "tools", "PortableCompiler.Driver", "bin", "Release", "net10.0", "PortableCompiler.Driver.dll");
 const built = project => join(stage, project, "bin", "Release", "netstandard2.0");
 run("dotnet", [driver, join(built("Reader"), "Reader.dll"), "MethodSpecProbe", reader]);
+const bootstrap = join(root, "demos", "stage-13-complete-bootstrap", "bin", "Release", "netstandard2.0", "BootstrapLibrary.dll");
+run("dotnet", [driver, bootstrap, "BootstrapLibrary.CompilerExports", compiler]);
 
 const runtime = wasm32Runtime();
 const core = "System.Private.CoreLib.dll";
 run("dotnet", ["run", "--project", join(stage, "Oracle"), "-c", "Release", "--",
-    join(built("Fixture"), "MethodSpecFixture.dll"), join(runtime.directory, core), join(runtime.widePack, core), oracle]);
+    join(built("Fixture"), "MethodSpecFixture.dll"), join(runtime.directory, core), join(runtime.widePack, core), oracle, executionOracle]);
 const cases = JSON.parse(readFileSync(oracle, "utf8"));
-const assets = new Map([["/reader", readFileSync(reader)]]);
+const execution = JSON.parse(readFileSync(executionOracle, "utf8"));
+const assets = new Map([["/reader", readFileSync(reader)], ["/compiler", readFileSync(compiler)]]);
 for (const { source, path } of cases)
     if (!assets.has("/" + source)) assets.set("/" + source, readFileSync(path));
 const tests = cases.map(({ source, row }) => ({ source, row }));
@@ -45,8 +49,39 @@ async function inspect(get, tests) {
     return results;
 }
 
-const node = await inspect(path => assets.get(path), tests);
-assert.deepEqual(node, cases.map(test => test.expected));
+async function execute(get, execution) {
+    const { instance: { exports: compiler } } = await WebAssembly.instantiate(await get("/compiler"));
+    function upload(bytes) {
+        const input = compiler.CreateBytes(bytes.length);
+        for (let i = 0; i < bytes.length; i++) compiler.SetByte(input, i, bytes[i]);
+        return input;
+    }
+    const encoder = new TextEncoder();
+    const names = execution.entries.map(({ name }) => encoder.encode(name));
+    const manifest = new Uint8Array(names.reduce((size, bytes) => size + 8 + bytes.length, 0));
+    const view = new DataView(manifest.buffer);
+    let offset = 0;
+    for (const [index, { row }] of execution.entries.entries()) {
+        const name = names[index];
+        view.setUint32(offset, row, true);
+        view.setUint32(offset + 4, name.length, true);
+        manifest.set(name, offset + 8);
+        offset += 8 + name.length;
+    }
+    const output = compiler.CreateBytes(1 << 20);
+    const location = compiler.CreateDiagnostic();
+    const size = compiler.CompileModuleDetailed(upload(await get("/fixture")), upload(manifest), output, location);
+    if (size < 1) throw Error("Compiler returned " + size + " at [" +
+        [0, 1, 2].map(i => compiler.ReadDiagnostic(location, i)) + "]");
+    const bytes = Uint8Array.from({ length: size }, (_, i) => compiler.ReadByte(output, i));
+    const { instance } = await WebAssembly.instantiate(bytes);
+    return execution.calls.map(({ name, input }) => instance.exports[name](input));
+}
+
+const get = path => assets.get(path);
+const node = { metadata: await inspect(get, tests), execution: await execute(get, execution) };
+assert.deepEqual(node.metadata, cases.map(test => test.expected));
+assert.deepEqual(node.execution, execution.calls.map(call => call.expected));
 const browser = await chromium.launch({ channel: "msedge" });
 try {
     const page = await browser.newPage();
@@ -56,13 +91,17 @@ try {
             : { contentType: "text/html", body: "<title>Generic method metadata</title>" });
     });
     await page.goto("http://localhost/");
-    const edge = await page.evaluate(async ({ tests, code }) => {
-        const run = (0, eval)("(" + code + ")");
-        return run(async path => new Uint8Array(await (await fetch(path, { signal: AbortSignal.timeout(15000) })).arrayBuffer()), tests);
-    }, { code: inspect.toString(), tests });
+    const edge = await page.evaluate(async ({ tests, execution, metadataSource, executionSource }) => {
+        const inspect = (0, eval)("(" + metadataSource + ")");
+        const execute = (0, eval)("(" + executionSource + ")");
+        const get = async path => new Uint8Array(await (await fetch(path, { signal: AbortSignal.timeout(15000) })).arrayBuffer());
+        return { metadata: await inspect(get, tests), execution: await execute(get, execution) };
+    }, { metadataSource: inspect.toString(), executionSource: execute.toString(), tests, execution });
     assert.deepEqual(edge, node);
     const report = { node: process.version, edge: browser.version(), comparisons: cases.length,
-        results: tests.map((test, index) => ({ ...test, values: node[index] })) };
+        results: tests.map((test, index) => ({ ...test, values: node.metadata[index] })),
+        execution: node.execution };
     writeFileSync(join(evidence, "results.json"), JSON.stringify(report, null, 2));
-    console.log("Node and Edge matched " + cases.length + " CLR metadata observations.");
+    console.log("Node and Edge matched " + cases.length + " CLR metadata observations and " +
+        execution.calls.length + " generic method results.");
 } finally { await browser.close(); }

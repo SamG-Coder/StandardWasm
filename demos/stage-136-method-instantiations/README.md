@@ -9,4 +9,7 @@ CoreLib range guard reached by the resource-stream compiler.
 Run `npm run demo -- stage-136-method-instantiations` with matching
 .NET 10 x86 and default-host runtimes and Edge installed. The runner
 builds the portable metadata probe and compares the same input DLLs
-in Node and Edge. Generic method body execution is a later checkpoint.
+in Node and Edge. It also compiles and executes closed static methods
+referenced by MethodDef tokens, covering recursion, method-typed locals
+and arrays, and class and struct constraints. MemberRef calls and
+interface-based constraints are still diagnosed.

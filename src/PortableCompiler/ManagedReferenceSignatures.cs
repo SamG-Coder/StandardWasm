@@ -7,8 +7,9 @@ namespace PortableCompiler
     internal static class ManagedReferenceSignatures
     {
         internal static int ReadStorage(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
-            int owner, int[] next, int end, int context, int[] objects) =>
-            ObjectLayouts.SignatureStorage(objects, Read(bundle, image, layout, heaps, owner, next, end, context, objects, 0));
+            int owner, int[] next, int end, int context, int[] objects, int[] methodArguments = null) =>
+            ObjectLayouts.SignatureStorage(objects, Read(bundle, image, layout, heaps, owner,
+                next, end, context, objects, 0, methodArguments: methodArguments));
 
         internal static int ReadInstantiation(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int blob, int[] objects, int context = 0)
@@ -27,7 +28,7 @@ namespace PortableCompiler
         }
 
         internal static int Read(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
-            int owner, int[] next, int end, int context, int[] objects, int depth, int[] substitutions = null)
+            int owner, int[] next, int end, int context, int[] objects, int depth, int[] substitutions = null, int[] methodArguments = null)
         {
             int at = next[0];
             if (at >= end) return -1;
@@ -49,10 +50,12 @@ namespace PortableCompiler
             }
             if (element == 0x0e) return String;
             if (element == 0x1c) return ObjectLayouts.ObjectReference;
-            if (element == 0x12 || element == 0x13)
+            if (element == 0x12 || element == 0x13 || element == 0x1e)
             {
                 int token = CompressedUnsigned(image, at + 1, end, next);
                 if (token < 0) return -1;
+                if (element == 0x1e)
+                    return methodArguments != null && token < methodArguments.Length ? methodArguments[token] : -2;
                 if (element == 0x13)
                 {
                     if (substitutions == null) return ObjectLayouts.Argument(objects, context, token);
@@ -62,7 +65,7 @@ namespace PortableCompiler
             }
             if (element == 0x1d)
             {
-                int item = Read(bundle, image, layout, heaps, owner, next, end, context, objects, depth + 1, substitutions);
+                int item = Read(bundle, image, layout, heaps, owner, next, end, context, objects, depth + 1, substitutions, methodArguments);
                 if (item < 0) return item;
                 // An enum vector needs separate nominal identity and array lowering.
                 if (ObjectLayouts.IsEnumKey(item)) return -2;
@@ -74,7 +77,7 @@ namespace PortableCompiler
             if (count < 0) return count;
             var arguments = new int[count];
             int status = ReadArguments(bundle, image, layout, heaps, owner, next, end, context, objects,
-                depth + 1, substitutions, arguments);
+                depth + 1, substitutions, arguments, methodArguments);
             if (status < 0) return status;
             return BundleLayouts.RegisterInstantiation(bundle, image, layout, heaps, owner, head[0], objects, arguments, head[1] == 0x11);
         }
@@ -99,7 +102,7 @@ namespace PortableCompiler
             if (count < 0) return count;
             if (head[1] != 0x12) return -2;
             var arguments = new int[count];
-            int status = ReadArguments(bundle, image, layout, heaps, owner, next, end, 0, objects, 0, substitutions, arguments);
+            int status = ReadArguments(bundle, image, layout, heaps, owner, next, end, 0, objects, 0, substitutions, arguments, null);
             if (status < 0) return status;
             if (next[0] != end) return -1;
             return BundleLayouts.ReserveParent(bundle, image, layout, heaps, owner, head[0], objects, arguments);
@@ -121,11 +124,11 @@ namespace PortableCompiler
         }
 
         private static int ReadArguments(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
-            int owner, int[] cursor, int end, int context, int[] objects, int depth, int[] substitutions, int[] arguments)
+            int owner, int[] cursor, int end, int context, int[] objects, int depth, int[] substitutions, int[] arguments, int[] methodArguments)
         {
             for (int i = 0; i < arguments.Length; i++)
             {
-                int argument = Read(bundle, image, layout, heaps, owner, cursor, end, context, objects, depth, substitutions);
+                int argument = Read(bundle, image, layout, heaps, owner, cursor, end, context, objects, depth, substitutions, methodArguments);
                 if (argument < 0) return argument;
                 arguments[i] = argument;
             }

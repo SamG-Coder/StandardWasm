@@ -7,7 +7,7 @@ namespace PeLibrary
         private const uint Variance = 3, Reference = 4, NonNullableValue = 8,
             DefaultConstructor = 0x10, AllowByRefLike = 0x20;
 
-        internal static int Check(byte[] image, int[] heaps, int[] methods, int typeRow, int[] arguments, int[] objects, int[] deferred)
+        internal static int Check(byte[] image, int[] heaps, int[] methods, int typeRow, int[] arguments, int[] objects, int[] deferred, bool method = false)
         {
             int arity = arguments.Length;
             var counts = new int[45];
@@ -18,7 +18,7 @@ namespace PeLibrary
             if (table < 0) return -1;
             int ownerWidth = counts[2] < 32768 && counts[6] < 32768 ? 2 : 4;
             int width = 4 + ownerWidth + methods[2];
-            int owner = typeRow << 1;
+            int owner = (typeRow << 1) | (method ? 1 : 0);
             // GenericParam is sorted by owner, then by parameter number.
             int low = 0, high = counts[42];
             while (low < high)
