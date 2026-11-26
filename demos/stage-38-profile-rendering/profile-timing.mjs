@@ -2,14 +2,14 @@ import { canvasBaseline } from "./render.mjs";
 
 const frame = () => new Promise(requestAnimationFrame);
 
-export function prepareProfileTiming({ canvas, model, text, gpu, captions, setManagedText, readPreview }) {
+export function prepareProfileTiming({ canvas, model, text, gpu, captions, setManagedText, readPreview, previewRegion }) {
     const comparison = canvas.cloneNode(false);
     const canvas2d = canvasBaseline(model, text, comparison);
 
     function select(key) {
-        if (key === "webgpu" && comparison.isConnected) comparison.replaceWith(canvas);
+        if (key !== "canvas2d" && comparison.isConnected) comparison.replaceWith(canvas);
         if (key === "canvas2d" && canvas.isConnected) canvas.replaceWith(comparison);
-        return key === "webgpu" ? gpu : canvas2d;
+        return key === "canvas2d" ? canvas2d : gpu;
     }
 
     function update(value) {
@@ -20,7 +20,7 @@ export function prepareProfileTiming({ canvas, model, text, gpu, captions, setMa
     function draw(key, renderer, preview) {
         captions.set("preview", preview);
         text.update(captions);
-        if (key === "webgpu") renderer.upload();
+        if (key !== "canvas2d") renderer.upload(key === "webgpuRegion" ? previewRegion : undefined);
         renderer.draw();
     }
 
@@ -30,8 +30,11 @@ export function prepareProfileTiming({ canvas, model, text, gpu, captions, setMa
                 webgpu: { updateMs: [], submitMs: [], queueDrainMs: [] },
                 canvas2d: { updateMs: [], submitMs: [] }
             };
+            if (previewRegion) totals.webgpuRegion = { updateMs: [], submitMs: [], queueDrainMs: [] };
+            const renderers = Object.keys(totals);
             for (let repeat = 0; repeat < repeats; repeat++) {
-                const order = repeat % 2 === 0 ? ["webgpu", "canvas2d"] : ["canvas2d", "webgpu"];
+                const first = repeat % renderers.length;
+                const order = [...renderers.slice(first), ...renderers.slice(0, first)];
                 for (const key of order) {
                     const renderer = select(key);
                     for (let index = 0; index < warmup + samples; index++) {
@@ -49,21 +52,21 @@ export function prepareProfileTiming({ canvas, model, text, gpu, captions, setMa
                             totals[key].submitMs.push(afterDraw - afterUpdate);
                         }
                     }
-                    if (key === "webgpu") {
+                    if (key !== "canvas2d") {
                         const start = performance.now();
                         await gpu.finished();
-                        totals.webgpu.queueDrainMs.push(performance.now() - start);
+                        totals[key].queueDrainMs.push(performance.now() - start);
                     }
                 }
             }
-            return { adapter: gpu.info, totals, width: model.width, height: model.height };
+            return { adapter: gpu.info, totals, width: model.width, height: model.height, previewRegion };
         },
         async render(key, value) {
             const renderer = select(key);
             const preview = update(value);
             await frame();
             draw(key, renderer, preview);
-            if (key === "webgpu") await gpu.finished();
+            if (key !== "canvas2d") await gpu.finished();
             await frame();
             return preview;
         }

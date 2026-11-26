@@ -28,10 +28,17 @@ export function createTextLayer(model) {
                 paint.fillStyle = button ? "#10212b" : "#f1f6ff";
                 paint.textAlign = button ? "center" : "left";
                 paint.textBaseline = "middle";
+                if (control.clipText) {
+                    paint.save();
+                    paint.beginPath();
+                    paint.rect(control.x, control.y, control.width, control.height);
+                    paint.clip();
+                }
                 paint.fillText(texts.get(control.name),
                     control.x + (button ? control.width * 0.5 : inset),
                     control.y + control.height * 0.5,
                     control.width - inset * 2);
+                if (control.clipText) paint.restore();
             }
         }
     };
@@ -216,8 +223,14 @@ export async function webgpuRenderer(canvas, model, text) {
             const bytes = active ? activeColors : initialColors;
             device.queue.writeBuffer(colorBuffer, start * 4, bytes, start * 4, count * 4);
         },
-        upload() {
-            device.queue.copyExternalImageToTexture({ source: text.canvas }, { texture }, extent);
+        upload(region) {
+            if (region === undefined) {
+                device.queue.copyExternalImageToTexture({ source: text.canvas }, { texture }, extent);
+                return;
+            }
+            const [x, y, width, height] = region;
+            device.queue.copyExternalImageToTexture({ source: text.canvas, origin: [x, y] },
+                { texture, origin: [x, y] }, [width, height]);
         },
         draw() {
             const encoder = device.createCommandEncoder();

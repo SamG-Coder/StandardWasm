@@ -45,9 +45,12 @@ export async function recordProfileTiming(page, engine, output) {
     assert.equal(native.sampleCount, count);
     assert.equal(native.warmup, warmup);
     const parity = [];
-    for (const [index, value] of values.entries()) {
+    const regional = browser.previewRegion !== undefined;
+    const snapshotsToCompare = regional ? [...values, ""] : values;
+    for (const [index, value] of snapshotsToCompare.entries()) {
         const snapshots = {};
-        for (const renderer of ["webgpu", "canvas2d"]) {
+        const renderers = regional ? ["webgpu", "webgpuRegion", "canvas2d"] : ["webgpu", "canvas2d"];
+        for (const renderer of renderers) {
             assert.equal(await page.evaluate(({ renderer, value }) => window.profileTiming.render(renderer, value),
                 { renderer, value }), "Hello, " + value);
             snapshots[renderer] = await page.locator("#surface").screenshot();
@@ -55,23 +58,32 @@ export async function recordProfileTiming(page, engine, output) {
         }
         const comparison = await comparePixels(page, snapshots.webgpu, snapshots.canvas2d, 3);
         assert.ok(comparison.changed / comparison.pixels <= .005, JSON.stringify(comparison));
-        parity.push({ value, ...comparison });
+        const regionComparison = regional ? await comparePixels(page, snapshots.webgpu, snapshots.webgpuRegion, 0) : null;
+        if (regionComparison) assert.equal(regionComparison.changed, 0, "Partial and full WebGPU uploads must match.");
+        parity.push({ value, ...comparison, ...(regionComparison ? { regional: regionComparison } : {}) });
     }
     const metrics = browser.totals;
     const driverQuery = spawnSync("powershell.exe", ["-NoProfile", "-Command",
         "Get-CimInstance Win32_VideoController | Select-Object Name, DriverVersion | ConvertTo-Json -Compress"],
         { encoding: "utf8" });
     const drivers = driverQuery.status === 0 && driverQuery.stdout.trim() ? JSON.parse(driverQuery.stdout) : null;
+    const webgpuTiming = renderer => ({
+        updateMs: summarize(renderer.updateMs, count),
+        submitMs: summarize(renderer.submitMs, count),
+        queueDrainMs: summarize(renderer.queueDrainMs, repeats)
+    });
+    const fullPixels = browser.width * browser.height;
+    const regionalPixels = regional ? browser.previewRegion[2] * browser.previewRegion[3] : 0;
     const evidence = {
         engine, node: process.version, runtime: native.runtime, platform: native.platform, cpu: cpus()[0]?.model.trim(), drivers,
         adapter: browser.adapter, width: browser.width, height: browser.height,
         workload: timingOptions, parity,
         native: { updateMs: summarize(native.updateMs, count), refreshMs: summarize(native.refreshMs, count) },
-        webgpu: {
-            updateMs: summarize(metrics.webgpu.updateMs, count),
-            submitMs: summarize(metrics.webgpu.submitMs, count),
-            queueDrainMs: summarize(metrics.webgpu.queueDrainMs, repeats)
-        },
+        webgpu: webgpuTiming(metrics.webgpu),
+        ...(regional ? {
+            webgpuRegion: webgpuTiming(metrics.webgpuRegion),
+            upload: { fullPixels, regionalPixels, reduction: 1 - regionalPixels / fullPixels }
+        } : {}),
         canvas2d: {
             updateMs: summarize(metrics.canvas2d.updateMs, count),
             submitMs: summarize(metrics.canvas2d.submitMs, count)
