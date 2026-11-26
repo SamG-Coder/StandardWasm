@@ -20,7 +20,9 @@ a facade. Match local and bundled declarations. Consider name-based implicit
 implementations from the closest class that declares the interface map. A
 subclass's public method can hide a name without changing the inherited map.
 Dispatch an overridable class body through its class slot. A final body
-already supplies its concrete target.
+already supplies its concrete target. For class virtual dispatch, a same-name
+MethodImpl can affect the slot only if its declaration belongs to the class
+hierarchy. Unsupported class mappings still produce a diagnostic.
 
 This stage supports local final instance-virtual MethodImpl bodies. Generic
 interface dispatch, default interface method selection, value-type receivers,

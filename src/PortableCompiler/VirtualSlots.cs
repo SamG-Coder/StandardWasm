@@ -31,9 +31,8 @@ namespace PortableCompiler
             if (CompressedTables.FindWithHeaps(source, sourceLayout, sourceHeaps) < 0) return -1;
             int name = MethodDefinitions.ReadColumn(source, sourceLayout, row, 3);
             int signature = MethodDefinitions.ReadColumn(source, sourceLayout, row, 4);
-            int sourceType = TypeDef(objects, declared);
-            int explicitSlot = VirtualSlotMetadata.HasNamedMethodImpl(source, sourceHeaps, sourceLayout, sourceType,
-                source, sourceHeaps, name);
+            int explicitSlot = HasClassMethodImpl(bundle, objects, declared, owner, source, sourceHeaps,
+                sourceLayout, source, sourceHeaps, name);
             if (explicitSlot != 0) return explicitSlot < 0 ? explicitSlot : -2;
 
             symbol[0] = owner;
@@ -52,7 +51,7 @@ namespace PortableCompiler
                 int targetOwner = AssemblyOf(objects, type), typeRow = TypeDef(objects, type);
                 byte[] image = bundle.Get(targetOwner);
                 if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
-                explicitSlot = VirtualSlotMetadata.HasNamedMethodImpl(image, heaps, layout, typeRow,
+                explicitSlot = HasClassMethodImpl(bundle, objects, type, targetOwner, image, heaps, layout,
                     source, sourceHeaps, name);
                 if (explicitSlot != 0) return explicitSlot < 0 ? explicitSlot : -2;
 
@@ -91,6 +90,28 @@ namespace PortableCompiler
                 final = (flags & 0x20) != 0;
             }
             return 0;
+        }
+
+        private static int HasClassMethodImpl(BundleImages bundle, int[] objects, int type, int owner,
+            byte[] image, int[] heaps, int[] layout, byte[] declaration, int[] declarationHeaps, int name)
+        {
+            var cursor = new int[1];
+            var parent = new int[2];
+            int typeRow = TypeDef(objects, type);
+            while (true)
+            {
+                int coded = VirtualSlotMetadata.NextNamedMethodImplParent(image, heaps, layout, typeRow,
+                    declaration, declarationHeaps, name, cursor);
+                if (coded <= 0) return coded;
+                int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, coded, parent);
+                if (status < 0) return status == -1 ? -1 : -2;
+
+                // An interface MethodImpl can share a name with this virtual
+                // slot. Only a declaration on the class chain can remap it.
+                for (int current = type; current >= FirstClass; current = Parent(objects, current))
+                    if (AssemblyOf(objects, current) == parent[0] && TypeDef(objects, current) == parent[1])
+                        return 1;
+            }
         }
     }
 }

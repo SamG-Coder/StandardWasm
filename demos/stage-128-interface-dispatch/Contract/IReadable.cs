@@ -4,4 +4,9 @@ namespace ReadContract
     {
         int Read();
     }
+
+    public interface ISecondary
+    {
+        int Read();
+    }
 }

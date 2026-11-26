@@ -48,6 +48,18 @@ namespace InterfaceDispatchDemo
         protected override int ReadCore() => 91;
     }
 
+    public class VirtualResource : IReadable
+    {
+        public virtual int Read() => 80;
+    }
+
+    public sealed class VirtualAlternateResource : VirtualResource, IAlternate, ISecondary
+    {
+        public override int Read() => 84;
+        int IAlternate.Read() => 90;
+        int ISecondary.Read() => 92;
+    }
+
     public static class Kernels
     {
         private static int Read(IReadable resource) => resource.Read();
@@ -66,6 +78,14 @@ namespace InterfaceDispatchDemo
         public static int ReadResource(int choice) => Read(Choose(choice));
 
         public static int ReadAlternate() => ((IAlternate)new ExplicitResource()).Read();
+
+        public static int ReadVirtualResource(int choice)
+        {
+            IReadable resource;
+            if (choice == 0) resource = new VirtualResource();
+            else resource = new VirtualAlternateResource();
+            return Read(resource);
+        }
     }
 
     public static class Demo

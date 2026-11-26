@@ -15,6 +15,7 @@ internal static class InterfaceDispatchCases
 
         Check(nameof(Kernels.ReadResource), [[-1], [0], [1], [2], [3], [4], [5]], arguments => Kernels.ReadResource(arguments[0]));
         Check(nameof(Kernels.ReadAlternate), [[]], _ => Kernels.ReadAlternate());
+        Check(nameof(Kernels.ReadVirtualResource), [[0], [1]], arguments => Kernels.ReadVirtualResource(arguments[0]));
 
         void Check(string method, int[][] inputsForOracle, Func<int[], int> oracle)
         {
