@@ -1,0 +1,1 @@
+{"assembly":"FinallyLibrary","exportType":"FinallyLibrary.FinallyDemo","method":"Compile","inputs":[{"file":"self"},{"name":"CatchAfterCleanup"}],"generated":{"capacity":16384,"arguments":[0]},"expected":1234}

@@ -1,0 +1,1 @@
+{"assembly":"LinkedReferences","exportType":"LinkedReferences.LinkDemo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["ReferenceBridge.dll","ReferenceLeaf.dll"]},{"name":"Alias"}],"generated":{"bundle":true,"capacity":32768,"arguments":[0,7]},"expected":797}

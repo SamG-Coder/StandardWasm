@@ -1,0 +1,1 @@
+{"assembly":"CheckedCasts","exportType":"CheckedCasts.CastDemo","method":"Compile","inputs":[{"file":"self"},{"name":"F64ToU8"}],"generated":{"capacity":8192,"arguments":[255.9]},"expected":255}

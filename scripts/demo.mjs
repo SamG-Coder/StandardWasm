@@ -26,4 +26,5 @@ const result = (demo.generated
             })
         : invoke(instance.exports, demo.method, demoInputs(demo)));
 assert.equal(result, decode(demo.expected));
-console.log(demo.stage + ": " + demo.method + "(" + demo.inputs.map(input => input?.file === "bundle" ? demo.assembly + ".dll and dependencies" : input?.file === "self" ? demo.assembly + ".dll" : input?.name ?? input).join(", ") + ") = " + result);
+const display = result === null && demo.generated?.exceptionType ? demo.generated.exceptionType : result;
+console.log(demo.stage + ": " + demo.method + "(" + demo.inputs.map(input => input?.file === "bundle" ? demo.assembly + ".dll and dependencies" : input?.file === "self" ? demo.assembly + ".dll" : input?.name ?? input).join(", ") + ") = " + display);

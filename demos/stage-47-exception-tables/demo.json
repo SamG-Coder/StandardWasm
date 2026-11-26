@@ -1,0 +1,1 @@
+{"assembly":"ExceptionTables","exportType":"ExceptionTables.ExceptionDemo","method":"InspectNamed","inputs":[{"file":"self"},{"name":"SmallCatch"}],"expected":1}

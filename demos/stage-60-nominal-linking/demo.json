@@ -1,0 +1,1 @@
+{"assembly":"LinkedNominal","exportType":"LinkedNominal.LinkDemo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["NominalBridge.dll","NominalLeaf.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":32768,"arguments":[5,3]},"expected":325}

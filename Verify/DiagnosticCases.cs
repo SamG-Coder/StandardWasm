@@ -19,11 +19,11 @@ internal static class DiagnosticCases
         const BindingFlags methodFlags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
         Type estimates = typeof(Estimates);
 
-        var direct = estimates.GetMethod(nameof(Estimates.CheckedIncrement))!;
-        Reject(nameof(Estimates.CheckedIncrement), image, Row(direct), -2, At(0, direct, OpCodes.Add_Ovf));
-        var entry = estimates.GetMethod(nameof(Estimates.ViaHelper))!;
-        var helper = estimates.GetMethod("ClampCost", methodFlags)!;
-        Reject(nameof(Estimates.ViaHelper), image, Row(entry), -2, At(0, helper, OpCodes.Mul_Ovf));
+        var direct = estimates.GetMethod(nameof(Estimates.BoxedValue))!;
+        Reject(nameof(Estimates.BoxedValue), image, Row(direct), -2, At(0, direct, OpCodes.Box));
+        var entry = estimates.GetMethod(nameof(Estimates.ViaBoxingHelper))!;
+        var helper = estimates.GetMethod("BoxCost", methodFlags)!;
+        Reject(nameof(Estimates.ViaBoxingHelper), image, Row(entry), -2, At(0, helper, OpCodes.Box));
         var unsupported = estimates.GetMethod(nameof(Estimates.UnsupportedDecimal))!;
         Reject(nameof(Estimates.UnsupportedDecimal), image, Row(unsupported), -2, [0, Row(unsupported), -1]);
 
@@ -31,22 +31,26 @@ internal static class DiagnosticCases
         Reject(nameof(Estimates.Absolute), image, Row(absolute), -2, At(0, absolute, OpCodes.Call));
         Reject("invalid metadata", [0], 1, -1, [0, 0, -1]);
 
-        var linked = estimates.GetMethod(nameof(Estimates.ViaDependency))!;
-        var dependencyMethod = typeof(Costs).GetMethod(nameof(Costs.Estimate))!;
-        Reject("dependency opcode", bundle, Manifest(linked), -2, At(1, dependencyMethod, OpCodes.Mul_Ovf), bundled: true);
+        var linked = estimates.GetMethod(nameof(Estimates.ViaBoxedDependency))!;
+        var dependencyMethod = typeof(Costs).GetMethod(nameof(Costs.BoxHours))!;
+        Reject("dependency opcode", bundle, Manifest(linked), -2, At(1, dependencyMethod, OpCodes.Box), bundled: true);
         Reject("missing dependency", BundleCases.Pack(image), Manifest(linked), -4,
             At(0, linked, OpCodes.Call), bundled: true);
         Reject("invalid dependency metadata", BundleCases.Pack(image, [1]), Manifest(linked), -1,
             [1, 0, -1], bundled: true);
         Reject("invalid bundle", [1], Manifest(linked), -1, noLocation, bundled: true);
         Reject("invalid module manifest", image, new byte[] { 1 }, -1, noLocation, multiExport: true);
-        Reject("unsupported method in module", image, Manifest(direct), -2, At(0, direct, OpCodes.Add_Ovf), multiExport: true);
+        Reject("unsupported method in module", image, Manifest(direct), -2, At(0, direct, OpCodes.Box), multiExport: true);
 
         var supported = estimates.GetMethod(nameof(Estimates.Supported))!;
         Succeed("single export", image, Row(supported), Estimates.Supported);
         Succeed("module export", image, Manifest(supported), Estimates.Supported, multiExport: true);
         var rate = estimates.GetMethod(nameof(Estimates.LinkedRate))!;
         Succeed("linked export", bundle, Manifest(rate), Estimates.LinkedRate, bundled: true);
+        var checkedRate = estimates.GetMethod(nameof(Estimates.ViaDependency))!;
+        Succeed("linked checked multiplication", bundle, Manifest(checkedRate), Estimates.ViaDependency, bundled: true);
+        var checkedConversion = estimates.GetMethod(nameof(Estimates.ViaUnsupportedDependency))!;
+        Succeed("linked checked conversion", bundle, Manifest(checkedConversion), Estimates.ViaUnsupportedDependency, bundled: true);
 
         Array.Fill(output, (byte)0xa5);
         int[] shortLocation = [17, 29];
@@ -80,7 +84,17 @@ internal static class DiagnosticCases
                 throw new InvalidOperationException($"{name}: diagnostics changed successful output.");
             string hex = Convert.ToHexString(code).ToLowerInvariant();
             foreach (int value in new[] { 0, 7, int.MaxValue })
-                Record(name, file, selection, evaluate(value), noLocation, [value], hex, false, bundled, multiExport);
+            {
+                int? expected;
+                string exception = null;
+                try { expected = evaluate(value); }
+                catch (OverflowException error)
+                {
+                    expected = null;
+                    exception = error.GetType().FullName;
+                }
+                Record(name, file, selection, expected, noLocation, [value], hex, false, bundled, multiExport, exception);
+            }
         }
 
         int Compile(byte[] file, object selection, bool detailed, bool bundled, bool multiExport)
@@ -95,14 +109,15 @@ internal static class DiagnosticCases
                 : CompilerExports.Compile(file, (int)selection, output);
         }
 
-        void Record(string fixture, byte[] file, object selection, int expected, int[] location,
-            int[] arguments, string hex, bool reject, bool bundled, bool multiExport) =>
+        void Record(string fixture, byte[] file, object selection, int? expected, int[] location,
+            int[] arguments, string hex, bool reject, bool bundled, bool multiExport, string exception = null) =>
             cases.Add(new
             {
                 module = "BootstrapLibrary", method = bundled ? "CompileBundle" : multiExport ? "CompileModule" : "Compile", fixture,
                 inputs = new[] { Encode(file), selection is byte[] entries ? Encode(entries) : selection },
-                generated = new { capacity, arguments, diagnostic = location, hex, reject, bundle = bundled, multiExport },
-                expected
+                generated = new { capacity, arguments, diagnostic = location, hex, reject, bundle = bundled, multiExport,
+                    exceptionType = exception },
+                expected, exception
             });
     }
 
