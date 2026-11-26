@@ -21,5 +21,5 @@ internal partial class CounterForm : Form
         Bind(Increment, Result, CounterHandlers.Advance, "Count: ");
     }
 
-    partial void Bind(Button button, Label label, Func<int, int> click, string prefix);
+    partial void Bind(Button button, Label label, Func<CounterState, int> click, string prefix);
 }

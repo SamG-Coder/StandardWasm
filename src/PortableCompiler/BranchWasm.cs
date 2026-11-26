@@ -1,4 +1,5 @@
 using static PortableCompiler.BranchIl;
+using static PeLibrary.ObjectLayouts;
 using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
@@ -10,9 +11,11 @@ namespace PortableCompiler
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             byte result = (byte)frameShape[3];
-            int used = WasmBinary.Unsigned(code, 0, locals + (maximum == 0 ? 1 : 4));
+            int classes = frameShape[4];
+            int used = WasmBinary.Unsigned(code, 0, locals + classes + (maximum == 0 ? 1 : 4 + classes));
             int spills = arguments + locals;
-            int pcLocal = spills + 3 * maximum;
+            int temporaries = spills + (3 + classes) * maximum;
+            int pcLocal = temporaries + classes;
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < spills; i++)
             {
@@ -21,11 +24,16 @@ namespace PortableCompiler
             }
             if (maximum != 0)
             {
-                for (byte kind = I32; kind <= Ints; kind++)
+                for (int kind = I32; kind <= Ints + classes; kind++)
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
-                    used = WasmBinary.ValueType(code, used, kind);
+                    used = WasmBinary.ValueType(code, used, (byte)kind);
                 }
+            }
+            for (int i = 0; i < classes; i++)
+            {
+                code[used++] = 1;
+                used = WasmBinary.ValueType(code, used, (byte)(FirstClass + i));
             }
             code[used++] = 1;
             code[used++] = 0x7f;
@@ -34,7 +42,7 @@ namespace PortableCompiler
             for (int pc = 0; pc < depths.Length; pc++)
             {
                 if (depths[pc] == 0) continue;
-                int slot = pc * Width;
+                int slot = pc * BranchIl.Width;
                 int kind = records[slot], operand = records[slot + 1], next = records[slot + 2];
                 int depth = depths[pc] - 1;
                 int state = pc * maximum;
@@ -80,17 +88,46 @@ namespace PortableCompiler
                     code[used++] = (byte)operand;
                     used = Local(code, used, 0x21, spills + top - 1);
                 }
-                else if (kind == Call)
+                else if (kind == Call || kind == NewObject)
                 {
-                    int arity = arities[operand];
-                    int first = depth - arity;
-                    for (int i = 0; i < arity; i++)
-                        used = Local(code, used, 0x20, Spill(spills, maximum, states[state + first + i], first + i));
+                    int arity = arities[operand], shape = offsets[operand];
+                    int receiver = kind == NewObject ? 1 : 0;
+                    int first = depth - arity + receiver;
+                    int temp = 0;
+                    if (kind == NewObject)
+                    {
+                        byte type = signatures[shape + 1];
+                        temp = temporaries + type - FirstClass;
+                        used = Gc(code, used, 1, type); // struct.new_default
+                        used = Local(code, used, 0x22, temp);
+                    }
+                    for (int i = receiver; i < arity; i++)
+                    {
+                        int argument = first + i - receiver;
+                        used = Local(code, used, 0x20, Spill(spills, maximum, states[state + argument], argument));
+                        if (i == 0 && records[slot + 3] != 0)
+                            code[used++] = 0xd4; // callvirt null-check on a known nonvirtual target
+                    }
                     code[used++] = 0x10;
                     used = WasmBinary.Unsigned(code, used, operand);
-                    byte returned = signatures[offsets[operand]];
+                    byte returned = signatures[shape];
+                    if (kind == NewObject)
+                    {
+                        returned = signatures[shape + 1];
+                        used = Local(code, used, 0x20, temp);
+                    }
                     if (returned != Void)
                         used = Local(code, used, 0x21, Spill(spills, maximum, returned, first));
+                }
+                else if (kind == GetField || kind == SetField)
+                {
+                    byte type = (byte)records[slot + 3];
+                    int address = kind == GetField ? top : top - 1;
+                    used = Local(code, used, 0x20, Spill(spills, maximum, type, address));
+                    if (kind == SetField) used = Local(code, used, 0x20, spills + top);
+                    used = Gc(code, used, kind == GetField ? 2 : 5, type);
+                    used = WasmBinary.Unsigned(code, used, operand);
+                    if (kind == GetField) used = Local(code, used, 0x21, spills + top);
                 }
                 else if (kind == NewArray)
                 {
@@ -163,8 +200,7 @@ namespace PortableCompiler
         {
             code[used++] = 0xfb;
             code[used++] = (byte)instruction;
-            code[used++] = (byte)(array - Bytes);
-            return used;
+            return WasmBinary.Unsigned(code, used, array - Bytes);
         }
 
         private static int Const(byte[] code, int used, int value)

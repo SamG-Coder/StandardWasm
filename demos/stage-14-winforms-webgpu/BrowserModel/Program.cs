@@ -35,14 +35,22 @@ var model = new
 // Use the same portable compiler implementation as the self-reproducing Wasm compiler.
 using var manifest = new MemoryStream();
 using var writer = new BinaryWriter(manifest);
-byte[] name = Encoding.ASCII.GetBytes(form.Binding.Export);
-if (Encoding.ASCII.GetString(name) != form.Binding.Export)
-    throw new InvalidOperationException("The portable compiler requires ASCII export names.");
-writer.Write(form.Binding.Row);
-writer.Write(name.Length);
-writer.Write(name);
+WriteEntry(form.Binding.Export, form.Binding.Row);
+WriteEntry(nameof(CounterHandlers.Create), typeof(CounterHandlers).GetMethod(nameof(CounterHandlers.Create))!.MetadataToken & 0xffffff);
+WriteEntry(nameof(CounterHandlers.Read), typeof(CounterHandlers).GetMethod(nameof(CounterHandlers.Read))!.MetadataToken & 0xffffff);
+
+void WriteEntry(string export, int row)
+{
+    byte[] name = Encoding.ASCII.GetBytes(export);
+    if (Encoding.ASCII.GetString(name) != export)
+        throw new InvalidOperationException("The portable compiler requires ASCII export names.");
+    writer.Write(row);
+    writer.Write(name.Length);
+    writer.Write(name);
+}
+
 byte[] dll = File.ReadAllBytes(typeof(CounterHandlers).Assembly.Location);
-var wasm = new byte[4096];
+var wasm = new byte[16384];
 int length = CompilerExports.CompileModule(dll, manifest.ToArray(), wasm);
 if (length <= 0)
     throw new InvalidOperationException($"Handler compilation failed with status {length}.");

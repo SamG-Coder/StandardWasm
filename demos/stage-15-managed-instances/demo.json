@@ -1,0 +1,1 @@
+{"assembly":"ObjectLibrary","exportType":"ObjectLibrary.ObjectDemo","method":"Compile","inputs":[{"file":"self"},{"name":"Isolated"}],"generated":{"capacity":16384,"arguments":[10]},"expected":19}

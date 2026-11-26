@@ -1,4 +1,5 @@
 using static PortableCompiler.BranchIl;
+using static PeLibrary.ObjectLayouts;
 using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
@@ -17,7 +18,7 @@ namespace PortableCompiler
             while (head < tail)
             {
                 int pc = pending[head++];
-                int slot = pc * Width;
+                int slot = pc * BranchIl.Width;
                 int kind = records[slot];
                 int depth = depths[pc] - 1;
                 int operand = records[slot + 1];
@@ -65,18 +66,29 @@ namespace PortableCompiler
                     return -1;
                 return depth - needed + (kind == Binary ? 1 : 0);
             }
-            if (kind == Call)
+            if (kind == Call || kind == NewObject)
             {
                 int count = arities[operand], offset = offsets[operand];
-                int start = depth - count;
+                int receiver = kind == NewObject ? 1 : 0;
+                int start = depth - count + receiver;
                 if (start < 0)
                     return -1;
-                for (int i = 0; i < count; i++)
-                    if (stack[start + i] != signatures[offset + 1 + i])
+                for (int i = receiver; i < count; i++)
+                    if (stack[start + i - receiver] != signatures[offset + 1 + i])
                         return -1;
-                byte result = signatures[offset];
+                byte result = kind == NewObject ? signatures[offset + 1] : signatures[offset];
                 return result == Void ? start : Push(stack, start, result);
             }
+            if (kind == BaseCtor)
+                return depth > 0 && stack[depth - 1] >= FirstClass ? depth - 1 : -1;
+            if (kind == GetField)
+            {
+                if (!Match(stack, depth, (byte)extra)) return -1;
+                stack[depth - 1] = I32;
+                return depth;
+            }
+            if (kind == SetField)
+                return Match(stack, depth, I32) && Match(stack, depth - 1, (byte)extra) ? depth - 2 : -1;
             if (kind == NewArray)
             {
                 if (!Match(stack, depth, I32)) return -1;
