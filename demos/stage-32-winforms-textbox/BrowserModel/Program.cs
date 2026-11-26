@@ -1,17 +1,16 @@
 using System.Reflection;
 using System.Text;
 using BootstrapLibrary;
-using ProfileExample;
+using ProfileBrowser;
 
 if (args.Length != 1)
     throw new ArgumentException("Usage: BrowserModel <profile.wasm>");
 
 using var manifest = new MemoryStream();
 using var writer = new BinaryWriter(manifest);
-var handlers = typeof(ProfileHandlers);
+var handlers = typeof(BrowserExports);
 foreach (var method in handlers.GetMethods(BindingFlags.Public | BindingFlags.Static))
 {
-    if (method.Name == nameof(ProfileHandlers.Edit)) continue; // Browser input uses EditChars.
     byte[] name = Encoding.ASCII.GetBytes(method.Name);
     writer.Write(method.MetadataToken & 0xffffff);
     writer.Write(name.Length);
