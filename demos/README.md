@@ -116,6 +116,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [110 · Console arguments and streams](stage-110-console-arguments/README.md) | `npm run demo -- stage-110-console-arguments` | Windows, Node and Edge match on exit status and stdout/stderr bytes for `Main(string[])` |
 | [112 · Standalone Webcil intake](stage-112-standalone-webcil-intake/README.md) | `npm run demo -- stage-112-standalone-webcil-intake` | Inspect the original .NET 10 standalone publish in Node and Edge |
 | [114 · Empty module startup](stage-114-empty-module-startup/README.md) | `npm run demo -- stage-114-empty-module-startup` | Prove empty module startup in standalone and linked .NET Standard libraries |
+| [117 · WinForms blocker census](stage-117-winforms-census/README.md) | `npm run demo -- stage-117-winforms-census` | Rank the compiler blockers and P/Invokes statically reached from the original WinForms entry |
 
 ## Adding a stage
 
