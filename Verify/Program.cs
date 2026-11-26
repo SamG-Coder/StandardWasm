@@ -117,4 +117,5 @@ VolatileFieldCases.Add(cases);
 PointerFieldCases.Add(cases);
 EmbeddedValueCases.Add(cases);
 EnumFieldCases.Add(cases);
+ValueBaseCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);
