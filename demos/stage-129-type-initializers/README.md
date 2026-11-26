@@ -22,6 +22,8 @@ The kernels cover:
 - recursive initialization, where B reads A while A runs
 - try, catch and finally inside an initializer
 - a field read and a static call into a bundled dependency's initializer
+- a static call into a closed beforefieldinit generic type, which reads no static field and so
+  needs no initializer
 - distinct `new object()` allocations, root-object identity through a static field, and a
   failed nominal test against an unrelated class
 
@@ -33,5 +35,5 @@ Wasm stack inside an initializer. The CLR would end the process, so it has no CL
 It checks that the next host entry retires the interrupted initializer instead of treating
 it as recursion.
 
-`GetHashCode`, `ToString`, `GetType` and `Equals` on a root object, and `lock`, must return
-the explicit -2 diagnostic at their instruction. The design is decision 0057.
+`GetHashCode`, `ToString`, `GetType` and `Equals` on a root object, `lock`, and a static call
+into a closed precise generic type must return the explicit -2 diagnostic at their instruction. The design is decision 0057.

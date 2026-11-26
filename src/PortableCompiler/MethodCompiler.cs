@@ -1272,9 +1272,11 @@ namespace PortableCompiler
             int initialization = TypeInitializers.Find(image, layout, heaps, owner, initializerFlags);
             if (initialization < 0) return initialization;
             // A generic type has one initializer per closed instantiation, which needs
-            // per-instantiation guards. A precise value type also triggers on instance
-            // methods. Both stay explicit diagnostics.
-            if (initialization != 0 && (context != 0 ||
+            // per-instantiation guards. Only a precise type runs it on a method call; a
+            // beforefieldinit generic type waits for a static field access, and generic
+            // static fields are still diagnosed (Stage 108). A precise value type also
+            // triggers on instance methods. Both stay explicit diagnostics.
+            if (initialization != 0 && initializerFlags[0] == 0 && (context != 0 ||
                 GenericParameters.Check(image, heaps, layout, owner, new int[0], objects, new int[8]) != 0))
                 return -2;
             if (context != 0)

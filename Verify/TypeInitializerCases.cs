@@ -19,6 +19,7 @@ internal static class TypeInitializerCases
 
         Check(nameof(Kernels.BeforeFieldInitOnce), Kernels.BeforeFieldInitOnce);
         Check(nameof(Kernels.BundledDependency), Kernels.BundledDependency);
+        Check(nameof(Kernels.RelaxedGenericCall), Kernels.RelaxedGenericCall);
         Check(nameof(Kernels.DistinctObjects), Kernels.DistinctObjects);
         Check(nameof(Kernels.StaticFieldAlias), Kernels.StaticFieldAlias);
         Check(nameof(Kernels.NotNominalClass), Kernels.NotNominalClass);

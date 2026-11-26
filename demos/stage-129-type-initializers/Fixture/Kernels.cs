@@ -239,6 +239,12 @@ namespace TypeInitializerFixture
         }
 
         // An escaping exception: the CLR raises TypeInitializationException.
+        // A closed beforefieldinit generic static call that reads no static field.
+        public static int RelaxedGenericCall() => RelaxedBox<int>.Id(4);
+
+        // A closed precise generic static call stays a located diagnostic.
+        public static int PreciseGenericCall() => PreciseBox<int>.Id(4);
+
         public static int ReadFailing() => Failing.Value;
 
         public static int ReadOuterFailing() => OuterFailing.Value;
