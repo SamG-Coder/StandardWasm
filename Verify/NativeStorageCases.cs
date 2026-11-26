@@ -40,7 +40,12 @@ internal static class NativeStorageCases
         foreach (int length in new[] { 0, 1, 127 })
             Check(nameof(Kernels.HasArrayItems), [length], Kernels.HasArrayItems(length) ? 1 : 0);
 
-        Reject(bundle, nameof(Kernels.RejectNativeAdd), Offset(nameof(Kernels.RejectNativeAdd), OpCodes.Add), -2);
+        // Stage 132 (decision 0060): native int arithmetic follows ECMA-335 Table III.2.
+        // This verifier runs on the 64-bit CLR, so the expected value is the 4-byte
+        // (wasm32, decision 0027) sum, the same result the 32-bit CLR returns.
+        foreach (var (left, right) in new[] { (1, 2), (-5, 3), (int.MaxValue, 1), (int.MinValue, -1), (0, 0) })
+            Check(nameof(Kernels.RejectNativeAdd), [left, right],
+                IntPtr.Size == 4 ? (int)Kernels.RejectNativeAdd(left, right) : unchecked(left + right));
 
         int row = Row(nameof(Kernels.Run));
         using var pe = new PEReader(new MemoryStream(image));

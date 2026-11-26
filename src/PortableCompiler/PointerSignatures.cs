@@ -7,6 +7,15 @@ namespace PortableCompiler
         internal static int ReadStorage(BundleImages bundle, byte[] image, int[] layout,
             int[] heaps, int owner, int position, int end, int[] next)
         {
+            // Decision 0060: a single-level pointer to a primitive is an i32 address
+            // into memory 0, the CLI's native-int stack type. void*, pointers to
+            // named structs and multi-level pointers keep the null-only storage of
+            // decisions 0032 and 0035.
+            if (position < end && IsPrimitiveElement(image[position]))
+            {
+                next[0] = position + 1;
+                return SignatureTypes.Native;
+            }
             int pointee = PointerStorage.ReadPointee(image, position, end, next);
             if (pointee < 0) return pointee;
             if (pointee > 0)
@@ -19,6 +28,10 @@ namespace PortableCompiler
             }
             return PointerStorage.NullPointer;
         }
+
+        // bool, char, the sized integers, float, double and native ints.
+        private static bool IsPrimitiveElement(int element) =>
+            element >= 2 && element <= 0x0d || element == 0x18 || element == 0x19;
 
         // Returns the right cursor and leaves the left cursor in next.
         internal static int Match(BundleImages bundle, byte[] caller, int[] callerLayout,
