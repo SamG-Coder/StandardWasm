@@ -34,6 +34,9 @@
     <ProjectReference Include="../demos/stage-34-shared-winforms-source/ProfileBrowser.csproj" Aliases="BrowserForms" />
     <ProjectReference Include="../demos/stage-35-managed-control-tree/ReferenceLibrary.csproj" />
     <ProjectReference Include="../demos/stage-36-managed-events/EventLibrary.csproj" />
+    <Compile Remove="Fixtures/**/*.cs" />
+    <ProjectReference Include="Fixtures/PlatformIdentity/ThirdPartyTypes/ThirdPartyTypes.csproj" Aliases="ThirdParty" />
+    <ProjectReference Include="Fixtures/PlatformIdentity/PlatformIdentityProbe/PlatformIdentityProbe.csproj" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../demos/stage-39-portable-primitive-arrays/PrimitiveStorage.csproj" />
@@ -53,5 +56,16 @@
     <ProjectReference Include="../demos/stage-55-allocation-delegates/AllocationDelegates.csproj" />
     <ProjectReference Include="../demos/stage-56-instance-null/InstanceNull.csproj" />
     <ProjectReference Include="../demos/stage-57-linked-exceptions/LinkedExceptions.csproj" />
+    <ProjectReference Include="../demos/stage-58-linked-references/LinkedReferences.csproj" />
+    <ProjectReference Include="../demos/stage-59-linked-objects/LinkedObjects.csproj" />
+    <ProjectReference Include="../demos/stage-60-nominal-linking/LinkedNominal.csproj" />
+    <ProjectReference Include="../demos/stage-61-linked-instances/LinkedInstances.csproj" />
+    <ProjectReference Include="../demos/stage-62-null-stack/NullStack.csproj" />
+    <ProjectReference Include="../demos/stage-63-linked-fields/LinkedFields.csproj" />
+    <ProjectReference Include="../demos/stage-64-foreign-field-types/ForeignFieldTypes.csproj" />
+    <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />
+    <Compile Remove="Fixtures/**/*.cs" />
+    <ProjectReference Include="Fixtures/PlatformIdentity/ThirdPartyTypes/ThirdPartyTypes.csproj" Aliases="ThirdParty" />
+    <ProjectReference Include="Fixtures/PlatformIdentity/PlatformIdentityProbe/PlatformIdentityProbe.csproj" />
   </ItemGroup>
 </Project>

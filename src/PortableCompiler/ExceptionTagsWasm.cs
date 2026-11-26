@@ -3,8 +3,8 @@ namespace PortableCompiler
     internal static class ExceptionTagsWasm
     {
         internal const int OverflowExportSize = 12, DivideExportSize = 16;
-        internal const int IndexExportSize = 19, NullExportSize = 17;
-        internal const int OverflowTag = 0, DivideTag = 1, IndexTag = 2, NullTag = 3, Count = 4;
+        internal const int IndexExportSize = 19, NullExportSize = 17, InvalidCastExportSize = 15;
+        internal const int OverflowTag = 0, DivideTag = 1, IndexTag = 2, NullTag = 3, InvalidCastTag = 4, Count = 5;
 
         internal static int WriteOverflowExport(byte[] code, int used)
         {
@@ -89,6 +89,26 @@ namespace PortableCompiler
             code[used++] = (byte)'e';
             code[used++] = 4; // exported tag
             code[used++] = NullTag;
+            return used;
+        }
+
+        internal static int WriteInvalidCastExport(byte[] code, int used)
+        {
+            code[used++] = 12;
+            code[used++] = 0;
+            code[used++] = (byte)'i';
+            code[used++] = (byte)'n';
+            code[used++] = (byte)'v';
+            code[used++] = (byte)'a';
+            code[used++] = (byte)'l';
+            code[used++] = (byte)'i';
+            code[used++] = (byte)'d';
+            code[used++] = (byte)'C';
+            code[used++] = (byte)'a';
+            code[used++] = (byte)'s';
+            code[used++] = (byte)'t';
+            code[used++] = 4;
+            code[used++] = InvalidCastTag;
             return used;
         }
 
