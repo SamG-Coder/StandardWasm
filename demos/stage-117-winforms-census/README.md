@@ -9,7 +9,9 @@ it isn't in the default location. Set `STANDARDWASM_DESKTOP_VERSION` to census
 another installed version, and `STANDARDWASM_CENSUS_PARALLEL` to change the
 number of concurrent compiler verdicts (default 12). A run takes about 3.5
 minutes. `STANDARDWASM_CENSUS_REUSE=<census.json>` replays an earlier run's
-verdicts so the rankings can be regenerated without recompiling.
+verdicts so the rankings can be regenerated without recompiling. Reuse is
+refused unless the recorded compiler hash and ordered bundle hashes match the
+current inputs exactly.
 
 The runner publishes the unchanged [Stage 72](../stage-72-winforms-windows-reference/README.md)
 reference application. A host-side analyzer then walks the static call graph

@@ -1,5 +1,5 @@
 {
-  "schema": "standardwasm.winforms-census/1",
+  "schema": "standardwasm.winforms-census/2",
   "entry": {
     "id": "WinFormsReference#2",
     "name": "WinFormsReference.Program::Main"
@@ -474,12 +474,206 @@
       "version": "1.0.0.0",
       "file": "WinFormsReference.dll",
       "source": "application",
-      "sha256": "a65eda77ad5a8d24cce10bf22b0fb3a257f30c3fd183d397364f11aafb966178",
+      "sha256": "f85f99dde89b2954e49e107c8ca59460653377dd273e6c73fb08adeadb6f9941",
       "inCompilerPack": true
     }
   ],
   "unresolvedAssemblies": [],
   "excludedFromCompilerPack": [],
+  "verdictIdentity": {
+    "compiler": "BootstrapLibrary.dll",
+    "compilerSha256": "674848e69272f0d140804ae027207994320f5bb33176694dddae16690fbf3574",
+    "bundle": [
+      {
+        "name": "WinFormsReference",
+        "sha256": "f85f99dde89b2954e49e107c8ca59460653377dd273e6c73fb08adeadb6f9941"
+      },
+      {
+        "name": "System.Windows.Forms",
+        "sha256": "204e6b09b56fe450b0b32eb8b7c1a95aef4432f843fc291acf61fbcbdfac1342"
+      },
+      {
+        "name": "System.Windows.Forms.Primitives",
+        "sha256": "acc5b6c2f81929a56d71e6c93c212cb54d10d1da37ec2ac1085f20c7e0312aac"
+      },
+      {
+        "name": "System.Private.Windows.Core",
+        "sha256": "a1aa6915dc704ea43ce04784dbe4ca62b62d78aedec271d96aaf035a31e509e3"
+      },
+      {
+        "name": "System.Drawing.Common",
+        "sha256": "727a5e5313951da5d1c7a1d9f4e15c887cdf102620c8be01b8d17082af5a81c5"
+      },
+      {
+        "name": "System.Private.Windows.GdiPlus",
+        "sha256": "82ffd3c279847fa074f275b88054f82a82a0a08fa967f04a7d92b1455bb1c8d1"
+      },
+      {
+        "name": "System.Private.CoreLib",
+        "sha256": "21e6cd59df4c4e4be28e0a7c996b52fe8fe4cf2e5020b3afbe7b30a4f8b225d4"
+      },
+      {
+        "name": "System.Runtime",
+        "sha256": "d0ed7fa8e1c2d39012d271ddf4e6ab29c8ea4d62e78604263f7b6926aefc9318"
+      },
+      {
+        "name": "System.ComponentModel.Primitives",
+        "sha256": "f1ad1d4d284488b1a3b6ffe332f315a1a0f321ae696ad935f041f4d41ae8541f"
+      },
+      {
+        "name": "System.Collections",
+        "sha256": "bed2b08668d486c03e231e27b2ecbcb3191d4583df17c1453445930215e8c95b"
+      },
+      {
+        "name": "System.Threading",
+        "sha256": "d43d8dfb2effcd71422c56a580f8a96f73d8e6bca595afeae5f32e23ffc4febb"
+      },
+      {
+        "name": "System.Drawing.Primitives",
+        "sha256": "29f78b7da3576c4c7c6d3ccad4680667b0f7a165c947830e3f3a79a3dc0dd0b9"
+      },
+      {
+        "name": "System.ComponentModel",
+        "sha256": "69788e9f673ab833e7a867c99e0fc69a0b59b9d5c169aa6bf10eb8645774d213"
+      },
+      {
+        "name": "System.ComponentModel.TypeConverter",
+        "sha256": "968328152ad5ba3c126771ed87ab79060a417170b97dfab5faca3e75f8e9b8e2"
+      },
+      {
+        "name": "System.Collections.Concurrent",
+        "sha256": "2823d8c29f90e4111ee8a0594a4d04ffaec1d9fc1c48737ff7585322502ef4e3"
+      },
+      {
+        "name": "System.Collections.Specialized",
+        "sha256": "f2b28f97c8a3f1751462b742cd69af427f94e007e4a7d4d54395d47b97133aa0"
+      },
+      {
+        "name": "System.ObjectModel",
+        "sha256": "08cb078ae812ac77353c544dc7456406f95ec333f6b027a90e767a2528d30ee2"
+      },
+      {
+        "name": "Microsoft.Win32.Registry",
+        "sha256": "c0834a133bce1e7fa56608a4f3bfaa4072e0a03220829882d6e00986bc6bad98"
+      },
+      {
+        "name": "Microsoft.Win32.SystemEvents",
+        "sha256": "77450dbd9e4b9b2c153af317a49b8395f0bc187e6cf6a4c38007feb0adf77ae0"
+      },
+      {
+        "name": "System.Collections.Immutable",
+        "sha256": "25d6bbdbe1688f4dfbec88436977776e9b03f6279d9edc76194ea128378131e1"
+      },
+      {
+        "name": "System.Collections.NonGeneric",
+        "sha256": "c1afff2553fdaf4461773f21fc8684f347b3ec5a1df9cc5217815f48fa37c4d9"
+      },
+      {
+        "name": "System.ComponentModel.EventBasedAsync",
+        "sha256": "16c29dae9e31a728f45852d78e51b054b524adea6c295b0b4e3e1e019d8e3164"
+      },
+      {
+        "name": "System.Diagnostics.DiagnosticSource",
+        "sha256": "4aa4d0a6e2c18f7cc2054ffd5ad5af43c15bc32af73e6795439ca7ac58eb16ce"
+      },
+      {
+        "name": "System.Formats.Asn1",
+        "sha256": "68695d8d182fc38e08ff3f01efcd2a4b48c854dd52ad5e2d20d19381abfe36f9"
+      },
+      {
+        "name": "System.Formats.Nrbf",
+        "sha256": "d1bfcab420502e36abb37130f40e02544a3b0df5694a10696c236a997658fce2"
+      },
+      {
+        "name": "System.IO.Pipelines",
+        "sha256": "0ca4d55ec0d90aea630d644a3ad162d5d7932690f1e256e4ac23d4ac033f757b"
+      },
+      {
+        "name": "System.Linq",
+        "sha256": "cdd12114ef1c4b469bcad850593a5b86b8002b36edec58ea63ccd66cfde84968"
+      },
+      {
+        "name": "System.Memory",
+        "sha256": "a46a6d4766029296e70085dca000c1c3f30cb3217a6a9e7b5804d46dd8127e13"
+      },
+      {
+        "name": "System.Net.Http",
+        "sha256": "7673b25360edc33bb53e6e3e69f21458b3c30f4024805922b271adb8e81cc6b0"
+      },
+      {
+        "name": "System.Net.NameResolution",
+        "sha256": "8bf0ee1a107d80d0e59ea7789c618514da825e0ae0476ac94ab6890e46642cfe"
+      },
+      {
+        "name": "System.Net.NetworkInformation",
+        "sha256": "cea44d284e020642242e92a9a284c6f2b16e14c0f8928532cf7d671dad40b9b6"
+      },
+      {
+        "name": "System.Net.Primitives",
+        "sha256": "57d5678cab2016d6cc992a6ed50b10b4cc88548731715f83e45b3b0a6bf4afe7"
+      },
+      {
+        "name": "System.Net.Requests",
+        "sha256": "1bd4f38f6c146984040e9732d721e40f2ccf9ef48de4a75f82d63b868d627601"
+      },
+      {
+        "name": "System.Net.Security",
+        "sha256": "6de13d85482273560d3ad6046979316bb46b7f7721610fb2342ffb8740d6360b"
+      },
+      {
+        "name": "System.Net.Sockets",
+        "sha256": "97dcd362a0abf8c946925b110f2b93087ee0e4227c53e1671b365e94ff0dad6a"
+      },
+      {
+        "name": "System.Net.WebHeaderCollection",
+        "sha256": "180cfc4e06dc66d2a475fdb5d8d8fa00883cd4d121c8839a616b2c9d059ace4a"
+      },
+      {
+        "name": "System.Private.Uri",
+        "sha256": "48512b7474360610937e87fc032c96760d5519a944d0dd7a6e59536e1a2bc317"
+      },
+      {
+        "name": "System.Reflection.Metadata",
+        "sha256": "c33abb2c936ac542278bab0908a6fe0faef00399e54dba33b13243c8fe4445c1"
+      },
+      {
+        "name": "System.Runtime.InteropServices",
+        "sha256": "9ad24f614fa1a282dcad2e562d54fb80c699b481f676b777630c6a75d5d8ae5b"
+      },
+      {
+        "name": "System.Runtime.Numerics",
+        "sha256": "39c431709a10fbe47ca95d8792bb605205dd893c388ef9f480ffc451aec29ab6"
+      },
+      {
+        "name": "System.Runtime.Serialization.Formatters",
+        "sha256": "3c13c7c306ffc3a7360a1b539f83030136ec0fb7a048969ee36b2cbcbfe611ab"
+      },
+      {
+        "name": "System.Security.Claims",
+        "sha256": "fd6688f140c63c10d3df8331914ee9b53097d7521c198acd3fe02033d1a1bf83"
+      },
+      {
+        "name": "System.Security.Cryptography",
+        "sha256": "0d9a9aa4afd514fa300b9148f95d8bead5cdb57a18605b1f2b6185f21b68ab38"
+      },
+      {
+        "name": "System.Security.Principal.Windows",
+        "sha256": "09de0837695b03ea42a470df5a5bf7ecba74c40e6047ba94fa24a3b7fd69e1a0"
+      },
+      {
+        "name": "System.Text.Encodings.Web",
+        "sha256": "26c4956e2a75a89ae0df0c5ae129eacf767b3e2f05fbc7821e55713669007cd0"
+      },
+      {
+        "name": "System.Text.Json",
+        "sha256": "6e8dae57cc991cd23fac52510db4bb639308e0b4e69d3a6831a668b27c868430"
+      },
+      {
+        "name": "System.Text.RegularExpressions",
+        "sha256": "56d291287a0f191d61e673379171d982e19583ad585c4c80007f84750472ca3f"
+      }
+    ]
+  },
   "graph": {
     "model": "RTA: call/newobj/ldftn, callvirt/ldvirtftn to overrides in instantiated types, type and module initializers, finalizers",
     "reachedMethods": 28344,
@@ -1514,21 +1708,16 @@
       "detail": "System.Windows.Forms.Application/ThreadContext::FromCurrent"
     },
     "judged": 27102,
-    "compiles": 2129,
-    "blockedInOwnBody": 13318,
-    "blockedInClosure": 2698,
-    "exportAbiNoVerdict": 8957,
+    "compiles": 2288,
+    "blockedInOwnBody": 13062,
+    "blockedInClosure": 2829,
+    "exportAbiNoVerdict": 8923,
     "notJudged": 1242,
     "methodLevelSuspects": [
       {
         "type": "feature: locals without localsinit ([SkipLocalsInit])",
         "kind": "locals without localsinit ([SkipLocalsInit])",
-        "failedMethods": 5924
-      },
-      {
-        "type": "feature: value-type instance call",
-        "kind": "value-type instance call",
-        "failedMethods": 4564
+        "failedMethods": 5920
       },
       {
         "type": "feature: value-type instance method",
@@ -1538,7 +1727,7 @@
       {
         "type": "feature: indirect load/store",
         "kind": "indirect load/store",
-        "failedMethods": 2314
+        "failedMethods": 2313
       },
       {
         "type": "feature: member of generic type",
@@ -1553,7 +1742,7 @@
       {
         "type": "feature: throw",
         "kind": "throw",
-        "failedMethods": 1482
+        "failedMethods": 1440
       },
       {
         "type": "feature: generic method definition",
@@ -1568,32 +1757,27 @@
       {
         "type": "feature: interface call",
         "kind": "interface call",
-        "failedMethods": 988
+        "failedMethods": 981
       },
       {
         "type": "feature: boxing",
         "kind": "boxing",
-        "failedMethods": 955
+        "failedMethods": 949
       },
       {
         "type": "feature: Span\u003CT\u003E (local)",
         "kind": "Span\u003CT\u003E (local)",
-        "failedMethods": 789
-      },
-      {
-        "type": "feature: reflection: ldtoken",
-        "kind": "reflection: ldtoken",
-        "failedMethods": 777
+        "failedMethods": 788
       },
       {
         "type": "feature: calls P/Invoke",
         "kind": "calls P/Invoke",
-        "failedMethods": 776
+        "failedMethods": 775
       },
       {
-        "type": "feature: unsafe pointer (local)",
-        "kind": "unsafe pointer (local)",
-        "failedMethods": 758
+        "type": "feature: reflection: ldtoken",
+        "kind": "reflection: ldtoken",
+        "failedMethods": 768
       },
       {
         "type": "feature: unsafe pointer (signature)",
@@ -1603,7 +1787,7 @@
       {
         "type": "feature: reflection: typeof",
         "kind": "reflection: typeof",
-        "failedMethods": 714
+        "failedMethods": 705
       },
       {
         "type": "System.ReadOnlySpan\u00601\u003CByte\u003E",
@@ -1613,7 +1797,7 @@
       {
         "type": "feature: constrained. call",
         "kind": "constrained. call",
-        "failedMethods": 587
+        "failedMethods": 586
       },
       {
         "type": "feature: static constructor",
@@ -1633,7 +1817,7 @@
       {
         "type": "feature: pinned local (fixed)",
         "kind": "pinned local (fixed)",
-        "failedMethods": 520
+        "failedMethods": 518
       },
       {
         "type": "System.IFormatProvider",
@@ -1653,12 +1837,12 @@
       {
         "type": "feature: sizeof",
         "kind": "sizeof",
-        "failedMethods": 330
+        "failedMethods": 328
       },
       {
         "type": "Char*",
         "kind": "unmanaged pointer",
-        "failedMethods": 317
+        "failedMethods": 316
       },
       {
         "type": "Byte*",
@@ -1668,7 +1852,7 @@
       {
         "type": "feature: stackalloc (localloc)",
         "kind": "stackalloc (localloc)",
-        "failedMethods": 299
+        "failedMethods": 298
       },
       {
         "type": "System.Span\u00601\u003CChar\u003E",
@@ -1688,7 +1872,7 @@
       {
         "type": "Char\u0026 pinned",
         "kind": "pinned local",
-        "failedMethods": 239
+        "failedMethods": 238
       },
       {
         "type": "!!0\u0026",
@@ -1714,11 +1898,6 @@
         "type": "feature: explicit layout (field access)",
         "kind": "explicit layout (field access)",
         "failedMethods": 184
-      },
-      {
-        "type": "System.Text.Json.JsonSerializerOptions",
-        "kind": "reference type",
-        "failedMethods": 172
       },
       {
         "type": "declaring System.Text.Json.Utf8JsonReader",
@@ -1793,7 +1972,7 @@
       {
         "type": "feature: rethrow",
         "kind": "rethrow",
-        "failedMethods": 104
+        "failedMethods": 103
       },
       {
         "type": "!0[]",
@@ -1819,120 +1998,135 @@
         "type": "declaring System.SpanHelpers",
         "kind": "declaring reference type",
         "failedMethods": 94
+      },
+      {
+        "type": "Char\u0026",
+        "kind": "managed byref",
+        "failedMethods": 93
+      },
+      {
+        "type": "declaring System.Windows.Forms.ListBox",
+        "kind": "declaring reference type",
+        "failedMethods": 91
+      },
+      {
+        "type": "declaring System.Drawing.Graphics",
+        "kind": "declaring reference type",
+        "failedMethods": 90
       }
     ],
     "categoriesByOwnBody": [
       {
         "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "methods": 3442
+        "methods": 3438
       },
       {
         "category": "method-level: no distinguishing signature or local type",
-        "methods": 1647
+        "methods": 1847
       },
       {
         "category": "method-level: declaring reference type",
-        "methods": 1522
+        "methods": 1182
       },
       {
         "category": "method-level: member of generic type",
-        "methods": 610
+        "methods": 640
       },
       {
         "category": "static constructor body/header",
         "methods": 577
       },
       {
-        "category": "method-level: value-type instance call",
-        "methods": 557
-      },
-      {
-        "category": "method-level: reference type",
-        "methods": 504
-      },
-      {
         "category": "static field with type initializer",
-        "methods": 462
+        "methods": 493
       },
       {
         "category": "virtual dispatch (receiver not proven exact)",
-        "methods": 445
+        "methods": 493
+      },
+      {
+        "category": "method-level: reference type",
+        "methods": 450
       },
       {
         "category": "method-level: throw",
-        "methods": 381
-      },
-      {
-        "category": "opcode: throw",
-        "methods": 279
+        "methods": 367
       },
       {
         "category": "call (linked target or signature)",
-        "methods": 268
+        "methods": 304
+      },
+      {
+        "category": "opcode: throw",
+        "methods": 290
       },
       {
         "category": "generic method instantiation",
-        "methods": 233
+        "methods": 243
       },
       {
-        "category": "method-level: generic method definition",
-        "methods": 176
-      },
-      {
-        "category": "instance field ldflda",
-        "methods": 167
-      },
-      {
-        "category": "static field",
-        "methods": 153
-      },
-      {
-        "category": "method-level: interface call",
-        "methods": 145
+        "category": "method-level: managed byref",
+        "methods": 197
       },
       {
         "category": "method-level: indirect load/store",
-        "methods": 143
+        "methods": 191
+      },
+      {
+        "category": "method-level: interface call",
+        "methods": 190
+      },
+      {
+        "category": "static field",
+        "methods": 189
+      },
+      {
+        "category": "method-level: generic method definition",
+        "methods": 186
+      },
+      {
+        "category": "instance field ldflda",
+        "methods": 180
       },
       {
         "category": "method-level: unsafe pointer (signature)",
-        "methods": 128
+        "methods": 136
+      },
+      {
+        "category": "method-level: calls P/Invoke",
+        "methods": 124
       },
       {
         "category": "method-level: reflection: ldtoken",
         "methods": 120
       },
       {
-        "category": "method-level: managed byref",
-        "methods": 117
-      },
-      {
-        "category": "method-level: calls P/Invoke",
-        "methods": 90
-      },
-      {
-        "category": "catch clause type",
-        "methods": 88
+        "category": "method-level: value type",
+        "methods": 110
       },
       {
         "category": "ldtoken (runtime handles)",
-        "methods": 86
+        "methods": 93
+      },
+      {
+        "category": "catch clause type",
+        "methods": 90
+      },
+      {
+        "category": "method-level: boxing",
+        "methods": 79
       },
       {
         "category": "call to P/Invoke",
         "methods": 75
       },
       {
-        "category": "method-level: boxing",
-        "methods": 75
-      },
-      {
         "category": "opcode: box",
-        "methods": 70
+        "methods": 73
       },
       {
         "category": "opcode: ldloca.s",
-        "methods": 66
+        "methods": 72
       },
       {
         "category": "method-level: unsafe: Unsafe/MemoryMarshal",
@@ -1940,35 +2134,15 @@
       },
       {
         "category": "interface dispatch",
-        "methods": 49
+        "methods": 52
       },
       {
         "category": "callvirt (linked target or signature)",
         "methods": 47
       },
       {
-        "category": "method-level: value type",
-        "methods": 46
-      },
-      {
-        "category": "reference newobj (constructor or signature)",
-        "methods": 43
-      },
-      {
-        "category": "value-type instance call (managed receiver address)",
-        "methods": 36
-      },
-      {
-        "category": "method-level: generic reference-type instantiation",
-        "methods": 30
-      },
-      {
         "category": "static call that triggers a type initializer",
         "methods": 30
-      },
-      {
-        "category": "opcode: castclass",
-        "methods": 29
       },
       {
         "category": "opcode: ldarga.s",
@@ -1979,39 +2153,63 @@
         "methods": 27
       },
       {
-        "category": "opcode: isinst",
-        "methods": 22
+        "category": "opcode: castclass",
+        "methods": 27
       },
       {
         "category": "member of generic type",
-        "methods": 21
+        "methods": 24
+      },
+      {
+        "category": "method-level: generic reference-type instantiation",
+        "methods": 24
       },
       {
         "category": "method-level: array type",
-        "methods": 21
+        "methods": 23
       },
       {
-        "category": "method-level: primitive Void modreq(System.Runtime.CompilerServices.IsExternalInit)",
-        "methods": 15
-      },
-      {
-        "category": "delegate target (ldftn)",
-        "methods": 14
+        "category": "opcode: isinst",
+        "methods": 23
       },
       {
         "category": "method-level: declaring value type",
-        "methods": 13
+        "methods": 20
       },
       {
-        "category": "method-level: unsafe pointer (local)",
-        "methods": 11
+        "category": "delegate target (ldftn)",
+        "methods": 18
       },
       {
-        "category": "opcode: constrained.",
-        "methods": 11
+        "category": "method-level: primitive Void modreq(System.Runtime.CompilerServices.IsExternalInit)",
+        "methods": 16
+      },
+      {
+        "category": "reference newobj (constructor or signature)",
+        "methods": 14
       },
       {
         "category": "exception filter",
+        "methods": 13
+      },
+      {
+        "category": "value-type newobj",
+        "methods": 13
+      },
+      {
+        "category": "opcode: constrained.",
+        "methods": 12
+      },
+      {
+        "category": "opcode: ret",
+        "methods": 10
+      },
+      {
+        "category": "value-type instance call (managed receiver address)",
+        "methods": 10
+      },
+      {
+        "category": "method-level: Span\u003CT\u003E (local)",
         "methods": 9
       },
       {
@@ -2019,7 +2217,7 @@
         "methods": 9
       },
       {
-        "category": "opcode: ret",
+        "category": "method-level: generic value-type instantiation",
         "methods": 9
       },
       {
@@ -2027,24 +2225,28 @@
         "methods": 9
       },
       {
-        "category": "value-type newobj",
-        "methods": 9
+        "category": "method-level: pinned local (fixed)",
+        "methods": 8
       },
       {
         "category": "value-type static call",
         "methods": 8
       },
       {
+        "category": "method-level: sizeof",
+        "methods": 7
+      },
+      {
         "category": "opcode: sizeof",
         "methods": 7
       },
       {
-        "category": "method-level: sizeof",
+        "category": "opcode: newarr",
         "methods": 6
       },
       {
-        "category": "opcode: newarr",
-        "methods": 6
+        "category": "method-level: explicit layout (field access)",
+        "methods": 5
       },
       {
         "category": "method-level: rethrow",
@@ -2063,11 +2265,11 @@
         "methods": 4
       },
       {
-        "category": "instance field stfld",
-        "methods": 3
+        "category": "opcode: unbox.any",
+        "methods": 4
       },
       {
-        "category": "method-level: explicit layout (field access)",
+        "category": "instance field stfld",
         "methods": 3
       },
       {
@@ -2087,7 +2289,7 @@
         "methods": 2
       },
       {
-        "category": "method-level: Span\u003CT\u003E (local)",
+        "category": "method-level: array element address",
         "methods": 2
       },
       {
@@ -2096,14 +2298,6 @@
       },
       {
         "category": "method-level: exception filter",
-        "methods": 2
-      },
-      {
-        "category": "method-level: pinned local (fixed)",
-        "methods": 2
-      },
-      {
-        "category": "method-level: threading: SemaphoreSlim",
         "methods": 2
       },
       {
@@ -2119,15 +2313,11 @@
         "methods": 2
       },
       {
-        "category": "opcode: unbox.any",
-        "methods": 2
-      },
-      {
         "category": "delegate target (ldvirtftn)",
         "methods": 1
       },
       {
-        "category": "method-level: array element address",
+        "category": "instance field ldfld",
         "methods": 1
       },
       {
@@ -2136,6 +2326,14 @@
       },
       {
         "category": "method-level: primitive Interop/Advapi32/MARSHALLED_UNICODE_STRING/Marshaller/Native",
+        "methods": 1
+      },
+      {
+        "category": "method-level: primitive Interop/Winsock/IPv6MulticastRequest",
+        "methods": 1
+      },
+      {
+        "category": "method-level: unmanaged pointer",
         "methods": 1
       },
       {
@@ -2148,6 +2346,10 @@
       },
       {
         "category": "opcode: ldind.u4",
+        "methods": 1
+      },
+      {
+        "category": "opcode: mul",
         "methods": 1
       },
       {
@@ -2170,119 +2372,119 @@
     "categoriesByFirstBlocker": [
       {
         "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "methods": 3781
+        "methods": 3833
       },
       {
         "category": "method-level: no distinguishing signature or local type",
-        "methods": 1647
-      },
-      {
-        "category": "method-level: declaring reference type",
-        "methods": 1522
+        "methods": 1847
       },
       {
         "category": "catch clause type",
-        "methods": 1407
+        "methods": 1409
       },
       {
-        "category": "method-level: member of generic type",
-        "methods": 610
+        "category": "method-level: declaring reference type",
+        "methods": 1182
       },
       {
         "category": "static field with type initializer",
-        "methods": 594
+        "methods": 641
       },
       {
-        "category": "method-level: value-type instance call",
-        "methods": 590
+        "category": "method-level: member of generic type",
+        "methods": 640
+      },
+      {
+        "category": "virtual dispatch (receiver not proven exact)",
+        "methods": 618
       },
       {
         "category": "static constructor body/header",
         "methods": 577
       },
       {
-        "category": "virtual dispatch (receiver not proven exact)",
-        "methods": 558
+        "category": "call (linked target or signature)",
+        "methods": 521
       },
       {
         "category": "method-level: reference type",
-        "methods": 505
-      },
-      {
-        "category": "call (linked target or signature)",
-        "methods": 480
+        "methods": 453
       },
       {
         "category": "opcode: throw",
-        "methods": 394
+        "methods": 422
       },
       {
         "category": "method-level: throw",
-        "methods": 382
+        "methods": 373
       },
       {
         "category": "generic method instantiation",
-        "methods": 331
+        "methods": 345
       },
       {
         "category": "static field",
-        "methods": 204
+        "methods": 241
       },
       {
         "category": "instance field ldflda",
-        "methods": 199
-      },
-      {
-        "category": "method-level: generic method definition",
-        "methods": 176
-      },
-      {
-        "category": "method-level: interface call",
-        "methods": 146
+        "methods": 214
       },
       {
         "category": "method-level: indirect load/store",
-        "methods": 143
-      },
-      {
-        "category": "method-level: unsafe pointer (signature)",
-        "methods": 128
-      },
-      {
-        "category": "method-level: reflection: ldtoken",
-        "methods": 120
+        "methods": 200
       },
       {
         "category": "method-level: managed byref",
-        "methods": 117
+        "methods": 197
+      },
+      {
+        "category": "method-level: interface call",
+        "methods": 196
+      },
+      {
+        "category": "method-level: generic method definition",
+        "methods": 186
+      },
+      {
+        "category": "method-level: unsafe pointer (signature)",
+        "methods": 139
+      },
+      {
+        "category": "method-level: calls P/Invoke",
+        "methods": 130
       },
       {
         "category": "ldtoken (runtime handles)",
-        "methods": 116
+        "methods": 126
+      },
+      {
+        "category": "method-level: reflection: ldtoken",
+        "methods": 121
+      },
+      {
+        "category": "method-level: value type",
+        "methods": 115
       },
       {
         "category": "opcode: ldloca.s",
-        "methods": 102
+        "methods": 109
       },
       {
         "category": "call to P/Invoke",
         "methods": 96
       },
       {
-        "category": "method-level: calls P/Invoke",
-        "methods": 92
-      },
-      {
         "category": "opcode: box",
-        "methods": 87
+        "methods": 90
       },
       {
         "category": "method-level: boxing",
-        "methods": 75
+        "methods": 81
       },
       {
         "category": "interface dispatch",
-        "methods": 64
+        "methods": 67
       },
       {
         "category": "method-level: unsafe: Unsafe/MemoryMarshal",
@@ -2293,20 +2495,8 @@
         "methods": 60
       },
       {
-        "category": "reference newobj (constructor or signature)",
-        "methods": 58
-      },
-      {
-        "category": "value-type instance call (managed receiver address)",
-        "methods": 50
-      },
-      {
-        "category": "method-level: value type",
-        "methods": 46
-      },
-      {
         "category": "opcode: ldarga.s",
-        "methods": 40
+        "methods": 41
       },
       {
         "category": "static call that triggers a type initializer",
@@ -2314,63 +2504,83 @@
       },
       {
         "category": "opcode: castclass",
-        "methods": 33
+        "methods": 31
       },
       {
-        "category": "method-level: generic reference-type instantiation",
-        "methods": 30
+        "category": "reference newobj (constructor or signature)",
+        "methods": 29
       },
       {
         "category": "runtime internal call",
         "methods": 29
       },
       {
+        "category": "member of generic type",
+        "methods": 27
+      },
+      {
         "category": "method-level: interface type",
         "methods": 27
       },
       {
-        "category": "opcode: isinst",
-        "methods": 23
+        "category": "method-level: generic reference-type instantiation",
+        "methods": 24
       },
       {
-        "category": "member of generic type",
-        "methods": 22
+        "category": "opcode: isinst",
+        "methods": 24
       },
       {
         "category": "method-level: array type",
-        "methods": 21
+        "methods": 23
       },
       {
         "category": "delegate target (ldftn)",
-        "methods": 16
-      },
-      {
-        "category": "method-level: primitive Void modreq(System.Runtime.CompilerServices.IsExternalInit)",
-        "methods": 15
-      },
-      {
-        "category": "exception filter",
-        "methods": 14
+        "methods": 21
       },
       {
         "category": "method-level: declaring value type",
-        "methods": 13
+        "methods": 20
       },
       {
-        "category": "opcode: constrained.",
-        "methods": 13
+        "category": "exception filter",
+        "methods": 19
+      },
+      {
+        "category": "value-type instance call (managed receiver address)",
+        "methods": 17
+      },
+      {
+        "category": "method-level: primitive Void modreq(System.Runtime.CompilerServices.IsExternalInit)",
+        "methods": 16
       },
       {
         "category": "value-type newobj",
-        "methods": 12
+        "methods": 16
       },
       {
-        "category": "method-level: unsafe pointer (local)",
-        "methods": 11
+        "category": "opcode: constrained.",
+        "methods": 14
       },
       {
         "category": "opcode: ret",
+        "methods": 11
+      },
+      {
+        "category": "method-level: generic value-type instantiation",
         "methods": 10
+      },
+      {
+        "category": "opcode: sizeof",
+        "methods": 10
+      },
+      {
+        "category": "instance field stfld",
+        "methods": 9
+      },
+      {
+        "category": "method-level: Span\u003CT\u003E (local)",
+        "methods": 9
       },
       {
         "category": "method-level: enum",
@@ -2378,6 +2588,10 @@
       },
       {
         "category": "opcode: bne.un.s",
+        "methods": 9
+      },
+      {
+        "category": "opcode: ldarg.0",
         "methods": 9
       },
       {
@@ -2393,16 +2607,16 @@
         "methods": 9
       },
       {
-        "category": "opcode: sizeof",
+        "category": "method-level: pinned local (fixed)",
         "methods": 8
       },
       {
-        "category": "opcode: ldarg.0",
-        "methods": 7
+        "category": "method-level: sizeof",
+        "methods": 8
       },
       {
-        "category": "method-level: sizeof",
-        "methods": 6
+        "category": "method-level: explicit layout (field access)",
+        "methods": 5
       },
       {
         "category": "method-level: rethrow",
@@ -2417,10 +2631,6 @@
         "methods": 5
       },
       {
-        "category": "instance field stfld",
-        "methods": 4
-      },
-      {
         "category": "method-level: delegate type",
         "methods": 4
       },
@@ -2433,8 +2643,8 @@
         "methods": 4
       },
       {
-        "category": "method-level: explicit layout (field access)",
-        "methods": 3
+        "category": "opcode: unbox.any",
+        "methods": 4
       },
       {
         "category": "call to runtime internal call",
@@ -2445,7 +2655,7 @@
         "methods": 2
       },
       {
-        "category": "method-level: Span\u003CT\u003E (local)",
+        "category": "method-level: array element address",
         "methods": 2
       },
       {
@@ -2457,11 +2667,7 @@
         "methods": 2
       },
       {
-        "category": "method-level: pinned local (fixed)",
-        "methods": 2
-      },
-      {
-        "category": "method-level: threading: SemaphoreSlim",
+        "category": "no IL body (abstract or extern)",
         "methods": 2
       },
       {
@@ -2473,15 +2679,11 @@
         "methods": 2
       },
       {
-        "category": "opcode: unbox.any",
-        "methods": 2
-      },
-      {
         "category": "delegate target (ldvirtftn)",
         "methods": 1
       },
       {
-        "category": "method-level: array element address",
+        "category": "instance field ldfld",
         "methods": 1
       },
       {
@@ -2490,6 +2692,14 @@
       },
       {
         "category": "method-level: primitive Interop/Advapi32/MARSHALLED_UNICODE_STRING/Marshaller/Native",
+        "methods": 1
+      },
+      {
+        "category": "method-level: primitive Interop/Winsock/IPv6MulticastRequest",
+        "methods": 1
+      },
+      {
+        "category": "method-level: unmanaged pointer",
         "methods": 1
       },
       {
@@ -2502,6 +2712,10 @@
       },
       {
         "category": "opcode: ldind.u4",
+        "methods": 1
+      },
+      {
+        "category": "opcode: mul",
         "methods": 1
       },
       {
@@ -2521,7 +2735,7 @@
         "methods": 1
       }
     ],
-    "siteCount": 13406,
+    "siteCount": 13165,
     "sites": [
       {
         "site": "System.Private.CoreLib#8040",
@@ -2632,6 +2846,15 @@
         "reachedSite": true
       },
       {
+        "site": "System.Text.Json#2634",
+        "method": "System.Text.Json.Serialization.JsonConverter\u00601::.ctor",
+        "offset": -1,
+        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
+        "detail": "",
+        "blocksReachedMethods": 21,
+        "reachedSite": true
+      },
+      {
         "site": "System.Collections#3",
         "method": "System.SR::GetResourceString",
         "offset": 25,
@@ -2665,6 +2888,15 @@
         "category": "opcode: throw",
         "detail": "",
         "blocksReachedMethods": 13,
+        "reachedSite": true
+      },
+      {
+        "site": "System.Private.CoreLib#16464",
+        "method": "System.Threading.Lock::.ctor",
+        "offset": 7,
+        "category": "static field with type initializer",
+        "detail": "System.Threading.Lock::s_maxSpinCount",
+        "blocksReachedMethods": 12,
         "reachedSite": true
       },
       {
@@ -2722,15 +2954,6 @@
         "reachedSite": true
       },
       {
-        "site": "System.Private.CoreLib#16464",
-        "method": "System.Threading.Lock::.ctor",
-        "offset": 7,
-        "category": "static field with type initializer",
-        "detail": "System.Threading.Lock::s_maxSpinCount",
-        "blocksReachedMethods": 10,
-        "reachedSite": true
-      },
-      {
         "site": "System.Private.CoreLib#3984",
         "method": "System.Convert::ToInt32",
         "offset": -1,
@@ -2744,6 +2967,15 @@
         "method": "System.OperatingSystem::IsOSVersionAtLeast",
         "offset": -1,
         "category": "method-level: locals without localsinit ([SkipLocalsInit])",
+        "detail": "",
+        "blocksReachedMethods": 10,
+        "reachedSite": true
+      },
+      {
+        "site": "System.Text.Json#462",
+        "method": "System.Text.Json.ThrowHelper::ThrowInvalidOperationException_TypeInfoImmutable",
+        "offset": 10,
+        "category": "opcode: throw",
         "detail": "",
         "blocksReachedMethods": 10,
         "reachedSite": true
@@ -2770,8 +3002,8 @@
         "site": "System.Drawing.Common#1402",
         "method": "System.Drawing.SystemPens::FromSystemColor",
         "offset": -1,
-        "category": "method-level: value-type instance call",
-        "detail": "feature: value-type instance call",
+        "category": "method-level: indirect load/store",
+        "detail": "feature: indirect load/store",
         "blocksReachedMethods": 9,
         "reachedSite": true
       },
@@ -2848,6 +3080,15 @@
         "reachedSite": true
       },
       {
+        "site": "System.Windows.Forms#3312",
+        "method": "System.Windows.Forms.Control::set_Visible",
+        "offset": 2,
+        "category": "virtual dispatch (receiver not proven exact)",
+        "detail": "System.Windows.Forms.Control::SetVisibleCore",
+        "blocksReachedMethods": 9,
+        "reachedSite": true
+      },
+      {
         "site": "System.Private.CoreLib#11535",
         "method": "System.Numerics.BitOperations::Log2SoftwareFallback",
         "offset": -1,
@@ -2911,15 +3152,6 @@
         "reachedSite": true
       },
       {
-        "site": "System.Windows.Forms#3312",
-        "method": "System.Windows.Forms.Control::set_Visible",
-        "offset": 2,
-        "category": "virtual dispatch (receiver not proven exact)",
-        "detail": "System.Windows.Forms.Control::SetVisibleCore",
-        "blocksReachedMethods": 8,
-        "reachedSite": true
-      },
-      {
         "site": "System.Drawing.Common#1340",
         "method": "System.Drawing.SystemBrushes::FromSystemColor",
         "offset": 0,
@@ -2952,6 +3184,15 @@
         "offset": 17,
         "category": "value-type instance call (managed receiver address)",
         "detail": "System.Runtime.CompilerServices.MethodTable::get_HasFinalizer",
+        "blocksReachedMethods": 7,
+        "reachedSite": true
+      },
+      {
+        "site": "System.Private.CoreLib#18991",
+        "method": "System.Text.Encoding::get_UTF8",
+        "offset": 0,
+        "category": "static field with type initializer",
+        "detail": "System.Text.UTF8Encoding::s_default",
         "blocksReachedMethods": 7,
         "reachedSite": true
       },
@@ -2992,6 +3233,15 @@
         "reachedSite": true
       },
       {
+        "site": "System.Private.CoreLib#41758",
+        "method": "System.Collections.Generic.Dictionary\u00602::.ctor",
+        "offset": -1,
+        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
+        "detail": "",
+        "blocksReachedMethods": 7,
+        "reachedSite": true
+      },
+      {
         "site": "System.Private.Windows.Core#80",
         "method": "Windows.Win32.PInvokeCore::SystemParametersInfoBool",
         "offset": 3,
@@ -3003,9 +3253,9 @@
       {
         "site": "System.Windows.Forms#11650",
         "method": "System.Windows.Forms.ToolStrip::get_OverflowButton",
-        "offset": 62,
-        "category": "value-type instance call (managed receiver address)",
-        "detail": "System.Drawing.Rectangle::get_Size",
+        "offset": 54,
+        "category": "virtual dispatch (receiver not proven exact)",
+        "detail": "System.Windows.Forms.Control::get_DisplayRectangle",
         "blocksReachedMethods": 7,
         "reachedSite": true
       },
@@ -3046,6 +3296,15 @@
         "reachedSite": true
       },
       {
+        "site": "System.Private.CoreLib#32910",
+        "method": "System.Runtime.ExceptionServices.ExceptionDispatchInfo::Throw",
+        "offset": 7,
+        "category": "instance field ldflda",
+        "detail": "System.Runtime.ExceptionServices.ExceptionDispatchInfo::_dispatchState",
+        "blocksReachedMethods": 6,
+        "reachedSite": true
+      },
+      {
         "site": "System.Private.CoreLib#3425",
         "method": "System.BitConverter::SingleToInt32Bits",
         "offset": 1,
@@ -3073,6 +3332,15 @@
         "reachedSite": true
       },
       {
+        "site": "System.Private.CoreLib#37750",
+        "method": "System.IO.FileStream::.ctor",
+        "offset": -1,
+        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
+        "detail": "",
+        "blocksReachedMethods": 6,
+        "reachedSite": true
+      },
+      {
         "site": "System.Private.CoreLib#3860",
         "method": "System.Convert::ThrowUInt32OverflowException",
         "offset": 10,
@@ -3091,20 +3359,29 @@
         "reachedSite": true
       },
       {
-        "site": "System.Private.CoreLib#41758",
-        "method": "System.Collections.Generic.Dictionary\u00602::.ctor",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 6,
-        "reachedSite": true
-      },
-      {
         "site": "System.Private.CoreLib#535",
         "method": "Microsoft.Win32.SafeHandles.SafeHandleZeroOrMinusOneIsInvalid::.ctor",
         "offset": 1,
         "category": "static field",
         "detail": "System.IntPtr::Zero",
+        "blocksReachedMethods": 6,
+        "reachedSite": true
+      },
+      {
+        "site": "System.Private.CoreLib#9368",
+        "method": "System.ThrowHelper::ThrowObjectDisposedException",
+        "offset": 7,
+        "category": "call (linked target or signature)",
+        "detail": "System.Object::GetType",
+        "blocksReachedMethods": 6,
+        "reachedSite": true
+      },
+      {
+        "site": "System.Text.Json#3296",
+        "method": "System.Text.Json.Serialization.Metadata.JsonTypeInfo::\u003CEnsureConfigured\u003Eg__ConfigureSynchronized|174_0",
+        "offset": -1,
+        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
+        "detail": "",
         "blocksReachedMethods": 6,
         "reachedSite": true
       },
@@ -3190,6 +3467,15 @@
         "reachedSite": true
       },
       {
+        "site": "System.Private.CoreLib#16257",
+        "method": "System.Threading.CancellationToken::get_None",
+        "offset": -1,
+        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
+        "detail": "",
+        "blocksReachedMethods": 5,
+        "reachedSite": true
+      },
+      {
         "site": "System.Private.CoreLib#1672",
         "method": "System.Math::Round",
         "offset": -1,
@@ -3204,15 +3490,6 @@
         "offset": 40,
         "category": "opcode: throw",
         "detail": "",
-        "blocksReachedMethods": 5,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#32910",
-        "method": "System.Runtime.ExceptionServices.ExceptionDispatchInfo::Throw",
-        "offset": 7,
-        "category": "instance field ldflda",
-        "detail": "System.Runtime.ExceptionServices.ExceptionDispatchInfo::_dispatchState",
         "blocksReachedMethods": 5,
         "reachedSite": true
       },
@@ -3244,6 +3521,15 @@
         "reachedSite": true
       },
       {
+        "site": "System.Windows.Forms#3285",
+        "method": "System.Windows.Forms.Control::set_TabStop",
+        "offset": 42,
+        "category": "virtual dispatch (receiver not proven exact)",
+        "detail": "System.Windows.Forms.Control::OnTabStopChanged",
+        "blocksReachedMethods": 5,
+        "reachedSite": true
+      },
+      {
         "site": "System.Windows.Forms#3311",
         "method": "System.Windows.Forms.Control::get_Visible",
         "offset": 11,
@@ -3271,6 +3557,15 @@
         "reachedSite": true
       },
       {
+        "site": "System.Collections.Concurrent#172",
+        "method": "System.Collections.Concurrent.ConcurrentDictionary\u00602::.ctor",
+        "offset": -1,
+        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
+        "detail": "",
+        "blocksReachedMethods": 4,
+        "reachedSite": true
+      },
+      {
         "site": "System.Collections.NonGeneric#3",
         "method": "System.SR::GetResourceString",
         "offset": 25,
@@ -3280,8 +3575,35 @@
         "reachedSite": true
       },
       {
+        "site": "System.ComponentModel.EventBasedAsync#28",
+        "method": "System.ComponentModel.AsyncOperation::PostCore",
+        "offset": 35,
+        "category": "virtual dispatch (receiver not proven exact)",
+        "detail": "System.Threading.SynchronizationContext::Post",
+        "blocksReachedMethods": 4,
+        "reachedSite": true
+      },
+      {
         "site": "System.ComponentModel.TypeConverter#1029",
         "method": "System.ComponentModel.TypeDescriptor::NodeFor",
+        "offset": -1,
+        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
+        "detail": "",
+        "blocksReachedMethods": 4,
+        "reachedSite": true
+      },
+      {
+        "site": "System.Drawing.Common#914",
+        "method": "System.Drawing.Image::LoadGdipImageFromStream",
+        "offset": -1,
+        "category": "method-level: unsafe pointer (signature)",
+        "detail": "feature: unsafe pointer (signature)",
+        "blocksReachedMethods": 4,
+        "reachedSite": true
+      },
+      {
+        "site": "System.Net.Http#2158",
+        "method": "System.Net.Http.SocketsHttpHandler::get_SslOptions",
         "offset": -1,
         "category": "method-level: locals without localsinit ([SkipLocalsInit])",
         "detail": "",
@@ -3406,11 +3728,11 @@
         "reachedSite": true
       },
       {
-        "site": "System.Private.CoreLib#9368",
-        "method": "System.ThrowHelper::ThrowObjectDisposedException",
-        "offset": 7,
-        "category": "call (linked target or signature)",
-        "detail": "System.Object::GetType",
+        "site": "System.Private.CoreLib#9370",
+        "method": "System.ThrowHelper::ThrowObjectDisposedException_StreamClosed",
+        "offset": 11,
+        "category": "opcode: throw",
+        "detail": "",
         "blocksReachedMethods": 4,
         "reachedSite": true
       },
@@ -3517,8 +3839,8 @@
         "site": "System.Windows.Forms#20470",
         "method": "System.Windows.Forms.Timer::set_Interval",
         "offset": -1,
-        "category": "method-level: value-type instance call",
-        "detail": "feature: value-type instance call",
+        "category": "method-level: throw",
+        "detail": "feature: throw",
         "blocksReachedMethods": 4,
         "reachedSite": true
       },
@@ -3577,15 +3899,6 @@
         "reachedSite": true
       },
       {
-        "site": "System.Windows.Forms#3285",
-        "method": "System.Windows.Forms.Control::set_TabStop",
-        "offset": 42,
-        "category": "virtual dispatch (receiver not proven exact)",
-        "detail": "System.Windows.Forms.Control::OnTabStopChanged",
-        "blocksReachedMethods": 4,
-        "reachedSite": true
-      },
-      {
         "site": "System.Windows.Forms#58",
         "method": "SourceGenerated.EnumValidator::Validate",
         "offset": 13,
@@ -3622,15 +3935,6 @@
         "reachedSite": true
       },
       {
-        "site": "System.Collections.Concurrent#172",
-        "method": "System.Collections.Concurrent.ConcurrentDictionary\u00602::.ctor",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 3,
-        "reachedSite": true
-      },
-      {
         "site": "System.Collections.Immutable#3",
         "method": "System.SR::GetResourceString",
         "offset": 25,
@@ -3645,15 +3949,6 @@
         "offset": 1,
         "category": "static field with type initializer",
         "detail": "System.Collections.Specialized.NameObjectCollectionBase::s_defaultComparer",
-        "blocksReachedMethods": 3,
-        "reachedSite": true
-      },
-      {
-        "site": "System.ComponentModel.EventBasedAsync#28",
-        "method": "System.ComponentModel.AsyncOperation::PostCore",
-        "offset": 35,
-        "category": "virtual dispatch (receiver not proven exact)",
-        "detail": "System.Threading.SynchronizationContext::Post",
         "blocksReachedMethods": 3,
         "reachedSite": true
       },
@@ -3706,8 +4001,8 @@
         "site": "System.Drawing.Common#462",
         "method": "System.Drawing.Font::get_SizeInPoints",
         "offset": -1,
-        "category": "method-level: value-type instance call",
-        "detail": "feature: value-type instance call",
+        "category": "method-level: interface call",
+        "detail": "feature: interface call",
         "blocksReachedMethods": 3,
         "reachedSite": true
       },
@@ -3717,6 +4012,24 @@
         "offset": 1,
         "category": "call (linked target or signature)",
         "detail": "System.MemoryExtensions::AsSpan",
+        "blocksReachedMethods": 3,
+        "reachedSite": true
+      },
+      {
+        "site": "System.Net.Http#2128",
+        "method": "System.Net.Http.SocketsHttpHandler::CheckDisposedOrStarted",
+        "offset": 30,
+        "category": "opcode: throw",
+        "detail": "",
+        "blocksReachedMethods": 3,
+        "reachedSite": true
+      },
+      {
+        "site": "System.Net.Http#714",
+        "method": "System.Net.Http.HttpMessageHandler::.ctor",
+        "offset": 6,
+        "category": "static field with type initializer",
+        "detail": "System.Net.NetEventSource::Log",
         "blocksReachedMethods": 3,
         "reachedSite": true
       },
@@ -3874,15 +4187,6 @@
         "reachedSite": true
       },
       {
-        "site": "System.Private.CoreLib#16257",
-        "method": "System.Threading.CancellationToken::get_None",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 3,
-        "reachedSite": true
-      },
-      {
         "site": "System.Private.CoreLib#16315",
         "method": "System.Threading.CancellationTokenSource::TransitionToCancellationRequested",
         "offset": -1,
@@ -3910,6 +4214,15 @@
         "reachedSite": true
       },
       {
+        "site": "System.Private.CoreLib#16738",
+        "method": "System.Threading.SemaphoreSlim::Release",
+        "offset": -1,
+        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
+        "detail": "",
+        "blocksReachedMethods": 3,
+        "reachedSite": true
+      },
+      {
         "site": "System.Private.CoreLib#16930",
         "method": "System.Threading._ThreadPoolWaitOrTimerCallback::WaitOrTimerCallback_Context",
         "offset": -1,
@@ -3924,6 +4237,15 @@
         "offset": 0,
         "category": "static field with type initializer",
         "detail": "System.Threading.RegisteredWaitHandle::s_cachedEvent",
+        "blocksReachedMethods": 3,
+        "reachedSite": true
+      },
+      {
+        "site": "System.Private.CoreLib#18233",
+        "method": "System.Threading.Tasks.TaskScheduler::get_Default",
+        "offset": 0,
+        "category": "static field with type initializer",
+        "detail": "System.Threading.Tasks.TaskScheduler::s_defaultTaskScheduler",
         "blocksReachedMethods": 3,
         "reachedSite": true
       },
@@ -4018,6 +4340,15 @@
         "reachedSite": true
       },
       {
+        "site": "System.Private.CoreLib#37936",
+        "method": "System.IO.MemoryStream::.ctor",
+        "offset": 12,
+        "category": "generic method instantiation",
+        "detail": "System.ArgumentOutOfRangeException::ThrowIfNegative",
+        "blocksReachedMethods": 3,
+        "reachedSite": true
+      },
+      {
         "site": "System.Private.CoreLib#39189",
         "method": "System.Diagnostics.Debugger::get_IsAttached",
         "offset": 0,
@@ -4090,6 +4421,15 @@
         "reachedSite": true
       },
       {
+        "site": "System.Text.Json#2493",
+        "method": "System.Text.Json.Serialization.ConfigurationList\u00601::.ctor",
+        "offset": 23,
+        "category": "instance field stfld",
+        "detail": "System.Text.Json.Serialization.ConfigurationList\u00601::_list",
+        "blocksReachedMethods": 3,
+        "reachedSite": true
+      },
+      {
         "site": "System.Text.Json#391",
         "method": "System.Text.Json.ThrowHelper::GetInvalidOperationException",
         "offset": 6,
@@ -4156,8 +4496,8 @@
         "site": "System.Windows.Forms#12974",
         "method": "System.Windows.Forms.ToolStripItem::Select",
         "offset": -1,
-        "category": "method-level: value-type instance call",
-        "detail": "feature: value-type instance call",
+        "category": "method-level: reference type",
+        "detail": "System.Windows.Forms.ToolStripItem/ToolStripItemAccessibleObject",
         "blocksReachedMethods": 3,
         "reachedSite": true
       },
@@ -4273,8 +4613,8 @@
         "site": "System.Windows.Forms#3498",
         "method": "System.Windows.Forms.Control::Invalidate",
         "offset": -1,
-        "category": "method-level: value-type instance call",
-        "detail": "feature: value-type instance call",
+        "category": "method-level: boxing",
+        "detail": "feature: boxing",
         "blocksReachedMethods": 3,
         "reachedSite": true
       },
@@ -4320,6 +4660,15 @@
         "offset": 7,
         "category": "virtual dispatch (receiver not proven exact)",
         "detail": "System.Windows.Forms.Timer::set_Enabled",
+        "blocksReachedMethods": 3,
+        "reachedSite": true
+      },
+      {
+        "site": "System.Windows.Forms#9947",
+        "method": "System.Windows.Forms.PictureBox::OnFrameChanged",
+        "offset": -1,
+        "category": "method-level: value type",
+        "detail": "System.Threading.Lock/Scope",
         "blocksReachedMethods": 3,
         "reachedSite": true
       },
@@ -4684,6 +5033,15 @@
         "reachedSite": true
       },
       {
+        "site": "System.Drawing.Common#172",
+        "method": "System.Drawing.Bitmap::.ctor",
+        "offset": -1,
+        "category": "method-level: calls P/Invoke",
+        "detail": "feature: calls P/Invoke",
+        "blocksReachedMethods": 2,
+        "reachedSite": true
+      },
+      {
         "site": "System.Drawing.Common#178",
         "method": "System.Drawing.Bitmap::.ctor",
         "offset": 12,
@@ -4777,8 +5135,8 @@
         "site": "System.Drawing.Common#460",
         "method": "System.Drawing.Font::ToHfont",
         "offset": -1,
-        "category": "method-level: value-type instance call",
-        "detail": "feature: value-type instance call",
+        "category": "method-level: throw",
+        "detail": "feature: throw",
         "blocksReachedMethods": 2,
         "reachedSite": true
       },
@@ -4786,8 +5144,8 @@
         "site": "System.Drawing.Common#461",
         "method": "System.Drawing.Font::GetHeight",
         "offset": -1,
-        "category": "method-level: value-type instance call",
-        "detail": "feature: value-type instance call",
+        "category": "method-level: interface call",
+        "detail": "feature: interface call",
         "blocksReachedMethods": 2,
         "reachedSite": true
       },
@@ -4806,6 +5164,15 @@
         "offset": 1,
         "category": "call (linked target or signature)",
         "detail": "Windows.Win32.Graphics.GdiPlus.StatusExtensions::ThrowIfFailed",
+        "blocksReachedMethods": 2,
+        "reachedSite": true
+      },
+      {
+        "site": "System.Drawing.Common#872",
+        "method": "System.Drawing.Icon::get_Size",
+        "offset": 60,
+        "category": "opcode: sizeof",
+        "detail": "Windows.Win32.Graphics.Gdi.BITMAP",
         "blocksReachedMethods": 2,
         "reachedSite": true
       },
@@ -4882,6 +5249,15 @@
         "reachedSite": true
       },
       {
+        "site": "System.Formats.Nrbf#309",
+        "method": "System.Formats.Nrbf.Utils.BinaryReaderExtensions::ReadPrimitiveType",
+        "offset": 1,
+        "category": "virtual dispatch (receiver not proven exact)",
+        "detail": "System.IO.BinaryReader::ReadByte",
+        "blocksReachedMethods": 2,
+        "reachedSite": true
+      },
+      {
         "site": "System.Formats.Nrbf#331",
         "method": "System.Formats.Nrbf.Utils.TypeNameHelpers::ParseNonSystemClassRecordTypeName",
         "offset": 41,
@@ -4895,6 +5271,15 @@
         "method": "System.ThrowHelper::CreateArgumentOutOfRangeException",
         "offset": 0,
         "category": "opcode: ldarga.s",
+        "detail": "",
+        "blocksReachedMethods": 2,
+        "reachedSite": true
+      },
+      {
+        "site": "System.Net.Http#2091",
+        "method": "System.Net.Http.HttpConnectionSettings::.ctor",
+        "offset": -1,
+        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
         "detail": "",
         "blocksReachedMethods": 2,
         "reachedSite": true
@@ -4945,6 +5330,15 @@
         "reachedSite": true
       },
       {
+        "site": "System.Net.Http#486",
+        "method": "System.Net.Http.HttpClient::.ctor",
+        "offset": 27,
+        "category": "static field with type initializer",
+        "detail": "System.Net.Http.HttpClient::s_defaultTimeout",
+        "blocksReachedMethods": 2,
+        "reachedSite": true
+      },
+      {
         "site": "System.Net.Http#743",
         "method": "System.Net.Http.HttpMethod::Initialize",
         "offset": -1,
@@ -4965,6 +5359,15 @@
       {
         "site": "System.Net.Primitives#475",
         "method": "System.Net.Sockets.SocketAddressExtensions::GetIPAddress",
+        "offset": -1,
+        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
+        "detail": "",
+        "blocksReachedMethods": 2,
+        "reachedSite": true
+      },
+      {
+        "site": "System.Net.Requests#126",
+        "method": "System.Net.FileWebRequest::CreateResponse",
         "offset": -1,
         "category": "method-level: locals without localsinit ([SkipLocalsInit])",
         "detail": "",
@@ -5033,195 +5436,6 @@
         "detail": "",
         "blocksReachedMethods": 2,
         "reachedSite": true
-      },
-      {
-        "site": "System.Net.Sockets#190",
-        "method": "System.Net.SocketProtocolSupportPal::get_OSSupportsIPv4",
-        "offset": 0,
-        "category": "static field with type initializer",
-        "detail": "System.Net.SocketProtocolSupportPal::\u003COSSupportsIPv4\u003Ek__BackingField",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Net.Sockets#191",
-        "method": "System.Net.SocketProtocolSupportPal::get_OSSupportsUnixDomainSockets",
-        "offset": 0,
-        "category": "static field with type initializer",
-        "detail": "System.Net.SocketProtocolSupportPal::\u003COSSupportsUnixDomainSockets\u003Ek__BackingField",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Net.Sockets#86",
-        "method": "Interop/Winsock::\u003CEnsureInitialized\u003Eg__Initialize|57_0",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Net.Sockets#97",
-        "method": "Interop/Kernel32::SetFileCompletionNotificationModes",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#11069",
-        "method": "System.WeakReference\u00601::SetTarget",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#11338",
-        "method": "System.Resources.FastResourceComparer::CompareOrdinal",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#11406",
-        "method": "System.Resources.ResourceManager::GetSatelliteContractVersion",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#11408",
-        "method": "System.Resources.ResourceManager::IsDefaultType",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#11541",
-        "method": "System.Numerics.BitOperations::TrailingZeroCount",
-        "offset": 69,
-        "category": "opcode: ldind.u1",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#1223",
-        "method": "System.Delegate::op_Equality",
-        "offset": 14,
-        "category": "virtual dispatch (receiver not proven exact)",
-        "detail": "System.Object::Equals",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#1259",
-        "method": "System.Enum::Parse",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#13110",
-        "method": "System.Globalization.CalendarData::GetCalendarCurrentEra",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#13175",
-        "method": "System.Globalization.CalendricalCalculationsHelper::EphemerisCorrection",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#13208",
-        "method": "System.Globalization.CharUnicodeInfo::ToUpper",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#13210",
-        "method": "System.Globalization.CharUnicodeInfo::ToLower",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#13218",
-        "method": "System.Globalization.CharUnicodeInfo::GetCodePointFromString",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#13275",
-        "method": "System.Globalization.CompareInfo::ThrowCompareOptionsCheckFailed",
-        "offset": 31,
-        "category": "opcode: throw",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#13335",
-        "method": "System.Globalization.CompareInfo::GetIsAsciiEqualityOrdinal",
-        "offset": 15,
-        "category": "callvirt (linked target or signature)",
-        "detail": "System.String::get_Length",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#13361",
-        "method": "System.Globalization.CompareInfo::NlsGetSortHandle",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#13512",
-        "method": "System.Globalization.CultureData::GetLocaleInfoExInt",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
-      },
-      {
-        "site": "System.Private.CoreLib#13795",
-        "method": "System.Globalization.DateTimeFormatInfoScanner::ArrayElementsHaveSpace",
-        "offset": -1,
-        "category": "method-level: locals without localsinit ([SkipLocalsInit])",
-        "detail": "",
-        "blocksReachedMethods": 2,
-        "reachedSite": true
       }
     ]
   },
@@ -5229,7 +5443,7 @@
     {
       "feature": "managed address (ldloca/ldflda)",
       "reachedMethods": 6349,
-      "blockedInOwnBody": 6341
+      "blockedInOwnBody": 6334
     },
     {
       "feature": "locals without localsinit ([SkipLocalsInit])",
@@ -5239,7 +5453,7 @@
     {
       "feature": "value-type instance call",
       "reachedMethods": 4850,
-      "blockedInOwnBody": 4850
+      "blockedInOwnBody": 4843
     },
     {
       "feature": "virtual call",
@@ -5254,7 +5468,7 @@
     {
       "feature": "string literal",
       "reachedMethods": 3724,
-      "blockedInOwnBody": 2256
+      "blockedInOwnBody": 2253
     },
     {
       "feature": "generic method call",
@@ -5289,12 +5503,12 @@
     {
       "feature": "type test or cast",
       "reachedMethods": 1697,
-      "blockedInOwnBody": 1627
+      "blockedInOwnBody": 1622
     },
     {
       "feature": "value-type newobj",
       "reachedMethods": 1562,
-      "blockedInOwnBody": 1551
+      "blockedInOwnBody": 1549
     },
     {
       "feature": "Span\u003CT\u003E (signature)",
@@ -5374,7 +5588,7 @@
     {
       "feature": "unsafe pointer (local)",
       "reachedMethods": 771,
-      "blockedInOwnBody": 771
+      "blockedInOwnBody": 770
     },
     {
       "feature": "array allocation",
@@ -5409,7 +5623,7 @@
     {
       "feature": "threading: Tasks",
       "reachedMethods": 385,
-      "blockedInOwnBody": 358
+      "blockedInOwnBody": 355
     },
     {
       "feature": "GC API",
@@ -5424,17 +5638,17 @@
     {
       "feature": "delegate or function pointer creation (ldftn)",
       "reachedMethods": 336,
-      "blockedInOwnBody": 325
+      "blockedInOwnBody": 324
     },
     {
       "feature": "threading: volatile. prefix",
       "reachedMethods": 323,
-      "blockedInOwnBody": 276
+      "blockedInOwnBody": 270
     },
     {
       "feature": "delegate allocation",
       "reachedMethods": 320,
-      "blockedInOwnBody": 309
+      "blockedInOwnBody": 308
     },
     {
       "feature": "threading: Interlocked",
@@ -5489,7 +5703,7 @@
     {
       "feature": "resources",
       "reachedMethods": 166,
-      "blockedInOwnBody": 163
+      "blockedInOwnBody": 158
     },
     {
       "feature": "runtime delegate method",
@@ -5524,7 +5738,7 @@
     {
       "feature": "threading: CancellationToken",
       "reachedMethods": 115,
-      "blockedInOwnBody": 106
+      "blockedInOwnBody": 104
     },
     {
       "feature": "rethrow",
@@ -5534,7 +5748,7 @@
     {
       "feature": "threading: Lock",
       "reachedMethods": 109,
-      "blockedInOwnBody": 101
+      "blockedInOwnBody": 99
     },
     {
       "feature": "threading: Volatile",
@@ -5569,12 +5783,12 @@
     {
       "feature": "platform: filesystem",
       "reachedMethods": 52,
-      "blockedInOwnBody": 50
+      "blockedInOwnBody": 44
     },
     {
       "feature": "threading: ExecutionContext",
       "reachedMethods": 49,
-      "blockedInOwnBody": 44
+      "blockedInOwnBody": 43
     },
     {
       "feature": "threading: Timer",
@@ -5629,7 +5843,7 @@
     {
       "feature": "threading: SemaphoreSlim",
       "reachedMethods": 15,
-      "blockedInOwnBody": 15
+      "blockedInOwnBody": 12
     },
     {
       "feature": "threading: SpinLock",

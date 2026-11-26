@@ -7,101 +7,101 @@ Whole-program verdict from `Program.Main`: status -4 at [System.Windows.Forms, M
 | Compiler verdict | Methods |
 | --- | ---: |
 | judged | 27102 |
-| compiles | 2129 |
-| blockedInOwnBody | 13318 |
-| blockedInClosure | 2698 |
-| exportAbiNoVerdict | 8957 |
+| compiles | 2288 |
+| blockedInOwnBody | 13062 |
+| blockedInClosure | 2829 |
+| exportAbiNoVerdict | 8923 |
 | notJudged | 1242 |
 
 ## Blocker categories by reached methods whose own body stops there
 
 | Category | Methods |
 | --- | ---: |
-| method-level: locals without localsinit ([SkipLocalsInit]) | 3442 |
-| method-level: no distinguishing signature or local type | 1647 |
-| method-level: declaring reference type | 1522 |
-| method-level: member of generic type | 610 |
+| method-level: locals without localsinit ([SkipLocalsInit]) | 3438 |
+| method-level: no distinguishing signature or local type | 1847 |
+| method-level: declaring reference type | 1182 |
+| method-level: member of generic type | 640 |
 | static constructor body/header | 577 |
-| method-level: value-type instance call | 557 |
-| method-level: reference type | 504 |
-| static field with type initializer | 462 |
-| virtual dispatch (receiver not proven exact) | 445 |
-| method-level: throw | 381 |
-| opcode: throw | 279 |
-| call (linked target or signature) | 268 |
-| generic method instantiation | 233 |
-| method-level: generic method definition | 176 |
-| instance field ldflda | 167 |
-| static field | 153 |
-| method-level: interface call | 145 |
-| method-level: indirect load/store | 143 |
-| method-level: unsafe pointer (signature) | 128 |
+| static field with type initializer | 493 |
+| virtual dispatch (receiver not proven exact) | 493 |
+| method-level: reference type | 450 |
+| method-level: throw | 367 |
+| call (linked target or signature) | 304 |
+| opcode: throw | 290 |
+| generic method instantiation | 243 |
+| method-level: managed byref | 197 |
+| method-level: indirect load/store | 191 |
+| method-level: interface call | 190 |
+| static field | 189 |
+| method-level: generic method definition | 186 |
+| instance field ldflda | 180 |
+| method-level: unsafe pointer (signature) | 136 |
+| method-level: calls P/Invoke | 124 |
 | method-level: reflection: ldtoken | 120 |
-| method-level: managed byref | 117 |
-| method-level: calls P/Invoke | 90 |
-| catch clause type | 88 |
-| ldtoken (runtime handles) | 86 |
+| method-level: value type | 110 |
+| ldtoken (runtime handles) | 93 |
+| catch clause type | 90 |
+| method-level: boxing | 79 |
 | call to P/Invoke | 75 |
-| method-level: boxing | 75 |
-| opcode: box | 70 |
-| opcode: ldloca.s | 66 |
+| opcode: box | 73 |
+| opcode: ldloca.s | 72 |
 | method-level: unsafe: Unsafe/MemoryMarshal | 63 |
-| interface dispatch | 49 |
+| interface dispatch | 52 |
 | callvirt (linked target or signature) | 47 |
-| method-level: value type | 46 |
-| reference newobj (constructor or signature) | 43 |
-| value-type instance call (managed receiver address) | 36 |
-| method-level: generic reference-type instantiation | 30 |
 | static call that triggers a type initializer | 30 |
-| opcode: castclass | 29 |
 | opcode: ldarga.s | 28 |
 | method-level: interface type | 27 |
-| opcode: isinst | 22 |
+| opcode: castclass | 27 |
+| member of generic type | 24 |
+| method-level: generic reference-type instantiation | 24 |
+| method-level: array type | 23 |
+| opcode: isinst | 23 |
+| method-level: declaring value type | 20 |
 
 ## Blocker categories by reached methods whose compile stops there first (own or closure)
 
 | Category | Methods |
 | --- | ---: |
-| method-level: locals without localsinit ([SkipLocalsInit]) | 3781 |
-| method-level: no distinguishing signature or local type | 1647 |
-| method-level: declaring reference type | 1522 |
-| catch clause type | 1407 |
-| method-level: member of generic type | 610 |
-| static field with type initializer | 594 |
-| method-level: value-type instance call | 590 |
+| method-level: locals without localsinit ([SkipLocalsInit]) | 3833 |
+| method-level: no distinguishing signature or local type | 1847 |
+| catch clause type | 1409 |
+| method-level: declaring reference type | 1182 |
+| static field with type initializer | 641 |
+| method-level: member of generic type | 640 |
+| virtual dispatch (receiver not proven exact) | 618 |
 | static constructor body/header | 577 |
-| virtual dispatch (receiver not proven exact) | 558 |
-| method-level: reference type | 505 |
-| call (linked target or signature) | 480 |
-| opcode: throw | 394 |
-| method-level: throw | 382 |
-| generic method instantiation | 331 |
-| static field | 204 |
-| instance field ldflda | 199 |
-| method-level: generic method definition | 176 |
-| method-level: interface call | 146 |
-| method-level: indirect load/store | 143 |
-| method-level: unsafe pointer (signature) | 128 |
-| method-level: reflection: ldtoken | 120 |
-| method-level: managed byref | 117 |
-| ldtoken (runtime handles) | 116 |
-| opcode: ldloca.s | 102 |
+| call (linked target or signature) | 521 |
+| method-level: reference type | 453 |
+| opcode: throw | 422 |
+| method-level: throw | 373 |
+| generic method instantiation | 345 |
+| static field | 241 |
+| instance field ldflda | 214 |
+| method-level: indirect load/store | 200 |
+| method-level: managed byref | 197 |
+| method-level: interface call | 196 |
+| method-level: generic method definition | 186 |
+| method-level: unsafe pointer (signature) | 139 |
+| method-level: calls P/Invoke | 130 |
+| ldtoken (runtime handles) | 126 |
+| method-level: reflection: ldtoken | 121 |
+| method-level: value type | 115 |
+| opcode: ldloca.s | 109 |
 | call to P/Invoke | 96 |
-| method-level: calls P/Invoke | 92 |
-| opcode: box | 87 |
-| method-level: boxing | 75 |
-| interface dispatch | 64 |
+| opcode: box | 90 |
+| method-level: boxing | 81 |
+| interface dispatch | 67 |
 | method-level: unsafe: Unsafe/MemoryMarshal | 63 |
 | callvirt (linked target or signature) | 60 |
-| reference newobj (constructor or signature) | 58 |
-| value-type instance call (managed receiver address) | 50 |
-| method-level: value type | 46 |
-| opcode: ldarga.s | 40 |
+| opcode: ldarga.s | 41 |
 | static call that triggers a type initializer | 36 |
-| opcode: castclass | 33 |
-| method-level: generic reference-type instantiation | 30 |
+| opcode: castclass | 31 |
+| reference newobj (constructor or signature) | 29 |
 | runtime internal call | 29 |
+| member of generic type | 27 |
 | method-level: interface type | 27 |
+| method-level: generic reference-type instantiation | 24 |
+| opcode: isinst | 24 |
 
 ## Method-level suspects
 
@@ -109,46 +109,46 @@ Types and static features of method-level failures that occur in no reached meth
 
 | Failed methods | Kind | Type |
 | ---: | --- | --- |
-| 5924 | locals without localsinit ([SkipLocalsInit]) | `feature: locals without localsinit ([SkipLocalsInit])` |
-| 4564 | value-type instance call | `feature: value-type instance call` |
+| 5920 | locals without localsinit ([SkipLocalsInit]) | `feature: locals without localsinit ([SkipLocalsInit])` |
 | 3055 | value-type instance method | `feature: value-type instance method` |
-| 2314 | indirect load/store | `feature: indirect load/store` |
+| 2313 | indirect load/store | `feature: indirect load/store` |
 | 1843 | member of generic type | `feature: member of generic type` |
 | 1530 | Span<T> (signature) | `feature: Span<T> (signature)` |
-| 1482 | throw | `feature: throw` |
+| 1440 | throw | `feature: throw` |
 | 1095 | generic method definition | `feature: generic method definition` |
 | 1040 | unsafe: Unsafe/MemoryMarshal | `feature: unsafe: Unsafe/MemoryMarshal` |
-| 988 | interface call | `feature: interface call` |
-| 955 | boxing | `feature: boxing` |
-| 789 | Span<T> (local) | `feature: Span<T> (local)` |
-| 777 | reflection: ldtoken | `feature: reflection: ldtoken` |
-| 776 | calls P/Invoke | `feature: calls P/Invoke` |
-| 758 | unsafe pointer (local) | `feature: unsafe pointer (local)` |
+| 981 | interface call | `feature: interface call` |
+| 949 | boxing | `feature: boxing` |
+| 788 | Span<T> (local) | `feature: Span<T> (local)` |
+| 775 | calls P/Invoke | `feature: calls P/Invoke` |
+| 768 | reflection: ldtoken | `feature: reflection: ldtoken` |
 | 739 | unsafe pointer (signature) | `feature: unsafe pointer (signature)` |
-| 714 | reflection: typeof | `feature: reflection: typeof` |
+| 705 | reflection: typeof | `feature: reflection: typeof` |
 | 609 | Span<T> / ReadOnlySpan<T> | `System.ReadOnlySpan`1<Byte>` |
-| 587 | constrained. call | `feature: constrained. call` |
+| 586 | constrained. call | `feature: constrained. call` |
 | 577 | static constructor | `feature: static constructor` |
 | 568 | Span<T> / ReadOnlySpan<T> | `System.ReadOnlySpan`1<Char>` |
 | 549 | managed byref | `Int32&` |
-| 520 | pinned local (fixed) | `feature: pinned local (fixed)` |
+| 518 | pinned local (fixed) | `feature: pinned local (fixed)` |
 | 511 | interface type | `System.IFormatProvider` |
 | 431 | generic parameter | `!0` |
 | 407 | generic parameter | `!!0` |
-| 330 | sizeof | `feature: sizeof` |
-| 317 | unmanaged pointer | `Char*` |
+| 328 | sizeof | `feature: sizeof` |
+| 316 | unmanaged pointer | `Char*` |
 | 305 | unmanaged pointer | `Byte*` |
-| 299 | stackalloc (localloc) | `feature: stackalloc (localloc)` |
+| 298 | stackalloc (localloc) | `feature: stackalloc (localloc)` |
 | 288 | Span<T> / ReadOnlySpan<T> | `System.Span`1<Char>` |
 | 287 | value type | `System.DateTime` |
 | 276 | Span<T> / ReadOnlySpan<T> | `System.Span`1<Byte>` |
-| 239 | pinned local | `Char& pinned` |
+| 238 | pinned local | `Char& pinned` |
 | 233 | managed byref | `!!0&` |
 | 201 | array element address | `feature: array element address` |
 | 198 | unmanaged pointer | `Void*` |
 | 191 | value type | `System.Threading.CancellationToken` |
 | 184 | explicit layout (field access) | `feature: explicit layout (field access)` |
-| 172 | reference type | `System.Text.Json.JsonSerializerOptions` |
+| 172 | declaring value type | `declaring System.Text.Json.Utf8JsonReader` |
+| 164 | reference type | `System.Drawing.Graphics` |
+| 158 | managed byref | `System.Text.Json.Utf8JsonReader&` |
 
 ## Top blocker sites
 
@@ -166,22 +166,24 @@ Types and static features of method-level failures that occur in no reached meth
 | 23 | `System.SR::GetResourceString` (System.ComponentModel.Primitives#4) | method | method-level: locals without localsinit ([SkipLocalsInit]) | `` |
 | 22 | `System.SR::GetResourceString` (System.Formats.Asn1#3) | IL_0019 | catch clause type | `System.Resources.MissingManifestResourceException` |
 | 21 | `System.SR::GetResourceString` (System.Private.Uri#277) | IL_0019 | catch clause type | `System.Resources.MissingManifestResourceException` |
+| 21 | `System.Text.Json.Serialization.JsonConverter`1::.ctor` (System.Text.Json#2634) | method | method-level: locals without localsinit ([SkipLocalsInit]) | `` |
 | 20 | `System.SR::GetResourceString` (System.Collections#3) | IL_0019 | catch clause type | `System.Resources.MissingManifestResourceException` |
 | 16 | `System.SR::GetResourceString` (System.Security.Principal.Windows#65) | IL_0019 | catch clause type | `System.Resources.MissingManifestResourceException` |
 | 15 | `System.SR::GetResourceString` (System.Formats.Nrbf#3) | IL_0019 | catch clause type | `System.Resources.MissingManifestResourceException` |
 | 13 | `System.ArgumentNullException::Throw` (System.Private.CoreLib#3251) | IL_0006 | opcode: throw | `` |
+| 12 | `System.Threading.Lock::.ctor` (System.Private.CoreLib#16464) | IL_0007 | static field with type initializer | `System.Threading.Lock::s_maxSpinCount` |
 | 12 | `System.Text.Encoding::.ctor` (System.Private.CoreLib#18917) | IL_0013 | generic method instantiation | `System.ArgumentOutOfRangeException::ThrowIfNegative` |
 | 12 | `System.Text.Json.Serialization.JsonConverter::.ctor` (System.Text.Json#2556) | IL_0012 | ldtoken (runtime handles) | `System.Text.Json.Serialization.JsonConverter` |
 | 11 | `System.SR::GetResourceString` (System.Collections.Specialized#3) | IL_0019 | catch clause type | `System.Resources.MissingManifestResourceException` |
 | 11 | `System.SR::GetResourceString` (System.Diagnostics.DiagnosticSource#12) | IL_0019 | catch clause type | `System.Resources.MissingManifestResourceException` |
 | 11 | `System.Collections.Generic.List`1::.ctor` (System.Private.CoreLib#42059) | IL_0017 | static field with type initializer | `System.Collections.Generic.List`1::s_emptyArray` |
 | 11 | `System.SR::GetResourceString` (System.Security.Cryptography#537) | IL_0019 | catch clause type | `System.Resources.MissingManifestResourceException` |
-| 10 | `System.Threading.Lock::.ctor` (System.Private.CoreLib#16464) | IL_0007 | static field with type initializer | `System.Threading.Lock::s_maxSpinCount` |
 | 10 | `System.Convert::ToInt32` (System.Private.CoreLib#3984) | method | method-level: locals without localsinit ([SkipLocalsInit]) | `` |
 | 10 | `System.OperatingSystem::IsOSVersionAtLeast` (System.Private.CoreLib#7222) | method | method-level: locals without localsinit ([SkipLocalsInit]) | `` |
+| 10 | `System.Text.Json.ThrowHelper::ThrowInvalidOperationException_TypeInfoImmutable` (System.Text.Json#462) | IL_000a | opcode: throw | `` |
 | 9 | `System.SR::GetResourceString` (Microsoft.Win32.Registry#43) | IL_0019 | catch clause type | `System.Resources.MissingManifestResourceException` |
 | 9 | `System.SR::GetResourceString` (System.Collections.Concurrent#8) | IL_0019 | catch clause type | `System.Resources.MissingManifestResourceException` |
-| 9 | `System.Drawing.SystemPens::FromSystemColor` (System.Drawing.Common#1402) | method | method-level: value-type instance call | `feature: value-type instance call` |
+| 9 | `System.Drawing.SystemPens::FromSystemColor` (System.Drawing.Common#1402) | method | method-level: indirect load/store | `feature: indirect load/store` |
 | 9 | `System.SR::GetResourceString` (System.Net.Security#76) | IL_0019 | catch clause type | `System.Resources.MissingManifestResourceException` |
 | 9 | `System.Enum::ValidateRuntimeType` (System.Private.CoreLib#1305) | method | method-level: locals without localsinit ([SkipLocalsInit]) | `` |
 | 9 | `System.BitConverter::SingleToUInt32Bits` (System.Private.CoreLib#3431) | IL_0001 | generic method instantiation | `System.Runtime.CompilerServices.Unsafe::BitCast` |
@@ -190,6 +192,7 @@ Types and static features of method-level failures that occur in no reached meth
 | 9 | `System.SR::GetResourceString` (System.Reflection.Metadata#28) | IL_0019 | catch clause type | `System.Resources.MissingManifestResourceException` |
 | 9 | `System.Windows.Forms.ToolStripManager/ModalMenuFilter::get_Instance` (System.Windows.Forms#25047) | IL_0000 | static field | `System.Windows.Forms.ToolStripManager/ModalMenuFilter::t_instance` |
 | 9 | `System.Windows.Forms.Control::get_IsHandleCreated` (System.Windows.Forms#3201) | IL_0006 | virtual dispatch (receiver not proven exact) | `System.Windows.Forms.NativeWindow::get_Handle` |
+| 9 | `System.Windows.Forms.Control::set_Visible` (System.Windows.Forms#3312) | IL_0002 | virtual dispatch (receiver not proven exact) | `System.Windows.Forms.Control::SetVisibleCore` |
 | 8 | `System.Numerics.BitOperations::Log2SoftwareFallback` (System.Private.CoreLib#11535) | method | method-level: locals without localsinit ([SkipLocalsInit]) | `` |
 | 8 | `System.Environment::get_CurrentManagedThreadId` (System.Private.CoreLib#1354) | method | runtime internal call | `` |
 | 8 | `System.Environment::get_TickCount64` (System.Private.CoreLib#1420) | IL_0000 | call to P/Invoke | `Interop/Kernel32::GetTickCount64` |
@@ -197,42 +200,39 @@ Types and static features of method-level failures that occur in no reached meth
 | 8 | `System.String::Equals` (System.Private.CoreLib#2461) | IL_0002 | opcode: bne.un.s | `` |
 | 8 | `System.String::IsNullOrEmpty` (System.Private.CoreLib#2514) | IL_0004 | callvirt (linked target or signature) | `System.String::get_Length` |
 | 8 | `System.Collections.Hashtable::.ctor` (System.Private.CoreLib#41183) | method | method-level: locals without localsinit ([SkipLocalsInit]) | `` |
-| 8 | `System.Windows.Forms.Control::set_Visible` (System.Windows.Forms#3312) | IL_0002 | virtual dispatch (receiver not proven exact) | `System.Windows.Forms.Control::SetVisibleCore` |
 | 7 | `System.Drawing.SystemBrushes::FromSystemColor` (System.Drawing.Common#1340) | IL_0000 | opcode: ldarga.s | `` |
 | 7 | `System.SR::GetResourceString` (System.Net.Primitives#13) | IL_0019 | catch clause type | `System.Resources.MissingManifestResourceException` |
 | 7 | `System.Globalization.GregorianCalendarHelper::GetYearOffset` (System.Private.CoreLib#13905) | method | method-level: locals without localsinit ([SkipLocalsInit]) | `` |
 | 7 | `System.GC::SuppressFinalize` (System.Private.CoreLib#1515) | IL_0011 | value-type instance call (managed receiver address) | `System.Runtime.CompilerServices.MethodTable::get_HasFinalizer` |
+| 7 | `System.Text.Encoding::get_UTF8` (System.Private.CoreLib#18991) | IL_0000 | static field with type initializer | `System.Text.UTF8Encoding::s_default` |
 | 7 | `System.Runtime.CompilerServices.ConditionalWeakTable`2::.ctor` (System.Private.CoreLib#33340) | IL_0007 | reference newobj (constructor or signature) | `System.Object::.ctor` |
 | 7 | `System.Convert::ThrowCharOverflowException` (System.Private.CoreLib#3854) | IL_000a | opcode: throw | `` |
 | 7 | `System.Convert::ThrowInt16OverflowException` (System.Private.CoreLib#3857) | IL_000a | opcode: throw | `` |
 | 7 | `System.Convert::ThrowUInt16OverflowException` (System.Private.CoreLib#3858) | IL_000a | opcode: throw | `` |
+| 7 | `System.Collections.Generic.Dictionary`2::.ctor` (System.Private.CoreLib#41758) | method | method-level: locals without localsinit ([SkipLocalsInit]) | `` |
 | 7 | `Windows.Win32.PInvokeCore::SystemParametersInfoBool` (System.Private.Windows.Core#80) | IL_0003 | opcode: ldloca.s | `` |
-| 7 | `System.Windows.Forms.ToolStrip::get_OverflowButton` (System.Windows.Forms#11650) | IL_003e | value-type instance call (managed receiver address) | `System.Drawing.Rectangle::get_Size` |
+| 7 | `System.Windows.Forms.ToolStrip::get_OverflowButton` (System.Windows.Forms#11650) | IL_0036 | virtual dispatch (receiver not proven exact) | `System.Windows.Forms.Control::get_DisplayRectangle` |
 | 6 | `System.ComponentModel.TypeDescriptor::GetPropertiesImpl` (System.ComponentModel.TypeConverter#1021) | method | method-level: locals without localsinit ([SkipLocalsInit]) | `` |
 | 6 | `System.ComponentModel.ReflectTypeDescriptionProvider::GetTypeData` (System.ComponentModel.TypeConverter#862) | method | method-level: locals without localsinit ([SkipLocalsInit]) | `` |
-| 6 | `System.Threading.ExecutionContext::Capture` (System.Private.CoreLib#16388) | method | method-level: locals without localsinit ([SkipLocalsInit]) | `` |
-| 6 | `System.Runtime.InteropServices.Marshal::GetLastPInvokeError` (System.Private.CoreLib#31454) | method | runtime internal call | `` |
-| 6 | `System.BitConverter::SingleToInt32Bits` (System.Private.CoreLib#3425) | IL_0001 | generic method instantiation | `System.Runtime.CompilerServices.Unsafe::BitCast` |
-| 6 | `System.BitConverter::DoubleToUInt64Bits` (System.Private.CoreLib#3429) | IL_0001 | generic method instantiation | `System.Runtime.CompilerServices.Unsafe::BitCast` |
 
 ## Static features of reached methods
 
 | Feature | Reached methods | Own-body compiler blocks |
 | --- | ---: | ---: |
-| managed address (ldloca/ldflda) | 6349 | 6341 |
+| managed address (ldloca/ldflda) | 6349 | 6334 |
 | locals without localsinit ([SkipLocalsInit]) | 6002 | 6002 |
-| value-type instance call | 4850 | 4850 |
+| value-type instance call | 4850 | 4843 |
 | virtual call | 4725 | 4697 |
 | static field | 3749 | 3737 |
-| string literal | 3724 | 2256 |
+| string literal | 3724 | 2253 |
 | generic method call | 3564 | 3563 |
 | value-type field | 3109 | 3103 |
 | value-type instance method | 3058 | 3055 |
 | indirect load/store | 2332 | 2332 |
 | member of generic type | 1983 | 1843 |
 | throw | 1949 | 1949 |
-| type test or cast | 1697 | 1627 |
-| value-type newobj | 1562 | 1551 |
+| type test or cast | 1697 | 1622 |
+| value-type newobj | 1562 | 1549 |
 | Span<T> (signature) | 1538 | 1530 |
 | reflection: API call | 1434 | 1339 |
 | unsafe pointer (signature) | 1245 | 739 |
@@ -248,19 +248,19 @@ Types and static features of method-level failures that occur in no reached meth
 | P/Invoke | 831 | 0 |
 | reflection: typeof | 807 | 807 |
 | Span<T> (local) | 792 | 792 |
-| unsafe pointer (local) | 771 | 771 |
+| unsafe pointer (local) | 771 | 770 |
 | array allocation | 636 | 630 |
 | constrained. call | 602 | 602 |
 | static constructor | 577 | 577 |
 | pinned local (fixed) | 520 | 520 |
 | interop: Marshal | 471 | 458 |
 | try/catch | 409 | 408 |
-| threading: Tasks | 385 | 358 |
+| threading: Tasks | 385 | 355 |
 | GC API | 383 | 373 |
 | sizeof | 339 | 339 |
-| delegate or function pointer creation (ldftn) | 336 | 325 |
-| threading: volatile. prefix | 323 | 276 |
-| delegate allocation | 320 | 309 |
+| delegate or function pointer creation (ldftn) | 336 | 324 |
+| threading: volatile. prefix | 323 | 270 |
+| delegate allocation | 320 | 308 |
 | threading: Interlocked | 312 | 310 |
 | stackalloc (localloc) | 301 | 301 |
 | floating point | 299 | 247 |
@@ -271,24 +271,24 @@ Types and static features of method-level failures that occur in no reached meth
 | array element address | 208 | 208 |
 | interop: COM marshalling | 202 | 197 |
 | explicit layout (field access) | 186 | 186 |
-| resources | 166 | 163 |
+| resources | 166 | 158 |
 | runtime delegate method | 166 | 0 |
 | platform: environment | 129 | 112 |
 | interop: SafeHandle | 126 | 118 |
 | checked arithmetic | 122 | 120 |
 | runtime internal call | 116 | 0 |
 | reflection: activation (not modeled by RTA) | 115 | 93 |
-| threading: CancellationToken | 115 | 106 |
+| threading: CancellationToken | 115 | 104 |
 | rethrow | 111 | 111 |
-| threading: Lock | 109 | 101 |
+| threading: Lock | 109 | 99 |
 | threading: Volatile | 90 | 89 |
 | indirect call (calli) | 89 | 89 |
 | interop: GCHandle | 83 | 80 |
 | exception filter | 65 | 65 |
 | explicit layout (declaring type) | 64 | 59 |
 | threading: WaitHandle | 55 | 49 |
-| platform: filesystem | 52 | 50 |
-| threading: ExecutionContext | 49 | 44 |
+| platform: filesystem | 52 | 44 |
+| threading: ExecutionContext | 49 | 43 |
 | threading: Timer | 35 | 27 |
 | threading: ManualResetEvent | 34 | 23 |
 | threading: EventWaitHandle | 32 | 28 |
@@ -299,7 +299,7 @@ Types and static features of method-level failures that occur in no reached meth
 | threading: ReaderWriterLock | 21 | 18 |
 | threading: SpinWait | 20 | 20 |
 | threading: LazyInitializer | 18 | 18 |
-| threading: SemaphoreSlim | 15 | 15 |
+| threading: SemaphoreSlim | 15 | 12 |
 | threading: SpinLock | 15 | 13 |
 | checked native-int conversion | 14 | 13 |
 | interop: COM call | 12 | 12 |

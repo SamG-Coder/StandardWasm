@@ -3,8 +3,10 @@
 Recorded on Windows 11 x64 with .NET SDK 10.0.302 and the win-x86
 Microsoft.NETCore.App and Microsoft.WindowsDesktop.App 10.0.10 packs. Decision
 0044 requires a 4-byte native-width CoreLib before CoreLib bodies are lowered,
-so the census uses those packs. The compiler is built from main e573583. The
-Stage 72 entry assembly `WinFormsReference.dll` has sha256 `a65eda77…6178`.
+so the census uses those packs. The compiler is built from main e79167e. The
+Stage 72 entry assembly `WinFormsReference.dll` has sha256 `f85f99dd…9941` in
+this checkout. The app is republished per checkout and its hash differs between
+machines.
 The run loaded 59 assemblies, and [recorded/census-summary.json](recorded/census-summary.json)
 lists all of them with hashes. The full ranked tables are in
 [recorded/summary.md](recorded/summary.md). The per-method `census.json`
@@ -17,10 +19,17 @@ actually executes.
 ## Reproducibility
 
 `npm run demo -- stage-117-winforms-census` takes about 3.5 minutes. The
-compiler runs at 12-way parallelism and totals 40 CPU minutes. Two consecutive
-full runs produced byte-identical `census.json` files. Replaying a run's
-verdicts with `STANDARDWASM_CENSUS_REUSE=<census.json>` regenerates the rankings
-without recompiling.
+compiler runs at 12-way parallelism and totals about 50 CPU minutes. Two
+consecutive full runs produced byte-identical `census.json` files.
+
+`STANDARDWASM_CENSUS_REUSE=<census.json>` replays a run's verdicts and
+regenerates the rankings without recompiling. Each census records a
+`verdictIdentity`: the SHA-256 of the compiler assembly (`BootstrapLibrary.dll`)
+and the ordered SHA-256 of every bundle image. Reuse is refused with exit code 3
+unless that identity matches the current inputs exactly. A census without an
+identity, a different app or framework binary, a different compiler, or a
+reordered bundle are all rejected. Replaying with a matching identity reproduced
+the live `census.json` byte for byte.
 
 ## Reach
 
@@ -42,7 +51,7 @@ show where each one comes in.
 
 ## Compiler verdicts
 
-From `Program.Main` the whole program now stops at -4 [System.Windows.Forms,
+From `Program.Main` the whole program stops at -4 [System.Windows.Forms,
 MethodDef 4340, IL_0000]. That is `Application.Run(Form)` calling
 `Application/ThreadContext::FromCurrent`, the boundary that #232 tracks. On main
 70f8b6e the same census stopped at `ReferenceForm::.ctor` IL_0022 (#240), so the
@@ -50,10 +59,10 @@ entry verdict follows the live drop as the compiler grows.
 
 | Verdict | Methods |
 | --- | ---: |
-| Whole closure compiles | 2,129 |
-| Blocked in own body | 13,318 |
-| Own body lowers, blocked in a callee | 2,698 |
-| Export ABI rejects the shape (no own verdict) | 8,957 |
+| Whole closure compiles | 2,288 |
+| Blocked in own body | 13,062 |
+| Own body lowers, blocked in a callee | 2,829 |
+| Export ABI rejects the shape (no own verdict) | 8,923 |
 | No IL (P/Invoke, internal call, runtime, abstract) | 1,242 |
 
 An IL offset of -1 doesn't mean the failure is in the method header. The
@@ -73,21 +82,24 @@ its first blocker, so later blockers are hidden behind earlier ones.
 
 | Rank | Group | Own | First | Representative sites [assembly, MethodDef, IL] | Issue |
 | ---: | --- | ---: | ---: | --- | --- |
-| 1 | Locals without `localsinit` (`[SkipLocalsInit]`) | 3,442 | 3,781 | `Convert::ToInt32` [CoreLib, 3984, -1], `OperatingSystem::IsOSVersionAtLeast` [CoreLib, 7222, -1] | #268 |
-| 2 | Managed exception objects (typed catch, `throw`, filters) | 764 | 2,204 | `SR::GetResourceString` [CoreLib, 8040, IL_0014] catches `MissingManifestResourceException`, which alone blocks 835 methods | #269 |
-| 3 | Static initialization (type initializers, static fields with `.cctor`) | 1,222 | 1,411 | `List`1::.ctor` [CoreLib, 42058, IL_0007] `s_emptyArray`, `Lock::.ctor` [CoreLib, 16464, IL_0007] | #232, #170 (Codex) |
-| 4 | Value-type instance methods on a managed receiver address | 700 | 797 | `GC::SuppressFinalize` [CoreLib, 1515, IL_0011] `MethodTable::get_HasFinalizer`, `ToolStrip::get_OverflowButton` [SWF, 11650, IL_003e] `Rectangle::get_Size` | #259 (read-only), #271 |
-| 5 | Class virtual dispatch, receiver not exact | 445 | 558 | `Control::get_IsHandleCreated` [SWF, 3201, IL_0006], `Control::set_Visible` [SWF, 3312, IL_0002] | #264 landed; see note |
-| 6 | Managed byrefs, field addresses and `Span<T>` | 429 | 461 | `ExceptionDispatchInfo` [CoreLib, 32910, IL_0007] `ldflda`, `TableLayout/ContainerInfo` [SWF, 26301, IL_0001] | #273 |
-| 7 | Generic method instantiation (MethodSpec) | 409 | 507 | `Encoding::.ctor` [CoreLib, 18917, IL_0013] `ThrowIfNegative<T>`, `Unsafe.BitCast` [CoreLib, 3431, IL_0001] | #270 |
-| 8 | Runtime type handles (`ldtoken`, `typeof`) | 206 | 236 | `JsonConverter::.ctor` [System.Text.Json, 2556, IL_0012], WinForms enum converters | coordinate with #232 |
-| 9 | Platform boundary (P/Invoke, QCall, InternalCall) | 167 | 219 | `Environment::get_TickCount64` [CoreLib, 1420, IL_0000] → `Kernel32::GetTickCount64`, `Environment::get_CurrentManagedThreadId` | #274 |
-| 10 | Unmanaged pointers, pinning, `sizeof`, `calli` | 217 | 218 | `sizeof TRACKMOUSEEVENT` [SWF, 3491, IL_0024] | #275 |
-| 11 | Interface dispatch | 194 | 210 | `IArrangedElement::PerformLayout` [SWF, 20984, IL_0015], `IKeyboardToolTip::CanShowToolTipsNow` [SWF, 20522, IL_001d] | #272 |
+| 1 | Locals without `localsinit` (`[SkipLocalsInit]`) | 3,438 | 3,833 | `Convert::ToInt32` [CoreLib, 3984, -1], `OperatingSystem::IsOSVersionAtLeast` [CoreLib, 7222, -1] | #268 |
+| 2 | Managed exception objects (typed catch, `throw`, filters) | 767 | 2,230 | `SR::GetResourceString` [CoreLib, 8040, IL_0014] catches `MissingManifestResourceException`, which alone blocks 835 methods | #269 |
+| 3 | Static initialization (type initializers, static fields with `.cctor`) | 1,289 | 1,495 | `List`1::.ctor` [CoreLib, 42058, IL_0007] `s_emptyArray`, `Lock::.ctor` [CoreLib, 16464, IL_0007] | #232, #170 (Codex) |
+| 4 | Managed byrefs, field addresses and `Span<T>` | 577 | 620 | `ExceptionDispatchInfo` [CoreLib, 32910, IL_0007] `ldflda`, `TableLayout/ContainerInfo` [SWF, 26301, IL_0001] | #273 |
+| 5 | Class virtual dispatch, receiver not exact | 493 | 618 | `Control::get_IsHandleCreated` [SWF, 3201, IL_0006], `Control::set_Visible` [SWF, 3312, IL_0002] | #264 landed; see note |
+| 6 | Generic method instantiation (MethodSpec) | 429 | 531 | `Encoding::.ctor` [CoreLib, 18917, IL_0013] `ThrowIfNegative<T>`, `Unsafe.BitCast` [CoreLib, 3431, IL_0001] | #270 |
+| 7 | Interface dispatch | 242 | 263 | `IArrangedElement::PerformLayout` [SWF, 20984, IL_0015], `IKeyboardToolTip::CanShowToolTipsNow` [SWF, 20522, IL_001d] | #272 |
+| 8 | Platform boundary (P/Invoke, QCall, InternalCall) | 201 | 257 | `Environment::get_TickCount64` [CoreLib, 1420, IL_0000] → `Kernel32::GetTickCount64`, `Environment::get_CurrentManagedThreadId` [CoreLib, 1354, -1] | #274 |
+| 9 | Runtime type handles (`ldtoken`, `typeof`) | 213 | 247 | `JsonConverter::.ctor` [System.Text.Json, 2556, IL_0012], WinForms enum converters | coordinate with #232 |
+| 10 | Unmanaged pointers, pinning, `sizeof`, `calli` | 222 | 229 | `sizeof TRACKMOUSEEVENT` [SWF, 3491, IL_0024], `sizeof BITMAP` [System.Drawing.Common, 872, IL_003c] | #275 |
+| 11 | Value-type instance methods (mutating, `constrained.`, `ldarga`) | 124 | 183 | `GC::SuppressFinalize` [CoreLib, 1515, IL_0011], `SystemBrushes::FromSystemColor` [System.Drawing.Common, 1340, IL_0000] | #271 |
+
+On main e573583, before #266 (Stage 121, read-only value-type instance
+methods) landed, group 11 was 700 own-body and 797 first-blocker methods.
 
 Groups 1 and 2 are narrow and large. `SR.GetResourceString` sits on nearly
 every framework path that formats an error message. Because of the init-locals
-rule, 6,002 reached methods (3,442 judged own-body) can't compile until it
+rule, 6,002 reached methods (3,438 judged own-body) can't compile until it
 changes, whatever else they contain.
 
 Note on group 5: #264 implements closed-world class dispatch, and it diagnoses
@@ -97,8 +109,8 @@ parameter falls into this group even when the whole program would resolve it.
 Treat the count as an upper bound. Re-measure it from `Program.Main` once
 startup gets further.
 
-Another 1,647 method-level failures have no distinguishing type or feature,
-and 1,522 are attributed only to their declaring type. Those need the
+Another 1,847 method-level failures have no distinguishing type or feature,
+and 1,182 are attributed only to their declaring type. Those need the
 compiler to report its reason.
 
 ## Static features of reached methods
@@ -171,7 +183,7 @@ points.
   reflection activation, `TypeDescriptor` attributes, resource deserialization
   and COM activation, and 115 reached methods call such APIs. It also ignores
   runtime-synthesized array interfaces.
-- 8,957 methods have value-type or interface parameters or results, so they
+- 8,923 methods have value-type or interface parameters or results, so they
   can't be compile roots. They get a verdict only as callees.
 - A method counts only once, under its first blocker, so later blockers in the
   same method stay hidden until that one is fixed. Rerun the census after each

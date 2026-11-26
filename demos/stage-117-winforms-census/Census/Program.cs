@@ -97,6 +97,15 @@ var packIndices = pack.Select(a => a.Index).ToHashSet();
 List<MethodId> judged = graph.Reached.Keys
     .Where(m => set.Definition(m).RelativeVirtualAddress != 0 && packIndices.Contains(m.Assembly))
     .OrderBy(m => m.Assembly).ThenBy(m => m.Row).Take(limit).ToList();
+// A verdict depends on the exact compiler and the exact bundle bytes. MethodDef
+// rows and IL offsets only identify code within those bytes, so reuse requires
+// the same compiler assembly hash and the same ordered bundle hashes. The
+// bundle order is the pack order, and every main image is drawn from the pack.
+string Sha256(byte[] bytes) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+string compilerPath = typeof(BootstrapLibrary.CompilerExports).Assembly.Location;
+var verdictIdentity = new VerdictIdentity(
+    Path.GetFileName(compilerPath), Sha256(File.ReadAllBytes(compilerPath)),
+    pack.Select(a => new BundleIdentity(a.Name, Sha256(a.Bytes))).ToList());
 if (reuse is not null)
 {
     // Replays the verdicts of an earlier census.json for the same inputs, so the
@@ -104,6 +113,12 @@ if (reuse is not null)
     var byName = set.All.ToDictionary(a => a.Name, a => a.Index, StringComparer.Ordinal);
     var judgedSet = judged.ToHashSet();
     using JsonDocument previous = JsonDocument.Parse(File.ReadAllBytes(reuse));
+    string? mismatch = VerdictIdentity.Compare(previous.RootElement, verdictIdentity);
+    if (mismatch is not null)
+    {
+        Console.Error.WriteLine($"Refusing to reuse {reuse}: {mismatch}. Run without reuse to compile current verdicts.");
+        return 3;
+    }
     foreach (JsonElement row in previous.RootElement.GetProperty("methods").EnumerateArray())
     {
         if (row.GetProperty("compiler").ValueKind != JsonValueKind.Object) continue;
@@ -333,7 +348,7 @@ var byAssembly = graph.Reached.Keys.GroupBy(m => set.All[m.Assembly].Name).Order
 
 var report = new
 {
-    schema = "standardwasm.winforms-census/1",
+    schema = "standardwasm.winforms-census/2",
     entry = new { id = Id(entry), name = set.Display(entry) },
     inputs = set.All.OrderBy(a => a.Name, StringComparer.Ordinal).Select(a => new
     {
@@ -347,6 +362,7 @@ var report = new
     }).ToList(),
     unresolvedAssemblies = set.UnresolvedAssemblies,
     excludedFromCompilerPack = excluded,
+    verdictIdentity,
     graph = new
     {
         model = "RTA: call/newobj/ldftn, callvirt/ldvirtftn to overrides in instantiated types, type and module initializers, finalizers",
@@ -395,7 +411,7 @@ File.WriteAllText(jsonPath, JsonSerializer.Serialize(report, options));
 var compactCompiler = new { report.compiler.entry, report.compiler.judged, report.compiler.compiles, report.compiler.blockedInOwnBody,
     report.compiler.blockedInClosure, report.compiler.exportAbiNoVerdict, report.compiler.notJudged, report.compiler.methodLevelSuspects,
     report.compiler.categoriesByOwnBody, report.compiler.categoriesByFirstBlocker, siteCount = sites.Count, sites = sites.Take(300) };
-var compact = new { report.schema, report.entry, report.inputs, report.unresolvedAssemblies, report.excludedFromCompilerPack,
+var compact = new { report.schema, report.entry, report.inputs, report.unresolvedAssemblies, report.excludedFromCompilerPack, report.verdictIdentity,
     report.graph, compiler = compactCompiler, report.features, report.pinvoke };
 File.WriteAllText(Path.Combine(output, "census-summary.json"), JsonSerializer.Serialize(compact, options));
 if (results.Count > 0)
