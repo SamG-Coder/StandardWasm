@@ -17,5 +17,7 @@ compares these against the CLR:
 Roslyn constructs into locals in place (`ldloca; call .ctor`), so both the
 `newobj` form and the in-place form are exercised. The lowering is described
 in [decision 0042](../../docs/decisions/0042-value-type-construction.md).
-A constructor that calls an instance method on its receiver, and a `ref`
-argument to an ordinary method, are diagnosed at the call's IL offset.
+A constructor that calls a mutating instance method on its receiver is
+diagnosed at that method's write through `this`. Read-only methods are
+admitted by Stage 121 and decision 0049. A `ref` argument to an ordinary
+method is diagnosed at the call's IL offset.

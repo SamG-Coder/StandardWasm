@@ -113,6 +113,7 @@
     <ProjectReference Include="../demos/stage-111-value-construction/ValueConstructionDemo.csproj" />
     <ProjectReference Include="../demos/stage-119-framework-delegates/FrameworkDelegateDemo.csproj" />
     <ProjectReference Include="../demos/stage-115-sequential-reference-layouts/SequentialLayoutDemo.csproj" />
+    <ProjectReference Include="../demos/stage-121-value-instance-methods/ValueMethodDemo.csproj" />
     <ProjectReference Include="../demos/stage-103-handle-generic-constraints/HandleConstraintDemo.csproj" />
     <ProjectReference Include="../demos/stage-105-generic-method-bodies/GenericBodyDemo.csproj" />
     <ProjectReference Include="../demos/stage-102-nominal-enum-arguments/EnumArgumentDemo.csproj" />

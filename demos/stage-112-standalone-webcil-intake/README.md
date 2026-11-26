@@ -19,7 +19,11 @@ The runner compares the published entry token and metadata to the SDK's linked
 PE. It also checks that a missing resource, a changed resource and a native
 runtime Wasm substitution are rejected. Results are saved as `results.json`
 under the run directory. The comparison records the current compiler boundary
-before application execution. Localized satellite assemblies, alternate boot
+before application execution. `Program::<Main>` now links, including
+`TaskAwaiter::GetResult()` as a read-only value method (Stage 121). The
+boundary is `-2 [0, 1, -1]` in the async `Program::<Main>$`, whose state
+machine reaches `System.Threading.Tasks.VoidTaskResult`. That type is an empty
+struct with `ClassSize = 1`. Localized satellite assemblies, alternate boot
 formats and application rendering through StandardWasm remain future work.
 
 [webcil]: https://github.com/dotnet/runtime/blob/v10.0.10/docs/design/mono/webcil.md
