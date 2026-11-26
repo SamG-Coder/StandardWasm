@@ -3,9 +3,11 @@ export const decode = value => value?.i64 !== undefined ? BigInt(value.i64)
     : value?.f64 !== undefined ? Number(value.f64) : value;
 
 export function managedExceptionType(exports, error) {
+    if (!(error instanceof WebAssembly.Exception)) return null;
     const overflow = exports["\0overflow"];
-    return overflow instanceof WebAssembly.Tag && error instanceof WebAssembly.Exception && error.is(overflow)
-        ? "System.OverflowException" : null;
+    if (overflow instanceof WebAssembly.Tag && error.is(overflow)) return "System.OverflowException";
+    const divide = exports["\0divideByZero"];
+    return divide instanceof WebAssembly.Tag && error.is(divide) ? "System.DivideByZeroException" : null;
 }
 
 export function invoke(exports, method, inputs) {

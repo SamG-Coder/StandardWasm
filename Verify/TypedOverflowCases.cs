@@ -51,7 +51,7 @@ internal static class TypedOverflowCases
                 {
                     module = "BootstrapLibrary", method = "Compile", fixture = method,
                     inputs = new object[] { encoded, row }, generated = new { capacity, arguments, hex,
-                        exceptionType = typed && exception == typeof(OverflowException).FullName ? exception : null }, expected, exception
+                        exceptionType = typed ? exception : null }, expected, exception
                 });
             }
         }

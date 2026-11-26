@@ -68,7 +68,7 @@ namespace PortableCompiler
             }
             code[used++] = 0x03;
             code[used++] = 0x40;
-            if (catchRegion.Length != 0) used = OverflowCatchWasm.Begin(code, used);
+            if (catchRegion.Length != 0) used = ArithmeticCatchWasm.Begin(code, used);
             for (int pc = 0; pc < depths.Length; pc++)
             {
                 if (depths[pc] == 0) continue;
@@ -278,8 +278,14 @@ namespace PortableCompiler
                     }
                     else
                     {
+                        if (IsIntegerDivision(operand, type))
+                        {
+                            used = NumericLocal(code, used, right, rightType, width);
+                            code[used++] = type == I64 ? (byte)0x50 : (byte)0x45; // eqz
+                            used = ArithmeticExceptionWasm.ThrowIf(code, used, ArithmeticExceptionWasm.DivideTag);
+                        }
                         if (IsSignedIntegerDivision(operand, type))
-                            used = OverflowWasm.ThrowIf(code, IsMinAndMinusOne(code, used, type, left, right));
+                            used = ArithmeticExceptionWasm.ThrowIf(code, IsMinAndMinusOne(code, used, type, left, right));
                         used = NumericLocal(code, used, left, type, width);
                         used = NumericLocal(code, used, right, rightType, width);
                         if (type == I64 && IsShift(operand)) code[used++] = 0xad;
@@ -450,12 +456,13 @@ namespace PortableCompiler
                     else used = Const(code, used, kind == Branch || kind == Leave ? operand : next);
                     used = Local(code, used, 0x21, pcLocal);
                     code[used++] = 0x0c;
-                    code[used++] = catchRegion.Length == 0 ? (byte)1 : (byte)3;
+                    // Catch dispatch adds try_table and two destination blocks around the instruction if.
+                    code[used++] = catchRegion.Length == 0 ? (byte)1 : (byte)4;
                 }
                 code[used++] = 0x0b;
             }
             code[used++] = 0;
-            if (catchRegion.Length != 0) used = OverflowCatchWasm.End(code, used, pcLocal, catchRegion);
+            if (catchRegion.Length != 0) used = ArithmeticCatchWasm.End(code, used, pcLocal, catchRegion);
             code[used++] = 0x0b;
             code[used++] = 0;
             code[used++] = 0x0b;

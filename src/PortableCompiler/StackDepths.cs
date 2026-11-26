@@ -17,9 +17,13 @@ namespace PortableCompiler
             int head = 0, tail = 1;
             if (catchRegion.Length != 0)
             {
-                int handler = catchRegion[OverflowCatch.Resume];
-                depths[handler] = 1;
-                pending[tail++] = handler;
+                for (int kind = ArithmeticCatch.OverflowResume; kind <= ArithmeticCatch.DivideResume; kind++)
+                {
+                    int handler = catchRegion[kind];
+                    if (handler == 0 || depths[handler] != 0) continue;
+                    depths[handler] = 1; // Handler resumes after discarding the exception.
+                    pending[tail++] = handler;
+                }
             }
             while (head < tail)
             {
@@ -28,7 +32,7 @@ namespace PortableCompiler
                 int slot = pc * BranchIl.Width;
                 int kind = records[slot];
                 int depth = depths[pc] - 1;
-                if (catchRegion.Length != 0 && pc == catchRegion[OverflowCatch.TryStart] && depth != 0) return -1;
+                if (catchRegion.Length != 0 && pc == catchRegion[ArithmeticCatch.TryStart] && depth != 0) return -1;
                 int operand = records[slot + 1];
                 for (int i = 0; i < depth; i++)
                     stack[i] = states[pc * maximum + i];

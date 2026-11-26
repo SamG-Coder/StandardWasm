@@ -59,7 +59,7 @@ namespace PortableCompiler
                 ? WideConst(code, used, low, high)
                 : Const(code, used, low);
             code[used++] = NumericOpcode(comparison, source);
-            return OverflowWasm.ThrowIf(code, used);
+            return ArithmeticExceptionWasm.ThrowIf(code, used);
         }
 
         private static int GuardFloat(byte[] code, int used, int input, byte source, int width, bool unsigned)
@@ -77,7 +77,7 @@ namespace PortableCompiler
             code[used++] = source == F32 ? (byte)0x5d : (byte)0x63; // lt
             code[used++] = 0x71; // and
             code[used++] = 0x45; // eqz
-            return OverflowWasm.ThrowIf(code, used);
+            return ArithmeticExceptionWasm.ThrowIf(code, used);
         }
 
         private static int PowerOfTwo(byte[] code, int used, byte source, int exponent, int sign) =>

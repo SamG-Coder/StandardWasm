@@ -12,10 +12,14 @@ namespace PortableCompiler
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup, bool overflowTag)
+            byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup, int exceptionTags)
         {
             int typeOffset = objects[0] + FirstClassHeap;
             bool hasRemainder = remainderFixup != 0;
+            bool overflow = (exceptionTags & ExceptionTypes.Overflow) != 0;
+            bool divide = (exceptionTags & ExceptionTypes.DivideByZero) != 0;
+            // Keep the divide-by-zero index stable even in modules that never throw overflow.
+            int tagCount = divide ? 2 : overflow ? 1 : 0;
             int remainderIndex = functions + thunks[0];
             int totalFunctions = remainderIndex + (hasRemainder ? 1 : 0);
             var remainderBody = new byte[hasRemainder ? FloatRemainderWasm.BodyCapacity : 0];
@@ -44,10 +48,10 @@ namespace PortableCompiler
             // The entry and invocation list also share one fixed recursive type group.
             int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 1;
             if (hasRemainder) typeEntries++;
-            if (overflowTag) typeEntries++;
+            if (tagCount != 0) typeEntries++;
             int prefix = UnsignedSize(typeEntries) + 63 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
-            if (overflowTag) prefix += 3; // () -> () exception payload
+            if (tagCount != 0) prefix += 3; // () -> () exception payload
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;
             int functionSize = UnsignedSize(totalFunctions) + thunks[0];
@@ -75,10 +79,11 @@ namespace PortableCompiler
                 codeSize += code;
                 functionSize += index;
             }
-            int exportCount = exports.Length + (overflowTag ? 1 : 0);
-            int exportSize = UnsignedSize(exportCount) + (overflowTag ? OverflowWasm.ExportSize : 0);
+            int exportCount = exports.Length + (overflow ? 1 : 0) + (divide ? 1 : 0);
+            int exportSize = UnsignedSize(exportCount) + (overflow ? ArithmeticExceptionWasm.OverflowExportSize : 0) +
+                (divide ? ArithmeticExceptionWasm.DivideExportSize : 0);
             int tagType = typeOffset + functions + (hasRemainder ? 1 : 0);
-            int tagSize = 2 + UnsignedSize(tagType);
+            int tagSize = 1 + tagCount * (1 + UnsignedSize(tagType));
             for (int i = 0; i < exports.Length; i++)
             {
                 int name = (int)ImageBytes.U32(names, (uint)entryOffsets[i] + 4);
@@ -106,7 +111,7 @@ namespace PortableCompiler
             remaining = Reserve(remaining, functionSize);
             if (thunks[0] != 0)
                 remaining = Reserve(remaining, tableSize);
-            if (overflowTag)
+            if (tagCount != 0)
                 remaining = Reserve(remaining, tagSize);
             if (eventArgsEmpty)
                 remaining = Reserve(remaining, 8);
@@ -235,7 +240,7 @@ namespace PortableCompiler
                     cursor = ValueType(output, cursor, result);
             }
             if (hasRemainder) cursor = FloatRemainderWasm.WriteType(output, cursor);
-            if (overflowTag)
+            if (tagCount != 0)
             {
                 output[cursor++] = 0x60;
                 output[cursor++] = 0;
@@ -257,13 +262,16 @@ namespace PortableCompiler
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, thunks[0]);
             }
-            if (overflowTag)
+            if (tagCount != 0)
             {
                 // Tag sections precede globals and exports despite section ID 13.
                 cursor = Section(output, cursor, 13, tagSize);
-                output[cursor++] = 1;
-                output[cursor++] = 0; // exception attribute
-                cursor = Unsigned(output, cursor, tagType);
+                output[cursor++] = (byte)tagCount;
+                for (int tag = 0; tag < tagCount; tag++)
+                {
+                    output[cursor++] = 0; // exception attribute
+                    cursor = Unsigned(output, cursor, tagType);
+                }
             }
 
             if (eventArgsEmpty)
@@ -289,7 +297,8 @@ namespace PortableCompiler
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, exports[i]);
             }
-            if (overflowTag) cursor = OverflowWasm.WriteExport(output, cursor);
+            if (overflow) cursor = ArithmeticExceptionWasm.WriteOverflowExport(output, cursor);
+            if (divide) cursor = ArithmeticExceptionWasm.WriteDivideExport(output, cursor);
 
             if (thunks[0] != 0)
             {

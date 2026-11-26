@@ -137,7 +137,7 @@ namespace PortableCompiler
             var body = new int[6];
             var frameShape = new int[8];
             bool eventArgsEmpty = false;
-            bool overflowTag = false;
+            int exceptionTags = 0;
             var noCatch = new int[0];
 
             int activeOwner = 0;
@@ -158,15 +158,26 @@ namespace PortableCompiler
                 int status = MethodBodies.Read(image, rva, body);
                 if (status != 0)
                     return status == MethodBodies.Malformed ? -1 : -2;
-                int[] catchRegion = noCatch;
+                int[] catchRegion = noCatch, clauses = noCatch;
                 if (body[5] != 0)
                 {
-                    catchRegion = new int[OverflowCatch.Width];
-                    int regions = ExceptionRegions.Read(image, rva, body, catchRegion);
-                    if (regions < 0) return regions == ExceptionRegions.Capacity ? -2 : regions;
-                    if (regions != 1 || catchRegion[0] != 0 || !ExceptionTypes.IsOverflow(image, heaps, layout, catchRegion[5]))
-                        return -2;
-                    overflowTag = true;
+                    catchRegion = new int[ArithmeticCatch.Width];
+                    int regions = ExceptionRegions.Count(image, rva, body);
+                    if (regions < 0) return regions;
+                    if (regions == 0) return -2;
+                    clauses = new int[regions * ExceptionRegions.Width];
+                    int read = ExceptionRegions.Read(image, rva, body, clauses);
+                    if (read < 0) return read;
+                    for (int clause = 0; clause < clauses.Length; clause += ExceptionRegions.Width)
+                    {
+                        if (location.Length != 0) location[2] = clauses[clause + 3];
+                        if (clauses[clause] != 0) return -2;
+                        int mask = ExceptionTypes.ArithmeticMask(image, heaps, layout, clauses[clause + 5]);
+                        if (mask == 0) return -2;
+                        clauses[clause + 5] = mask;
+                    }
+                    if (location.Length != 0) location[2] = -1;
+                    exceptionTags |= ExceptionTypes.Arithmetic;
                 }
 
                 int parameters = arities[current];
@@ -224,7 +235,7 @@ namespace PortableCompiler
                     var states = new byte[body[1] * maximum];
                     if (catchRegion.Length != 0)
                     {
-                        status = OverflowCatch.Validate(records, catchRegion, location);
+                        status = ArithmeticCatch.Validate(records, clauses, catchRegion, location);
                         if (status < 0) return status;
                     }
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
@@ -235,8 +246,8 @@ namespace PortableCompiler
                     int capacity = body[1] * 64 + 32;
                     if (catchRegion.Length != 0)
                     {
-                        if (capacity > int.MaxValue - 64) return -3;
-                        capacity += 64;
+                        if (capacity > int.MaxValue - 128) return -3;
+                        capacity += 128;
                     }
                     if (locals > (int.MaxValue - capacity) / 3)
                         return -3;
@@ -258,14 +269,24 @@ namespace PortableCompiler
                         }
                         int pc = slot / BranchIl.Width;
                         int operation = records[slot + 1];
-                        if (depths[pc] != 0 &&
-                            (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion ||
-                             kind == BranchIl.Binary &&
-                             BranchIl.IsSignedIntegerDivision(operation, states[pc * maximum + depths[pc] - 2])))
+                        if (depths[pc] != 0)
                         {
-                            if (capacity > int.MaxValue - 48) return -3;
-                            capacity += 48;
-                            overflowTag = true;
+                            int tags = 0;
+                            if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion)
+                                tags = ExceptionTypes.Overflow;
+                            else if (kind == BranchIl.Binary)
+                            {
+                                byte type = states[pc * maximum + depths[pc] - 2];
+                                if (BranchIl.IsIntegerDivision(operation, type))
+                                    tags = BranchIl.IsSignedIntegerDivision(operation, type)
+                                        ? ExceptionTypes.Arithmetic : ExceptionTypes.DivideByZero;
+                            }
+                            if (tags != 0)
+                            {
+                                if (capacity > int.MaxValue - 64) return -3;
+                                capacity += 64;
+                                exceptionTags |= tags;
+                            }
                         }
                         if ((kind != BranchIl.Call && kind != BranchIl.NewObject) ||
                             depths[slot / BranchIl.Width] == 0)
@@ -306,7 +327,7 @@ namespace PortableCompiler
             }
             CompileLocation.Clear(location);
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], eventArgsEmpty, remainderFixup[0], overflowTag);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], eventArgsEmpty, remainderFixup[0], exceptionTags);
         }
 
         private static int LinkOperands(byte[] main, byte[] bundle, int[] ranges, byte[] image, int[] layout,

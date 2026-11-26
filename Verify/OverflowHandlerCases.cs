@@ -72,7 +72,7 @@ internal static class OverflowHandlerCases
                 {
                     expected = null;
                     exception = error.GetType().FullName;
-                    if (error is OverflowException) exceptionType = exception;
+                    exceptionType = exception;
                 }
                 cases.Add(new
                 {

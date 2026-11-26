@@ -22,14 +22,14 @@ namespace PortableCompiler
                 {
                     // Intercept the one overflowing Wasm division before using it as a check.
                     used = IsMinAndMinusOne(code, used, type, left, right);
-                    used = OverflowWasm.ThrowIf(code, used);
+                    used = ArithmeticExceptionWasm.ThrowIf(code, used);
                 }
                 used = Operation(code, used, operation, type, left, right);
                 used = Local(code, used, 0x20, right);
                 code[used++] = NumericOpcode(unsigned ? 0x6e : 0x6d, type);
                 used = Local(code, used, 0x20, left);
                 code[used++] = NumericOpcode(0x47, type); // ne
-                used = OverflowWasm.ThrowIf(code, used);
+                used = ArithmeticExceptionWasm.ThrowIf(code, used);
                 code[used++] = 0x0b;
             }
             else if (unsigned)
@@ -42,7 +42,7 @@ namespace PortableCompiler
                     used = Local(code, used, 0x20, left);
                 used = Local(code, used, 0x20, operation == 0x6a ? left : right);
                 code[used++] = NumericOpcode(0x49, type); // lt_u
-                used = OverflowWasm.ThrowIf(code, used);
+                used = ArithmeticExceptionWasm.ThrowIf(code, used);
             }
             else
             {
@@ -61,7 +61,7 @@ namespace PortableCompiler
                 code[used++] = type == I32 ? (byte)0x41 : (byte)0x42;
                 code[used++] = 0; // integer zero
                 code[used++] = NumericOpcode(0x48, type); // lt_s
-                used = OverflowWasm.ThrowIf(code, used);
+                used = ArithmeticExceptionWasm.ThrowIf(code, used);
             }
             return Operation(code, used, operation, type, left, right);
         }
