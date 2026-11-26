@@ -26,8 +26,14 @@ namespace PortableCompiler
             if (known != 0) return ObjectLayouts.IsValueType(objects, known) == valueType ? known : -2;
             if (depth >= ObjectLayouts.MaxClasses) return -2;
             var shape = new int[5];
-            int status = GenericParameters.Check(image, heaps, layout, row, arguments, objects);
+            var deferred = new int[8];
+            int status = GenericParameters.Check(image, heaps, layout, row, arguments, objects, deferred);
             if (status < 0) return status;
+            if (status != 0)
+            {
+                status = BundleConstraints.Check(main, bundle, ranges, image, layout, heaps, owner, objects, arguments, deferred);
+                if (status < 0) return status;
+            }
             status = ObjectLayouts.ReadShape(image, heaps, layout, row, shape, valueType);
             if (status != 0) return status;
             int parent = 0;
