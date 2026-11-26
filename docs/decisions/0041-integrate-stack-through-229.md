@@ -1,4 +1,4 @@
-# 0038 · Land the stacked PRs through #229 as one integration merge
+# 0041 · Land the stacked PRs through #229 as one integration merge
 
 By 2026-11-26 about seventy stacked PRs (#51 through #229, plus the side
 branches #93 → #153 → #155 and #86 → #139) were waiting on each other. Each
@@ -27,17 +27,13 @@ This is a one-time deviation from the per-PR READY/APPROVE step in
 AGENTS.md. The individual PRs were reviewed at their own heads, and most
 were approved. The integration PR is tested as a whole, and Codex
 re-attests it after it merges. Open review points do not block the merge.
-The integration includes the fixes Codex pushed for #64, #79, #147, #181
-and #205, but those fixes have no independent review at their own heads
-yet. Each one becomes a follow-up issue for that review:
+The integration includes the independently reviewed fixes from #64, #79,
+#147, #181 and #205. The final revision also preserves the latest reviewed
+heads of #139, #147, #183 and #208.
 
-- #147: a null-receiver `NewDelegate` trapped under `catch (Exception)`.
-- #181: neither of the two type-forwarding guards had a fixture.
-- #205: the platform check in `ValueBase` had no fixture.
-- #64 and #79: their REQUEST CHANGES points.
-
-#231 stays out of the integration because of its 4,096-entry cap defect.
-It, and the PRs stacked above it, are rebased onto main separately.
+#231 and the PRs above it stay out under the selected scope. #241 also
+stays out, so #227 remains open for its current console follow-up. Keep every
+other in-scope PR open until its live head is included in main.
 
 ## Integration choices
 
