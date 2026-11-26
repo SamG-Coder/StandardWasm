@@ -119,6 +119,37 @@ namespace PeLibrary
             return 0;
         }
 
+        // Stage 129 (decision 0057). Return the type's .cctor MethodDef row, or
+        // zero when it has none. flags[0] receives 1 for a BeforeFieldInit type.
+        // A second initializer or one with another shape is malformed for this
+        // compiler and stays an explicit diagnostic.
+        internal static int Find(byte[] image, int[] layout, int[] heaps, int type, int[] flags)
+        {
+            var counts = new int[45];
+            if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0 ||
+                type < 1 || type > counts[2]) return -1;
+            int strings = layout[2];
+            int fields = counts[4] < 65536 ? 2 : 4;
+            int methods = counts[6] < 65536 ? 2 : 4;
+            int extends = counts[2] < 16384 && counts[1] < 16384 && counts[27] < 16384 ? 2 : 4;
+            int methodColumn = 4 + 2 * strings + extends + fields;
+            int rowWidth = methodColumn + methods;
+            uint definition = (uint)TypeDefinition(layout, counts, type);
+            uint at = definition + (uint)methodColumn;
+            int first = MethodIndex(image, at, methods);
+            int end = type == counts[2] ? counts[6] + 1 : MethodIndex(image, at + (uint)rowWidth, methods);
+            if (first < 1 || end < first || end > counts[6] + 1) return -1;
+            flags[0] = (U32(image, definition) & 0x00100000) != 0 ? 1 : 0;
+            int found = 0;
+            for (int row = first; row < end; row++)
+            {
+                if (!MethodNames.IsInitializer(image, layout, heaps, row)) continue;
+                if (found != 0 || !HasInitializerShape(image, layout, heaps, row)) return -2;
+                found = row;
+            }
+            return found;
+        }
+
         private static bool HasInitializerShape(byte[] image, int[] layout, int[] heaps, int row)
         {
             int attributes = MethodDefinitions.ReadColumn(image, layout, row, 2);
