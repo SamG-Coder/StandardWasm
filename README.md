@@ -55,6 +55,8 @@ instance.exports.SumSquares(10); // 385
 
 Stage 13 compares the portable compiler's CLR output with three Wasm generations built from the same DLL and export manifest. Each generated compiler provides its own byte transport. The second generation replays the portable generated-code fixtures in Node and Edge. See the [Stage 13 instructions](demos/stage-13-complete-bootstrap/README.md). Stage 23 adds [portable assembly bundle linking](demos/stage-23-assembly-linking/README.md). Stage 24 adds [portable 64-bit scalar integers](demos/stage-24-portable-i64/README.md) and linked calls with an exact BigInt boundary.
 
+After `npm test`, run `npm run audit:portable` to compile the direct CLR fixtures with the saved Wasm compiler. Use `--compiler path/to/compiler.wasm` after the npm argument separator to audit another compiler against the same fixture DLLs. The JSON report separates matching returns, matching typed managed exceptions, and accepted legacy traps. A legacy trap counts toward the historical pass total only when the CLR fixture expected an exception. Use `--require-complete` to fail the run if either engine misses any case in that total.
+
 ## Source map and bootstrap dependencies
 
 - `Compiler/ModuleCompiler.cs` selects exports, links reachable methods and maps CLR types.
