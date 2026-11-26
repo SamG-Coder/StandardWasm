@@ -27,6 +27,18 @@ Run("NullRect", Pattern(5), []);
 Run("Walk", Pattern(5), [Pointer(0), Int(8)]);
 Run("Walk", Pattern(9), [Pointer(128), Int(0)]);
 
+// Pack and Size: the CLR measures them (5 and 12), and the compiler diagnoses the sizeof (-2).
+foreach (string name in new[] { "PackedSize", "SizedSize" })
+{
+    MethodInfo method = kernels.GetMethod(name)!;
+    int clr = (int)method.Invoke(null, null)!;
+    int row = method.MetadataToken & 0xffffff;
+    // sizeof is the first instruction: FE 1C <token> at offset 0.
+    if (method.GetMethodBody()!.GetILAsByteArray()![0] != 0xfe) throw new InvalidOperationException(name + " does not start with sizeof");
+    cases.Add(new { name, row, image = Pattern(0), arguments = Array.Empty<object>(), result = "Int32", expected = clr.ToString(),
+        after = Pattern(0), status = -2, diagnostic = new[] { 0, row, 0 } });
+}
+
 File.WriteAllText(Path.Combine(evidence, "oracle.json"), JsonSerializer.Serialize(new
 {
     fixture, imageSize = ImageSize, cases, runtime = Environment.Version.ToString(),

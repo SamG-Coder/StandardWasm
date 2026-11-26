@@ -19,8 +19,14 @@ namespace StructPointerFixture
     public struct WithStatic { public static long Shared; public byte B; }
     public struct Mixed { public byte B; public long L; public short S; public double D; }
 
+    // Pack and Size change the CLR byte layout: sizeof stays a located diagnostic (x86 CLR: 5, 12).
+    [StructLayout(LayoutKind.Sequential, Pack = 1)] public struct Packed { public byte B; public int I; }
+    [StructLayout(LayoutKind.Sequential, Size = 12)] public struct Sized { public int I; }
+
     public static unsafe class Kernels
     {
+        public static int PackedSize() => sizeof(Packed);
+        public static int SizedSize() => sizeof(Sized);
         public static int ByteLongSize() => sizeof(ByteLong);
         public static int ByteDoubleSize() => sizeof(ByteDouble);
         public static int ByteIntSize() => sizeof(ByteInt);

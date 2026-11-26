@@ -25,7 +25,9 @@ its 4-byte native width.
 - **Enums.** An enum has auto layout and a single `value__` field, and takes
   its underlying size.
 - **Still diagnosed:** other auto-layout and explicit-layout structs, `Pack` and
-  `Size`, structs with reference fields, `sizeof(T)` over a generic parameter,
+  `Size` (checked with the same ClassLayout rule as registration: Codex's review
+  of #294 found `Pack = 1` `{byte, int}` = 5 on the x86 CLR, while natural
+  alignment gives 8), structs with reference fields, `sizeof(T)` over a generic parameter,
   and `IsByRefLike` structs, which hold byrefs.
 - **Inline arrays.** `[InlineArray(n)]` (Stage 138, decision 0066) repeats its
   single declared field n times, so it measures as n times the aligned element.

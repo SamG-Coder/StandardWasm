@@ -38,6 +38,10 @@ namespace PortableCompiler
             // hold byrefs and stay diagnosed (decision 0071).
             int inlineLength = ObjectLayouts.CheckValueAttributes(image, heaps, layout, type);
             if (inlineLength < 0) return inlineLength;
+            // [StructLayout(Pack = n)] and Size change the CLR's byte layout (Codex review of
+            // #294: Pack=1 {byte, int} is 5 on the x86 CLR). They stay diagnosed.
+            int packing = ObjectLayouts.CheckDefaultPacking(image, heaps, layout, type);
+            if (packing < 0) return packing;
 
             int strings = layout[2];
             int fieldIndex = counts[4] < 65536 ? 2 : 4;

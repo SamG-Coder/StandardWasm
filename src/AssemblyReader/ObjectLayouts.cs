@@ -718,6 +718,29 @@ namespace PeLibrary
             return ValueTypeAttributes.ReadInlineArrayLength(image, streams, methods, counts, row, refs, refWidth, defs, defWidth);
         }
 
+        // Zero when the type has no ClassLayout packing or size, otherwise -2. Byte-level
+        // views (sizeof, struct pointers) use natural alignment, which Pack and Size change.
+        internal static int CheckDefaultPacking(byte[] image, int[] streams, int[] methods, int row)
+        {
+            var counts = new int[45];
+            int start = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
+            if (start < 0 || row < 1 || row > counts[2]) return -1;
+            int strings = methods[2];
+            int refs = TypeRefStart(image, streams, counts, start, strings);
+            int defs = refs + counts[1] * (ResolutionWidth(counts) + 2 * strings);
+            int fieldIndex = IndexWidth(counts[4]);
+            int fieldColumn = 4 + 2 * strings + CodedWidth(counts[2], counts[1], counts[27]);
+            int defWidth = fieldColumn + fieldIndex + IndexWidth(counts[6]);
+            uint def = (uint)(defs + (row - 1) * defWidth);
+            uint first = ReadIndex(image, def + (uint)fieldColumn, fieldIndex);
+            uint end = row == counts[2] ? (uint)(counts[4] + 1) : ReadIndex(image, def + (uint)(fieldColumn + defWidth), fieldIndex);
+            if (first < 1 || end < first || end > (uint)(counts[4] + 1)) return -1;
+            // Decision 0058: a sequential value with no instance fields may declare Size = 1.
+            bool sequential = (U32(image, def) & 0x18) == 0x08;
+            return DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]),
+                sequential ? defs + counts[2] * defWidth : 0, first, end);
+        }
+
         private static int TypeRefStart(byte[] image, int[] streams, int[] counts, int first, int strings) =>
             first + counts[0] * (2 + strings + 3 * ((image[streams[4] + 6] & 2) == 0 ? 2 : 4));
 

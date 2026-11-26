@@ -46,6 +46,22 @@ async function runCases(compiler, fixture, cases, imageSize) {
     const bundle = upload(packed);
     const compiled = new Map();
 
+    // A located diagnostic: the compiler returns status at [module, row, IL offset] and
+    // leaves the output buffer untouched.
+    function diagnose(test) {
+        const entries = new Uint8Array(11);
+        new DataView(entries.buffer).setUint32(0, test.row, true);
+        entries[4] = 3;
+        entries.set([0x72, 0x75, 0x6e], 8);
+        for (let i = 0; i < 4096; i++) build.SetByte(output, i, 0xa5);
+        const status = build.CompileBundleDetailed(bundle, upload(entries), output, location);
+        const diagnostic = [0, 1, 2].map(i => build.ReadDiagnostic(location, i));
+        if (status !== test.status || diagnostic.join() !== test.diagnostic.join())
+            throw Error(test.name + " returned " + status + " at " + diagnostic + ", expected " + test.status + " at " + test.diagnostic);
+        for (let i = 0; i < 4096; i++) if (build.ReadByte(output, i) !== 0xa5) throw Error(test.name + " changed the output on failure");
+        return { name: test.name, status, diagnostic, clr: test.expected };
+    }
+
     async function module(row) {
         if (compiled.has(row)) return compiled.get(row);
         const entries = new Uint8Array(11);
@@ -66,6 +82,7 @@ async function runCases(compiler, fixture, cases, imageSize) {
 
     const results = [];
     for (const test of cases) {
+        if (test.status !== undefined) { results.push(diagnose(test)); continue; }
         const memory = new WebAssembly.Memory({ initial: 1 });
         const bytes = new Uint8Array(memory.buffer);
         bytes.set(test.image, base);
@@ -118,5 +135,6 @@ try {
     }, null, 2) + "\n");
     const values = node.filter(result => result.value !== undefined).length;
     console.log("Node " + process.version + " and Edge " + browser.version() + " matched " + values +
-        " sizeof and struct-pointer results and memory images from the x86 CLR " + oracle.runtime + ".");
+        " sizeof and struct-pointer results and memory images from the x86 CLR " + oracle.runtime + "; Pack and Size stay " +
+        node.filter(result => result.status !== undefined).length + " located diagnostics.");
 } finally { await browser.close(); }
