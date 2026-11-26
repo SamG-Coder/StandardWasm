@@ -2,7 +2,7 @@
 
 Run `npm run demo -- stage-37-primitive-arrays` from the root after `npm ci`. Expected output is `CountPrimes(100) = 25`, from a sieve over a `bool[]`.
 
-Buffers.cs is ordinary array code over every primitive element width: a `bool[]` sieve, `long[]` prefix sums, `double[]` mean and variance, a single-precision `float[]` dot product, a `char[]` Caesar cipher, `uint[]` unsigned maxima, and packed-cell wraparound through `short[]`, `ushort[]`, `char[]` and `sbyte[]`. Each element type maps to a Wasm GC array (`Compiler/ArrayKinds.cs`):
+Buffers.cs is ordinary array code over every primitive element width: a `bool[]` sieve, `long[]` prefix sums, `double[]` mean and variance, a single-precision `float[]` dot product, a `char[]` Caesar cipher, `uint[]` unsigned maxima, and packed-cell wraparound through `short[]`, `ushort[]`, `char[]` and `sbyte[]`. Each element type maps to a Wasm GC array (`src/PortableCompiler/SignatureTypes.cs`):
 
 | CLR element | Wasm storage | Loads |
 | --- | --- | --- |

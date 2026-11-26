@@ -24,6 +24,11 @@ const realsDemo = demos.find(d => d.assembly === "FloatingPoint");
 const mathDemo = demos.find(d => d.assembly === "MathIntrinsics");
 const arraysDemo = demos.find(d => d.assembly === "PrimitiveArrays");
 
+// Select an ordinary non-ASCII CLR method name through the public CLI path.
+compile(scalarDemo.dll, "Sample.ExportNames", "artifacts/ExportNames.wasm");
+const { instance: namedExports } = await WebAssembly.instantiate(readFileSync("artifacts/ExportNames.wasm"));
+assert.equal(namedExports.exports["Café"](7), 8);
+
 // The portable compiler implements the checked operations that the earlier CLI rejected.
 for (const [dll, type, member, input, expected, overflow] of [
     [scalarDemo.dll, "Sample.CheckedArithmetic", "Increment", 10, 11, 2147483647],
