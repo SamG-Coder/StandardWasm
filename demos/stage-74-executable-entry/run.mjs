@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { root, run } from "../../scripts/toolchain.mjs";
 import { openExecutable } from "../stage-73-executable-intake/loader/intake.mjs";
-import { serveIntake } from "../stage-73-executable-intake/server.mjs";
+import { serveLaunch } from "./launch-server.mjs";
 import { runManagedEntry } from "./launch.mjs";
 
 const stage = "demos/stage-74-executable-entry";
@@ -17,12 +17,7 @@ if (!serve) {
 }
 if (!existsSync(compiler)) throw Error("Build the self-hosted compiler with npm test first.");
 
-const assets = new Map([
-    ["/StandardWasm.Compiler.wasm", ["application/wasm", compiler]],
-    ["/launch/launch.mjs", ["text/javascript", join(root, stage, "launch.mjs")]],
-    ["/launch/launch-worker.mjs", ["text/javascript", join(root, stage, "launch-worker.mjs")]]
-]);
-const { url, close } = await serveIntake(serve ? 5174 : 0, assets);
+const { url, close } = await serveLaunch(serve ? 5174 : 0, compiler);
 const launchUrl = url + "/?run";
 if (serve) console.log("Local executable launch at " + launchUrl);
 else {

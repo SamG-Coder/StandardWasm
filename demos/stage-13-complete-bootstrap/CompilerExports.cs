@@ -10,6 +10,8 @@ namespace BootstrapLibrary
             PortableCompiler.MethodCompiler.Compile(image, row, output);
         public static int CompileModule(byte[] image, byte[] entries, byte[] output) =>
             PortableCompiler.MethodCompiler.CompileExports(image, entries, output);
+        public static int CompileBundle(byte[] bundle, byte[] entries, byte[] output) =>
+            PortableCompiler.MethodCompiler.CompileBundle(bundle, entries, output);
         public static int BootstrapKernel(int value) => value * 2 + 1;
     }
 }

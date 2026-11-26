@@ -6,8 +6,20 @@ const staged = new Map();
 let revision = 0;
 const run = document.querySelector("#run");
 run.hidden = !new URLSearchParams(location.search).has("run");
+document.querySelector("#framework-option").hidden = run.hidden;
+const framework = document.querySelector("#framework");
 let selection, active;
-run.addEventListener("click", () => {
+framework.addEventListener("change", () => {
+    const wasRunning = Boolean(active);
+    active?.();
+    run.disabled = !selection;
+    if (wasRunning) {
+        revision++;
+        status.dataset.state = "ready";
+        status.textContent = "Framework files changed. Ready to compile.";
+    }
+});
+run.addEventListener("click", async () => {
     if (!selection) return;
     const current = revision;
     const worker = new Worker("/launch/launch-worker.mjs", { type: "module" });
@@ -21,7 +33,9 @@ run.addEventListener("click", () => {
         status.textContent = message;
         run.disabled = false;
     }
-    const deadline = setTimeout(() => finish("error", "The local entry did not finish within 15 seconds."), 15000);
+    const frameworkFiles = [...framework.files];
+    const timeout = frameworkFiles.length ? 300 : 15;
+    const deadline = setTimeout(() => finish("error", `The local entry did not finish within ${timeout} seconds.`), timeout * 1000);
     const cancel = () => {
         clearTimeout(deadline);
         worker.terminate();
@@ -32,8 +46,14 @@ run.addEventListener("click", () => {
         ? finish("error", data.error)
         : finish(data.result.state, JSON.stringify(data.result, null, 2));
     worker.onerror = () => finish("error", "The local launch worker failed.");
-    const { entry, entryToken, config, deps } = selection;
-    worker.postMessage({ entry, entryToken, config, deps });
+    try {
+        const framework = await Promise.all(frameworkFiles.map(async file => ({
+            path: file.name, bytes: new Uint8Array(await file.arrayBuffer())
+        })));
+        if (current === revision && active === cancel) worker.postMessage({ ...selection, framework });
+    } catch (error) {
+        finish("error", error.message);
+    }
 });
 drop.style.cssText = "border: 2px dashed; padding: 2rem; max-width: 28rem";
 drop.addEventListener("dragover", event => event.preventDefault());

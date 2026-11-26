@@ -6,6 +6,8 @@ namespace TextIdentityProbe
     {
         public static int ConcatLength() => ThirdParty::System.String.Concat("a", "b").Length;
 
+        public static int ConcatScalar(int value) => ThirdParty::System.String.Concat(value, 11);
+
         public static int Construct() => new ThirdParty::System.String(new char[3]).Length;
 
         public static int Allocate()

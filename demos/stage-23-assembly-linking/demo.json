@@ -1,0 +1,1 @@
+{"assembly":"BundleLibrary","exportType":"BundleLibrary.BundleDemo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["SharedMath.dll","LeafMath.dll"]},{"name":"Calculate"}],"generated":{"bundle":true,"capacity":32768,"arguments":[9]},"expected":89}

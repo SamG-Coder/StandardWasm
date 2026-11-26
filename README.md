@@ -53,7 +53,7 @@ instance.exports.SumSquares(10); // 385
 
 ## Self-recompilation
 
-Stage 13 compares the portable compiler's CLR output with three Wasm generations built from the same DLL and export manifest. Each generated compiler provides its own byte transport. The second generation replays the portable generated-code fixtures in Node and Edge. See the [Stage 13 instructions](demos/stage-13-complete-bootstrap/README.md).
+Stage 13 compares the portable compiler's CLR output with three Wasm generations built from the same DLL and export manifest. Each generated compiler provides its own byte transport. The second generation replays the portable generated-code fixtures in Node and Edge. See the [Stage 13 instructions](demos/stage-13-complete-bootstrap/README.md). Stage 23 adds [portable assembly bundle linking](demos/stage-23-assembly-linking/README.md).
 
 ## Source map and bootstrap dependencies
 
