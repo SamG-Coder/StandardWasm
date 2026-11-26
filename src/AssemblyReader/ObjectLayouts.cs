@@ -682,6 +682,22 @@ namespace PeLibrary
             return 0;
         }
 
+        // Zero for an ordinary value type. A layout-changing attribute (InlineArray,
+        // IsByRefLike) returns a diagnostic, so a byte-level size is never undercounted.
+        internal static int CheckValueAttributes(byte[] image, int[] streams, int[] methods, int row)
+        {
+            var counts = new int[45];
+            int start = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
+            if (start < 0 || row < 1 || row > counts[2]) return -1;
+            int strings = methods[2];
+            int refs = TypeRefStart(image, streams, counts, start, strings);
+            int refWidth = ResolutionWidth(counts) + 2 * strings;
+            int defs = refs + counts[1] * refWidth;
+            int defWidth = 4 + 2 * strings + CodedWidth(counts[2], counts[1], counts[27]) +
+                IndexWidth(counts[4]) + IndexWidth(counts[6]);
+            return ValueTypeAttributes.CheckSupported(image, streams, methods, counts, row, refs, refWidth, defs, defWidth);
+        }
+
         private static int TypeRefStart(byte[] image, int[] streams, int[] counts, int first, int strings) =>
             first + counts[0] * (2 + strings + 3 * ((image[streams[4] + 6] & 2) == 0 ? 2 : 4));
 

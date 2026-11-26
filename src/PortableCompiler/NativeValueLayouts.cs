@@ -34,6 +34,10 @@ namespace PortableCompiler
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0 || type < 1 || type > counts[2]) return -1;
+            // [InlineArray] repeats its field and ref structs hold byrefs: neither is
+            // measured from its declared field rows (decision 0071).
+            int attributes = ObjectLayouts.CheckValueAttributes(image, heaps, layout, type);
+            if (attributes < 0) return attributes;
 
             int strings = layout[2];
             int fieldIndex = counts[4] < 65536 ? 2 : 4;

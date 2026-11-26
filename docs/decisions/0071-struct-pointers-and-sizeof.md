@@ -25,8 +25,11 @@ its 4-byte native width.
 - **Enums.** An enum has auto layout and a single `value__` field, and takes
   its underlying size.
 - **Still diagnosed:** other auto-layout and explicit-layout structs, `Pack` and
-  `Size`, structs with reference fields, and `sizeof(T)` over a generic
-  parameter.
+  `Size`, structs with reference fields, `sizeof(T)` over a generic parameter,
+  and structs with a layout-changing attribute. `[InlineArray(n)]` repeats its
+  declared field n times, and `IsByRefLike` structs hold byrefs. Their declared
+  field rows don't give the size. Once Stage 138 (#292) lands, an inline array
+  measures as n times its element.
 - **Ground truth.** The x86 CLR 10.0.10: `{byte, long}` = 16, `{byte, void*,
   byte*}` = 12 (24 on x64), `{char, bool}` = 4, empty = 1.
 
