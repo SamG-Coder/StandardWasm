@@ -6,7 +6,7 @@ namespace PeLibrary
     {
         // Validate the exact AssemblyRef name, token and neutral culture.
         internal static bool IsPlatformAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row,
-            bool netstandardOnly = false, bool includeRuntimeExtensions = true, bool includeRuntime = true)
+            bool netstandardOnly = false, bool includeRuntimeExtensions = true, bool includeRuntime = true, bool includeMemory = false)
         {
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 35);
             if (table < 0 || row < 1 || row > counts[35]) return false;
@@ -21,9 +21,9 @@ namespace PeLibrary
             uint name = Index(image, at + (uint)(12 + blobs), strings);
             uint n = (uint)heaps[2] + name, size = (uint)heaps[3];
             if (name == 0) return false;
-            if (low == 0xff137bcc && high == 0x51dd2dcd) // netstandard
-                return Fits(name, 12, size) && U32(image, n) == 0x7374656e &&
-                    U32(image, n + 4) == 0x646e6174 && U32(image, n + 8) == 0x647261;
+            if (low == 0xff137bcc && high == 0x51dd2dcd) // netstandard, System.Memory
+                return MatchesAscii(image, heaps, name, "netstandard") ||
+                    includeMemory && !netstandardOnly && MatchesAscii(image, heaps, name, "System.Memory");
             if (netstandardOnly) return false;
             if (low == 0x565c7ab7 && high == 0x89e03419) // mscorlib
                 return Fits(name, 9, size) && U32(image, n) == 0x6f63736d &&

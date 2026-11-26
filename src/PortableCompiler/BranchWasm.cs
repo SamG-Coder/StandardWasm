@@ -6,7 +6,7 @@ namespace PortableCompiler
 {
     internal static class BranchWasm
     {
-        private const int ObjectLocationBank = PeLibrary.ConsoleStorage.Writer + 1, ObjectSpanBank = ObjectLocationBank + 1;
+        private const int ObjectLocationBank = PeLibrary.ConsoleStorage.Writer + 1, ReadOnlySpanBank = ObjectLocationBank + 1;
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
             byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection, int[] inlineLocations)
@@ -27,7 +27,7 @@ namespace PortableCompiler
             int stackPointer = frameShape[16] - 1, stackBase = frameShape[17] - 1, stackLimit = frameShape[18] - 1;
             int resourceFunction = frameShape[19] - 1;
             bool hasNull = outgoingNulls.Length != 0;
-            int spillKinds = ObjectSpanBank + classes;
+            int spillKinds = ReadOnlySpanBank + classes;
             // V8 counts parameters together with function locals. Reject
             // before emitting a body that Node and Edge cannot instantiate.
             const int MaxLocals = 50000;
@@ -72,9 +72,9 @@ namespace PortableCompiler
                 {
                     used = WasmBinary.Unsigned(code, used, maximum);
                     int type = kind == NativeZero ? NativeVector :
-                        kind == ObjectLocationBank ? ObjectLocation : kind == ObjectSpanBank ? ObjectSpan : kind;
-                    if (kind > ObjectSpanBank)
-                        type = FirstClass + kind - ObjectSpanBank - 1;
+                        kind == ObjectLocationBank ? ObjectLocation : kind == ReadOnlySpanBank ? ObjectSpan : kind;
+                    if (kind > ReadOnlySpanBank)
+                        type = FirstClass + kind - ReadOnlySpanBank - 1;
                     used = WasmBinary.ValueType(code, used, Representation(objects, type));
                 }
             }
@@ -615,19 +615,28 @@ namespace PortableCompiler
                     int vector = Spill(spills, maximum, operand, top - 1);
                     int count = Spill(spills, maximum, I32, top);
                     int resultSpill = Spill(spills, maximum, ObjectSpan, top - 1);
-                    used = ObjectSpanWasm.Create(code, used, vector, count, resultSpill);
+                    used = ReadOnlySpanWasm.Create(code, used, vector, count, resultSpill);
                 }
-                else if (kind == ObjectSpanLength)
+                else if (kind == StringAsSpan)
                 {
-                    used = ObjectSpanWasm.Length(code, used, Spill(spills, maximum, ObjectSpan, top));
+                    int source = Spill(spills, maximum, states[state + top], top);
+                    used = ReadOnlySpanWasm.FromString(code, used, source);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, CharacterSpan, top));
+                }
+                else if (kind == SpanLength)
+                {
+                    int type = records[slot + 3];
+                    used = ReadOnlySpanWasm.Length(code, used, Spill(spills, maximum, type, top));
                     used = Local(code, used, 0x21, Spill(spills, maximum, I32, top));
                 }
-                else if (kind == ObjectSpanRead)
+                else if (kind == SpanRead)
                 {
-                    int view = Spill(spills, maximum, ObjectSpan, top - 1);
+                    int type = records[slot + 3];
+                    int view = Spill(spills, maximum, type, top - 1);
                     int index = Spill(spills, maximum, I32, top);
-                    used = ObjectSpanWasm.Read(code, used, operand, view, index);
-                    used = Local(code, used, 0x21, Spill(spills, maximum, ObjectReference, top - 1));
+                    used = ReadOnlySpanWasm.Read(code, used, operand, view, index);
+                    int resultType = type == CharacterSpan ? I32 : ObjectReference;
+                    used = Local(code, used, 0x21, Spill(spills, maximum, resultType, top - 1));
                 }
                 else if (kind == ObjectElementAddress)
                 {
@@ -1025,8 +1034,8 @@ namespace PortableCompiler
             // for native arrays without increasing the engine's local pressure.
             type == ConstructorAddress ? I32 - 1 :
             PeLibrary.RuntimeTypeMetadata.IsStorage(type) || IsValueLocation(type) ? ObjectReference - 1 :
-            type == ObjectLocation ? ObjectLocationBank - 1 : type == ObjectSpan ? ObjectSpanBank - 1 :
-            type >= FirstClass ? ObjectSpanBank + type - FirstClass :
+            type == ObjectLocation ? ObjectLocationBank - 1 : IsReadOnlySpan(type) ? ReadOnlySpanBank - 1 :
+            type >= FirstClass ? ReadOnlySpanBank + type - FirstClass :
                 (type == NativeZero ? Native : type == NativeVector ? NativeZero : type) - 1;
 
         internal static int LoadOperand(byte[] code, int used, int local, int source, int target)

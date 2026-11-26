@@ -161,6 +161,7 @@ InlineArrayLayoutCases.Add(cases);
 ManagedObjectByrefCases.Add(cases);
 InlineObjectAddressCases.Add(cases);
 ObjectReadOnlySpanCases.Add(cases);
+CharacterReadOnlySpanCases.Add(cases);
 GenericBaseCases.Add(cases);
 RuntimeTypeCases.Add(cases);
 StringVectorCases.Add(cases);

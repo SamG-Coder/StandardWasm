@@ -14,8 +14,8 @@ namespace PortableCompiler
         internal const int RootObjectHeap = NativeArrayHeap + 1;
         internal const int ValueLocationHeap = RootObjectHeap + 1;
         private const int ObjectLocationHeap = ValueLocationHeap + 1;
-        private const int ObjectSpanHeap = ObjectLocationHeap + 1;
-        private const int FirstClassHeap = ObjectSpanHeap + 1;
+        private const int ReadOnlySpanHeap = ObjectLocationHeap + 1;
+        private const int FirstClassHeap = ReadOnlySpanHeap + 1;
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
@@ -95,7 +95,7 @@ namespace PortableCompiler
             if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
             if (hasDescriptors) typeEntries++;
             int prefix = UnsignedSize(typeEntries) + 70 + ManagedValueLocationWasm.TypeBytes +
-                ManagedObjectLocationWasm.TypeBytes + ObjectSpanWasm.TypeBytes + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+                ManagedObjectLocationWasm.TypeBytes + ReadOnlySpanWasm.TypeBytes + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (tagCount != 0) prefix += 3; // () -> () exception payload
             if (objectTag) prefix += ExceptionTagsWasm.ObjectTagTypeBytes; // (eqref) -> () managed object payload
@@ -291,7 +291,7 @@ namespace PortableCompiler
             output[cursor++] = 0;
             cursor = ManagedValueLocationWasm.WriteType(output, cursor);
             cursor = ManagedObjectLocationWasm.WriteType(output, cursor);
-            cursor = ObjectSpanWasm.WriteType(output, cursor);
+            cursor = ReadOnlySpanWasm.WriteType(output, cursor);
             if (recursive)
             {
                 output[cursor++] = 0x4e;
@@ -525,7 +525,7 @@ namespace PortableCompiler
                 type == EventArgsReference ? EventArgsHeap :
                 type == EventHandlerReference ? EventHandlerHeap :
                 type == Singles ? SingleArrayHeap : type == Doubles ? DoubleArrayHeap :
-                type == NativeVector ? NativeArrayHeap : type == ObjectLocation ? ObjectLocationHeap : type == ObjectSpan ? ObjectSpanHeap :
+                type == NativeVector ? NativeArrayHeap : type == ObjectLocation ? ObjectLocationHeap : IsReadOnlySpan(type) ? ReadOnlySpanHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;
 
         // Positive heap indices are encoded as signed LEB values. The sign

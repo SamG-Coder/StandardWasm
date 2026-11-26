@@ -165,11 +165,13 @@ namespace PortableCompiler
             if (kind == NewObjectSpan)
                 return depth >= 2 && stack[depth - 2] == operand && stack[depth - 1] == I32
                     ? Push(stack, allocated, depth - 2, ObjectSpan) : -2;
-            if (kind == ObjectSpanLength)
-                return Match(stack, depth, ObjectSpan) ? Push(stack, allocated, depth - 1, I32) : -2;
-            if (kind == ObjectSpanRead)
-                return Match(stack, depth - 1, ObjectSpan) && Match(stack, depth, I32)
-                    ? Push(stack, allocated, depth - 2, ObjectReference) : -2;
+            if (kind == StringAsSpan)
+                return Match(stack, depth, String) ? Push(stack, allocated, depth - 1, CharacterSpan) : -2;
+            if (kind == SpanLength)
+                return Match(stack, depth, extra) ? Push(stack, allocated, depth - 1, I32) : -2;
+            if (kind == SpanRead)
+                return Match(stack, depth - 1, extra) && Match(stack, depth, I32)
+                    ? Push(stack, allocated, depth - 2, extra == CharacterSpan ? I32 : ObjectReference) : -2;
             if (kind == ObjectElementAddress)
             {
                 if (depth < 2 || !ArrayIndex(stack, depth)) return -1;

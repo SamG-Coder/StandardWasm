@@ -158,14 +158,14 @@ namespace PortableCompiler
                 {
                     int type = signatures[offsets[index] + parameter];
                     if (CanExchangeClass(objects, type)) externalObjects = true;
-                    if (type == NullPointer || type == ObjectLocation || type == ObjectSpan || RuntimeTypeMetadata.IsStorage(type) || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
+                    if (type == NullPointer || type == ObjectLocation || IsReadOnlySpan(type) || RuntimeTypeMetadata.IsStorage(type) || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
                         return -2;
                 }
                 int result = signatures[offsets[index]];
                 // A foreign Wasm caller can mutate an escaped class or array
                 // that still has an alias inside the linked application.
                 if (CanExchangeClass(objects, result)) externalObjects = true;
-                if (result == NullPointer || result == ObjectSpan || RuntimeTypeMetadata.IsStorage(result) || ObjectLayouts.IsValueType(objects, result)) return -2;
+                if (result == NullPointer || IsReadOnlySpan(result) || RuntimeTypeMetadata.IsStorage(result) || ObjectLayouts.IsValueType(objects, result)) return -2;
                 exports[export] = index;
             }
             var body = new int[6];
@@ -505,7 +505,7 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.InvalidCast | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.CastClass)
                                 tags = ExceptionTypes.InvalidCast;
-                            else if (kind == BranchIl.ObjectSpanRead)
+                            else if (kind == BranchIl.SpanRead)
                                 tags = ExceptionTypes.IndexOutOfRange;
                             else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet || kind == BranchIl.StringCharacter ||
                                 kind == BranchIl.ObjectElementAddress)
@@ -722,10 +722,11 @@ namespace PortableCompiler
                     // The value-type this argument is already a managed address.
                     // ldarga.0 would instead take the address of that argument slot.
                     if (valueReceiver && records[slot + 1] == 0) return -2;
-                    if (frame[records[slot + 1]] == ObjectSpan)
+                    int type = frame[records[slot + 1]];
+                    if (IsReadOnlySpan(type))
                     {
-                        int span = ObjectSpanOperands.Bind(bundle, image, layout, heaps, owner, context, methodArguments,
-                            records, slot, objects, clauses);
+                        int span = ReadOnlySpanOperands.Bind(bundle, image, layout, heaps, owner, context, methodArguments,
+                            records, slot, type, objects, clauses);
                         if (span < 0) return span;
                         if (span != 0) continue;
                     }
@@ -948,6 +949,14 @@ namespace PortableCompiler
                 {
                     int status = StringLiterals.Lower(image, heaps, records, slot, literals, literalSize, globals);
                     if (status < 0) return status;
+                    continue;
+                }
+                if ((kind == BranchIl.Call || kind == BranchIl.MemberCall) && records[slot + 3] ==
+                    (kind == BranchIl.Call ? 0 : 0x28) && records[slot + BranchIl.Width + 1] == 0 &&
+                    (kind == BranchIl.MemberCall || (uint)(records[slot + 1] - 1) < (uint)(bases[owner + 1] - bases[owner])) &&
+                    ReadOnlySpanMetadata.StringAsSpan(image, layout, heaps, records[slot + 1], kind == BranchIl.MemberCall))
+                {
+                    records[slot] = BranchIl.StringAsSpan;
                     continue;
                 }
                 if (kind == BranchIl.MemberCall)
@@ -1577,7 +1586,7 @@ namespace PortableCompiler
         // Class slots have already resolved to an assembly-qualified layout.
         private static bool IsSharedBundleType(int type) =>
             IsScalar(type) || type == String || type == ObjectReference || type == NullPointer ||
-            RuntimeTypeMetadata.IsStorage(type) || IsArray(StackType(type)) || IsValueLocation(type) ||
+            RuntimeTypeMetadata.IsStorage(type) || IsReadOnlySpan(type) || IsArray(StackType(type)) || IsValueLocation(type) ||
             // The platform EventArgs and EventHandler representations are
             // compiler-owned and bound by identity, so every assembly shares them.
             type == EventArgsReference || type == EventHandlerReference ||

@@ -3,7 +3,7 @@ using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
-    internal static class ObjectSpanWasm
+    internal static class ReadOnlySpanWasm
     {
         internal const int TypeBytes = 8;
 
@@ -27,6 +27,29 @@ namespace PortableCompiler
             used = Local(code, used, 0x20, length);
             used = Gc(code, used, 0, ObjectSpan); // struct.new
             return Local(code, used, 0x21, target);
+        }
+
+        // String.AsSpan views the original packed UTF-16 array. Null yields
+        // the same empty descriptor as default(ReadOnlySpan<char>).
+        internal static int FromString(byte[] code, int used, int source)
+        {
+            used = Local(code, used, 0x20, source);
+            code[used++] = 0xd1; // ref.is_null
+            code[used++] = 0x04;
+            used = WasmBinary.ValueType(code, used, CharacterSpan);
+            code[used++] = 0xd0; // ref.null
+            used = WasmBinary.Signed(code, used, WasmBinary.HeapType(CharacterSpan));
+            code[used++] = 0x05;
+            used = Local(code, used, 0x20, source);
+            used = StringWasm.Unwrap(code, used);
+            used = Const(code, used, 0);
+            used = Local(code, used, 0x20, source);
+            used = StringWasm.Unwrap(code, used);
+            code[used++] = 0xfb;
+            code[used++] = 0x0f; // array.len
+            used = Gc(code, used, 0, CharacterSpan);
+            code[used++] = 0x0b;
+            return used;
         }
 
         internal static int Length(byte[] code, int used, int view)
@@ -56,7 +79,7 @@ namespace PortableCompiler
             used = LoadField(code, used, view, 1);
             used = Local(code, used, 0x20, index);
             code[used++] = 0x6a; // i32.add
-            return Gc(code, used, 0x0b, vector); // array.get
+            return Gc(code, used, vector == Chars ? 0x0d : 0x0b, vector); // array.get_u for packed UTF-16
         }
 
         private static int LoadField(byte[] code, int used, int view, byte field)

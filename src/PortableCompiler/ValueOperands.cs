@@ -9,13 +9,13 @@ namespace PortableCompiler
             int owner, int methodCount, int[] records, int slot, int[] frame, int[] objects, int[] clauses)
         {
             int local = records[slot + 1], type = frame[local];
-            if (type != RuntimeTypeMetadata.Handle && type != SignatureTypes.ObjectSpan && !ObjectLayouts.IsValueType(objects, type)) return -2;
+            if (type != RuntimeTypeMetadata.Handle && !SignatureTypes.IsReadOnlySpan(type) && !ObjectLayouts.IsValueType(objects, type)) return -2;
             int next = records[slot + 2] * Width;
             if (next >= records.Length || Entry(records, next / Width, clauses)) return -2;
             int kind = records[next];
             if (kind == InitializeValue)
                 return Clear(bundle, image, layout, heaps, owner, records, slot, next, type, objects);
-            if (type == RuntimeTypeMetadata.Handle || type == SignatureTypes.ObjectSpan) return -2;
+            if (type == RuntimeTypeMetadata.Handle || SignatureTypes.IsReadOnlySpan(type)) return -2;
             if (kind == GetField)
             {
                 records[slot] = Load;
