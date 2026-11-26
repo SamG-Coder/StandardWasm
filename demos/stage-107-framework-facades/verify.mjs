@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { root, run } from "../../scripts/toolchain.mjs";
+import { runOn32BitClr, wasm32Runtime } from "../../scripts/runtime-packs.mjs";
 
 const stage = join(root, "demos", "stage-107-framework-facades");
 const compiler = process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts", "StandardWasm.Compiler.wasm");
@@ -14,7 +15,10 @@ run("dotnet", ["build", "-c", "Release", join(stage, "Consumer")]);
 const consumer = join(stage, "Consumer", "bin", "Release");
 const assemblies = ["netstandard2.0", "netstandard2.1"].map(target => join(consumer, target, "FacadeConsumer.dll"));
 const pack = process.env.STANDARDWASM_RUNTIME_PACK;
-run("dotnet", ["run", "-c", "Release", "--project", join(stage, "Oracle"), "--", evidence, ...assemblies, ...(pack ? [pack] : [])]);
+// Double.IsNaN and the List constructor are CoreLib bodies, so the default
+// pack is the x86 CLR's own 32-bit runtime directory (decision 0044).
+runOn32BitClr(wasm32Runtime(), join(stage, "Oracle"), join(stage, "Oracle", "bin", "Release", "net10.0", "Oracle.dll"),
+    [evidence, ...assemblies, ...(pack ? [pack] : [])]);
 const oracle = JSON.parse(readFileSync(join(evidence, "oracle.json"), "utf8"));
 const files = [compiler, ...oracle.files].map(path => readFileSync(path));
 

@@ -1,9 +1,12 @@
 # Stage 107 · Framework facades
 
 Run `npm test` to build the self-hosted compiler, then run
-`npm run demo -- stage-107-framework-facades`. Set
-`STANDARDWASM_RUNTIME_PACK` to select an installed .NET 10 runtime directory.
-The runner otherwise uses the CLR's runtime directory.
+`npm run demo -- stage-107-framework-facades`. The oracle
+runs on the installed win-x86 .NET 10 CLR, because the compiled calls lower
+original CoreLib bodies that must come from a 32-bit CoreLib
+([decision 0044](../../docs/decisions/0044-corelib-native-width.md)). Set
+`STANDARDWASM_RUNTIME_PACK` to select another installed .NET 10 runtime
+directory. The runner otherwise uses the x86 CLR's runtime directory.
 
 The test builds unchanged C# as .NET Standard 2.0 and 2.1 DLLs. It runs the same
 DLLs on the CLR and compiles their Double.IsNaN and Char.IsHighSurrogate calls in

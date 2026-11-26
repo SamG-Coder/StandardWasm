@@ -20,8 +20,8 @@ a 32-bit pack, for example an x86 or browser-wasm CoreLib. The installed x64
 CoreLib is suitable for metadata analysis in the WinForms startup probes.
 Executing its native-width-specialized bodies would embed x64 assumptions in a
 wasm32 module. For example, the x64 IL for `IntPtr.Size` hard-codes 8.
-[#233](https://github.com/SamG-Coder/StandardWasm/issues/233) tracks runtime-pack
-validation before enabling execution of those bodies.
+[Decision 0044](0044-corelib-native-width.md) rejects lowering those bodies
+unless the CoreLib's own IL has a 4-byte native width.
 
 JavaScript calls to exported native integer parameters use the same i32
 conversion as exported `int` parameters, including wrapping to 32 bits.

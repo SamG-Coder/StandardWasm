@@ -6,8 +6,13 @@ import { chromium } from "playwright-core";
 import { oracleCases } from "./oracle.mjs";
 import { compile, invokeCompiler, root, run } from "./toolchain.mjs";
 import { verify } from "./verify.mjs";
+import { compareRuntimeVersions } from "./runtime-packs.mjs";
 
 process.chdir(root);
+// Runtime pack selection (decision 0044) picks the newest installed version.
+assert.deepEqual(["10.0.10", "10.0.9", "10.0.0", "10.0.0-rc.2.25502.107", "10.0.0-rc.10.1", "10.0.0-preview.7.1", "10.0.11-alpha"]
+    .sort(compareRuntimeVersions),
+    ["10.0.0-preview.7.1", "10.0.0-rc.2.25502.107", "10.0.0-rc.10.1", "10.0.0", "10.0.9", "10.0.10", "10.0.11-alpha"]);
 mkdirSync("artifacts", { recursive: true });
 run("dotnet", ["run", "-c", "Release", "--project", "Verify", "--", "artifacts/oracle.json"]);
 const demos = listDemos().filter(demo => !demo.runner);
