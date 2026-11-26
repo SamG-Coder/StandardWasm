@@ -586,6 +586,39 @@ namespace PortableCompiler
                     code[used++] = 0x24; // global.set
                     used = WasmBinary.Unsigned(code, used, operand);
                 }
+                else if ((kind == GetField || kind == SetField || kind == FieldAddress) &&
+                    records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
+                    IsNativeInteger(states[state + (kind == SetField ? top - 1 : top)]))
+                {
+                    // PROTOTYPE: p->F in memory 0. The field offset is the memarg offset.
+                    int offset = records[slot + 2 * BranchIl.Width + 2] - 1, load = records[slot + 2 * BranchIl.Width + 3];
+                    int receiver = kind == SetField ? top - 1 : top;
+                    int address = Spill(spills, maximum, Native, receiver);
+                    if (kind == FieldAddress)
+                    {
+                        // &p->F does not dereference p: plain address arithmetic, as on the CLR.
+                        used = Local(code, used, 0x20, address);
+                        used = Const(code, used, offset);
+                        code[used++] = 0x6a;
+                        used = Local(code, used, 0x21, Spill(spills, maximum, Native, top));
+                    }
+                    else
+                    {
+                        used = LinearMemoryWasm.GuardNull(code, used, address);
+                        used = Local(code, used, 0x20, address);
+                        if (kind == GetField)
+                        {
+                            used = LinearMemoryWasm.Load(code, used, load, offset);
+                            used = Local(code, used, 0x21, Spill(spills, maximum, StackDepths.IndirectType(load), top));
+                        }
+                        else
+                        {
+                            int value = states[state + top];
+                            used = Local(code, used, 0x20, Spill(spills, maximum, value, top));
+                            used = LinearMemoryWasm.Store(code, used, StoreFor(load), offset);
+                        }
+                    }
+                }
                 else if (kind == GetField || kind == SetField)
                 {
                     int descriptor = records[slot + 3];
@@ -869,6 +902,11 @@ namespace PortableCompiler
             code[used++] = 0x71; // i32.and
             return used;
         }
+
+        // stind.* matching a field's ldind.* opcode.
+        private static int StoreFor(int load) =>
+            load <= 0x47 ? 0x52 : load <= 0x49 ? 0x53 : load <= 0x4b ? 0x54 : load == 0x4c ? 0x55 :
+            load == 0x4e ? 0x56 : load == 0x4f ? 0x57 : 0xdf;
 
         internal static int Spill(int first, int maximum, int type, int depth) =>
             type == NullValue ? first - 1 : first + SpillBank(type) * maximum + depth;
