@@ -19,6 +19,7 @@ internal static class GenericBaseCases
         Check(nameof(Kernels.ReusedAndDistinct), Kernels.ReusedAndDistinct);
         Check(nameof(Kernels.RootVirtual), Kernels.RootVirtual);
         Check(nameof(Kernels.NestedArgument), Kernels.NestedArgument);
+        Check(nameof(Kernels.ReentrantArgument), Kernels.ReentrantArgument);
 
         // This valid CLR shape needs its own class identity as a type argument
         // before its base can be reserved. Keep that cycle diagnosed.

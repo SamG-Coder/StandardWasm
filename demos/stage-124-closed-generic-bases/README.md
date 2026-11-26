@@ -7,6 +7,7 @@ derived field, and returns 12 for input 5.
 `npm test` compares same-assembly and linked closed base classes with the
 CLR. It covers shared and distinct base instantiations, substitution inside
 an array argument, inherited field access, base assignment, and runtime
-dispatch of an ordinary virtual slot through the generic base.
+dispatch of an ordinary virtual slot through the generic base. It also
+covers a base argument with a field that refers back to the derived type.
 
 See [decision 0052](../../docs/decisions/0052-closed-generic-bases.md).

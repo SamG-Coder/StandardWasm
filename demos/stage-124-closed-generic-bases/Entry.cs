@@ -35,6 +35,16 @@ namespace GenericBaseDemo
         public NestedInt(int[] value) : base(value) { }
     }
 
+    public sealed class Holder
+    {
+        public LinkedHolder Other;
+    }
+
+    public sealed class LinkedHolder : LocalBase<Holder>
+    {
+        public LinkedHolder() : base(null) { }
+    }
+
     public sealed class SelfTyped : LocalBase<SelfTyped>
     {
         public SelfTyped() : base(null) { }
@@ -76,6 +86,13 @@ namespace GenericBaseDemo
         }
 
         public static int NestedArgument(int value) => new NestedInt(new int[] { value }).Value[0];
+
+        public static int ReentrantArgument(int value)
+        {
+            var item = new LinkedHolder();
+            item.Item = new Holder { Other = item };
+            return item.Item.Other == item ? value : 0;
+        }
 
         public static int RecursiveTypeArgument() => new SelfTyped().Item == null ? 1 : 0;
     }

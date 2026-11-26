@@ -69,9 +69,13 @@ namespace PortableCompiler
                     ObjectLayouts.RequiresLayoutParent(image, heaps, layout, shape))
                     return -2;
             }
-            // The parent must precede the child in the Wasm recursive type group.
-            // Defer all fields until that ordering is fixed, even if a base field
-            // refers back to the derived type being registered.
+            // A field of a base argument can re-enter registration and reserve
+            // this class after the argument's own nominal identity is available.
+            int known = ObjectLayouts.Find(objects, owner, row, arguments);
+            if (known != 0)
+                return ObjectLayouts.Parent(objects, known) == parent && ObjectLayouts.IsValueType(objects, known) == valueType ? known : -2;
+
+            // Reserve the parent before the child in the Wasm recursive type group.
             return ObjectLayouts.Reserve(objects, owner, row, shape, parent, arguments);
         }
 

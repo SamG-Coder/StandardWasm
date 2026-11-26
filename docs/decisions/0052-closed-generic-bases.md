@@ -12,6 +12,10 @@ nominal subtype order and permits recursive field references from a base
 or derived class after reservation. Dispatch of existing supported
 ordinary virtual slots follows the resulting parent links.
 
+Binding a base argument can complete its fields and re-enter registration
+of the class that extends the base. Reuse the class identity reserved by
+that inner registration so both paths point to the same Wasm type.
+
 Generic argument binding and direct inheritance share a bounded
 reservation depth. A type argument that requires the still-unreserved
 derived layout, such as `Derived : Base<Derived>`, receives a diagnostic.
