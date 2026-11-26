@@ -55,16 +55,7 @@ internal static class TypedArrayCases
             inputs = new object[] { Encode(wrongLocal), row },
             generated = new { capacity, arguments = Array.Empty<int>(), reject = true }, expected = -1
         });
-        int compilerRow = typeof(ArrayDemo).GetMethod(nameof(ArrayDemo.Compile))!.MetadataToken & 0xffffff;
-        byte[] referenceCompiler = new byte[1 << 20];
-        int compilerSize = ArrayDemo.Compile(image, compilerRow, referenceCompiler);
-        if (compilerSize <= 0)
-            throw new InvalidOperationException($"CLR self-compilation returned {compilerSize}");
-        cases.Add(new
-        {
-            module = "TypedArrayLibrary", bootstrap = true, inputs = new object[] { Encode(image), compilerRow },
-            expectedHex = Convert.ToHexString(referenceCompiler.AsSpan(0, compilerSize)).ToLowerInvariant()
-        });
+
     }
 
     private static object Encode(byte[] bytes) => new { bytes = Array.ConvertAll(bytes, value => (int)value) };

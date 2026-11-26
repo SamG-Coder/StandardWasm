@@ -5,7 +5,7 @@ import { verifyBootstrap } from "./bootstrap.mjs";
 const printable = value => JSON.stringify(value, (key, v) =>
     typeof v === "bigint" ? v + "n" : Object.is(v, -0) ? "-0" : typeof v === "number" && !Number.isFinite(v) ? String(v) : v);
 
-export async function verify(load, cases) {
+export async function verify(load, cases, saveCompiler) {
     const modules = {};
     for (const name of new Set(cases.map(c => c.module))) {
         const module = await WebAssembly.compile(await load(name));
@@ -43,5 +43,5 @@ export async function verify(load, cases) {
     const summary = (cases.length - (bootstrap ? 1 : 0)) +
         " CLR comparisons and 1,000,000 tail calls passed" + trapSummary;
     return bootstrap ? summary + "\n  Self-recompiled: " +
-        await verifyBootstrap(modules[bootstrap.module], bootstrap, cases) : summary;
+        await verifyBootstrap(modules[bootstrap.module], bootstrap, cases, saveCompiler) : summary;
 }
