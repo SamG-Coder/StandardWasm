@@ -32,6 +32,8 @@ namespace PortableCompiler
         // localloc: [size] -> [address] on the shadow stack in memory 0.
         internal const int LocalAllocate = 72;
         internal const int ReadReflection = 73, StringEquals = 74, ResourceLookup = 75;
+        // sizeof <type>: lowered to an int32 Constant once the layout is measured.
+        internal const int SizeOf = 112; // clear of the reflection kinds 73–75 (Stage 131)
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
@@ -310,6 +312,13 @@ namespace PortableCompiler
                     }
                     else if (extended == 0x0f)
                         kind = LocalAllocate;
+                    else if (extended == 0x1c)
+                    {
+                        if (length - pc < 4) return -1;
+                        operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                        pc += 4;
+                        kind = SizeOf;
+                    }
                     else if (extended == 0x1a)
                     {
                         if (!hasCatches) return -1;

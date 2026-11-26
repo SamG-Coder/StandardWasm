@@ -84,6 +84,16 @@ namespace PortableCompiler
                         return -1;
                     next = Push(stack, allocated, depth - 1, EventHandlerReference);
                 }
+                else if ((kind == GetField || kind == SetField || kind == FieldAddress) &&
+                    records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
+                    depth >= (kind == SetField ? 2 : 1) && IsNativeInteger(stack[depth - (kind == SetField ? 2 : 1)]))
+                {
+                    // Stage 143 (decision 0071): p->F through an S* address in memory 0.
+                    int storage = FieldAccess.Storage(records[slot + 3]);
+                    if (kind == GetField) next = Push(stack, allocated, depth - 1, StackType(storage));
+                    else if (kind == FieldAddress) next = Push(stack, allocated, depth - 1, Native);
+                    else next = Assignable(stack[depth - 1], storage, objects) ? depth - 2 : -2;
+                }
                 else if (kind == VirtualCall)
                 {
                     int arity = records[slot + 3];
