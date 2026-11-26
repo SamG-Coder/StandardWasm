@@ -10,31 +10,17 @@ const managedTags = [
     ["\0divideByZero", "System.DivideByZeroException"],
     ["\0indexOutOfRange", "System.IndexOutOfRangeException"],
     ["\0nullReference", "System.NullReferenceException"],
-    ["\0invalidCast", "System.InvalidCastException"]
+    ["\0invalidCast", "System.InvalidCastException"],
+    ["\0argument", "System.ArgumentException"]
 ];
 
 export function managedExceptionType(exports, error) {
     if (!(error instanceof WebAssembly.Exception)) return null;
-<<<<<<< HEAD
     for (const [name, type] of managedTags) {
         const tag = exports[name];
         if (tag instanceof WebAssembly.Tag && error.is(tag)) return type;
     }
     return null;
-=======
-    const overflow = exports["\0overflow"];
-    if (overflow instanceof WebAssembly.Tag && error.is(overflow)) return "System.OverflowException";
-    const divide = exports["\0divideByZero"];
-    if (divide instanceof WebAssembly.Tag && error.is(divide)) return "System.DivideByZeroException";
-    const index = exports["\0indexOutOfRange"];
-    if (index instanceof WebAssembly.Tag && error.is(index)) return "System.IndexOutOfRangeException";
-    const nullReference = exports["\0nullReference"];
-    if (nullReference instanceof WebAssembly.Tag && error.is(nullReference)) return "System.NullReferenceException";
-    const invalidCast = exports["\0invalidCast"];
-    if (invalidCast instanceof WebAssembly.Tag && error.is(invalidCast)) return "System.InvalidCastException";
-    const argument = exports["\0argument"];
-    return argument instanceof WebAssembly.Tag && error.is(argument) ? "System.ArgumentException" : null;
->>>>>>> origin/codex/146-base-exception-catches
 }
 
 export function invoke(exports, method, inputs) {
