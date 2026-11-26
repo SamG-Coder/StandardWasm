@@ -1,4 +1,5 @@
 import { packEntry, readManagedCompanions } from "./companions.mjs";
+import { instantiateManagedModule } from "./resource-host.mjs";
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -31,10 +32,11 @@ export async function runManagedEntry(compilerBytes, selection) {
     // The PE reader verified the MethodDef token. The compiler takes its row.
     const row = entryToken & 0xffffff;
     const result = { entry: selection.entry.path, entryToken, target, runtimeTarget };
+    const origins = compiler.BundleModuleOrigins?.() === 1;
     let length;
-    if (companions.length === 0) length = compiler.Compile(upload(selection.entry.bytes), row, output);
+    if (companions.length === 0 && !origins) length = compiler.Compile(upload(selection.entry.bytes), row, output);
     else {
-        const [bundle, entries] = packEntry(selection.entry, companions, row);
+        const [bundle, entries] = packEntry(selection.entry, companions, row, origins);
         const source = upload(bundle), manifest = upload(entries);
         if (typeof compiler.CompileBundleDetailed === "function") {
             const location = compiler.CreateDiagnostic();
@@ -49,9 +51,7 @@ export async function runManagedEntry(compilerBytes, selection) {
 
     const code = Uint8Array.from({ length }, (_, i) => compiler.ReadByte(output, i));
     const module = await WebAssembly.compile(code);
-    if (WebAssembly.Module.imports(module).length)
-        throw Error("This entry host does not provide runtime imports yet.");
-    const { exports } = await WebAssembly.instantiate(module);
+    const { exports } = await instantiateManagedModule(module, compiler, [selection.entry, ...companions]);
     if (typeof exports.run !== "function" || exports.run.length !== 0)
         throw Error("This entry host supports a parameterless managed entry point.");
     const exitCode = exports.run();

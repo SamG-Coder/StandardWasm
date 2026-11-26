@@ -8,7 +8,7 @@ export function serveLaunch(port, compiler) {
         ["/StandardWasm.Compiler.wasm", ["application/wasm", compiler]],
         ["/stage-73-executable-intake/loader/pe.mjs", ["text/javascript",
             join(root, "demos/stage-73-executable-intake/loader/pe.mjs")]],
-        ...["launch", "launch-worker", "companions"].map(name => [
+        ...["launch", "launch-worker", "companions", "resource-host"].map(name => [
             "/launch/" + name + ".mjs", ["text/javascript", join(stage, name + ".mjs")]
         ])
     ]));

@@ -31,6 +31,7 @@ namespace PortableCompiler
         internal const int LoadIndirect = 70, StoreIndirect = 71;
         // localloc: [size] -> [address] on the shadow stack in memory 0.
         internal const int LocalAllocate = 72;
+        internal const int ReadReflection = 73, StringEquals = 74, ResourceLookup = 75;
         // sizeof <type>: lowered to an int32 Constant once the layout is measured.
         internal const int SizeOf = 112; // clear of the reflection kinds 73–75 (Stage 131)
         internal const int ProvenNativeZero = 2;
@@ -39,9 +40,10 @@ namespace PortableCompiler
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
-        internal static int Decode(byte[] image, int start, int length, int arguments, int locals, int[] records, int[] location, bool hasCatches)
+        internal static int Decode(byte[] image, int start, int length, int arguments, int locals,
+            int[] records, int[] location, bool hasCatches, int first = 0)
         {
-            int pc = 0;
+            int pc = first;
             while (pc < length)
             {
                 if (location.Length != 0) location[2] = pc;

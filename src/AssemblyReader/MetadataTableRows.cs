@@ -75,16 +75,16 @@ namespace PeLibrary
             if (table == 37) return 12 + Width(counts[35]);
             if (table == 38) return 4 + strings + blobs;
             if (table == 39 || table == 40)
-            {
-                int implementation = counts[38] < 16384 && counts[35] < 16384 && counts[39] < 16384 ? 2 : 4;
-                return 8 + (table == 39 ? 2 * strings : strings) + implementation;
-            }
+                return 8 + (table == 39 ? 2 * strings : strings) + ImplementationWidth(counts);
             if (table == 41) return 2 * Width(counts[2]);
             if (table == 42) return 4 + strings + (counts[2] < 32768 && counts[6] < 32768 ? 2 : 4);
             if (table == 44) return Width(counts[42]) +
                 (counts[2] < 16384 && counts[1] < 16384 && counts[27] < 16384 ? 2 : 4);
             return table == 43 ? blobs + MethodRefWidth(counts) : 0;
         }
+
+        internal static int ImplementationWidth(int[] counts) =>
+            counts[38] < 16384 && counts[35] < 16384 && counts[39] < 16384 ? 2 : 4;
 
         internal static int MethodRefWidth(int[] counts) => counts[6] < 32768 && counts[10] < 32768 ? 2 : 4;
 

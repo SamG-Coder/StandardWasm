@@ -16,11 +16,11 @@ namespace PortableCompiler
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostImports,
-            bool linearMemory = false)
+            byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostFeatures, int reflectionHeapFixup)
         {
             // Imported functions precede defined functions in the Wasm index
             // space. Emitted bodies already include this offset in their calls.
+            int hostImports = WasmImports.FunctionCount(hostFeatures);
             int argumentArray = EntryArgumentsWasm.ArgumentArray(exports, arities, offsets, types, objects);
             if (!ValueFieldsWasm.CheckLayouts(objects)) return -2;
             int typeOffset = objects[0] + FirstClassHeap;
@@ -32,12 +32,13 @@ namespace PortableCompiler
             bool invalidCast = (exceptionTags & ExceptionTypes.InvalidCast) != 0;
             // Tag indices stay stable even when lower tags are unused.
             bool argumentException = (exceptionTags & ExceptionTypes.Argument) != 0;
-            int tagCount = argumentException ? ExceptionTagsWasm.Count : invalidCast ? ExceptionTagsWasm.InvalidCastTag + 1 :
+            bool argumentNull = (exceptionTags & ExceptionTypes.ArgumentNull) != 0;
+            int tagCount = argumentNull ? ExceptionTagsWasm.ArgumentNullTag + 1 :
+                argumentException ? ExceptionTagsWasm.ArgumentTag + 1 : invalidCast ? ExceptionTagsWasm.InvalidCastTag + 1 :
                 nullReference ? ExceptionTagsWasm.NullTag + 1 :
                 bounds ? ExceptionTagsWasm.IndexTag + 1 : divide ? ExceptionTagsWasm.DivideTag + 1 : overflow ? 1 : 0;
-            // The object tag (decision 0054) follows all six fixed tags so their indices stay stable.
             bool objectTag = (exceptionTags & ExceptionTypes.Object) != 0;
-            if (objectTag) tagCount = ExceptionTagsWasm.ObjectTag + 1;
+            if (objectTag && tagCount <= ExceptionTagsWasm.ObjectTag) tagCount = ExceptionTagsWasm.ObjectTag + 1;
             int remainderIndex = hostImports + functions + thunks[0];
             int builderIndex = remainderIndex + (hasRemainder ? 1 : 0);
             int totalFunctions = builderIndex - hostImports + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0);
@@ -79,14 +80,14 @@ namespace PortableCompiler
             if (hasRemainder) typeEntries++;
             if (tagCount != 0) typeEntries++;
             if (objectTag) typeEntries++;
-            if (hostImports != 0) typeEntries += ConsoleWasm.ImportCount;
+            typeEntries += hostImports;
             if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
             if (hasDescriptors) typeEntries++;
             int prefix = UnsignedSize(typeEntries) + 70 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (tagCount != 0) prefix += 3; // () -> () exception payload
             if (objectTag) prefix += ExceptionTagsWasm.ObjectTagTypeBytes; // (eqref) -> () managed object payload
-            if (hostImports != 0) prefix += ConsoleWasm.TypeBytes;
+            prefix += WasmImports.TypeBytes(hostFeatures);
             if (argumentArray != 0) prefix += EntryArgumentsWasm.TypeBytes(argumentArray);
             if (hasDescriptors) prefix += RuntimeTypeWasm.DescriptorBytes;
             if (classBytes > output.Length - prefix) return -3;
@@ -102,7 +103,7 @@ namespace PortableCompiler
             // Host import and argument builder types follow every existing type.
             int objectTagType = tagType + 1;
             int importType = tagType + (tagCount != 0 ? 1 : 0) + (objectTag ? 1 : 0);
-            int builderType = importType + (hostImports != 0 ? ConsoleWasm.ImportCount : 0);
+            int builderType = importType + hostImports;
             // Append the optional descriptor type to keep the existing ABI indices stable.
             int descriptorHeap = builderType + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0);
             if (argumentArray != 0)
@@ -131,13 +132,15 @@ namespace PortableCompiler
             }
             int exportCount = exports.Length + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0) +
                 (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) +
-                (nullReference ? 1 : 0) + (invalidCast ? 1 : 0) + (argumentException ? 1 : 0) + (objectTag ? 1 : 0);
+                (nullReference ? 1 : 0) + (invalidCast ? 1 : 0) + (argumentException ? 1 : 0) + (objectTag ? 1 : 0) +
+                (argumentNull ? 1 : 0);
             int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
                 (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
                 (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0) +
-                (argumentException ? ExceptionTagsWasm.ArgumentExportSize : 0) + (objectTag ? ExceptionTagsWasm.ObjectExportSize : 0);
+                (argumentException ? ExceptionTagsWasm.ArgumentExportSize : 0) + (objectTag ? ExceptionTagsWasm.ObjectExportSize : 0) +
+                (argumentNull ? ExceptionTagsWasm.ArgumentNullExportSize : 0);
             if (argumentArray != 0) exportSize += EntryArgumentsWasm.ExportBytes(builderIndex);
-            int tagSize = 1 + (objectTag ? ExceptionTagsWasm.Count : tagCount) * (1 + UnsignedSize(tagType)) +
+            int tagSize = 1 + (tagCount - (objectTag ? 1 : 0)) * (1 + UnsignedSize(tagType)) +
                 (objectTag ? 1 + UnsignedSize(objectTagType) : 0);
             for (int i = 0; i < exports.Length; i++)
             {
@@ -163,10 +166,8 @@ namespace PortableCompiler
 
             int remaining = output.Length - 8;
             remaining = Reserve(remaining, typeSize);
-            // The memory import follows any console imports in the same section.
-            int importSize = hostImports != 0 ? ConsoleWasm.SectionSize(importType) : linearMemory ? 1 : 0;
-            if (linearMemory) importSize += LinearMemoryWasm.ImportBytes;
-            if (importSize != 0)
+            int importSize = WasmImports.Size(hostFeatures, importType);
+            if (hostFeatures != 0)
                 remaining = Reserve(remaining, importSize);
             remaining = Reserve(remaining, functionSize);
             if (thunks[0] != 0)
@@ -186,7 +187,8 @@ namespace PortableCompiler
             if (remaining < 0 || (literalSize != 0 && (dataOverhead > remaining ||
                 literalSize > remaining - dataOverhead || Reserve(remaining, dataOverhead + literalSize) < 0)))
                 return -3;
-            if (hasRemainder) FloatRemainderWasm.ResolveCalls(bodies, remainderFixup, remainderIndex);
+            if (reflectionHeapFixup != 0) WasmIndexFixups.Resolve(bodies, reflectionHeapFixup, descriptorHeap);
+            if (hasRemainder) WasmIndexFixups.Resolve(bodies, remainderFixup, remainderIndex);
 
             output[0] = 0;
             output[1] = 0x61;
@@ -338,16 +340,13 @@ namespace PortableCompiler
                 output[cursor++] = 0;
             }
             if (objectTag) cursor = ExceptionTagsWasm.WriteObjectTagType(output, cursor);
-            if (hostImports != 0) cursor = ConsoleWasm.WriteTypes(output, cursor);
+            cursor = WasmImports.WriteTypes(output, cursor, hostFeatures);
             if (argumentArray != 0) cursor = EntryArgumentsWasm.WriteTypes(output, cursor, argumentArray);
             if (hasDescriptors) cursor = RuntimeTypeWasm.WriteDescriptor(output, cursor);
-            if (importSize != 0)
+            if (hostFeatures != 0)
             {
                 cursor = Section(output, cursor, 2, importSize);
-                int count = (hostImports != 0 ? 2 : 0) + (linearMemory ? 1 : 0);
-                if (hostImports != 0) cursor = ConsoleWasm.WriteImports(output, cursor, importType, count);
-                else output[cursor++] = (byte)count;
-                if (linearMemory) cursor = LinearMemoryWasm.WriteImport(output, cursor);
+                cursor = WasmImports.WriteEntries(output, cursor, hostFeatures, importType);
             }
 
             cursor = Section(output, cursor, 3, functionSize);
@@ -376,7 +375,7 @@ namespace PortableCompiler
                 for (int tag = 0; tag < tagCount; tag++)
                 {
                     output[cursor++] = 0; // exception attribute
-                    cursor = Unsigned(output, cursor, tag == ExceptionTagsWasm.ObjectTag ? objectTagType : tagType);
+                    cursor = Unsigned(output, cursor, objectTag && tag == ExceptionTagsWasm.ObjectTag ? objectTagType : tagType);
                 }
             }
 
@@ -404,6 +403,7 @@ namespace PortableCompiler
             if (nullReference) cursor = ExceptionTagsWasm.WriteNullExport(output, cursor);
             if (invalidCast) cursor = ExceptionTagsWasm.WriteInvalidCastExport(output, cursor);
             if (argumentException) cursor = ExceptionTagsWasm.WriteArgumentExport(output, cursor);
+            if (argumentNull) cursor = ExceptionTagsWasm.WriteArgumentNullExport(output, cursor);
             if (objectTag) cursor = ExceptionTagsWasm.WriteObjectExport(output, cursor);
 
             if (thunks[0] != 0)
