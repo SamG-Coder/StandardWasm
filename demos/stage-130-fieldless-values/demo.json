@@ -1,0 +1,8 @@
+{
+  "assembly": "FieldlessSequentialValue",
+  "exportType": "FieldlessSequentialValue.Demo",
+  "method": "CompileBundle",
+  "inputs": [{"file": "bundle", "dependencies": []}, {"name": "BothGenericArguments"}],
+  "generated": {"bundle": true, "capacity": 65536, "arguments": []},
+  "expected": 30
+}

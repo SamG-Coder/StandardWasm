@@ -591,14 +591,14 @@ namespace PortableCompiler
                     // starg.0 would replace the address itself.
                     if (kind == BranchIl.Store) return -2;
                     int lowered = ValueOperands.LowerReceiver(bundle, image, layout, heaps,
-                        owner, records, slot, frame, objects, clauses, readOnlyReceiver);
+                        owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses, readOnlyReceiver);
                     if (lowered < 0) return lowered;
                     continue;
                 }
                 if (kind == BranchIl.LocalAddress)
                 {
                     int lowered = ValueOperands.LowerLocal(bundle, image, layout, heaps,
-                        owner, records, slot, frame, objects, clauses);
+                        owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses);
                     if (lowered < 0) return lowered;
                     continue;
                 }
