@@ -8,7 +8,8 @@ namespace PeLibrary
         internal const int Malformed = -1, Unsupported = -2, Capacity = -3;
 
         // Each record is flags, try start/length, handler start/length, and the
-        // catch token or filter offset. The code layout is from MethodBodies.Read.
+        // catch token or filter offset. Expose the first table, which is the
+        // table used by the CLR. Validate subsequent sections before publication.
         internal static int Read(byte[] image, uint methodRva, int[] body, int[] clauses)
         {
             int count = Count(image, methodRva, body);
@@ -31,6 +32,7 @@ namespace PeLibrary
                 return Malformed;
             uint section = (methodRva + endOfCode + 3) & ~3u;
             int count = 0;
+            bool first = true;
             while (true)
             {
                 int header = PeLocator.MapImageRange(image, section, 4);
@@ -50,14 +52,15 @@ namespace PeLibrary
                 uint end = (uint)header + bytes;
                 for (; at < end; at += width)
                 {
-                    int status = ReadClause(image, at, fat, (uint)body[1], clauses, count * Width, publish);
+                    int status = ReadClause(image, at, fat, (uint)body[1], clauses, count * Width, publish && first);
                     if (status < 0) return status;
-                    count++;
+                    if (first) count++;
                 }
                 if ((kind & 0x80) == 0) return count;
                 // The EH table formats have four-byte-aligned total sizes.
                 if (bytes > uint.MaxValue - section) return Malformed;
                 section += bytes;
+                first = false;
             }
         }
 

@@ -90,13 +90,16 @@ internal static class ExceptionTableCases
         chained[multiple.Table] |= 0x80;
         chained[multiple.Table + 1] = 16;
         BinaryPrimitives.WriteUInt32LittleEndian(chained.AsSpan(multiple.Table + 16), 0x1001);
-        Probe("two chained compact sections", chained, multiple.Rva, 12, 2);
+        using var chainedPe = new PEReader(new MemoryStream(chained));
+        var active = chainedPe.GetMethodBody(multiple.Rva).ExceptionRegions.Single();
+        Probe("first table in a chain", chained, multiple.Rva, 12, 1);
+        int[] activeFields = [(int)active.Kind, active.TryOffset, active.TryLength, active.HandlerOffset,
+            active.HandlerLength, MetadataTokens.GetToken(active.CatchType)];
         for (int field = 0; field < 6; field++)
-        {
-            int expected = ExceptionDemo.InspectRva(image, (uint)multiple.Rva, 1, field);
-            Record("InspectRva", "second chained clause", chained, expected,
-                ExceptionDemo.InspectRva(chained, (uint)multiple.Rva, 1, field), multiple.Rva, 1, field);
-        }
+            Record("InspectRva", "active clause in chained sections", chained, activeFields[field],
+                ExceptionDemo.InspectRva(chained, (uint)multiple.Rva, 0, field), multiple.Rva, 0, field);
+        Record("InspectRva", "second table is inactive", chained, -1,
+            ExceptionDemo.InspectRva(chained, (uint)multiple.Rva, 1, 0), multiple.Rva, 1, 0);
         chained[multiple.Table + 17] = 3;
         Probe("malformed second section preserves destination", chained, multiple.Rva, 12, -1);
 
