@@ -151,7 +151,7 @@ namespace PortableCompiler
                 // Reject pointers, managed locations and nested values until their
                 // lifetimes can be represented and checked transitively.
                 if (byRefLike && storage != 0 &&
-                    (ObjectLayouts.IsValueType(objects, storage) || SignatureTypes.IsNativeInteger(storage) ||
+                    (ObjectLayouts.IsValueType(objects, storage) ||
                         (!SignatureTypes.IsScalar(storage) && !SignatureTypes.IsReference(storage)))) return -2;
                 if (overlay && storage != 0)
                 {
@@ -177,8 +177,13 @@ namespace PortableCompiler
                 int end = reference[1];
                 reference[0] = -reference[0];
                 if (image[reference[0]] == PointerStorage.Element)
+                {
+                    // Native integers are scalar handles. Pointer signatures
+                    // can carry an address whose lifetime a scope must preserve.
+                    if (ObjectLayouts.IsByRefLikeValue(objects, receiver)) return -2;
                     storage = PointerSignatures.ReadStorage(bundle, image, layout, heaps,
                         owner, reference[0] + 1, end, reference);
+                }
                 else
                     storage = ManagedReferenceSignatures.ReadStorage(bundle, image, layout, heaps,
                         owner, reference, end, receiver, objects);

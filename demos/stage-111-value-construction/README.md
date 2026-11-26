@@ -23,7 +23,7 @@ admitted by Stage 121 and decision 0049. A `ref` argument to an ordinary
 method is diagnosed at the call's IL offset.
 
 `DisposeScoped` covers a readonly `ref struct` with a managed reference and a
-boolean. It checks disposal on normal exit and overflow before the outer
+native unsigned integer. It checks disposal on normal exit and overflow before the outer
 catch reads the shared state. This uses the managed value ABI. Ref-like
 types containing managed byrefs, pointers or nested values still report a
 diagnostic, as do fields, arrays and generic specializations containing a

@@ -58,17 +58,17 @@ namespace ValueConstructionDemo
     internal readonly ref struct LayoutScope
     {
         private readonly LayoutState state;
-        private readonly bool performLayout;
+        private readonly nuint cookie;
 
-        internal LayoutScope(LayoutState state, bool performLayout)
+        internal LayoutScope(LayoutState state, nuint cookie)
         {
             this.state = state;
-            this.performLayout = performLayout;
+            this.cookie = cookie;
         }
 
         public void Dispose()
         {
-            if (performLayout) state.Trace = unchecked(state.Trace + 7);
+            if (cookie != 0) state.Trace = unchecked(state.Trace + 7);
         }
     }
 
@@ -77,7 +77,7 @@ namespace ValueConstructionDemo
         public static int DisposeScoped(int value)
         {
             var state = new LayoutState();
-            var scope = new LayoutScope(state, value != 0);
+            var scope = new LayoutScope(state, unchecked((nuint)value));
             try
             {
                 using (scope)
