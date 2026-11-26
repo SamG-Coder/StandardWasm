@@ -110,4 +110,5 @@ ForwardingCases.Add(cases);
 StaticLayoutCases.Add(cases);
 InterfaceReferenceCases.Add(cases);
 NativeStorageCases.Add(cases);
+NestedReferenceCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

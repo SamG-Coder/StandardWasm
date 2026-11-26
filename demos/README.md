@@ -73,6 +73,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [82 · Static fields and instance layout](stage-82-static-field-layout/README.md) | `npm run demo -- stage-82-static-field-layout` | Static fields do not shift inherited instance storage |
 | [83 · Interface references](stage-83-interface-references/README.md) | `npm run demo -- stage-83-interface-references` | Linked interface fields preserve reference identity and null |
 | [84 · Native-sized storage](stage-84-native-sized-storage/README.md) | `npm run demo -- stage-84-native-sized-storage` | Linked native-sized fields use wasm32 width |
+| [85 · Nested type references](stage-85-nested-references/README.md) | `npm run demo -- stage-85-nested-references` | Nested identities survive cross-DLL binding and forwarding |
 
 ## Adding a stage
 

@@ -74,6 +74,7 @@
     <ProjectReference Include="../demos/stage-82-static-field-layout/FieldLayoutDemo.csproj" />
     <ProjectReference Include="../demos/stage-83-interface-references/InterfaceDemo.csproj" />
     <ProjectReference Include="../demos/stage-84-native-sized-storage/NativeLayout.csproj" />
+    <ProjectReference Include="../demos/stage-85-nested-references/NestedDemo.csproj" />
     <ProjectReference Include="../demos/stage-78-strong-names/Alternate/Alternate.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />
     <Compile Remove="Fixtures/**/*.cs" />
@@ -89,5 +90,11 @@
       <ForwardingFixture Include="$(MSBuildThisFileDirectory)../demos/stage-80-type-forwarding/bin/$(Configuration)/netstandard2.0/forwarded/*.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(ForwardingFixture)" DestinationFolder="$(OutDir)forwarding" />
+  </Target>
+  <Target Name="CopyNestedForwardingVerification" AfterTargets="Build">
+    <ItemGroup>
+      <NestedForwardedFixture Include="$(MSBuildThisFileDirectory)../demos/stage-85-nested-references/bin/$(Configuration)/netstandard2.0/forwarded/*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(NestedForwardedFixture)" DestinationFolder="$(OutDir)nested-forwarding" />
   </Target>
 </Project>

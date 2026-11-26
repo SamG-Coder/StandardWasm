@@ -46,7 +46,7 @@ namespace PortableCompiler
             var targetLayout = new int[4];
             var targetHeaps = new int[8];
             var range = new int[2];
-            byte[] target = ResolveType(main, bundle, ranges, caller, heaps, reference, false,
+            byte[] target = ResolveType(main, bundle, ranges, caller, heaps, layout, reference, false,
                 binding, targetLayout, targetHeaps, range);
             int matched = binding[0], declaring = binding[1];
             if (declaring < 0) return declaring;
@@ -95,7 +95,7 @@ namespace PortableCompiler
             var targetLayout = new int[4];
             var targetHeaps = new int[8];
             var range = new int[2];
-            byte[] target = ResolveType(main, bundle, ranges, caller, heaps, reference, true,
+            byte[] target = ResolveType(main, bundle, ranges, caller, heaps, layout, reference, true,
                 binding, targetLayout, targetHeaps, range);
             int matched = binding[0], declaringType = binding[1];
             if (declaringType < 0) return declaringType;
@@ -151,7 +151,7 @@ namespace PortableCompiler
             if (status < 0) return status;
             var targetLayout = new int[4];
             var targetHeaps = new int[8];
-            byte[] target = ResolveType(main, bundle, ranges, image, heaps, reference, false,
+            byte[] target = ResolveType(main, bundle, ranges, image, heaps, layout, reference, false,
                 symbol, targetLayout, targetHeaps, new int[2]);
             if (symbol[1] < 0) return symbol[1];
             if (ObjectLayouts.IsCoreObjectType(target, targetHeaps, targetLayout, symbol[1] << 2))
@@ -166,7 +166,7 @@ namespace PortableCompiler
         // signature fixed while each facade supplies a fresh AssemblyRef.
         // binding carries (owner, TypeDef) on success, or a negative status in slot 1.
         private static byte[] ResolveType(byte[] main, byte[] bundle, int[] ranges, byte[] caller,
-            int[] heaps, int[] reference, bool fields, int[] binding, int[] targetLayout,
+            int[] heaps, int[] layout, int[] reference, bool fields, int[] binding, int[] targetLayout,
             int[] targetHeaps, int[] range)
         {
             int owner = FindOwner(main, bundle, ranges, caller, heaps, reference);
@@ -176,7 +176,7 @@ namespace PortableCompiler
                 status = -1;
                 byte[] target = Load(main, bundle, ranges, owner);
                 if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) break;
-                status = AssemblyReferences.FindType(caller, heaps, reference,
+                status = AssemblyReferences.FindType(caller, heaps, layout, reference,
                     target, targetHeaps, targetLayout, range, fields);
                 if (status > 0)
                 {

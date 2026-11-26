@@ -50,7 +50,7 @@ namespace PeLibrary
             return 4 + Index(counts[4]); // FieldLayout
         }
 
-        private static int HasCustomAttribute(int[] counts)
+        internal static int HasCustomAttribute(int[] counts)
         {
             // ECMA-335 II.24.2.6 HasCustomAttribute targets, five tag bits.
             for (int i = 0; i < counts.Length; i++)
