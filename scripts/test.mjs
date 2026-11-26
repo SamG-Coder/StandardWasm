@@ -74,6 +74,14 @@ const rejectedArrayIdentity = spawnSync("dotnet", ["run", "-c", "Release", "--no
     { encoding: "utf8" });
 assert.equal(rejectedArrayIdentity.status, 1);
 assert.match(rejectedArrayIdentity.stderr, /Probe::Make\(System\.Int32\) at IL_[0-9a-f]+ \(newarr\): Arrays of System\.Int16 in ThirdPartyPrimitive/);
+// #141: the oracle writes MathIntrinsics.dll with Culture set on its platform AssemblyRefs (name and token unchanged).
+// The CLR does not bind that reference to the BCL, so its System.Double is not the CLI primitive.
+const rejectedCulture = spawnSync("dotnet", ["run", "-c", "Release", "--no-build", "--project", "Compiler", "--",
+    "artifacts/culture-probe/MathIntrinsics.dll", "MathIntrinsics.Measures", "artifacts/unsupported-culture.wat"],
+    { encoding: "utf8" });
+assert.equal(rejectedCulture.status, 1);
+assert.match(rejectedCulture.stderr, /Measures::Sqrt\(System\.Double\) at IL_[0-9a-f]+ \([a-z.0-9]+\): Unsupported value type: System\.Double in netstandard/);
+assert.equal(existsSync("artifacts/unsupported-culture.wat"), false);
 const cases = JSON.parse(readFileSync("artifacts/oracle.json"));
 console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases));
 
