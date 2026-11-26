@@ -14,5 +14,6 @@ This is an experiment backing [decision 0026](../../docs/decisions/0026-modal-me
 Expected:
 - All three runs print "trace matches Windows".
 - Each reports host tasks (and, in Edge, animation frames) during the 100 ms modal, and a per-message round trip in microseconds.
+- Each confirms that a Wasm GC object held on the suspended click-handler frame kept its identity and state after the modal loop. Under JSPI that holds even across a garbage collection forced while the frame was suspended.
 
 Results are written to `artifacts/modal-message-loop/results.json`. The runner exits on its own and is not part of `npm test`.

@@ -27,9 +27,10 @@ oracleRuns.forEach(r => assert.deepEqual(r, oracleRuns[0], "WinForms dispatch or
 const oracle = oracleRuns[0];
 
 const wasm = join(out, "app.wasm");
-run(process.execPath, ["node_modules/binaryen/bin/wasm-as", join(stage, "app.wat"), "-o", wasm]);
+run(process.execPath, ["node_modules/binaryen/bin/wasm-as", join(stage, "app.wat"), "--enable-gc",
+    "--enable-reference-types", "-o", wasm]);
 
-const nodeRun = spawnSync(process.execPath, ["--experimental-wasm-jspi", join(stage, "node-j.mjs"), wasm, timerMs, echoCount],
+const nodeRun = spawnSync(process.execPath, ["--experimental-wasm-jspi", "--expose-gc", join(stage, "node-j.mjs"), wasm, timerMs, echoCount],
     { encoding: "utf8" });
 if (nodeRun.status !== 0) throw Error(nodeRun.stderr);
 const nodeJ = JSON.parse(nodeRun.stdout);
@@ -50,7 +51,8 @@ const server = createServer((request, response) => {
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 const edgePath = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
-const browser = await chromium.launch({ executablePath: process.env.BROWSER_PATH || (existsSync(edgePath) ? edgePath : undefined) });
+const browser = await chromium.launch({ executablePath: process.env.BROWSER_PATH || (existsSync(edgePath) ? edgePath : undefined),
+    args: ["--js-flags=--expose-gc"] });
 let edge, engine;
 try {
     engine = browser.version();
@@ -61,7 +63,7 @@ try {
         const bytes = await (await fetch("/app.wasm")).arrayBuffer();
         return {
             isolated: crossOriginIsolated, jspi: "Suspending" in WebAssembly,
-            J: await runJspi(bytes, { timerMs, echoCount }),
+            J: await runJspi(bytes, { timerMs, echoCount, gc: globalThis.gc }),
             W: await runWorker(bytes, { timerMs, echoCount }, "/worker-w.mjs")
         };
     }, { timerMs, echoCount });
@@ -77,7 +79,10 @@ for (const [label, r] of [["Node " + process.version + " J", nodeJ], ["Edge " + 
     const same = JSON.stringify(r.trace) === JSON.stringify(oracle);
     console.log(`${label}: trace ${same ? "matches Windows" : "DIFFERS: " + r.trace.join(" > ")}; modal ${r.modalMs} ms with ` +
         `${r.hostTasksDuringModal} host tasks${r.framesDuringModal === null ? "" : " and " + r.framesDuringModal + " frames"}; ` +
-        `${r.usPerTrip} us per message round trip`);
+        `${r.usPerTrip} us per message round trip; GC reference on the suspended frame ` +
+        `${r.stateCheck === 1 ? "kept its identity and state" : "LOST"}` +
+        (r.collectedWhileSuspended ? ` across ${r.collectedWhileSuspended} forced collection(s) while suspended` : ""));
     assert.deepEqual(r.trace, oracle);
+    assert.equal(r.stateCheck, 1);
 }
 console.log(`Edge page cross-origin isolated: ${edge.isolated}; JSPI available: ${edge.jspi}`);

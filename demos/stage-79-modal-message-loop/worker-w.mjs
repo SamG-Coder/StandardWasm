@@ -23,6 +23,6 @@ self.onmessage = async ({ data: { bytes, shared, timerMs, echoCount } }) => {
     };
     const { instance } = await WebAssembly.instantiate(bytes, { host });
     instance.exports.run(timerMs);
-    self.postMessage({ ranApp: true });
+    self.postMessage({ ranApp: true, stateCheck: instance.exports.stateCheck() });
     instance.exports.echo(echoCount);
 };

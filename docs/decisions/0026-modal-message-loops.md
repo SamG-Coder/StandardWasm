@@ -4,7 +4,7 @@ Status: proposed (#176). It needs Codex's APPROVE because the WinForms platform 
 
 ## Context
 
-Unmodified WinForms runs a blocking `GetMessage`/`DispatchMessage` loop in `Application.Run`. `ShowDialog` and `MessageBox` run a nested modal loop inside the calling event handler's stack frame: the handler resumes only after the dialog closes, and the nested loop also dispatches work queued before it started. The browser main thread can't block. It has to return to its event loop to receive input, run timers and present frames. Compiled code needs one mechanism that keeps WinForms' dispatch order while letting the page run.
+This serves the upstream WinForms architecture recorded in [#160](https://github.com/SamG-Coder/StandardWasm/pull/160) (gate W2, the browser window and event pump). Unmodified WinForms runs a blocking `GetMessage`/`DispatchMessage` loop in `Application.Run`. `ShowDialog` and `MessageBox` run a nested modal loop inside the calling event handler's stack frame: the handler resumes only after the dialog closes, and the nested loop also dispatches work queued before it started. The browser main thread can't block. It has to return to its event loop to receive input, run timers and present frames. Compiled code needs one mechanism that keeps WinForms' dispatch order while letting the page run.
 
 ## Experiment
 
@@ -23,9 +23,17 @@ Results on Windows 11 (Ryzen 7 9800X3D), Node 24.19.0 and Edge 158.0.4370.33 (Pl
 | --- | --- | --- | --- |
 | **J** · JS Promise Integration: `getMessage` is a `WebAssembly.Suspending` import, the app runs on the page's own thread | identical (Node, Edge) | Edge: 25 host tasks (full rate of a 4 ms interval). Node: 7 tasks | Edge 4.1 / 3.6 µs, Node 15.8 / 16.9 µs |
 | **W** · dedicated worker blocking in `Atomics.wait` on a SharedArrayBuffer queue | identical (Edge) | 25 host tasks | Edge 11.6 / 11.9 µs |
+| **Asyncify** (Binaryen 132) | not applicable | (none) | (none) |
 
 (Two runs, shown as first / second.) The host-task count is the evidence that the page thread kept running during the modal loop. In both runs a 4 ms interval fired at its full rate in Edge. Animation-frame counts in headless Edge were not stable across runs (J 3 then 0, W 5 then 3) and are not used as evidence.
-| **Asyncify** (Binaryen 132) | not applicable | (none) | (none) |
+
+**Managed references across suspension** (Codex review on #179). The click handler allocates a Wasm GC struct, `{ticks, tag = 0x5eed}`, and holds it in a local of its own frame across the whole modal loop. The dialog's timer increments `ticks` through a second reference (a global) while that frame is suspended. Under J, the host also forces a garbage collection (`gc()` via `--expose-gc` / `--js-flags=--expose-gc`) inside the timer callback, while the frame is suspended. After `ShowDialog` returns, the frame's reference must be `ref.eq` to the global, keep its tag, and show `ticks = 1`.
+- Node J (one forced collection while suspended): preserved.
+- Edge J (one forced collection while suspended): preserved.
+- Edge W: preserved.
+- Mutation check: replacing the frame's reference with a fresh struct before the comparison gives `stateCheck = 0`, so the check discriminates.
+
+This shows only that a suspended JSPI frame keeps its GC references alive, traced and identical. Full framework lowering remains separate.
 
 Asyncify rejects the module: "Asyncify does not yet support non-number types, like references". It can't suspend code that holds Wasm GC references, and compiled .NET code always holds them.
 

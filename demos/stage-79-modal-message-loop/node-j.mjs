@@ -3,5 +3,6 @@ import { readFileSync } from "node:fs";
 import { runJspi } from "./host-core.mjs";
 
 const [wasm, timerMs, echoCount] = process.argv.slice(2);
-const result = await runJspi(readFileSync(wasm), { timerMs: +timerMs, echoCount: +echoCount });
+// Run with --expose-gc so the host can collect while the Wasm frame is suspended.
+const result = await runJspi(readFileSync(wasm), { timerMs: +timerMs, echoCount: +echoCount, gc: globalThis.gc });
 process.stdout.write(JSON.stringify(result));

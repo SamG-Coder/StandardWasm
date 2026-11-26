@@ -21,7 +21,7 @@ function modalMonitor() {
 
 // J: JS Promise Integration on the current thread. getMessage returns a queued message synchronously, or a Promise
 // when the queue is empty, which suspends the whole Wasm stack (including the nested modal frame) until a message arrives.
-export async function runJspi(bytes, { timerMs, echoCount }) {
+export async function runJspi(bytes, { timerMs, echoCount, gc }) {
     const queue = [];
     let waiter = null, onEcho = null;
     const trace = [], monitor = modalMonitor();
@@ -29,15 +29,18 @@ export async function runJspi(bytes, { timerMs, echoCount }) {
     const host = {
         getMessage: new WebAssembly.Suspending(() => queue.length ? queue.shift() : new Promise(r => { waiter = r; })),
         post: m => (m >>> 16) === 7 ? onEcho(m & 0xffff) : deliver(m),
-        setTimer: ms => setTimeout(() => deliver(msg(4, 0)), ms),
+        // Collect garbage while the click handler's frame is suspended, so that frame's GC references must be traced.
+        setTimer: ms => setTimeout(() => { if (gc) { gc(); collectedWhileSuspended++; } deliver(msg(4, 0)); }, ms),
         trace: id => {
             trace.push(TRACE_NAMES[id]);
             if (id === 5) monitor.dialogShown();
             if (id === 7) monitor.dialogClosed();
         }
     };
+    let collectedWhileSuspended = 0;
     const { instance } = await WebAssembly.instantiate(bytes, { host });
     await WebAssembly.promising(instance.exports.run)(timerMs);
+    const stateCheck = instance.exports.stateCheck();
 
     // Latency: each reply schedules the next message as a separate task (MessageChannel), so every round trip
     // suspends and resumes the Wasm stack once.
@@ -49,7 +52,7 @@ export async function runJspi(bytes, { timerMs, echoCount }) {
     await WebAssembly.promising(instance.exports.echo)(echoCount);
     const usPerTrip = +((performance.now() - start) * 1000 / echoCount).toFixed(2);
     channel.port1.close();
-    return { trace, ...monitor.result(), usPerTrip };
+    return { trace, ...monitor.result(), usPerTrip, stateCheck, collectedWhileSuspended };
 }
 
 // W: the app runs in a dedicated worker and blocks in Atomics.wait. Layout of the shared Int32Array:
@@ -75,6 +78,7 @@ export function runWorker(bytes, { timerMs, echoCount }, workerUrl) {
             } else if (data.timer !== undefined) {
                 setTimeout(() => enqueue(msg(4, 0)), data.timer);
             } else if (data.ranApp) {
+                const stateCheck = data.stateCheck;
                 // Latency: the main thread waits asynchronously for each reply and posts the next message.
                 enqueue(msg(7, 0));
                 const start = performance.now();
@@ -87,7 +91,7 @@ export function runWorker(bytes, { timerMs, echoCount }, workerUrl) {
                 }
                 const usPerTrip = +((performance.now() - start) * 1000 / echoCount).toFixed(2);
                 worker.terminate();
-                resolve({ trace, ...monitor.result(), usPerTrip });
+                resolve({ trace, ...monitor.result(), usPerTrip, stateCheck, collectedWhileSuspended: null });
             }
         };
         worker.postMessage({ bytes, shared, timerMs, echoCount });
