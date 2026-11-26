@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Dependency/**/*.cs" />
+    <ProjectReference Include="Dependency/PointerFieldDependency.csproj" />
+    <Compile Include="../../src/AssemblyReader/*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="../../src/PortableCompiler/*.cs" Link="%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

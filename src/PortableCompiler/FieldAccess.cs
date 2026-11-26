@@ -9,5 +9,9 @@ namespace PortableCompiler
         internal static int Encode(int owner, int storage) => (owner << StorageBits) | storage;
         internal static byte Owner(int descriptor) => (byte)(descriptor >> StorageBits);
         internal static int Storage(int descriptor) => descriptor & ((1 << StorageBits) - 1);
+
+        internal static int LoadInstruction(int storage) =>
+            storage == SignatureTypes.Signed8 || storage == SignatureTypes.Signed16 ? 3 :
+            SignatureTypes.IsNarrow(storage) ? 4 : 2;
     }
 }
