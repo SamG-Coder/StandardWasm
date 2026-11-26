@@ -36,6 +36,21 @@ namespace ReflectionFixture
             return (own == moduleOwner ? 4 : 0) + (own == other ? 8 : 0);
         }
 
+        public static int ResourceBufferIdentity()
+        {
+            var bytes = new byte[3];
+            var characters = new char[2];
+            var integers = new long[2];
+            object alias = BufferIdentity.Preserve(bytes);
+            object other = BufferIdentity.Preserve(new byte[3]);
+            int result = alias == bytes ? 1 : 0;
+            if (alias == other) result |= 2;
+            if (BufferIdentity.Preserve(characters) == characters) result |= 4;
+            if (BufferIdentity.Preserve(integers) == integers) result |= 8;
+            if (BufferIdentity.Preserve(null) == null) result |= 16;
+            return result;
+        }
+
         public static int OrdinalResourceNames()
         {
             string name = "Resource.é.東京.𐐀";
