@@ -73,6 +73,9 @@ namespace PeLibrary
                 if (width > alignment) alignment = width;
                 extent += width;
             }
+            // CoreCLR rounds small auto-layout value types up to a power of
+            // two. Copies can preserve the trailing bytes of that CLR layout.
+            if (auto && (extent & (extent - 1)) != 0) return 0;
             return extent % alignment == 0 ? extent : 0;
         }
 

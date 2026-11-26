@@ -26,7 +26,9 @@ namespace PortableCompiler
             bool nullReference = (exceptionTags & ExceptionTypes.NullReference) != 0;
             bool invalidCast = (exceptionTags & ExceptionTypes.InvalidCast) != 0;
             // Tag indices stay stable even when lower tags are unused.
-            int tagCount = invalidCast ? ExceptionTagsWasm.Count : nullReference ? ExceptionTagsWasm.NullTag + 1 :
+            bool argumentException = (exceptionTags & ExceptionTypes.Argument) != 0;
+            int tagCount = argumentException ? ExceptionTagsWasm.Count : invalidCast ? ExceptionTagsWasm.InvalidCastTag + 1 :
+                nullReference ? ExceptionTagsWasm.NullTag + 1 :
                 bounds ? ExceptionTagsWasm.IndexTag + 1 : divide ? ExceptionTagsWasm.DivideTag + 1 : overflow ? 1 : 0;
             int remainderIndex = hostImports + functions + thunks[0];
             int builderIndex = remainderIndex + (hasRemainder ? 1 : 0);
@@ -111,11 +113,13 @@ namespace PortableCompiler
                 codeSize += code;
                 functionSize += index;
             }
-            int exportCount = exports.Length + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0) + (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) +
-                (nullReference ? 1 : 0) + (invalidCast ? 1 : 0);
+            int exportCount = exports.Length + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0) +
+                (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) +
+                (nullReference ? 1 : 0) + (invalidCast ? 1 : 0) + (argumentException ? 1 : 0);
             int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
                 (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
-                (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0);
+                (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0) +
+                (argumentException ? ExceptionTagsWasm.ArgumentExportSize : 0);
             if (argumentArray != 0) exportSize += EntryArgumentsWasm.ExportBytes(builderIndex);
             int tagSize = 1 + tagCount * (1 + UnsignedSize(tagType));
             for (int i = 0; i < exports.Length; i++)
@@ -371,6 +375,7 @@ namespace PortableCompiler
             if (bounds) cursor = ExceptionTagsWasm.WriteIndexExport(output, cursor);
             if (nullReference) cursor = ExceptionTagsWasm.WriteNullExport(output, cursor);
             if (invalidCast) cursor = ExceptionTagsWasm.WriteInvalidCastExport(output, cursor);
+            if (argumentException) cursor = ExceptionTagsWasm.WriteArgumentExport(output, cursor);
 
             if (thunks[0] != 0)
             {

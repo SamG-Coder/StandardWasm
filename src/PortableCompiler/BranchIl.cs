@@ -16,8 +16,11 @@ namespace PortableCompiler
         internal const int LocalAddress = 56, InitializeValue = 57, UpdateValue = 58, ClearValue = 59;
         // Console.Out/Error push a host stream; the operand is the stream number.
         // ConsoleWrite consumes a stream and, unless writing an empty line, a String.
-        internal const int ConsoleWriter = 60, ConsoleWrite = 61;
+        internal const int ConsoleWriter = 61, ConsoleWrite = 62;
         internal const int ProvenNativeZero = 2;
+        // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
+        // #139 used 46 before integration with the stack, which assigned 46 through 59; kinds must stay unique.
+        internal const int MathCall = 60;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).

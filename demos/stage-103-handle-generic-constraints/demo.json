@@ -1,0 +1,1 @@
+{"assembly":"HandleConstraintDemo","exportType":"HandleConstraintDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["HandleConstraintDependency.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":65536,"arguments":[-17]},"expected":-17}

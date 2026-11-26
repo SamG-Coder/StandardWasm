@@ -213,7 +213,10 @@ namespace PortableCompiler
                 {
                     byte receiver = (byte)records[slot + 3];
                     byte closureType = (byte)operand;
-                    used = Local(code, used, 0x20, Spill(spills, maximum, receiver, top - 1));
+                    int target = Spill(spills, maximum, receiver, top - 1);
+                    // CLR rejects binding an instance delegate to a null target.
+                    used = GuardNull(code, used, target, ExceptionTagsWasm.ArgumentTag);
+                    used = Local(code, used, 0x20, target);
                     code[used++] = 0xd4;
                     int pointer = Spill(spills, maximum, MethodPointer, top);
                     int destination = Spill(spills, maximum, closureType, top - 1);
@@ -402,6 +405,13 @@ namespace PortableCompiler
                     }
                     if (returned != Void)
                         used = Local(code, used, 0x21, Spill(spills, maximum, StackType(returned), first));
+                }
+                else if (kind == MathCall)
+                {
+                    byte type = MathWasm.Type(operand);
+                    int first = top - MathWasm.Arity(operand) + 1;
+                    used = MathWasm.Emit(code, used, operand, Spill(spills, maximum, type, first), Spill(spills, maximum, type, top));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, type, first));
                 }
                 else if (kind == ExchangeHandlerField)
                 {
@@ -601,11 +611,11 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int GuardNull(byte[] code, int used, int reference)
+        private static int GuardNull(byte[] code, int used, int reference, int tag = ExceptionTagsWasm.NullTag)
         {
             used = Local(code, used, 0x20, reference);
             code[used++] = 0xd1; // ref.is_null
-            return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.NullTag);
+            return ExceptionTagsWasm.ThrowIf(code, used, tag);
         }
 
         private static int GuardArrayIndex(byte[] code, int used, int reference, int index, bool wrapped)
