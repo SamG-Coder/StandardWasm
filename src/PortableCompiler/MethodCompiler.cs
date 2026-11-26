@@ -717,12 +717,8 @@ namespace PortableCompiler
                 }
                 if (kind == BranchIl.LoadString)
                 {
-                    int start = literalSize[0];
-                    int characters = StringMetadata.CopyLiteral(image, heaps, records[slot + 1], literals, start);
-                    if (characters < 0) return characters;
-                    records[slot + 1] = start;
-                    records[slot + 3] = characters;
-                    literalSize[0] = start + characters * 2;
+                    int status = StringLiterals.Lower(image, heaps, records, slot, literals, literalSize, globals);
+                    if (status < 0) return status;
                     continue;
                 }
                 if (kind == BranchIl.MemberCall)

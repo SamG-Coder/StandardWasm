@@ -204,6 +204,14 @@ namespace PortableCompiler
                 }
                 else if (kind == LoadString)
                 {
+                    int global = records[slot + BranchIl.Width + 1];
+                    // The passive data segment survives for the lifetime of
+                    // this module. Allocate each immutable literal on demand.
+                    code[used++] = 0x23; // global.get
+                    used = WasmBinary.Unsigned(code, used, global);
+                    code[used++] = 0xd1; // ref.is_null
+                    code[used++] = 0x04;
+                    code[used++] = 0x40;
                     int characters = records[slot + 3];
                     if (characters != 0)
                     {
@@ -215,6 +223,11 @@ namespace PortableCompiler
                     code[used++] = 4;
                     code[used++] = 0;
                     used = StringWasm.Wrap(code, used);
+                    code[used++] = 0x24; // global.set
+                    used = WasmBinary.Unsigned(code, used, global);
+                    code[used++] = 0x0b; // end if
+                    code[used++] = 0x23; // global.get
+                    used = WasmBinary.Unsigned(code, used, global);
                     used = Local(code, used, 0x21, Spill(spills, maximum, String, depth));
                 }
                 else if (kind == NewRootObject)
