@@ -20,7 +20,18 @@ namespace PortableCompiler
 
             // A field has exactly one type, without a parameter count.
             int count = 0;
-            if (!field)
+            if (field)
+            {
+                next[0] = left;
+                int leftModifier = ObjectLayouts.ReadFieldModifier(caller, callerHeaps, callerLayout, next, leftEnd);
+                if (leftModifier < 0) return leftModifier;
+                left = next[0];
+                next[0] = right;
+                int rightModifier = ObjectLayouts.ReadFieldModifier(target, targetHeaps, targetLayout, next, rightEnd);
+                if (leftModifier != rightModifier) return 0;
+                right = next[0];
+            }
+            else
             {
                 count = CompressedUnsigned(caller, left, leftEnd, next);
                 left = next[0];

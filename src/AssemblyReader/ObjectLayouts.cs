@@ -128,6 +128,12 @@ namespace PeLibrary
             reference[0] = 0;
             if (size < 2 || size > limit - blob) return -1;
             if (image[blob] != 6) return -2;
+            reference[0] = blob + 1;
+            int modifier = ReadFieldModifier(image, streams, methods, reference, end);
+            if (modifier < 0) return modifier;
+            blob = reference[0] - 1;
+            size = end - blob;
+            reference[0] = 0;
             byte element = image[blob + 1];
             if (size == 2 && (element == 8 || element == 9)) return 1;
             if (size == 2 && element >= 2 && element <= 7) return NarrowStorage.FromElement(element);
@@ -151,6 +157,63 @@ namespace PeLibrary
             if (coded <= 0 || reference[0] != end) return -2;
             reference[0] = coded;
             return 0;
+        }
+
+        // A required modifier participates in linkage even when the storage
+        // bits are unchanged. Volatile ordering belongs to the IL prefix.
+        internal static int ReadFieldModifier(byte[] image, int[] heaps, int[] methods, int[] cursor, int end)
+        {
+            int at = cursor[0];
+            if (at >= end) return -1;
+            if (image[at] == 0x20) return -2; // Optional modifiers need their own binding policy.
+            if (image[at] != 0x1f) return 0;
+            int coded = CompressedUnsigned(image, at + 1, end, cursor);
+            if (coded <= 0 || cursor[0] >= end) return -1;
+            return IsVolatileMarker(image, heaps, methods, coded) ? 1 : -2;
+        }
+
+        private static bool IsVolatileMarker(byte[] image, int[] heaps, int[] methods, int coded)
+        {
+            int tag = coded & 3, row = coded >> 2;
+            if (tag > 1 || row < 1) return false;
+            var counts = new int[45];
+            int start = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (start < 0) return false;
+            int strings = methods[2], scope = ResolutionWidth(counts);
+            int refs = TypeRefStart(image, heaps, counts, start, strings);
+            int refWidth = scope + 2 * strings;
+            uint name, space;
+            if (tag == 1)
+            {
+                if (row > counts[1]) return false;
+                uint at = (uint)(refs + (row - 1) * refWidth);
+                uint resolution = ReadIndex(image, at, scope);
+                if ((resolution & 3) != 2 ||
+                    !PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, (int)(resolution >> 2)))
+                    return false;
+                name = ReadIndex(image, at + (uint)scope, strings);
+                space = ReadIndex(image, at + (uint)(scope + strings), strings);
+            }
+            else
+            {
+                if (row > counts[2] || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, methods, counts))
+                    return false;
+                int width = 4 + 2 * strings + CodedWidth(counts[2], counts[1], counts[27]) +
+                    IndexWidth(counts[4]) + IndexWidth(counts[6]);
+                uint at = (uint)(refs + counts[1] * refWidth + (row - 1) * width);
+                if ((U32(image, at) & 7) != 1) return false; // The CoreLib marker is top-level and public.
+                name = ReadIndex(image, at + 4, strings);
+                space = ReadIndex(image, at + (uint)(4 + strings), strings);
+            }
+            if (!Fits(name, 11, (uint)heaps[3]) || !Fits(space, 32, (uint)heaps[3])) return false;
+            uint n = (uint)heaps[2] + name, s = (uint)heaps[2] + space;
+            // IsVolatile, System.Runtime.CompilerServices.
+            return U32(image, n) == 0x6f567349 && U32(image, n + 4) == 0x6974616c &&
+                U16(image, n + 8) == 0x656c && image[n + 10] == 0 &&
+                U32(image, s) == 0x74737953 && U32(image, s + 4) == 0x522e6d65 &&
+                U32(image, s + 8) == 0x69746e75 && U32(image, s + 12) == 0x432e656d &&
+                U32(image, s + 16) == 0x69706d6f && U32(image, s + 20) == 0x5372656c &&
+                U32(image, s + 24) == 0x69767265 && U32(image, s + 28) == 0x00736563;
         }
 
         internal static int Owner(byte[] image, int[] streams, int[] methods, int member, bool field)

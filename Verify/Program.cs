@@ -113,4 +113,5 @@ NativeStorageCases.Add(cases);
 NestedReferenceCases.Add(cases);
 GenericLayoutCases.Add(cases);
 PackedFieldCases.Add(cases);
+VolatileFieldCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);
