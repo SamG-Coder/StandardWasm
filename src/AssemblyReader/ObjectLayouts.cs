@@ -410,6 +410,13 @@ namespace PeLibrary
             return true;
         }
 
+        internal static bool DeclaresInterface(int[] registry, int source, int target)
+        {
+            for (int edge = registry[Slot(source) + Interfaces]; edge != 0; edge = registry[edge + 1])
+                if (registry[edge] == target) return true;
+            return false;
+        }
+
         internal static bool Implements(int[] registry, int source, int target)
         {
             if (source < FirstClass || !IsInterface(registry, target)) return false;

@@ -66,7 +66,7 @@ namespace PortableCompiler
                 for (int index = sites[site + Scanned]; index < allocationsCount; index++)
                 {
                     int type = allocations[index];
-                    if (type != receiver && !Inherits(objects, type, receiver)) continue;
+                    if (!SignatureTypes.Assignable(type, receiver, objects)) continue;
                     CompileLocation.Set(location, sites[site + CallerOwner], sites[site + CallerRow], sites[site + CallerOffset]);
                     int shape = offsets[dispatcher];
                     int target = MethodCompiler.BindVirtualBody(bundle, objects, type, true, sites[site + Declared],

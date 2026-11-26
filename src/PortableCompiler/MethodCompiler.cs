@@ -987,7 +987,7 @@ namespace PortableCompiler
             if (declaring < 1) return -1;
             int receiver = BundleLayouts.Register(bundle, image, layout, heaps, owner, declaring, objects);
             if (receiver < 0) return receiver;
-            if (ObjectLayouts.IsInterface(objects, receiver) || ObjectLayouts.IsValueType(objects, receiver)) return -2;
+            if (ObjectLayouts.IsValueType(objects, receiver)) return -2;
             int shape = used[0];
             int blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
             int arity = SignatureTypes.Read(bundle, image, heaps, blob, types, shape,
@@ -1031,7 +1031,7 @@ namespace PortableCompiler
                 }
                 else
                 {
-                    if (externalObjects || bound < ObjectLayouts.FirstClass || ObjectLayouts.IsInterface(objects, bound) ||
+                    if (externalObjects || bound < ObjectLayouts.FirstClass ||
                         ObjectLayouts.IsValueType(objects, bound) || !Assignable(bound, declared, objects)) return -2;
                     function = dispatch.Add(functions, owner, row, bound, declared, callerOwner, callerRow, pc);
                     if (function < 0) return function;

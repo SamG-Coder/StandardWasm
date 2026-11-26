@@ -14,6 +14,9 @@ namespace PortableCompiler
                 (!allocated && !IsSealed(objects, receiver)) ||
                 IsValueType(objects, receiver) || IsInterface(objects, receiver)) return -2;
 
+            if (IsInterface(objects, declared))
+                return InterfaceSlots.SelectBody(bundle, objects, receiver, declared, owner, row, symbol);
+
             var ancestors = new int[objects[0]];
             int count = 0;
             for (int type = receiver; type != declared; type = Parent(objects, type))
@@ -35,7 +38,10 @@ namespace PortableCompiler
 
             symbol[0] = owner;
             symbol[1] = row;
-            bool final = (MethodDefinitions.ReadColumn(source, sourceLayout, row, 2) & 0x20) != 0;
+            int declarationFlags = MethodDefinitions.ReadColumn(source, sourceLayout, row, 2);
+            int declarationAccess = declarationFlags & 7;
+            bool familySlot = declarationAccess == 4 || declarationAccess == 5;
+            bool final = (declarationFlags & 0x20) != 0;
             var layout = new int[4];
             var heaps = new int[8];
             var range = new int[2];
@@ -70,7 +76,8 @@ namespace PortableCompiler
                     flags = attributes;
                 }
                 if (selected == 0) continue;
-                if ((flags & 7) != 6) return -2;
+                int access = flags & 7;
+                if (access != 6 && !(familySlot && (access == 4 || access == 5))) return -2;
                 // A new slot shadows the old name for later ordinary
                 // overrides. It does not change calls to the original slot.
                 if ((flags & 0x100) != 0)
