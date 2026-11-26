@@ -5,7 +5,7 @@ namespace PortableCompiler
 {
     internal static class ValueOperands
     {
-        internal static int LowerLocal(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+        internal static int LowerFrame(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int methodCount, int[] records, int slot, int[] frame, int[] objects, int[] clauses)
         {
             int local = records[slot + 1], type = frame[local];
@@ -46,7 +46,7 @@ namespace PortableCompiler
             return LowerAddressUse(image, layout, heaps, methodCount, records, slot, 0, clauses, readOnly);
         }
 
-        // ldloca/ldarg.0 followed by initobj of the same type clears the location.
+        // A frame address followed by initobj of the same type clears the location.
         private static int Clear(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int[] records, int slot, int next, int type, int[] objects)
         {
@@ -70,7 +70,7 @@ namespace PortableCompiler
                     initialized = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true);
             }
             if (initialized < 0 || initialized != type) return -2;
-            // The operand stays the frame index: the local, or argument 0.
+            // The operand stays the original frame index.
             records[slot] = ClearValue;
             records[slot + 2] = records[next + 2];
             records[next] = 0;
@@ -117,7 +117,7 @@ namespace PortableCompiler
                     // these arguments. The receiver is pushed as the
                     // current value, and the call's spare operand records keep
                     // the location and the argument count.
-                    if (records[slot] == LocalAddress) records[slot] = Load;
+                    if (records[slot] == FrameAddress) records[slot] = Load;
                     records[next + Width + 1] = local + 1;
                     records[next + 2 * Width + 1] = depth + 1;
                     return 0;

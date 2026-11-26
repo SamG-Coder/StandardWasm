@@ -623,9 +623,12 @@ namespace PortableCompiler
                     if (lowered < 0) return lowered;
                     continue;
                 }
-                if (kind == BranchIl.LocalAddress)
+                if (kind == BranchIl.FrameAddress)
                 {
-                    int lowered = ValueOperands.LowerLocal(bundle, image, layout, heaps,
+                    // The value-type this argument is already a managed address.
+                    // ldarga.0 would instead take the address of that argument slot.
+                    if (valueReceiver && records[slot + 1] == 0) return -2;
+                    int lowered = ValueOperands.LowerFrame(bundle, image, layout, heaps,
                         owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses);
                     if (lowered < 0) return lowered;
                     continue;

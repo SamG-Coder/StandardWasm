@@ -137,6 +137,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [131 · Runtime reflection](stage-131-runtime-reflection/README.md) | `npm run demo -- stage-131-runtime-reflection` | Preserve module identity and original basenames in compiled assemblies |
 | [133 · String object identity](stage-133-string-object-identity/README.md) | `npm run demo -- stage-133-string-object-identity` | Preserve identity for identical literals across linked assemblies |
 | [134 · Static aggregate fields](stage-134-static-aggregate-fields/README.md) | `npm run demo -- stage-134-static-aggregate-fields` | Read and write static structs with CLR copy and initializer semantics |
+| [135 · Addressed value arguments](stage-135-addressed-value-arguments/README.md) | `npm run demo -- stage-135-addressed-value-arguments` | Preserve the callee copy when taking the address of a by-value struct argument |
 
 ## Adding a stage
 

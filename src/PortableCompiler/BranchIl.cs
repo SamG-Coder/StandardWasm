@@ -13,7 +13,7 @@ namespace PortableCompiler
         internal const int FieldToken = 46, InitializedArray = 47;
         internal const int CheckedInteger = 48, CheckedConversion = 49, Leave = 50, Rethrow = 51, EndFinally = 52;
         internal const int CastClass = 53, TestClass = 54, ThrowNull = 55;
-        internal const int LocalAddress = 56, InitializeValue = 57, UpdateValue = 58, ClearValue = 59;
+        internal const int FrameAddress = 56, InitializeValue = 57, UpdateValue = 58, ClearValue = 59;
         // Console.Out/Error push a host stream; the operand is the stream number.
         // ConsoleWrite consumes a stream and, unless writing an empty line, a String.
         internal const int ConsoleWriter = 61, ConsoleWrite = 62;
@@ -64,9 +64,9 @@ namespace PortableCompiler
                     }
                     if (operand >= arguments) return -1;
                 }
-                else if (op == 0x10)
+                else if (op == 0x0f || op == 0x10)
                 {
-                    kind = Store;
+                    kind = op == 0x0f ? FrameAddress : Store;
                     if (pc >= length) return -1;
                     operand = image[start + pc++];
                     if (operand >= arguments) return -1;
@@ -74,7 +74,7 @@ namespace PortableCompiler
                 else if (op >= 6 && op <= 13 || op >= 0x11 && op <= 0x13)
                 {
                     bool store = op == 0x13 || (op >= 10 && op <= 13);
-                    kind = op == 0x12 ? LocalAddress : store ? Store : Load;
+                    kind = op == 0x12 ? FrameAddress : store ? Store : Load;
                     if (op >= 0x11)
                     {
                         if (pc >= length) return -1;
@@ -287,14 +287,15 @@ namespace PortableCompiler
                         kind = LoadFunction;
                         operand = (int)(token & 0xffffff);
                     }
-                    else if (extended == 0x0d)
+                    else if (extended == 0x0a || extended == 0x0d)
                     {
                         if (length - pc < 2) return -1;
                         operand = (int)ImageBytes.U16(image, (uint)(start + pc));
                         pc += 2;
-                        if (operand >= locals) return -1;
-                        kind = LocalAddress;
-                        operand += arguments;
+                        bool argument = extended == 0x0a;
+                        if (operand >= (argument ? arguments : locals)) return -1;
+                        kind = FrameAddress;
+                        if (!argument) operand += arguments;
                     }
                     else if (extended == 0x15)
                     {
