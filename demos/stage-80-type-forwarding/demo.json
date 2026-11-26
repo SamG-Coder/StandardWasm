@@ -1,0 +1,1 @@
+{"assembly":"ForwardingDemo","exportType":"ForwardingDemo.Demo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["forwarded/ForwardContract.dll","forwarded/ForwardImplementation.dll"]},{"name":"Run"}],"generated":{"bundle":true,"capacity":32768,"arguments":[5]},"expected":22}

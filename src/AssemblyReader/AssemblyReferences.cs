@@ -4,7 +4,11 @@ namespace PeLibrary
 {
     internal static class AssemblyReferences
     {
-        // Version byte offset, assembly/type/namespace/member string indexes, signature blob index.
+        internal const int SymbolWidth = 9;
+        private const int FullKey = 6, KeyStart = 7, KeyLength = 8;
+
+        // Version byte offset, assembly/type/namespace/member string indexes,
+        // signature blob index, then key kind and its validated byte range.
         internal static int ReadMember(byte[] image, int[] streams, int[] methods, int row, int[] reference)
         {
             var counts = new int[45];
@@ -37,15 +41,30 @@ namespace PeLibrary
             int first, int typeRow, int[] reference)
         {
             if (typeRow < 1 || typeRow > counts[1]) return -1;
-            int strings = methods[2], blobs = methods[3];
+            int strings = methods[2];
             int scopeWidth = ScopeWidth(counts);
             int typeRefWidth = scopeWidth + 2 * strings;
             int typeRefs = TypeRefStart(image, streams, counts, first, strings);
             uint type = (uint)(typeRefs + (typeRow - 1) * typeRefWidth);
             uint scope = Index(image, type, scopeWidth);
             if ((scope & 3) != 2) return -2;
-            int assemblyRow = (int)(scope >> 2);
+            reference[2] = (int)Index(image, type + (uint)scopeWidth, strings);
+            reference[3] = (int)Index(image, type + (uint)(scopeWidth + strings), strings);
+            return ReadAssemblyRow(image, streams, methods, counts, (int)(scope >> 2), reference);
+        }
+
+        internal static int ReadAssembly(byte[] image, int[] streams, int[] methods, int row, int[] reference)
+        {
+            var counts = new int[45];
+            if (MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts) < 0) return -1;
+            return ReadAssemblyRow(image, streams, methods, counts, row, reference);
+        }
+
+        private static int ReadAssemblyRow(byte[] image, int[] streams, int[] methods, int[] counts,
+            int assemblyRow, int[] reference)
+        {
             if (assemblyRow < 1 || assemblyRow > counts[35]) return -1;
+            int strings = methods[2], blobs = methods[3];
 
             int refs = MetadataTableRows.TableStart(streams, methods, counts, 35);
             if (refs < 0) return -1;
@@ -53,13 +72,18 @@ namespace PeLibrary
             uint versionFlags = U32(image, assembly + 8);
             uint key = Index(image, assembly + 12, blobs);
             uint culture = Index(image, assembly + (uint)(12 + blobs + strings), strings);
-            if (versionFlags != 0 || key != 0 || culture != 0)
-                return -2; // Initial linker supports exact, unsigned, culture-neutral identity.
+            if ((versionFlags & ~1u) != 0 || culture != 0) return -2;
+            var data = new int[1];
+            int length = StrongNames.ReadKey(image, streams, (int)key, data);
+            if (length < 0) return length;
+            bool fullKey = (versionFlags & 1) != 0;
+            if (fullKey ? length == 0 : length != 0 && length != 8) return -1;
+            reference[FullKey] = fullKey ? 1 : 0;
+            reference[KeyStart] = data[0];
+            reference[KeyLength] = length;
 
             reference[0] = (int)assembly;
             reference[1] = (int)Index(image, assembly + (uint)(12 + blobs), strings);
-            reference[2] = (int)Index(image, type + (uint)scopeWidth, strings);
-            reference[3] = (int)Index(image, type + (uint)(scopeWidth + strings), strings);
             return 0;
         }
 
@@ -79,10 +103,19 @@ namespace PeLibrary
             uint version = (uint)reference[0];
             if (U32(candidate, row + 4) != U32(source, version) || U32(candidate, row + 8) != U32(source, version + 4))
                 return 0;
-            if (U32(candidate, row + 12) != 0 || Index(candidate, row + 16, blobs) != 0 ||
-                Index(candidate, row + (uint)(16 + blobs + strings), strings) != 0)
+            uint flags = U32(candidate, row + 12);
+            uint key = Index(candidate, row + 16, blobs);
+            if ((flags & ~1u) != 0 || Index(candidate, row + (uint)(16 + blobs + strings), strings) != 0)
                 return 0;
-            return 1;
+            if ((flags & 1) == 0) return key == 0 && reference[KeyLength] == 0 ? 1 : 0;
+            if (reference[KeyLength] == 0) return 0;
+            var data = new int[1];
+            int length = StrongNames.ReadKey(candidate, heaps, (int)key, data);
+            if (length <= 0) return -1;
+            if (reference[FullKey] != 0)
+                return length == reference[KeyLength] &&
+                    StrongNames.Equal(source, reference[KeyStart], candidate, data[0], length) ? 1 : 0;
+            return StrongNames.MatchesToken(source, reference[KeyStart], candidate, data[0], length) ? 1 : 0;
         }
 
         internal static int FindType(byte[] source, int[] sourceHeaps, int[] reference,
