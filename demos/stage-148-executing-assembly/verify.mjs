@@ -5,6 +5,7 @@ import { packEntry } from "../stage-74-executable-entry/companions.mjs";
 import { verifyManagedBundle } from "../../scripts/verify-managed-bundle.mjs";
 import { root } from "../../scripts/toolchain.mjs";
 import { runOn32BitClr, wasm32Runtime } from "../../scripts/runtime-packs.mjs";
+import { verifyWinFormsStartup } from "./verify-winforms.mjs";
 
 const stage = join(root, "demos", "stage-148-executing-assembly");
 const compilerPath = process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts", "StandardWasm.Compiler.wasm");
@@ -23,3 +24,10 @@ const [bundle] = packEntry(image("ExecutingFixture.dll"), [image("ExecutingDepen
 const report = await verifyManagedBundle(compiler, bundle, oracle);
 writeFileSync(join(evidence, "results.json"), JSON.stringify({ ...report, clr: runtime.version }, null, 2));
 console.log(`Node and Edge matched ${report.comparisons} executing assembly identities from x86 CLR ${runtime.version}.`);
+
+const reference = process.env.STANDARDWASM_WINFORMS_REFERENCE;
+if (reference) {
+    const startup = await verifyWinFormsStartup(reference, runtime, compilerPath);
+    writeFileSync(join(evidence, "winforms-startup.json"), JSON.stringify(startup, null, 2) + "\n");
+    console.log("Both original WinForms publish formats reached String.TrimEnd in Node and Edge.");
+}
