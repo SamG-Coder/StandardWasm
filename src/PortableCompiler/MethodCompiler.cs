@@ -84,7 +84,7 @@ namespace PortableCompiler
             int count = CompressedTables.FindWithHeaps(image, layout, heaps);
             if (count < 0)
                 return count == MethodDefinitions.Unsupported ? -2 : -1;
-            int mainInitialization = TypeInitializers.RejectModuleInitializer(image, layout, heaps);
+            int mainInitialization = TypeInitializers.CheckModuleInitializer(image, layout, heaps, count);
             if (mainInitialization < 0) return mainInitialization;
 
             // A MethodDef row is local to its image. Give every row a disjoint
@@ -106,7 +106,7 @@ namespace PortableCompiler
                 int dependencyInterfaces = InterfaceImplementations.ReadTable(dependency, dependencyHeaps, dependencyLayout, interfaceTable);
                 if (dependencyInterfaces < 0) return dependencyInterfaces;
                 interfaces += dependencyInterfaces;
-                int dependencyInitialization = TypeInitializers.RejectModuleInitializer(dependency, dependencyLayout, dependencyHeaps);
+                int dependencyInitialization = TypeInitializers.CheckModuleInitializer(dependency, dependencyLayout, dependencyHeaps, size);
                 if (dependencyInitialization < 0) return dependencyInitialization;
                 if (size >= int.MaxValue - bases[module]) return -2;
                 bases[module + 1] = bases[module] + size;
