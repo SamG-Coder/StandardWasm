@@ -83,6 +83,7 @@
     <ProjectReference Include="../demos/stage-66-base-exception-catches/BaseExceptionHandlers.csproj" />
     <ProjectReference Include="../demos/stage-67-null-throw/NullThrow.csproj" />
     <ProjectReference Include="../demos/stage-68-bare-catch/BareCatch.csproj" />
+    <ProjectReference Include="../demos/stage-123-skip-locals-init/SkipLocalsInitFixture.csproj" />
     <ProjectReference Include="../demos/stage-75-inherited-layouts/HierarchyDemo.csproj" />
     <ProjectReference Include="../demos/stage-76-initializer-reachability/InitializerReachability.csproj" />
     <ProjectReference Include="../demos/stage-76-initializer-reachability/Module/ModuleInitFixture.csproj" />

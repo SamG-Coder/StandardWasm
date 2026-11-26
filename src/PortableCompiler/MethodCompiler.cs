@@ -261,8 +261,12 @@ namespace PortableCompiler
                     locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context);
                     if (locals < 0)
                         return locals;
-                    if (locals > 0 && body[4] == 0)
-                        return -2;
+                    // CorILMethod_InitLocals (body[4]) is deliberately not required. Without it
+                    // ECMA-335 II.25.4.4 leaves local contents unspecified, and the CLR still zeroes
+                    // GC references. Every Wasm local starts at zero or null, and value-type locals
+                    // use null as their zeroed aggregate, so [SkipLocalsInit] bodies get zeroed locals
+                    // too: a valid refinement of "unspecified". localloc (stackalloc) memory is not a
+                    // Wasm local; it is not decoded and stays an explicit diagnostic (decision 0051).
                 }
                 if (body[1] > (int.MaxValue - 32) / 64)
                     return -2;

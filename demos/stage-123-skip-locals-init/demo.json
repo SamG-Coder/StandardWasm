@@ -1,0 +1,1 @@
+{"assembly":"SkipLocalsInitFixture","exportType":"SkipLocalsInitFixture.Demo","method":"Compile","inputs":[{"file":"self"},{"name":"Scalars"}],"generated":{"capacity":8192,"arguments":[5]},"expected":31}
