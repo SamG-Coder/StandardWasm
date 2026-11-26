@@ -4,7 +4,7 @@ namespace PeLibrary
 {
     internal static class ValueTypeAttributes
     {
-        internal static int CheckByRefLike(byte[] image, int[] heaps, int[] methods, int[] counts, int typeRow,
+        internal static int CheckSupported(byte[] image, int[] heaps, int[] methods, int[] counts, int typeRow,
             int refs, int refWidth, int defs, int defWidth)
         {
             if (counts[12] == 0) return 0;
@@ -31,9 +31,9 @@ namespace PeLibrary
                 uint nameAt = (uint)(start + (row - 1) * rowWidth + nameColumn);
                 int name = Index(image, nameAt, strings);
                 int space = Index(image, nameAt + (uint)strings, strings);
-                // Even a byref-like struct with only scalar fields needs CLR
-                // stack lifetime rules. Its marker is enough to reject layout.
-                if (IsByRefLikeName(image, heaps, name, space)) return -2;
+                // Ref-like values need lifetime rules. Inline arrays repeat
+                // their declared field and cannot use the ordinary aggregate.
+                if (ChangesValueShape(image, heaps, name, space)) return -2;
             }
             return 0;
         }
@@ -57,18 +57,23 @@ namespace PeLibrary
             return typeRow > 0 && typeRow <= counts[tag == 1 ? 1 : 2] ? parent : -1;
         }
 
-        private static bool IsByRefLikeName(byte[] image, int[] heaps, int name, int space)
+        private static bool ChangesValueShape(byte[] image, int[] heaps, int name, int space)
         {
             uint size = (uint)heaps[3];
             if (!Fits((uint)name, 21, size) || !Fits((uint)space, 32, size)) return false;
             uint n = (uint)(heaps[2] + name), s = (uint)(heaps[2] + space);
-            return U32(image, n) == 0x79427349 && U32(image, n + 4) == 0x4c666552 &&
-                U32(image, n + 8) == 0x41656b69 && U32(image, n + 12) == 0x69727474 &&
-                U32(image, n + 16) == 0x65747562 && image[n + 20] == 0 &&
-                U32(image, s) == 0x74737953 && U32(image, s + 4) == 0x522e6d65 &&
-                U32(image, s + 8) == 0x69746e75 && U32(image, s + 12) == 0x432e656d &&
-                U32(image, s + 16) == 0x69706d6f && U32(image, s + 20) == 0x5372656c &&
-                U32(image, s + 24) == 0x69767265 && U32(image, s + 28) == 0x00736563;
+            if (U32(image, s) != 0x74737953 || U32(image, s + 4) != 0x522e6d65 ||
+                U32(image, s + 8) != 0x69746e75 || U32(image, s + 12) != 0x432e656d ||
+                U32(image, s + 16) != 0x69706d6f || U32(image, s + 20) != 0x5372656c ||
+                U32(image, s + 24) != 0x69767265 || U32(image, s + 28) != 0x00736563 ||
+                image[n + 20] != 0) return false;
+
+            // IsByRefLikeAttribute and InlineArrayAttribute.
+            return U32(image, n + 12) == 0x69727474 && U32(image, n + 16) == 0x65747562 &&
+                (U32(image, n) == 0x79427349 && U32(image, n + 4) == 0x4c666552 &&
+                    U32(image, n + 8) == 0x41656b69 ||
+                U32(image, n) == 0x696c6e49 && U32(image, n + 4) == 0x7241656e &&
+                    U32(image, n + 8) == 0x41796172);
         }
 
         private static int Index(byte[] image, uint at, int width) =>

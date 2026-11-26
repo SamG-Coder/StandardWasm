@@ -112,7 +112,7 @@ namespace PortableCompiler
                 if (storage < 0) return storage;
                 if (overlay && storage != 0)
                 {
-                    int width = ExplicitValueLayouts.Width(storage);
+                    int width = ExplicitValueLayouts.ViewWidth(objects, storage);
                     int start = offsets[offset] - 1;
                     if (start < 0) return -1;
                     if (width == 0 || start > limit - width) return -2;

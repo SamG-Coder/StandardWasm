@@ -85,6 +85,7 @@
     <ProjectReference Include="../demos/stage-94-floating-point-fields/FloatFieldDemo.csproj" />
     <ProjectReference Include="../demos/stage-96-primitive-generic-layouts/PrimitiveGenericDemo.csproj" />
     <ProjectReference Include="../demos/stage-97-byref-like-permission/ByRefPermissionFixture.csproj" />
+    <ProjectReference Include="../demos/stage-101-nested-overlay-views/NestedOverlayDemo.csproj" />
     <ProjectReference Include="../demos/stage-100-explicit-scalar-layouts/ScalarOverlayDemo.csproj" />
     <ProjectReference Include="../demos/stage-99-named-value-arguments/NamedValueDemo.csproj" />
     <ProjectReference Include="../demos/stage-98-nonnullable-value-constraints/ValueConstraintDemo.csproj" />

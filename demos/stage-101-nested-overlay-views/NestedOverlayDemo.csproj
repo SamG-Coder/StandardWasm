@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>netstandard2.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Dependency/**/*.cs;Oracle/**/*.cs" />
+    <ProjectReference Include="Dependency/NestedOverlayDependency.csproj" />
+    <Compile Include="../../src/AssemblyReader/*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="../../src/PortableCompiler/*.cs" Link="%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

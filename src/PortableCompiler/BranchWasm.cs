@@ -430,7 +430,7 @@ namespace PortableCompiler
                         used = LoadOperand(code, used, Spill(spills, maximum, source, top), source, storage);
                     }
                     if (IsExplicitValue(objects, type))
-                        used = ExplicitValueWasm.Load(code, used, type, operand, storage);
+                        used = ExplicitValueWasm.Load(code, used, objects, type, operand, storage, Spill(spills, maximum, I64, top));
                     else
                     {
                         // Packed cells truncate on assignment. The load selects the CLI extension.
@@ -450,7 +450,7 @@ namespace PortableCompiler
                     byte source = states[state + top];
                     int replacement = Spill(spills, maximum, source, top);
                     if (IsExplicitValue(objects, type))
-                        used = ExplicitValueWasm.Update(code, used, type, local, operand, FieldAccess.Storage(descriptor), replacement, source);
+                        used = ExplicitValueWasm.Update(code, used, objects, type, local, operand, FieldAccess.Storage(descriptor), replacement, source);
                     else
                         used = ValueFieldsWasm.Update(code, used, objects, type, local, temporaries + type - FirstClass,
                             operand, replacement, source);

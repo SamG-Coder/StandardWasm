@@ -60,17 +60,17 @@ namespace PeLibrary
                 return valueType && (flags & 0x138) == 0x100
                     ? EnumStorage.Read(image, streams, methods, fields, (int)first, (int)end) : -2;
             uint layout = flags & 0x18;
-            if (valueType ? layout != 8 && layout != 0x10 : layout != 0) return -2;
+            if (valueType ? layout == 0x18 : layout != 0) return -2;
             if (valueType)
             {
                 // Sequential values use declared managed fields. Explicit
                 // field offsets are validated separately before lowering.
                 if ((flags & 0x120) != 0x100 || valueBase != 1)
                     return -2;
-                int attributed = ValueTypeAttributes.CheckByRefLike(image, streams, methods, counts,
+                int attributed = ValueTypeAttributes.CheckSupported(image, streams, methods, counts,
                     row, refs, refWidth, defs, defWidth);
                 if (attributed < 0) return attributed;
-                if (layout == 8)
+                if (layout != 0x10)
                 {
                     int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]));
                     if (supported < 0) return supported;
@@ -291,6 +291,9 @@ namespace PeLibrary
             type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & ValueShape) != 0;
         internal static bool IsExplicitValue(int[] registry, int type) =>
             IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & 0x18) == 0x10;
+
+        internal static bool IsAutoValue(int[] registry, int type) =>
+            IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & 0x18) == 0;
 
         internal static bool IsNullableValueType(int[] registry, int type) =>
             IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & NullableShape) != 0;

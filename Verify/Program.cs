@@ -124,4 +124,5 @@ ByRefPermissionCases.Add(cases);
 ValueConstraintCases.Add(cases);
 NamedValueCases.Add(cases);
 ExplicitScalarCases.Add(cases);
+NestedOverlayCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

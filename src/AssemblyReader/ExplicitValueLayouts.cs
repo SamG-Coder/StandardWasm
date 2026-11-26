@@ -52,6 +52,30 @@ namespace PeLibrary
         private static uint ReadIndex(byte[] image, uint at, int width) =>
             width == 2 ? U16(image, at) : U32(image, at);
 
+        internal static int ViewWidth(int[] objects, int storage)
+        {
+            if (!ObjectLayouts.IsValueType(objects, storage)) return Width(storage);
+            if (ObjectLayouts.IsExplicitValue(objects, storage)) return 0;
+
+            // The aggregate contains only CLR fields. Padding cannot be
+            // reconstructed after a scalar write supplies bits for those bytes.
+            // CoreCLR groups auto-layout scalars by size and preserves the
+            // declared order within one size group.
+            bool auto = ObjectLayouts.IsAutoValue(objects, storage);
+            int extent = 0, alignment = 1;
+            for (int i = 0; i < ObjectLayouts.FieldCount(objects, storage); i++)
+            {
+                int field = ObjectLayouts.FieldTypeAt(objects, storage, i);
+                if (field == 0) continue;
+                int width = Width(field);
+                if (width == 0 || extent + width > BackingBytes || extent % width != 0 ||
+                    (auto && extent != 0 && width != alignment)) return 0;
+                if (width > alignment) alignment = width;
+                extent += width;
+            }
+            return extent % alignment == 0 ? extent : 0;
+        }
+
         internal static int Width(int storage)
         {
             if (storage == NarrowStorage.Signed8 || storage == NarrowStorage.Unsigned8) return 1;

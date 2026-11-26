@@ -87,6 +87,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [98 · Non-nullable value constraints](stage-98-nonnullable-value-constraints/README.md) | `npm run demo -- stage-98-nonnullable-value-constraints` | Closed struct constraints and original CoreLib Nullable field layout |
 | [99 · Named value arguments](stage-99-named-value-arguments/README.md) | `npm run demo -- stage-99-named-value-arguments` | Closed generics with linked sequential struct arguments |
 | [100 · Explicit scalar layouts](stage-100-explicit-scalar-layouts/README.md) | `npm run demo -- stage-100-explicit-scalar-layouts` | Shared bytes for overlapping scalar fields |
+| [101 · Nested overlay views](stage-101-nested-overlay-views/README.md) | `npm run demo -- stage-101-nested-overlay-views` | Nested scalar value views of the same explicit bytes |
 
 ## Adding a stage
 

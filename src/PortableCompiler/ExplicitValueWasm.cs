@@ -1,4 +1,5 @@
 using PeLibrary;
+using static PeLibrary.ObjectLayouts;
 using static PortableCompiler.BranchWasm;
 using static PortableCompiler.SignatureTypes;
 
@@ -6,17 +7,77 @@ namespace PortableCompiler
 {
     internal static class ExplicitValueWasm
     {
-        // The receiver on the stack is materialized even for a default value.
-        // CLI byte offsets select bits in the little-endian backing cell.
-        internal static int Load(byte[] code, int used, int type, int offset, int storage)
+        // The receiver is already materialized, including for default values.
+        internal static int Load(byte[] code, int used, int[] objects, int type, int offset, int storage, int scratch)
         {
-            used = ReadCell(code, used, type);
-            if (offset != 0)
+            used = ReadField(code, used, type, 0, I64);
+            used = MoveBits(code, used, offset, 0x88); // i64.shr_u
+            if (!IsValueType(objects, storage)) return DecodeScalar(code, used, storage);
+
+            // Use the i64 spill at the replaced evaluation-stack depth. Only
+            // the overlay reference was live there on entry to this instruction.
+            used = Local(code, used, 0x21, scratch);
+            int start = 0;
+            for (int i = 0; i < FieldCount(objects, storage); i++)
             {
-                used = WideConst(code, used, offset * 8, 0);
-                code[used++] = 0x88; // i64.shr_u
+                int field = FieldTypeAt(objects, storage, i);
+                if (field == 0) continue;
+                used = Local(code, used, 0x20, scratch);
+                used = MoveBits(code, used, start, 0x88);
+                used = DecodeScalar(code, used, field);
+                start += ExplicitValueLayouts.Width(field);
+            }
+            return Gc(code, used, 0, storage);
+        }
+
+        internal static int Update(byte[] code, int used, int[] objects, int type, int local, int offset, int storage,
+            int replacement, byte replacementType)
+        {
+            int width = ExplicitValueLayouts.ViewWidth(objects, storage);
+            if (width != 8)
+            {
+                used = ValueFieldsWasm.Materialize(code, used, type, local);
+                used = ReadField(code, used, type, 0, I64);
+                used = KeepOtherBytes(code, used, offset, width);
+                code[used++] = 0x83; // i64.and
             }
 
+            if (IsValueType(objects, storage))
+                used = Pack(code, used, objects, storage, replacement);
+            else
+            {
+                used = LoadOperand(code, used, replacement, replacementType, storage);
+                used = EncodeScalar(code, used, storage);
+            }
+            used = MoveBits(code, used, offset, 0x86); // i64.shl
+            if (width != 8) code[used++] = 0x84; // i64.or
+
+            // Publish a new immutable aggregate so stored copies keep their bytes.
+            used = Gc(code, used, 0, type);
+            return Local(code, used, 0x21, local);
+        }
+
+        private static int Pack(byte[] code, int used, int[] objects, int type, int source)
+        {
+            used = ValueFieldsWasm.Materialize(code, used, type, source);
+            used = Local(code, used, 0x21, source);
+            int start = 0, ordinal = 0;
+            for (int i = 0; i < FieldCount(objects, type); i++)
+            {
+                int field = FieldTypeAt(objects, type, i);
+                if (field == 0) continue;
+                used = Local(code, used, 0x20, source);
+                used = ReadField(code, used, type, ordinal++, field);
+                used = EncodeScalar(code, used, field);
+                used = MoveBits(code, used, start, 0x86);
+                if (start != 0) code[used++] = 0x84; // i64.or
+                start += ExplicitValueLayouts.Width(field);
+            }
+            return used;
+        }
+
+        private static int DecodeScalar(byte[] code, int used, int storage)
+        {
             if (storage == F64)
                 code[used++] = 0xbf; // f64.reinterpret_i64
             else if (storage != I64)
@@ -35,26 +96,8 @@ namespace PortableCompiler
             return used;
         }
 
-        internal static int Update(byte[] code, int used, int type, int local, int offset, int storage,
-            int replacement, byte replacementType)
+        private static int EncodeScalar(byte[] code, int used, int storage)
         {
-            int width = ExplicitValueLayouts.Width(storage);
-            int mask = width >= 4 ? -1 : (1 << (width * 8)) - 1;
-            int shift = offset * 8;
-            if (width != 8)
-            {
-                used = ValueFieldsWasm.Materialize(code, used, type, local);
-                used = ReadCell(code, used, type);
-                // Form the 64-bit mask from two words. C# masks shift counts,
-                // so handle the zero and cross-word cases explicitly.
-                int low = shift < 32 ? mask << shift : 0;
-                int high = shift >= 32 ? mask << (shift - 32) :
-                    shift == 0 ? 0 : (int)((uint)mask >> (32 - shift));
-                used = WideConst(code, used, ~low, ~high);
-                code[used++] = 0x83; // i64.and
-            }
-
-            used = LoadOperand(code, used, replacement, replacementType, storage);
             if (storage == F64)
                 code[used++] = 0xbd; // i64.reinterpret_f64
             else if (storage != I64)
@@ -62,27 +105,39 @@ namespace PortableCompiler
                 if (storage == F32) code[used++] = 0xbc; // i32.reinterpret_f32
                 code[used++] = 0xad; // i64.extend_i32_u
             }
-            if (width < 4)
+            if (IsNarrow(storage))
             {
-                used = WideConst(code, used, mask, 0);
+                used = WideConst(code, used, ByteMask(ExplicitValueLayouts.Width(storage)), 0);
                 code[used++] = 0x83; // i64.and
             }
-            if (offset != 0)
-            {
-                used = WideConst(code, used, shift, 0);
-                code[used++] = 0x86; // i64.shl
-            }
-            if (width != 8) code[used++] = 0x84; // i64.or
-
-            // Store a new immutable aggregate so value copies retain their bytes.
-            used = Gc(code, used, 0, type);
-            return Local(code, used, 0x21, local);
+            return used;
         }
 
-        private static int ReadCell(byte[] code, int used, int type)
+        private static int KeepOtherBytes(byte[] code, int used, int offset, int width)
         {
-            used = Gc(code, used, 2, type);
-            return WasmBinary.Unsigned(code, used, 0);
+            int lowMask = ByteMask(width), highMask = width > 4 ? ByteMask(width - 4) : 0;
+            int shift = offset * 8;
+            // Split the i64 mask. C# masks shift counts, including a shift by 32.
+            int low = shift < 32 ? lowMask << shift : 0;
+            int high = shift >= 32 ? lowMask << (shift - 32) :
+                shift == 0 ? highMask : (int)((uint)lowMask >> (32 - shift)) | (highMask << shift);
+            return WideConst(code, used, ~low, ~high);
+        }
+
+        private static int ByteMask(int width) => width >= 4 ? -1 : (1 << (width * 8)) - 1;
+
+        private static int ReadField(byte[] code, int used, int type, int ordinal, int storage)
+        {
+            used = Gc(code, used, FieldAccess.LoadInstruction(storage), type);
+            return WasmBinary.Unsigned(code, used, ordinal);
+        }
+
+        private static int MoveBits(byte[] code, int used, int offset, byte instruction)
+        {
+            if (offset == 0) return used;
+            used = WideConst(code, used, offset * 8, 0);
+            code[used++] = instruction;
+            return used;
         }
     }
 }
