@@ -919,8 +919,9 @@ namespace PortableCompiler
             int index = reference[5];
             if (index < 1 || index >= heaps[1]) return false;
             var next = new int[1];
-            int size = ImageBytes.CompressedUnsigned(image, heaps[0] + index, heaps[0] + heaps[1], next);
-            return size > 0 && (image[next[0]] & 0x20) != 0;
+            int end = heaps[0] + heaps[1];
+            int size = ImageBytes.CompressedUnsigned(image, heaps[0] + index, end, next);
+            return size > 0 && size <= end - next[0] && (image[next[0]] & 0x20) != 0;
         }
 
         // A non-constructor instance method whose receiver is a value type.
