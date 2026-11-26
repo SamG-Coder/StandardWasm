@@ -6,5 +6,5 @@ The C# fixtures recover a concrete control from an `object sender` with
 layout, including one from another DLL.
 
 The CLR, Node and Edge suite checks identity, null, a same-layout
-nonmatch, an event callback with a typed sender, and both caught and
-uncaught typed `InvalidCastException`.
+nonmatch, a boolean `is` expression, an event callback with a typed
+sender, and both caught and uncaught typed `InvalidCastException`.

@@ -20,6 +20,19 @@ internal static class NominalCastCases
         Check(nameof(Kernels.ReadCast), OpCodes.Castclass, Kernels.ReadCast);
         Check(nameof(Kernels.ReadForeignAs), OpCodes.Isinst, Kernels.ReadForeignAs);
         Check(nameof(Kernels.CatchForeignCast), OpCodes.Castclass, Kernels.CatchForeignCast);
+        byte[] boolean = Manifest(nameof(Kernels.IsButton));
+        string booleanHex = Compile(boolean, nameof(Kernels.IsButton));
+        var booleanIl = typeof(Kernels).GetMethod(nameof(Kernels.IsButton))!.GetMethodBody()!.GetILAsByteArray()!;
+        if (IlOffsets.Find(booleanIl, OpCodes.Cgt_Un) < 0)
+            throw new InvalidOperationException("The boolean type test must emit cgt.un.");
+        foreach (int kind in new[] { 0, 1, 2, 3 })
+            cases.Add(new
+            {
+                module = "BootstrapLibrary", method = "CompileBundle", fixture = "nominal cast boolean is",
+                inputs = new[] { input, Encode(boolean) },
+                generated = new { capacity, bundle = true, arguments = new[] { kind }, hex = booleanHex },
+                expected = Kernels.IsButton(kind) ? 1 : 0
+            });
         byte[] eventManifest = Manifest(nameof(Kernels.ReadEventSender));
         string eventHex = Compile(eventManifest, nameof(Kernels.ReadEventSender));
         foreach (int value in new[] { 7, int.MinValue, int.MaxValue })

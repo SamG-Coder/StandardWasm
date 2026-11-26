@@ -190,7 +190,10 @@ namespace PortableCompiler
                     if (!ReferenceComparison(type, top)) return -1;
                     if (kind == Conditional)
                         return extra == 0x46 || extra == 0x47 ? depth - needed : -1;
-                    return operand == 0x46 ? Push(stack, depth - 2, I32) : -1;
+                    // C# materializes a boolean type test with isinst, ldnull,
+                    // cgt.un. Only accept this reference ordering against null.
+                    return operand == 0x46 || (operand == 0x4b && top == NullValue)
+                        ? Push(stack, depth - 2, I32) : -1;
                 }
                 if (IsFloat(type) || IsFloat(top))
                 {

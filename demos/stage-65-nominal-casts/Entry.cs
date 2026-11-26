@@ -75,6 +75,8 @@ namespace NominalCasts
             return -17;
         }
 
+        public static bool IsButton(int kind) => Sender(kind, 7) is Button;
+
         public static int ReadEventSender(int value)
         {
             var button = new ClickSource(value);
