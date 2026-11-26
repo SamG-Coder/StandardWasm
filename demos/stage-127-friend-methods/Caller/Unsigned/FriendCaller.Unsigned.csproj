@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>FriendCaller</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Caller.cs" />
+    <ProjectReference Include="../../Provider/UnsignedGrant/FriendProvider.UnsignedGrant.csproj" />
+  </ItemGroup>
+</Project>

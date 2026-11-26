@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>FriendProvider</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <SignAssembly>true</SignAssembly><PublicSign>true</PublicSign><AssemblyOriginatorKeyFile>../../../stage-78-strong-names/fixture-a.public.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Dependency.cs" />
+    <Compile Include="*.cs" />
+  </ItemGroup>
+</Project>
