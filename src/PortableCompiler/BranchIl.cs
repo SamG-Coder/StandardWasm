@@ -32,10 +32,14 @@ namespace PortableCompiler
         // localloc: [size] -> [address] on the shadow stack in memory 0.
         internal const int LocalAllocate = 72;
         // sizeof <type>: lowered to an int32 Constant once the layout is measured.
+<<<<<<< HEAD
         internal const int SizeOf = 73;
         // ldobj / stobj / initobj of a blittable struct through a native address (decision 0073).
         // Operand: the registry value type; auxiliary: native plan index + 1.
-        internal const int LoadObject = 74, StoreObject = 75, InitializeNative = 76;
+        internal const int LoadObject = 113, StoreObject = 114, InitializeNative = 115; // clear of Stage 131
+=======
+        internal const int SizeOf = 112; // clear of the reflection kinds 73–75 (Stage 131)
+>>>>>>> origin/claude/275-struct-pointers
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
