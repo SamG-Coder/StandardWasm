@@ -13,5 +13,5 @@ current single-agent Wasm GC heap. The heap has no shared fields. Static,
 indirect, unmanaged and cross-agent operations need separate implementations
 with the ordering guarantees appropriate to their memory model.
 
-See [Stage 88](../../demos/stage-88-volatile-field-signatures/README.md) and
+See [Stage 90](../../demos/stage-90-volatile-field-signatures/README.md) and
 [ECMA-335, Partitions I and III](https://www.ecma-international.org/wp-content/uploads/ECMA-335_6th_edition_june_2012.pdf).

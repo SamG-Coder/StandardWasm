@@ -13,6 +13,7 @@ namespace PortableCompiler
         internal const int FieldToken = 46, InitializedArray = 47;
         internal const int CheckedInteger = 48, CheckedConversion = 49, Leave = 50, Rethrow = 51, EndFinally = 52;
         internal const int CastClass = 53, TestClass = 54, ThrowNull = 55;
+        internal const int LocalAddress = 56, InitializeValue = 57, UpdateValue = 58, ClearValue = 59;
         internal const int ProvenNativeZero = 2;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
@@ -54,11 +55,11 @@ namespace PortableCompiler
                     operand = image[start + pc++];
                     if (operand >= arguments) return -1;
                 }
-                else if (op >= 6 && op <= 13 || op == 0x11 || op == 0x13)
+                else if (op >= 6 && op <= 13 || op >= 0x11 && op <= 0x13)
                 {
                     bool store = op == 0x13 || (op >= 10 && op <= 13);
-                    kind = store ? Store : Load;
-                    if (op == 0x11 || op == 0x13)
+                    kind = op == 0x12 ? LocalAddress : store ? Store : Load;
+                    if (op >= 0x11)
                     {
                         if (pc >= length) return -1;
                         operand = image[start + pc++];
@@ -169,7 +170,7 @@ namespace PortableCompiler
                     if (operand == 0) return -1;
                     if (op == 0x7b || op == 0x7c || op == 0x7d)
                     {
-                        if (table != 4 && (table != 0x0a || op == 0x7c)) return -2;
+                        if (table != 4 && table != 0x0a) return -2;
                         kind = op == 0x7b ? GetField : op == 0x7c ? FieldAddress : SetField;
                         comparison = table == 0x0a ? 1 : 0;
                     }
@@ -256,6 +257,22 @@ namespace PortableCompiler
                         if (token >> 24 != 6) return -2;
                         kind = LoadFunction;
                         operand = (int)(token & 0xffffff);
+                    }
+                    else if (extended == 0x0d)
+                    {
+                        if (length - pc < 2) return -1;
+                        operand = (int)ImageBytes.U16(image, (uint)(start + pc));
+                        pc += 2;
+                        if (operand >= locals) return -1;
+                        kind = LocalAddress;
+                        operand += arguments;
+                    }
+                    else if (extended == 0x15)
+                    {
+                        if (length - pc < 4) return -1;
+                        operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                        pc += 4;
+                        kind = InitializeValue;
                     }
                     else if (extended == 0x1a)
                     {

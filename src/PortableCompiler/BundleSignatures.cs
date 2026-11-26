@@ -69,7 +69,7 @@ namespace PortableCompiler
                     else return 0;
                     continue;
                 }
-                if (element == 0x12)
+                if (element == 0x12 || element == 0x11)
                 {
                     int leftToken = CompressedUnsigned(caller, left, leftEnd, next);
                     left = next[0];

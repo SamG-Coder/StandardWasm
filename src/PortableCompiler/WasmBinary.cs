@@ -14,6 +14,7 @@ namespace PortableCompiler
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
             byte[] literals, int literalSize, bool eventArgsEmpty, int remainderFixup, int exceptionTags)
         {
+            if (!ValueFieldsWasm.CheckLayouts(objects)) return -2;
             int typeOffset = objects[0] + FirstClassHeap;
             bool hasRemainder = remainderFixup != 0;
             bool overflow = (exceptionTags & ExceptionTypes.Overflow) != 0;
@@ -260,7 +261,7 @@ namespace PortableCompiler
                         output[cursor++] = fieldType == Signed8 || fieldType == Unsigned8 ? (byte)0x78 : (byte)0x77;
                     else
                         cursor = ValueType(output, cursor, Representation(objects, fieldType));
-                    output[cursor++] = 1;
+                    output[cursor++] = IsValueType(objects, classType) ? (byte)0 : (byte)1;
                 }
             }
             for (int type = 0; type < functions; type++)
