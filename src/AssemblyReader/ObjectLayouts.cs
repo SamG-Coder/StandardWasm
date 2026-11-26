@@ -6,7 +6,8 @@ namespace PeLibrary
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
         internal const int FirstClass = ArrayTypeRefs.Doubles + 1, MaxClasses = 256 - FirstClass;
-        private const int Header = 2, Width = 5, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
+        private const int Header = 2, Width = 9, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
+        private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8;
         internal const int FieldMapStart = Header + MaxClasses * Width;
 
         // The header stores class count and occupied field slots. Each class
@@ -22,10 +23,8 @@ namespace PeLibrary
             return 0;
         }
 
-        internal static int Reserve(byte[] image, int[] streams, int[] methods, int[] registry, int assembly, int row, int[] shape)
+        internal static int ReadShape(byte[] image, int[] streams, int[] methods, int row, int[] shape)
         {
-            if (registry[0] >= MaxClasses) return -2;
-
             var counts = new int[45];
             int start = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
             if (start < 0 || row < 1 || row > counts[2]) return -1;
@@ -39,16 +38,28 @@ namespace PeLibrary
             int defWidth = fieldColumn + fieldIndex + methodIndex;
             uint def = (uint)(defs + (row - 1) * defWidth);
             uint flags = U32(image, def);
-            if ((flags & 0x120) != 0x100) return -2; // Sealed class, no interface.
+            if ((flags & 0x38) != 0) return -2; // Interface or non-auto layout.
             uint baseType = ReadIndex(image, def + (uint)(4 + 2 * strings), extends);
-            if ((baseType & 3) != 1 || !IsObjectRef(image, streams, methods, counts, refs, (int)(baseType >> 2)))
-                return -2;
+            if (baseType == 0 || (baseType & 3) > 1) return -2;
+            if ((baseType & 3) == 1 && IsObjectRef(image, streams, methods, counts, refs, (int)(baseType >> 2)))
+                baseType = 0;
 
             uint first = ReadIndex(image, def + (uint)fieldColumn, fieldIndex);
             uint end = row == counts[2] ? (uint)(counts[4] + 1) :
                 ReadIndex(image, def + (uint)(defWidth + fieldColumn), fieldIndex);
             if (first < 1 || end < first || end > (uint)(counts[4] + 1)) return -1;
-            int count = (int)(end - first), storage = FieldMapStart + registry[1];
+            shape[0] = defs + counts[2] * defWidth;
+            shape[1] = (int)first;
+            shape[2] = (int)(end - first);
+            shape[3] = (int)baseType;
+            shape[4] = (int)flags;
+            return 0;
+        }
+
+        internal static int Reserve(int[] registry, int assembly, int row, int[] shape, int parent)
+        {
+            if (registry[0] >= MaxClasses) return -2;
+            int count = shape[2], storage = FieldMapStart + registry[1];
             if (count > registry.Length - storage) return -3;
             // Reserve the class and its whole field slice before following
             // recursive references. Their registration may append other slices.
@@ -58,12 +69,12 @@ namespace PeLibrary
             int slot = Slot(FirstClass + index);
             registry[slot + Assembly] = assembly;
             registry[slot + TypeRow] = row;
-            registry[slot + FirstField] = (int)first;
+            registry[slot + FirstField] = shape[1];
             registry[slot + Fields] = count;
             registry[slot + Storage] = storage;
-            shape[0] = defs + counts[2] * defWidth;
-            shape[1] = (int)first;
-            shape[2] = count;
+            registry[slot + Base] = parent;
+            registry[slot + ShapeFlags] = shape[4];
+            registry[slot + FieldTable] = shape[0];
             return FirstClass + index;
         }
 
@@ -130,6 +141,50 @@ namespace PeLibrary
 
         private static int Slot(int type) => Header + (type - FirstClass) * Width;
 
+        internal static int Parent(int[] registry, int type) => registry[Slot(type) + Base];
+        internal static bool IsSealed(int[] registry, int type) => (registry[Slot(type) + ShapeFlags] & 0x100) != 0;
+        internal static bool IsAbstract(int[] registry, int type) => (registry[Slot(type) + ShapeFlags] & 0x80) != 0;
+        internal static int AssemblyOf(int[] registry, int type) => registry[Slot(type) + Assembly];
+        internal static int FirstRow(int[] registry, int type) => registry[Slot(type) + FirstField];
+        internal static int TableOf(int[] registry, int type) => registry[Slot(type) + FieldTable];
+
+        internal static bool BeginFields(int[] registry, int type)
+        {
+            int slot = Slot(type) + Filling;
+            if (registry[slot] != 0) return false;
+            registry[slot] = 1;
+            return true;
+        }
+
+        internal static bool Inherits(int[] registry, int source, int target)
+        {
+            if (source < FirstClass || target < FirstClass) return false;
+            for (int type = Parent(registry, source); type != 0; type = Parent(registry, type))
+                if (type == target) return true;
+            return false;
+        }
+
+        internal static int LayoutFieldCount(int[] registry, int type)
+        {
+            int count = 0;
+            for (int current = type; current != 0; current = Parent(registry, current))
+                count += FieldCount(registry, current);
+            return count;
+        }
+
+        internal static int LayoutFieldType(int[] registry, int type, int index)
+        {
+            // Base fields are the prefix required by Wasm struct subtyping.
+            int current = type;
+            while (true)
+            {
+                int parent = Parent(registry, current);
+                int prefix = LayoutFieldCount(registry, parent);
+                if (index >= prefix) return FieldTypeAt(registry, current, index - prefix);
+                current = parent;
+            }
+        }
+
         internal static int FieldCount(int[] registry, int type) => registry[Slot(type) + Fields];
 
         internal static int FieldTypeAt(int[] registry, int type, int offset) =>
@@ -148,6 +203,9 @@ namespace PeLibrary
             if (index < 0 || index >= registry[slot + Fields] || registry[storage + index] == 0)
                 return -1;
             int ordinal = 0;
+            for (int parent = Parent(registry, type); parent != 0; parent = Parent(registry, parent))
+                for (int i = 0; i < FieldCount(registry, parent); i++)
+                    if (FieldTypeAt(registry, parent, i) != 0) ordinal++;
             for (int i = 0; i < index; i++)
                 if (registry[storage + i] != 0) ordinal++;
             return ordinal;

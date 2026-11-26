@@ -34,11 +34,13 @@ namespace PortableCompiler
             bool recursive = objects[0] != 0;
             for (int i = 0; i < objects[0]; i++)
             {
-                int classType = FirstClass + i, fields = FieldCount(objects, classType);
-                int size = 1, stored = 0;
+                int classType = FirstClass + i, fields = LayoutFieldCount(objects, classType);
+                int size = 1, stored = 0, parent = Parent(objects, classType);
+                if (parent != 0) size += 2 + UnsignedSize(HeapType((byte)parent));
+                else if (!IsSealed(objects, classType)) size += 2;
                 for (int field = 0; field < fields; field++)
                 {
-                    int type = FieldTypeAt(objects, classType, field);
+                    int type = LayoutFieldType(objects, classType, field);
                     if (type == 0) continue;
                     size += 1 + ValueWidth((byte)type);
                     stored++;
@@ -218,15 +220,23 @@ namespace PortableCompiler
             }
             for (int i = 0; i < objects[0]; i++)
             {
-                int classType = FirstClass + i, fields = FieldCount(objects, classType);
+                int classType = FirstClass + i, fields = LayoutFieldCount(objects, classType);
+                int parent = Parent(objects, classType);
+                bool final = IsSealed(objects, classType);
+                if (parent != 0 || !final)
+                {
+                    output[cursor++] = final ? (byte)0x4f : (byte)0x50;
+                    output[cursor++] = parent == 0 ? (byte)0 : (byte)1;
+                    if (parent != 0) cursor = Unsigned(output, cursor, HeapType((byte)parent));
+                }
                 output[cursor++] = 0x5f; // struct
                 int stored = 0;
                 for (int field = 0; field < fields; field++)
-                    if (FieldTypeAt(objects, classType, field) != 0) stored++;
+                    if (LayoutFieldType(objects, classType, field) != 0) stored++;
                 cursor = Unsigned(output, cursor, stored);
                 for (int field = 0; field < fields; field++)
                 {
-                    int fieldType = FieldTypeAt(objects, classType, field);
+                    int fieldType = LayoutFieldType(objects, classType, field);
                     if (fieldType == 0) continue;
                     cursor = ValueType(output, cursor, (byte)fieldType);
                     output[cursor++] = 1;

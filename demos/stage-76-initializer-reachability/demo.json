@@ -1,0 +1,1 @@
+{"assembly":"InitializerReachability","exportType":"InitializerReachability.InitializerDemo","method":"CompileBundle","inputs":[{"file":"bundle","dependencies":["InitializerDependency.dll"]},{"name":"SafeBundle"}],"generated":{"bundle":true,"capacity":16384,"arguments":[11]},"expected":40}

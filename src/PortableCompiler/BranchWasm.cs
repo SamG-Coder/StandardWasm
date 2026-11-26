@@ -319,7 +319,7 @@ namespace PortableCompiler
                         used = NumericLocal(code, used, right, rightType, width);
                         if (type == I64 && IsShift(operand)) code[used++] = 0xad;
                         if (IsFloat(width)) used = FloatWasm.Binary(code, used, operand, width);
-                        else if (ReferenceComparison(type, rightType))
+                        else if (type == NullValue || IsReference(type))
                         {
                             code[used++] = 0xd3; // ref.eq
                             if (operand == 0x4b) code[used++] = 0x45; // cgt.un against null is not-equal
