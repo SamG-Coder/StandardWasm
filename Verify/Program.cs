@@ -74,4 +74,5 @@ ArrayLiteralCases.Add(cases);
 CheckedIntegerCases.Add(cases);
 CheckedCastCases.Add(cases);
 TypedOverflowCases.Add(cases);
+ExceptionTableCases.Add(cases);
 OracleWriter.Write(args.Single(), cases);

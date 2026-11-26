@@ -158,7 +158,10 @@ namespace PortableCompiler
                 if (status != 0)
                     return status == MethodBodies.Malformed ? -1 : -2;
                 if (body[5] != 0)
-                    return -2;
+                {
+                    int regions = ExceptionRegions.Count(image, rva, body);
+                    return regions < 0 ? regions : -2; // Managed handlers still require lowering.
+                }
 
                 int parameters = arities[current];
                 int signature = offsets[current];

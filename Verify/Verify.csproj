@@ -42,5 +42,6 @@
     <ProjectReference Include="../demos/stage-44-checked-integers/CheckedIntegers.csproj" />
     <ProjectReference Include="../demos/stage-45-checked-casts/CheckedCasts.csproj" />
     <ProjectReference Include="../demos/stage-46-typed-overflow/TypedOverflow.csproj" />
+    <ProjectReference Include="../demos/stage-47-exception-tables/ExceptionTables.csproj" />
   </ItemGroup>
 </Project>
