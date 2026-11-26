@@ -61,6 +61,7 @@ BundleCases.Add(cases);
 PortableWideCases.Add(cases);
 PortableSwitchCases.Add(cases);
 DiagnosticCases.Add(cases);
+PlatformIdentityCases.Add(cases);
 WideStorageCases.Add(cases);
 PortableFloatCases.Add(cases);
 ResizeCases.Add(cases);
