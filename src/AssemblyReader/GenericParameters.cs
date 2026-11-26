@@ -4,6 +4,8 @@ namespace PeLibrary
 {
     internal static class GenericParameters
     {
+        private const uint AllowByRefLike = 0x20;
+
         internal static int Check(byte[] image, int[] heaps, int[] methods, int typeRow, int[] arguments, int[] objects)
         {
             int arity = arguments.Length;
@@ -30,7 +32,9 @@ namespace PeLibrary
                 if (Index(image, at + 4, ownerWidth) != owner) break;
                 if (low - first >= arity || (int)U16(image, at) != low - first) return -2;
                 uint flags = U16(image, at + 2);
-                if ((flags & ~7u) != 0) return -2; // Variance and reference constraint only.
+                // Permission widens the CLR's allowed argument set. Actual
+                // byref-like value layouts are rejected before being registered.
+                if ((flags & ~(7u | AllowByRefLike)) != 0) return -2;
                 if ((flags & 4) != 0)
                 {
                     int argument = arguments[low - first];

@@ -65,6 +65,9 @@ namespace PeLibrary
                 // packing and explicit layout require a separate memory ABI.
                 if ((flags & 0x120) != 0x100 || valueBase != 1)
                     return -2;
+                int attributed = ValueTypeAttributes.CheckByRefLike(image, streams, methods, counts,
+                    row, refs, refWidth, defs, defWidth);
+                if (attributed < 0) return attributed;
                 int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]));
                 if (supported < 0) return supported;
                 baseType = 0;

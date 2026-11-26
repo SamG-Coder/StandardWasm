@@ -83,6 +83,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [93 · Typed null pointer fields](stage-93-typed-pointer-fields/README.md) | `npm run demo -- stage-93-typed-pointer-fields` | Pointer levels and CLR pointee identity survive linked null storage |
 | [94 · Floating-point instance fields](stage-94-floating-point-fields/README.md) | `npm run demo -- stage-94-floating-point-fields` | Linked Single and Double fields preserve storage precision |
 | [96 · Primitive generic layouts](stage-96-primitive-generic-layouts/README.md) | `npm run demo -- stage-96-primitive-generic-layouts` | Closed scalar and vector arguments retain CLI identity through linked value copies |
+| [97 · Generic byref-like permission](stage-97-byref-like-permission/README.md) | `npm run demo -- stage-97-byref-like-permission` | Ordinary arguments bind to .NET 10 generic definitions with AllowByRefLike |
 
 ## Adding a stage
 
