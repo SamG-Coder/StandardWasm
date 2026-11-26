@@ -247,12 +247,12 @@ namespace PortableCompiler
                     operand = (int)(token & 0xffffff);
                 }
                 else if (op == 0x8e) kind = ArrayLength;
-                else if (op >= 0x90 && op <= 0x96 || op >= 0x98 && op <= 0x9a)
+                else if (op >= 0x90 && op <= 0x9a)
                 {
                     kind = ArrayGet;
                     operand = op;
                 }
-                else if (op >= 0x9c && op <= 0xa2)
+                else if (op >= 0x9b && op <= 0xa2)
                 {
                     kind = ArraySet;
                     operand = op;
