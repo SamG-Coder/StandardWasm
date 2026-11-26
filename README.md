@@ -18,7 +18,7 @@ Separate assembly loading, IL lowering, Wasm emission, library implementations a
 
 ## Status
 
-The first working backend takes a DLL and a public export type, follows reachable in-assembly static calls, and emits a standalone module with zero runtime imports. Public static methods become named exports. The host compiler runs on .NET 10. Mono.Cecil reads the IL, our C# backend lowers it to WAT, and Binaryen assembles the binary.
+The portable compiler takes a managed DLL and an export manifest, follows reachable methods, and emits WebAssembly. The CLI selects the public static methods of an export type. It builds and runs the portable compiler on .NET 10 to produce the first WebAssembly compiler from source.
 
 | Available today | Current boundary |
 | --- | --- |
@@ -36,7 +36,7 @@ npm ci
 npm test
 ```
 
-The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds the netstandard2.0 demo libraries, records expected results on the CLR, compiles the DLLs and executes the binaries in Node and a headless browser. It also verifies rejection of checked addition and exercises one million tail calls. Traps are compared as failures, without matching exception classes.
+The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds the netstandard2.0 demo libraries, records expected results on the CLR, compiles the DLLs and executes the binaries in Node and a headless browser. It checks managed overflow, unsupported operations and one million tail calls. Typed managed exceptions match the CLR exception type. Older cases that still trap report that outcome separately.
 
 To compile another DLL:
 
@@ -59,14 +59,13 @@ After `npm test`, run `npm run audit:portable` to compile the direct CLR fixture
 
 ## Source map and bootstrap dependencies
 
-- `Compiler/ModuleCompiler.cs` selects exports, links reachable methods and maps CLR types.
-- `Compiler/MethodCompiler.cs` translates IL evaluation stacks and control flow. Basic blocks currently use a dispatcher for correctness. Efficient structured control flow is a future optimization.
-- `Compiler/IntegerOps.cs` maps numeric and comparison instructions.
+- `tools/PortableCompiler.Driver/` selects exports and runs the portable compiler on the CLR.
+- `src/PortableCompiler/MethodCompiler.cs` links reachable methods and lowers IL. Basic blocks currently use a dispatcher.
 - `demos/stage-*/` contains the independently buildable .NET Standard libraries. `Verify/` generates deterministic expected results on the CLR.
 - `src/AssemblyReader/` contains the portable PE/CLI discovery code shared by the reader stages.
 - `src/PortableCompiler/` contains the compiler-in-Wasm path demonstrated by Stages 09 through 13.
 - `scripts/` contains assembly, engine validation and browser tests. Generated modules are written to `artifacts/`.
 
-The initial compiler uses Mono.Cecil and Binaryen on the build host. The portable compiler uses its own metadata reader, binary writer, and managed byte-array boundary. The generated compiler and sample modules have zero runtime imports. The CLR-equivalence suite includes additional capabilities that still need portable implementations.
+The first compiler module comes from the portable compiler source running on the CLR. Its core uses its own metadata reader, binary writer and managed byte-array boundary. Subsequent compiler generations run inside WebAssembly.
 
 The modern instructions used here are standardized Wasm GC array instructions, `return_call` and the non-trapping float-to-int conversions (`trunc_sat`). See the [WebAssembly 3.0 release](https://webassembly.org/news/2025-09-17-wasm-3.0/) and [engine feature matrix](https://webassembly.org/features/).

@@ -2,16 +2,13 @@
 
 Status: proposed (#78). It needs Codex's APPROVE because Codex owns the portable compiler chain.
 
-GOAL.md defines self-hosting as: a generated compiler reads its own DLL, emits a second compiler, and that compiler reproduces the module and passes the library suite. The repository has two compilers:
-
-- **Host compiler** (`Compiler/`): .NET 10 with Mono.Cecil and Binaryen. It compiles the CLR-equivalence stages and does not run in Wasm.
-- **Portable compiler** (`src/AssemblyReader`, `src/PortableCompiler`): netstandard2.0 code compiled to Wasm. This is the compiler that must host itself.
+GOAL.md defines self-hosting as: a generated compiler reads its own DLL, emits a second compiler, and that compiler reproduces the module and passes the library suite. The portable compiler (`src/AssemblyReader`, `src/PortableCompiler`) targets netstandard2.0 and runs on the CLR and in WebAssembly. The .NET 10 driver in `tools/PortableCompiler.Driver/` selects exports and invokes the portable compiler for source bootstrap and other build-host calls.
 
 This record pins what "reproduces the module" and "passes the library suite" mean, so that completion is a checkable claim.
 
 ## Producers
 
-- **B**: the bootstrap, i.e. the portable compiler DLL compiled to Wasm once by the host compiler. B's own bytes are outside every comparison below.
+- **B**: the bootstrap, i.e. the portable compiler DLL compiled to Wasm once by the portable compiler running on the CLR. B's own bytes are outside every comparison below.
 - **G1 = B(DLL)**: the compiler module B emits when run on the portable compiler's own DLL with the compiler entry point selected.
 - **G2 = G1(DLL)** and **G3 = G2(DLL)**: the same input and export selection, run through the previous generation.
 - **C**: the CLR running the same portable compiler on the same DLL with the same export selection.
@@ -26,7 +23,7 @@ This record pins what "reproduces the module" and "passes the library suite" mea
 
 ## Consequences
 
-Each host compiler capability (64-bit integers, floating point, `switch`, `Math` intrinsics, exact float remainder, primitive arrays, and later additions) needs a portable counterpart before the milestone closes. Porting work can proceed per capability, each step with its own stage cases run through gen2. The host compiler stays available for comparison and for capabilities not yet ported.
+Each host compiler capability (64-bit integers, floating point, `switch`, `Math` intrinsics, exact float remainder, primitive arrays, and later additions) needs a portable counterpart before the milestone closes. Porting work can proceed per capability, each step with its own stage cases run through gen2. The original host/portable comparison is part of the historical record below. Current toolchain invocations use the portable compiler.
 
 ## Current status (2026-11-26)
 

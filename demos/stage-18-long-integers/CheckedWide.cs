@@ -1,6 +1,6 @@
 namespace LongIntegers
 {
-    // Negative fixture. Checked 64-bit arithmetic and conversions must be diagnosed, never lowered to wrapping ops.
+    // Checked 64-bit arithmetic and conversions raise managed overflow outside the result range.
     public static class CheckedWide
     {
         public static long Increment(long value) => checked(value + 1);
