@@ -1,12 +1,12 @@
 // Stage 88: bounding linear-memory growth for model C payloads (#196, decision 0025 follow-up).
 // Churns 64 KiB payloads under five strategies and two allocation patterns, in Node and Edge, without forced GC,
 // and reports peak linear memory, time, and how often the JSPI slow path had to yield.
-import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { root, run } from "../../scripts/toolchain.mjs";
+import { checkResults, selfTestCheckResults } from "./check-results.mjs";
 
 const stage = join(root, "demos/stage-88-payload-pressure");
 const out = join(root, "artifacts", "payload-pressure");
@@ -64,15 +64,9 @@ for (const [label, all] of [["Node " + process.version, node], ["Edge " + engine
     console.log(`${label} frame cost, median ms for 20 sums over 262,143 nodes: Wasm GC (C) ${all.spill.gcSum}, ` +
         `linear unrooted ${all.spill.linearSum}, linear with shadow-stack spills (B) ${all.spill.spillSum}`);
 
-// Checks that fail the stage: the final live-list checksum must match everywhere, every non-ceiling run must
-// complete its full churn, and each ceiling run must stop with an explicit exhaustion after fewer allocations.
-for (const [label, all] of [["Node", node], ["Edge", edge]]) {
-    for (const r of all.b) assert.ok(r.liveIntact, `${label} ${r.strategy}: final live-list checksum mismatch`);
-    for (const r of [...all.c, ...all.b]) {
-        const ceiling = r.strategy.includes("ceiling");
-        assert.equal(r.exhausted, ceiling, `${label} ${r.strategy} ${r.pattern}: unexpected exhaustion state`);
-        if (ceiling) assert.ok(r.completedMiB < r.requestedMiB, `${label} ${r.strategy}: ceiling did not stop allocation`);
-        else if (!r.timedOut) assert.equal(r.completedMiB, r.requestedMiB, `${label} ${r.strategy}: incomplete churn`);
-    }
-}
-console.log("Checks passed: live-list checksums match; ceilings exhaust explicitly; other runs complete their churn.");
+// Checks that fail the stage live in check-results.mjs; the validator is self-tested on synthetic rows first.
+const validatorCases = selfTestCheckResults();
+const failures = checkResults([["Node", node], ["Edge", edge]]);
+if (failures.length) throw Error("Stage 88 checks failed:\n  " + failures.join("\n  "));
+console.log(`Checks passed (validator self-test: ${validatorCases} cases): live-list checksums match; ` +
+    "ceilings exhaust explicitly; every other run completed its full churn within the 60 s cap.");
