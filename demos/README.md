@@ -112,6 +112,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [106 ï¿½ Static field storage](stage-106-static-field-storage/README.md) | `npm run demo -- stage-106-static-field-storage` | Private typed Wasm globals shared by linked managed methods |
 | [107 ï¿½ Framework facades](stage-107-framework-facades/README.md) | `npm run demo -- stage-107-framework-facades` | Run original .NET Standard libraries through the runtime facade |
 | [108 ï¿½ BeforeFieldInit calls](stage-108-beforefieldinit-calls/README.md) | `npm run demo -- stage-108-beforefieldinit-calls` | Allow non-triggering static calls and diagnose reached initializers |
+| [109 · Virtual dispatch on sealed receivers](stage-109-exact-virtual-dispatch/README.md) | `npm run demo -- stage-109-exact-virtual-dispatch` | Resolve inherited and hidden virtual slots for sealed classes |
 | [110 Â· Console arguments and streams](stage-110-console-arguments/README.md) | `npm run demo -- stage-110-console-arguments` | Windows, Node and Edge match on exit status and stdout/stderr bytes for `Main(string[])` |
 
 ## Adding a stage

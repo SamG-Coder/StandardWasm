@@ -18,6 +18,7 @@ namespace PortableCompiler
         // ConsoleWrite consumes a stream and, unless writing an empty line, a String.
         internal const int ConsoleWriter = 61, ConsoleWrite = 62;
         internal const int LoadStaticField = 63, StoreStaticField = 64;
+        internal const int VirtualCall = 65;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;

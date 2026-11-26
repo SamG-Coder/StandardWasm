@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal static int Analyze(int[] records, int[] depths, int[] states, int maximum,
             int[] frame, int result, int[] signatures, int[] offsets, int[] arities, int[] location, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects)
+            byte[] outgoingNulls, int[] objects, int[] virtualTypes)
         {
             if (depths.Length == 0)
                 return -1;
@@ -72,6 +72,8 @@ namespace PortableCompiler
                         return -1;
                     next = Push(stack, depth - 1, EventHandlerReference);
                 }
+                else if (kind == VirtualCall)
+                    next = CallShape(stack, depth, virtualTypes, operand, records[slot + 3], 0, objects);
                 else next = Transition(stack, depth, kind, operand, records[slot + 3], frame,
                     signatures, offsets, arities, objects);
                 if (next < 0)
@@ -101,6 +103,17 @@ namespace PortableCompiler
                 }
             }
             return 0;
+        }
+
+        private static int CallShape(int[] stack, int depth, int[] types, int offset, int arity,
+            int constructed, int[] objects)
+        {
+            int start = depth - arity + constructed;
+            if (start < 0) return -1;
+            for (int i = constructed; i < arity; i++)
+                if (!Assignable(stack[start + i - constructed], types[offset + 1 + i], objects)) return -1;
+            int result = types[offset + constructed];
+            return result == Void ? start : Push(stack, start, StackType(result));
         }
 
         private static int Transition(int[] stack, int depth, int kind, int operand, int extra, int[] frame,
@@ -255,18 +268,7 @@ namespace PortableCompiler
                 return Push(stack, depth - arity, type);
             }
             if (kind == Call || kind == NewObject)
-            {
-                int count = arities[operand], offset = offsets[operand];
-                int receiver = kind == NewObject ? 1 : 0;
-                int start = depth - count + receiver;
-                if (start < 0)
-                    return -1;
-                for (int i = receiver; i < count; i++)
-                    if (!Assignable(stack[start + i - receiver], signatures[offset + 1 + i], objects))
-                        return -1;
-                int result = kind == NewObject ? signatures[offset + 1] : signatures[offset];
-                return result == Void ? start : Push(stack, start, StackType(result));
-            }
+                return CallShape(stack, depth, signatures, offsets[operand], arities[operand], kind == NewObject ? 1 : 0, objects);
             if (kind == BaseCtor)
                 return depth > 0 && stack[depth - 1] >= FirstClass && !IsInterface(objects, stack[depth - 1]) &&
                     !IsValueType(objects, stack[depth - 1]) ? depth - 1 : -1;
