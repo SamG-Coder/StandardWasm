@@ -1,4 +1,4 @@
-# 0037 · Console host contract
+# 0039 · Console host contract
 
 An original console app reaches the browser host through two contracts: one for the arguments the host passes to `Main(string[] args)`, and one for the bytes the app writes to stdout and stderr. Both contracts are explicit. A module that uses neither keeps the existing invariant of having no imports.
 

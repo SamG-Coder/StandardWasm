@@ -25,7 +25,10 @@ const { url, close } = await serveConsoleLaunch(serve ? 5174 : 0, compiler);
 const launchUrl = url + "/";
 if (serve) console.log("Local executable launch at " + launchUrl);
 else {
-    try { await verify(); }
+    try {
+        assert.throws(() => createConsoleHost({ encoding: "constructor" }), /Unsupported console encoding/);
+        await verify();
+    }
     finally { await close(); }
 }
 

@@ -16,7 +16,7 @@ For each argument set in [expected.json](expected.json), the runner checks that 
 - the stdout bytes
 - the stderr bytes, line terminators included
 
-The argument sets are: none, one empty argument, an argument with a space, `Grüße 😀` (non-BMP), and a mixed set. The Windows processes run without a console, so .NET encodes their output with the ANSI code page. The runner reads that code page from the registry and gives the browser host the same encoding and CRLF. On a Windows-1252 machine, the emoji therefore becomes `??` on every side. [Decision 0037](../../docs/decisions/0037-console-host-contract.md) defines the import and argument contract. The evidence is written to `artifacts/console-arguments/run-*/results.json`.
+The argument sets are: none, one empty argument, an argument with a space, `Grüße 😀` (non-BMP), and a mixed set. The Windows processes run without a console, so .NET encodes their output with the ANSI code page. The runner reads that code page from the registry and gives the browser host the same encoding and CRLF. On a Windows-1252 machine, the emoji therefore becomes `??` on every side. [Decision 0039](../../docs/decisions/0039-console-host-contract.md) defines the import and argument contract. The evidence is written to `artifacts/console-arguments/run-*/results.json`.
 
 To use the browser page directly, run `node demos/stage-110-console-arguments/run.mjs --serve` after `npm test`. Drop the publish output, enter the arguments as a JSON array, choose the encoding and select **Run managed entry**.
 

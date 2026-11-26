@@ -2,7 +2,7 @@ import { packEntry, readManagedCompanions } from "../../stage-74-executable-entr
 import { buildArguments, consoleImportModule, createConsoleHost, hex } from "./console-host.mjs";
 
 // Compiles a dropped .NET entry with the self-hosted compiler and runs it
-// with the console host of decision 0037. The compile half follows the
+// with the console host of decision 0039. The compile half follows the
 // Stage 74 launcher, which stays unchanged for its own parameterless entries.
 // selection.arguments is the string[] passed to Main. selection.console
 // names the Console.OutputEncoding and Environment.NewLine the host models.

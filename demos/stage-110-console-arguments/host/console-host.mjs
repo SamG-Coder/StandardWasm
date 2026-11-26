@@ -1,4 +1,4 @@
-// Host side of decision 0037: console streams and Main(string[]) arguments.
+// Host side of decision 0039: console streams and Main(string[]) arguments.
 // The generated module writes UTF-16 code units to stream 1 (stdout) or
 // 2 (stderr) and asks the host for a line terminator. The host owns what
 // the operating system owns for the CLR: Console.OutputEncoding and
@@ -41,7 +41,7 @@ function encodeUtf8(units) {
 const encoders = { "utf-8": encodeUtf8, "windows-1252": encodeWindows1252 };
 
 export function createConsoleHost({ encoding = "utf-8", newLine = "\r\n" } = {}) {
-    const encode = encoders[encoding];
+    const encode = Object.hasOwn(encoders, encoding) ? encoders[encoding] : undefined;
     if (!encode) throw Error("Unsupported console encoding " + encoding + ".");
     if (newLine !== "\r\n" && newLine !== "\n") throw Error("Environment.NewLine must be CRLF or LF.");
     // Code units accumulate per stream and are encoded once. This matches the
