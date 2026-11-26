@@ -18,14 +18,16 @@ namespace PointerFieldDemo
         private static void* Empty() => null;
         public static int ReadEmpty() => IsNull(Empty()) ? 1 : -1;
         public static int ReadNullSlot(NativeSlot slot) => IsNull(slot.Address) ? 1 : -1;
-        public static int RejectAddress(int value)
+        // Since Stage 137 (decision 0060), void* is a native address: any value can be
+        // stored, a null read raises NullReferenceException, and null exports as 0.
+        public static int StoreAddress(int value)
         {
             var slot = new NativeSlot(value);
             slot.Address = (void*)1;
-            return slot.Marker;
+            return slot.Address == (void*)1 ? slot.Marker : -1;
         }
-        public static int RejectDereference(NativeSlot slot) => *(int*)slot.Address;
-        public static void* RejectExport() => null;
+        public static int DereferenceNullAddress() => *(int*)new NativeSlot(0).Address;
+        public static void* ExportNull() => null;
         public static int RejectCallbackLayout() => new CallbackSlot().Marker;
     }
 

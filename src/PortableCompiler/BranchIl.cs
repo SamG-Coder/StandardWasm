@@ -29,6 +29,8 @@ namespace PortableCompiler
         // ldind.* / stind.* through an unmanaged pointer into memory 0 (decision 0060).
         // [address] -> [value] and [address, value] -> []. The operand is the opcode.
         internal const int LoadIndirect = 70, StoreIndirect = 71;
+        // localloc: [size] -> [address] on the shadow stack in memory 0.
+        internal const int LocalAllocate = 72;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
@@ -304,6 +306,8 @@ namespace PortableCompiler
                         pc += 4;
                         kind = InitializeValue;
                     }
+                    else if (extended == 0x0f)
+                        kind = LocalAllocate;
                     else if (extended == 0x1a)
                     {
                         if (!hasCatches) return -1;

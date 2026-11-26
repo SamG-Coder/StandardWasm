@@ -17,4 +17,5 @@ The Verify oracle compares these against the CLR in Node and Edge:
 - reference locals
 
 It also checks that each kernel really clears the flag. `Kernels.Stack` uses
-`stackalloc`, which stays an explicit -2 diagnostic.
+`stackalloc`. Since [Stage 137](../stage-137-stackalloc/README.md) it runs on the
+shadow stack in memory 0 and compares with the CLR.
