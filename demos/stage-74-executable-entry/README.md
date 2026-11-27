@@ -30,8 +30,10 @@ separate slots, and lookup uses the same linear memory as other imports.
 The browser host can create an activation-context handle from a file-backed
 module's numeric, language-neutral manifest resource and maintain the active
 contexts in stack order. The current contract retains the original manifest
-bytes. Side-by-side dependency resolution, file-path manifests, and compiler
-binding for the activation-context functions remain pending.
+bytes. The compiler links the exact CreateActCtxW entry with its native
+pointer and scalar or SDK HANDLE result. Side-by-side dependency resolution,
+file-path manifests, and compiler binding for the remaining context functions
+are still pending.
 
 Run `node demos/stage-74-executable-entry/verify-win32-host.mjs` on Windows to
 compare the host import contract in Node and Edge against native .NET calls.

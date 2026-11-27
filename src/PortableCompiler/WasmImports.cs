@@ -4,10 +4,16 @@ namespace PortableCompiler
     // advances only for function imports.
     internal static class WasmImports
     {
-        internal const int Console = 1, Resources = 2, Memory = 4, Win32Errors = 8, Win32Modules = 16;
+        internal const int Console = 1, Resources = 2, Memory = 4, Win32Errors = 8, Win32Modules = 16, Win32Activation = 32;
 
         internal static int FunctionCount(int features) =>
+            Win32ActivationBase(features) + ((features & Win32Activation) != 0 ? 1 : 0);
+
+        private static int Win32ActivationBase(int features) =>
             Win32ModuleBase(features) + ((features & Win32Modules) != 0 ? 1 : 0);
+
+        internal static int Win32UnarySlot(int features, int member) =>
+            member == Win32ModuleBinding.Module ? Win32ModuleBase(features) : Win32ActivationBase(features);
 
         internal static int Win32ModuleBase(int features) =>
             Win32ErrorBase(features) + ((features & Win32Errors) != 0 ? Win32ErrorWasm.FunctionCount : 0);
@@ -19,12 +25,13 @@ namespace PortableCompiler
             ((features & Console) != 0 ? ConsoleWasm.TypeBytes : 0) +
             ((features & Resources) != 0 ? ResourceWasm.TypeBytes : 0) +
             ((features & Win32Errors) != 0 ? Win32ErrorWasm.TypeBytes : 0) +
-            ((features & Win32Modules) != 0 ? Win32ModuleWasm.TypeBytes : 0);
+            ((features & Win32Modules) != 0 ? Win32ModuleWasm.TypeBytes : 0) +
+            ((features & Win32Activation) != 0 ? Win32ModuleWasm.TypeBytes : 0);
 
         private static int ConsoleFunctions(int features) => (features & Console) != 0 ? ConsoleWasm.ImportCount : 0;
 
         // Resource calls and native indirection share one memory index.
-        private static bool HasMemory(int features) => (features & (Resources | Memory | Win32Modules)) != 0;
+        private static bool HasMemory(int features) => (features & (Resources | Memory | Win32Modules | Win32Activation)) != 0;
 
         private static int EntryCount(int features) => FunctionCount(features) + (HasMemory(features) ? 1 : 0);
 
@@ -35,7 +42,10 @@ namespace PortableCompiler
             if (HasMemory(features)) size += LinearMemoryWasm.ImportBytes;
             if ((features & Resources) != 0) size += ResourceWasm.ImportEntryBytes(firstType + ConsoleFunctions(features));
             if ((features & Win32Errors) != 0) size += Win32ErrorWasm.ImportEntryBytes(firstType + Win32ErrorBase(features));
-            if ((features & Win32Modules) != 0) size += Win32ModuleWasm.ImportEntryBytes(firstType + Win32ModuleBase(features));
+            if ((features & Win32Modules) != 0)
+                size += Win32ModuleWasm.ImportEntryBytes(firstType + Win32ModuleBase(features), Win32ModuleBinding.Module);
+            if ((features & Win32Activation) != 0)
+                size += Win32ModuleWasm.ImportEntryBytes(firstType + Win32ActivationBase(features), Win32ModuleBinding.CreateContext);
             return size;
         }
 
@@ -45,6 +55,7 @@ namespace PortableCompiler
             if ((features & Resources) != 0) cursor = ResourceWasm.WriteTypes(output, cursor);
             if ((features & Win32Errors) != 0) cursor = Win32ErrorWasm.WriteTypes(output, cursor);
             if ((features & Win32Modules) != 0) cursor = Win32ModuleWasm.WriteType(output, cursor);
+            if ((features & Win32Activation) != 0) cursor = Win32ModuleWasm.WriteType(output, cursor);
             return cursor;
         }
 
@@ -55,7 +66,10 @@ namespace PortableCompiler
             if (HasMemory(features)) cursor = LinearMemoryWasm.WriteImport(output, cursor);
             if ((features & Resources) != 0) cursor = ResourceWasm.WriteEntries(output, cursor, firstType + ConsoleFunctions(features));
             if ((features & Win32Errors) != 0) cursor = Win32ErrorWasm.WriteEntries(output, cursor, firstType + Win32ErrorBase(features));
-            if ((features & Win32Modules) != 0) cursor = Win32ModuleWasm.WriteEntry(output, cursor, firstType + Win32ModuleBase(features));
+            if ((features & Win32Modules) != 0)
+                cursor = Win32ModuleWasm.WriteEntry(output, cursor, firstType + Win32ModuleBase(features), Win32ModuleBinding.Module);
+            if ((features & Win32Activation) != 0)
+                cursor = Win32ModuleWasm.WriteEntry(output, cursor, firstType + Win32ActivationBase(features), Win32ModuleBinding.CreateContext);
             return cursor;
         }
     }

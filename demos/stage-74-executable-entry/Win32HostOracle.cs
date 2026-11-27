@@ -29,7 +29,7 @@ nint moduleHandle = Lookup(forms.Name.ToUpperInvariant());
 int moduleError = Marshal.GetLastPInvokeError();
 Console.WriteLine(JsonSerializer.Serialize(new { executable, results, errors = new[] { system, pinvoke },
     compiledFixture, framework = forms.Assembly.Location, frameworkLookup = new[] { moduleHandle == 0 ? 0 : 1, moduleError },
-    activationContext = ActivationContextOracle.Probe(moduleHandle) }));
+    activationContext = ActivationContextOracle.Probe(moduleHandle), compiledActivation = ActivationContextOracle.ProbeFixture() }));
 
 [DllImport("KERNEL32.dll", EntryPoint = "GetModuleHandleW", ExactSpelling = true,
     CharSet = CharSet.Unicode, SetLastError = true)]
@@ -97,6 +97,19 @@ static class ActivationContextOracle
         {
             ReleaseActCtx(context);
         }
+    }
+
+    internal static int[][] ProbeFixture()
+    {
+        var results = new int[4][];
+        for (int scenario = 0; scenario < results.Length; scenario++)
+        {
+            nint handle = ActivationContextProbe.Create(scenario);
+            int error = Marshal.GetLastPInvokeError();
+            results[scenario] = [handle == -1 ? -1 : 1, error];
+            if (handle != -1) ReleaseActCtx(handle);
+        }
+        return results;
     }
 
     private static nint CurrentContext()

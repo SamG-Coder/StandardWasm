@@ -241,12 +241,15 @@ namespace PortableCompiler
                 {
                     // MethodShape proved the named native leaf and both sides
                     // of the ABI. Keep the SDK's managed caller and error logic.
-                    hostUse[0] = hostUse[0] | WasmImports.Win32Modules;
+                    int import = Win32ModuleBinding.FindImport(image, heaps, layout, source,
+                        MethodDefinitions.ReadColumn(image, layout, source, 1));
+                    if (import == 0) return -2;
+                    hostUse[0] = hostUse[0] | (import == Win32ModuleBinding.Module ? WasmImports.Win32Modules : WasmImports.Win32Activation);
                     if (moduleCode.Length - length < Win32ModuleWasm.BodyCapacity) return -3;
                     bodyOffsets[current] = length;
                     int shape = offsets[current];
                     length = Win32ModuleWasm.WriteBody(moduleCode, length, signatures[shape + 1], signatures[shape],
-                        WasmImports.Win32ModuleBase(hostFeatures), hostImports, initializerPrologue);
+                        WasmImports.Win32UnarySlot(hostFeatures, import), hostImports, initializerPrologue);
                     sizes[current] = length - bodyOffsets[current];
                     continue;
                 }
@@ -1749,7 +1752,8 @@ namespace PortableCompiler
             bool imported = (attributes & 0x2000) != 0;
             if ((attributes & 0x400) != 0 || (!allowVirtual && (attributes & 0x40) != 0) || (implementation & 7) != 0)
                 return -2;
-            if (imported && !Win32ModuleBinding.IsModuleImport(image, heaps, layout, row, implementation)) return -2;
+            int nativeImport = imported ? Win32ModuleBinding.FindImport(image, heaps, layout, row, implementation) : 0;
+            if (imported && nativeImport == 0) return -2;
             int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
             if (owner < 0) return -1;
             bool isStatic = (attributes & 0x10) != 0;
@@ -1799,8 +1803,7 @@ namespace PortableCompiler
             int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
             int arity = SignatureTypes.Read(bundle, image, heaps, signature, types, offset, receiver, layout, objects, assembly, context, methodArguments);
             if (imported && arity >= 0 && (arity != 1 ||
-                !Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 1], "PCWSTR") ||
-                !Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset], "HMODULE"))) return -2;
+                !Win32ModuleBinding.MatchesSignature(bundle, objects, nativeImport, types[offset + 1], types[offset]))) return -2;
             if (arity > 0 && !isStatic && ObjectLayouts.IsValueType(objects, receiver) &&
                 ObjectLayouts.IsConstructor(image, heaps, layout, row))
             {

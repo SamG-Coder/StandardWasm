@@ -131,7 +131,7 @@ async function exercise(instantiate, bytes, executable, framework) {
         embeddedFramework: [embedded, second.getLastSystemError()] };
 }
 
-async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes) {
+async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framework) {
     const { instance: { exports: compiler } } = await WebAssembly.instantiate(new Uint8Array(compilerBytes));
     function upload(bytes) {
         const result = compiler.CreateBytes(bytes.length);
@@ -141,7 +141,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes) {
 
     const fixture = upload(fixtureBytes);
     const encoder = new TextEncoder();
-    const names = ["Exchange", "Read", "LookupModule"].map(name => encoder.encode(name));
+    const names = ["Exchange", "Read", "LookupModule", "Create"].map(name => encoder.encode(name));
     const manifest = new Uint8Array(names.reduce((size, name) => size + 8 + name.length, 0));
     const view = new DataView(manifest.buffer);
     let offset = 0;
@@ -160,24 +160,35 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes) {
     if (length <= 0) throw Error("Marshal fixture failed to compile at " +
         [0, 1, 2].map(index => compiler.ReadDiagnostic(location, index)));
     const code = Uint8Array.from({ length }, (_, i) => compiler.ReadByte(output, i));
-    const { exports } = await instantiate(await WebAssembly.compile(code), compiler, []);
-    return [exports.Exchange(19), exports.Exchange(-13), exports.Read(),
+    const module = await WebAssembly.compile(code);
+    if (!WebAssembly.Module.imports(module).some(entry =>
+        entry.module === "standardwasm:win32" && entry.name === "createActCtxW"))
+        throw Error("The generated fixture omitted the activation context import");
+    const { exports } = await instantiate(module, compiler,
+        [{ path: framework.name, bytes: new Uint8Array(framework.bytes) }]);
+    const legacy = [exports.Exchange(19), exports.Exchange(-13), exports.Read(),
         exports.LookupModule(0), exports.LookupModule(1), exports.LookupModule(2), exports.LookupModule(3)];
+    const activation = [0, 1, 2, 3].map(scenario => {
+        const handle = exports.Create(scenario);
+        return [handle === -1 ? -1 : handle > 0 ? 1 : 0, exports.Read()];
+    });
+    return { legacy, activation };
 }
 
 const oracle = JSON.parse(execFileSync("dotnet", ["run", "--file",
     fileURLToPath(new URL("./Win32HostOracle.cs", import.meta.url))], { encoding: "utf8" }));
 const compilerPath = process.argv[2];
+const framework = { name: basename(oracle.framework), bytes: readFileSync(oracle.framework) };
+const expectedCompiler = { legacy: oracle.compiledFixture, activation: oracle.compiledActivation };
 let compilerBytes, fixtureBytes;
 if (compilerPath) {
     execFileSync("dotnet", ["build", fileURLToPath(new URL("./Win32Fixture", import.meta.url)), "-c", "Release"],
         { stdio: "inherit" });
     compilerBytes = readFileSync(compilerPath);
     fixtureBytes = readFileSync(new URL("./Win32Fixture/bin/Release/net10.0/Win32Fixture.dll", import.meta.url));
-    assert.deepEqual(await exerciseCompiler(instantiateManagedModule, compilerBytes, fixtureBytes), oracle.compiledFixture);
+    assert.deepEqual(await exerciseCompiler(instantiateManagedModule, compilerBytes, fixtureBytes, framework), expectedCompiler);
 }
 const bytes = probeModule();
-const framework = { name: basename(oracle.framework), bytes: readFileSync(oracle.framework) };
 const node = await exercise(instantiateManagedModule, bytes, oracle.executable, framework);
 const { createError, activated, currentMatches, restored, missing, invalidFlags } = oracle.activationContext;
 assert.deepEqual(node, { activationContext: {
@@ -213,12 +224,14 @@ try {
     }, { source: exercise.toString(), bytes: [...bytes], executable: oracle.executable, frameworkName: framework.name });
     assert.deepEqual(edge, node);
     if (compilerBytes) {
-        const compiled = await page.evaluate(async ({ source, compilerBytes, fixtureBytes }) => {
+        const compiled = await page.evaluate(async ({ source, compilerBytes, fixtureBytes, name }) => {
             const { instantiateManagedModule } = await import("/resource-host.mjs");
-            return (0, eval)("(" + source + ")")(instantiateManagedModule, compilerBytes, fixtureBytes);
-        }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes] });
-        assert.deepEqual(compiled, oracle.compiledFixture);
-        console.log("The self-hosted compiler matched CLR module lookups and Marshal error exchange in Node and Edge.");
+            const bytes = await (await fetch("/test-framework")).arrayBuffer();
+            return (0, eval)("(" + source + ")")(instantiateManagedModule, compilerBytes, fixtureBytes, { name, bytes });
+        }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes],
+            name: framework.name });
+        assert.deepEqual(compiled, expectedCompiler);
+        console.log("The Wasm compiler matched CLR module lookups, activation-context creation, and Marshal error exchange in Node and Edge.");
     }
     console.log("Node and Edge matched 6 CLR module lookups and both last-error slots. Memory growth and host isolation passed.");
     console.log("Node and Edge matched the WinForms manifest activation lifecycle and Windows error results.");

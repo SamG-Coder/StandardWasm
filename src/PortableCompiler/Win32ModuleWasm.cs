@@ -6,10 +6,10 @@ namespace PortableCompiler
     internal static class Win32ModuleWasm
     {
         internal const int TypeBytes = 5, BodyCapacity = 64;
-        private const string Import = "getModuleHandleW";
+        private static string Name(int import) => import == Win32ModuleBinding.Module ? "getModuleHandleW" : "createActCtxW";
 
-        internal static int ImportEntryBytes(int type) =>
-            Win32ErrorWasm.Module.Length + Import.Length + 3 + WasmBinary.UnsignedSize(type);
+        internal static int ImportEntryBytes(int type, int import) =>
+            Win32ErrorWasm.Module.Length + Name(import).Length + 3 + WasmBinary.UnsignedSize(type);
 
         internal static int WriteType(byte[] output, int cursor)
         {
@@ -21,10 +21,10 @@ namespace PortableCompiler
             return cursor;
         }
 
-        internal static int WriteEntry(byte[] output, int cursor, int type)
+        internal static int WriteEntry(byte[] output, int cursor, int type, int import)
         {
             cursor = Win32ErrorWasm.WriteName(output, cursor, Win32ErrorWasm.Module);
-            cursor = Win32ErrorWasm.WriteName(output, cursor, Import);
+            cursor = Win32ErrorWasm.WriteName(output, cursor, Name(import));
             output[cursor++] = 0;
             return WasmBinary.Unsigned(output, cursor, type);
         }
@@ -47,7 +47,7 @@ namespace PortableCompiler
             }
             code[used++] = 0x10;
             used = WasmBinary.Unsigned(code, used, import);
-            if (result != Native) used = Gc(code, used, 0, result); // HMODULE
+            if (result != Native) used = Gc(code, used, 0, result); // HMODULE or HANDLE
             code[used++] = 0x0b;
             return used;
         }
