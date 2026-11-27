@@ -36,3 +36,15 @@ compiler as the first argument to also compile the managed Marshal fixture
 and compare module lookup and error transfer with the CLR. It covers a native
 pointer signature and the SDK's one-field PCWSTR and HMODULE value shape.
 The original WinForms call still needs support for its pinned-string wrapper.
+
+Run the Windows oracle with the x86 and x64 .NET Desktop runtimes to record
+the native activation-context contract for the installed WinForms assembly.
+
+```powershell
+dotnet run --arch x86 --file demos/stage-74-executable-entry/Win32HostOracle.cs
+dotnet run --arch x64 --file demos/stage-74-executable-entry/Win32HostOracle.cs
+```
+
+The oracle selects the embedded manifest by numeric resource ID. It records
+the native structure offsets, the active context before and after
+deactivation, and the errors for a missing manifest and invalid flags.
