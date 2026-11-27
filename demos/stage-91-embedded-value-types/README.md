@@ -7,8 +7,9 @@ component reads, and the default of a value that contains a `void*` field.
 
 Values use immutable Wasm GC aggregates. A null representation denotes the
 default value. A narrowly scoped update through a local address replaces
-the local with a new aggregate, preserving earlier copies. Escaping byrefs,
-overlapping native layout, boxing, value type exports, and value arrays need
-separate implementation.
+the local with a new aggregate, preserving earlier copies. A managed `ref`
+call updates the same location, including across assembly boundaries. Exported
+managed addresses, overlapping native layout, boxing, value type exports, and
+value arrays need separate implementation.
 
 See the [embedded value layout decision](../../docs/decisions/0033-embedded-sequential-values.md).

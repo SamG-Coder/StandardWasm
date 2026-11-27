@@ -158,7 +158,7 @@ namespace ValueConstructionDemo
             return pair.First;
         }
 
-        public static int RejectBorrow(int value)
+        public static int BorrowExtent(int value)
         {
             var extent = new Extent(value, 1);
             Borrow.Touch(ref extent, 3);

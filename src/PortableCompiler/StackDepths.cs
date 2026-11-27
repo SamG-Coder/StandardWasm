@@ -559,7 +559,7 @@ namespace PortableCompiler
                 if (depth == 0) return -1;
                 int receiver = stack[depth - 1];
                 if (receiver == ConstructorAddress) receiver = frame[0];
-                if (IsValueLocation(receiver) && IsByRefLikeValue(objects, LocatedValue(receiver)))
+                if (IsValueLocation(receiver) && !IsExplicitValue(objects, LocatedValue(receiver)))
                     receiver = LocatedValue(receiver);
                 if (!Assignable(receiver, FieldAccess.Owner(extra), objects)) return -1;
                 return Push(stack, allocated, depth - 1, StackType(FieldAccess.Storage(extra)));
@@ -568,8 +568,11 @@ namespace PortableCompiler
             {
                 if (depth < 2 || !Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects)) return -1;
                 int owner = FieldAccess.Owner(extra), receiver = stack[depth - 2];
-                bool valid = IsByRefLikeValue(objects, owner) ? receiver == ValueLocation(owner) :
-                    Assignable(receiver, owner, objects);
+                // Aggregate stores replace the snapshot at an actual managed
+                // location. A value on the stack is only a copy.
+                bool valid = IsValueType(objects, owner)
+                    ? !IsExplicitValue(objects, owner) && receiver == ValueLocation(owner)
+                    : Assignable(receiver, owner, objects);
                 return valid ? depth - 2 : -1;
             }
             if (kind == UpdateConstructorField)

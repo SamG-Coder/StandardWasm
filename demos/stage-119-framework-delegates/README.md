@@ -24,8 +24,8 @@ The fixture compares the following against the CLR:
 - unsubscribing through the linked `remove_` accessor
 - delegate equality as `Remove` observes it, over the same target and method
   versus a different target
+- a static target that updates shared state when the delegate invokes it
 
-A delegate over a static method stays an explicit diagnostic at its `ldftn`.
 Delegate types other than `EventHandler`, `ldvirtftn`, `System.Delegate`
 typed storage in framework code, and subclasses of the platform `EventArgs`
 are also unsupported.

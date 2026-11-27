@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Reflection;
-using System.Reflection.Emit;
 using BootstrapLibrary;
 using ValueConstructionDemo;
 using ValueConstructionDependency;
@@ -24,13 +23,12 @@ internal static class ValueConstructionCases
         Check(nameof(Kernels.Guarded), Kernels.Guarded);
         Check(nameof(Kernels.DisposeScoped), Kernels.DisposeScoped);
 
-        // A receiver method that writes through this needs copy-out (decision
-        // 0049), and a byref argument needs general managed byrefs. The write
-        // is diagnosed in the callee at its stfld.
+        Check(nameof(Kernels.BorrowExtent), Kernels.BorrowExtent);
+
+        // A call using the read-only receiver ABI still diagnoses a write
+        // through this at the callee's stfld (decision 0049).
         MethodInfo assign = typeof(Rejected).GetMethod("Assign", BindingFlags.NonPublic | BindingFlags.Instance)!;
         Reject(Method(nameof(Kernels.RejectReceiverCall)), [0, Row(assign), 0]);
-        MethodInfo borrow = Method(nameof(Kernels.RejectBorrow));
-        Reject(borrow, [0, Row(borrow), Offset(borrow, OpCodes.Call, 1)]);
 
         void Check(string name, Func<int, int> expectedResult)
         {
@@ -68,13 +66,6 @@ internal static class ValueConstructionCases
 
     private static MethodInfo Method(string name) => typeof(Kernels).GetMethod(name)!;
     private static int Row(MethodBase method) => method.MetadataToken & 0xffffff;
-
-    private static int Offset(MethodBase method, OpCode opcode, int skip = 0)
-    {
-        int offset = IlOffsets.Find(method.GetMethodBody()!.GetILAsByteArray()!, opcode, skip);
-        if (offset < 0) throw new InvalidOperationException($"{method.Name} lacks {opcode}.");
-        return offset;
-    }
 
     private static byte[] Manifest(MethodBase method)
     {

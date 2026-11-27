@@ -17,7 +17,7 @@ internal static class FieldlessValueCases
         Check(nameof(Kernels.BothGenericArguments), Kernels.BothGenericArguments);
         Check(nameof(Kernels.StoreCallResult), () => Kernels.StoreCallResult(2), [2]);
         Check(nameof(Kernels.StoreNestedCallResult), () => Kernels.StoreNestedCallResult(-3), [-3]);
-        Reject(nameof(Kernels.RejectEscapingAddress), Kernels.RejectEscapingAddress);
+        Check(nameof(Kernels.WriteThroughBorrow), Kernels.WriteThroughBorrow);
         Reject(nameof(Kernels.RejectPacked), Kernels.RejectPacked);
         Reject(nameof(Kernels.RejectNonempty), Kernels.RejectNonempty);
 

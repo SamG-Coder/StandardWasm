@@ -1383,7 +1383,7 @@ namespace PortableCompiler
                                 // StackDepths distinguishes that receiver from the managed this.
                                 if (valueConstructor && frame[0] == FieldAccess.Owner(descriptor))
                                     records[slot] = BranchIl.UpdateConstructorField;
-                                else if (!pointerField && !ObjectLayouts.IsByRefLikeValue(objects, FieldAccess.Owner(descriptor)))
+                                else if (!pointerField && ObjectLayouts.IsExplicitValue(objects, FieldAccess.Owner(descriptor)))
                                     return -2;
                                 continue;
                             }

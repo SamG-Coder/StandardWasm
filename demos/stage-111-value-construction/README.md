@@ -19,8 +19,8 @@ Roslyn constructs into locals in place (`ldloca; call .ctor`), so both the
 in [decision 0042](../../docs/decisions/0042-value-type-construction.md).
 A constructor that calls a mutating instance method on its receiver is
 diagnosed at that method's write through `this`. Read-only methods are
-admitted by Stage 121 and decision 0049. A `ref` argument to an ordinary
-method is diagnosed at the call's IL offset.
+admitted by Stage 121 and decision 0049. `BorrowExtent` verifies that an
+ordinary linked `ref` call updates the caller's sequential struct.
 
 `DisposeScoped` covers a readonly `ref struct` with a managed reference and a
 native unsigned integer. It checks disposal on normal exit and overflow before the outer
