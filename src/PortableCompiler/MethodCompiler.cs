@@ -703,7 +703,7 @@ namespace PortableCompiler
                         if (functions < 0)
                             return functions;
                         functions = LinkCallIndirect(bundle, image, heaps, layout, count, owner, context, records, owners, rows,
-                            contexts, arities, offsets, signatures, objects, functions, pointers, location);
+                            contexts, arities, offsets, signatures, objects, functions, pointers, location, natives, nativeBase);
                         if (functions < 0)
                             return functions;
                     }
@@ -941,6 +941,7 @@ namespace PortableCompiler
                         }
                         int pc = slot / BranchIl.Width;
                         int operation = records[slot + 1];
+                        if (kind == BranchIl.CallNativeIndirect && depths[pc] != 0) linearMemory = true;
                         if ((kind == BranchIl.Load || kind == BranchIl.Store) && frameCells[operation] < 0 && depths[pc] != 0)
                         {
                             // Native layout nesting is bounded to 16 levels. Each stored leaf
@@ -3151,11 +3152,12 @@ namespace PortableCompiler
             return "ArgumentNullException";
         }
 
-        // Decision 0078: link each calli to the carrier for its StandAloneSig. Only the
-        // default managed convention is accepted (SignatureTypes rejects other first bytes).
+        // Managed calli uses the type carrier. Supported stdcall calls send the
+        // loaded guest target and receiver through the typed COM host route.
         private static int LinkCallIndirect(BundleImages bundle, byte[] image, int[] heaps, int[] layout, int count,
             int owner, int context, int[] records, int[] owners, int[] rows, int[] contexts, int[] arities,
-            int[] offsets, int[] signatures, int[] objects, int functions, FunctionPointerPlan pointers, int[] location)
+            int[] offsets, int[] signatures, int[] objects, int functions, FunctionPointerPlan pointers, int[] location,
+            NativeImportTable natives, int nativeBase)
         {
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
             {
@@ -3163,6 +3165,15 @@ namespace PortableCompiler
                 if (location.Length != 0) location[2] = slot / BranchIl.Width;
                 int blob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, 0x11000000 | records[slot + 1]);
                 if (blob < 0) return -1;
+                int nativeResult = NativeIndirectImports.ReadResult(bundle, image, heaps, layout, blob, owner, objects);
+                if (nativeResult < 0) return nativeResult;
+                if (nativeResult != 0)
+                {
+                    records[slot] = BranchIl.CallNativeIndirect;
+                    records[slot + 1] = nativeBase + NativeIndirectImports.Register(natives);
+                    records[slot + 3] = nativeResult;
+                    continue;
+                }
                 var types = new int[256];
                 int arity = SignatureTypes.Read(bundle, image, heaps, blob, types, 0, 0, layout, objects, owner, context);
                 if (arity < 0) return arity;

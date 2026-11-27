@@ -269,7 +269,8 @@ namespace PortableCompiler
 
                 int tracked = 0;
                 bool publishesRoots = tracksRoots && (kind == Call || kind == NewObject || kind == ConstructValue ||
-                    kind == ResourceLookup || kind == InvokeDelegate || TypeInitializerWasm.HasFieldTrigger(kind, operand, fieldInitializers));
+                    kind == ResourceLookup || kind == InvokeDelegate || kind == CallNativeIndirect ||
+                    TypeInitializerWasm.HasFieldTrigger(kind, operand, fieldInitializers));
                 if (publishesRoots)
                 {
                     int first = kind == Call || kind == NewObject || kind == ConstructValue
@@ -887,6 +888,18 @@ namespace PortableCompiler
                 {
                     used = Const(code, used, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, Native, depth));
+                }
+                else if (kind == CallNativeIndirect)
+                {
+                    // IL already evaluated [receiver, token]. The host validates
+                    // the issued token first, then dispatches on the receiver.
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, Native, top));
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, Native, top - 1));
+                    code[used++] = 0x10;
+                    used = WasmBinary.Unsigned(code, used, operand);
+                    int returned = records[slot + 3];
+                    if (returned != I32) used = Gc(code, used, 0, returned);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, returned, top - 1));
                 }
                 else if (kind == CallIndirect)
                 {

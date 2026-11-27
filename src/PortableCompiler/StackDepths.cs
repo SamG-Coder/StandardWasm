@@ -114,9 +114,13 @@ namespace PortableCompiler
                 {
                     // Stage 143 (decision 0071): p->F through an S* address in memory 0.
                     int storage = FieldAccess.Storage(records[slot + 3]);
-                    if (kind == GetField) next = Push(stack, allocated, depth - 1, StackType(storage));
+                    // A proven native layout exposes pointer fields as real
+                    // addresses, including a void** vtable field.
+                    bool pointerField = records[slot + 2 * BranchIl.Width + 3] == 0x4d;
+                    if (kind == GetField) next = Push(stack, allocated, depth - 1, pointerField ? Native : StackType(storage));
                     else if (kind == FieldAddress || kind == TakeProjectedFieldAddress) next = Push(stack, allocated, depth - 1, Native);
-                    else next = Assignable(stack[depth - 1], storage, objects) ? depth - 2 : -2;
+                    else next = Assignable(stack[depth - 1], storage, objects) || pointerField && IsNativeInteger(stack[depth - 1])
+                        ? depth - 2 : -2;
                 }
                 else if (kind == VirtualCall)
                 {
@@ -456,6 +460,11 @@ namespace PortableCompiler
             if (kind == LoadFunction) return Push(stack, allocated, depth, MethodPointer);
             // Decision 0078: a function pointer is a native int; calli takes it last.
             if (kind == FunctionAddress) return Push(stack, allocated, depth, Native);
+            if (kind == CallNativeIndirect)
+            {
+                if (depth < 2 || !IsNativeInteger(stack[depth - 1]) || !IsNativeInteger(stack[depth - 2])) return -2;
+                return Push(stack, allocated, depth - 2, extra);
+            }
             if (kind == CallIndirect)
             {
                 int arity = arities[operand], shape = offsets[operand];
