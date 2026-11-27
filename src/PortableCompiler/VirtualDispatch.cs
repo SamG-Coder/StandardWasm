@@ -261,8 +261,9 @@ namespace PortableCompiler
                     int element = cases[entry + BoxElement], armBytes = element == 0 ? 26 : 96;
                     if (code.Length - length < 2 || arity > (code.Length - length - 2) / 6 ||
                         code.Length - length - 2 - arity * 6 < armBytes) return -3;
+                    int receiver = Representation(objects, signatures[offsets[target] + 1]);
                     length = element == 0
-                        ? VirtualDispatchWasm.Arm(code, length, type, signatures[offsets[target] + 1], hostImports + target, arity)
+                        ? VirtualDispatchWasm.Arm(code, length, type, receiver, hostImports + target, arity)
                         : VirtualDispatchWasm.BoxArm(code, length, boxLayout, element, type, hostImports + target, arity);
                 }
 
