@@ -98,7 +98,9 @@ namespace PeLibrary
 
         internal static bool IsIntrinsicsAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row) =>
             MatchesAscii(image, heaps, MicrosoftFacadeName(image, heaps, methods, counts, row, 0xff137bcc, 0x51dd2dcd),
-                "System.Runtime.Intrinsics");
+                "System.Runtime.Intrinsics") ||
+            MatchesAscii(image, heaps, MicrosoftFacadeName(image, heaps, methods, counts, row, 0xd785ec7c, 0x8e79a7be),
+                "System.Private.CoreLib");
 
         private static uint MicrosoftFacadeName(byte[] image, int[] heaps, int[] methods, int[] counts, int row,
             uint tokenLow = 0x7f5f3fb0, uint tokenHigh = 0x3a0ad511)

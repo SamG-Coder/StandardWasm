@@ -47,7 +47,7 @@ namespace PortableCompiler
         {
             const string space = "System.Runtime.Intrinsics";
             const string name = "Vector128`1";
-            if (SpanMetadata.IsPlatformType(image, layout, heaps, coded, space, name)) return true;
+            if ((coded & 3) == 0) return SpanMetadata.IsPlatformType(image, layout, heaps, coded, space, name);
             if ((coded & 3) != 1) return false;
             var reference = new int[AssemblyReferences.SymbolWidth];
             if (AssemblyReferences.ReadType(image, heaps, layout, coded >> 2, reference) < 0 ||
