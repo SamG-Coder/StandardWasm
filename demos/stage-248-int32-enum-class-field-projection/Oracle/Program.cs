@@ -8,7 +8,7 @@ var cases = new[] { nameof(Guest.ClassSigned), nameof(Guest.ClassUnsigned), name
 {
     var method = guest.GetMethod(name)!;
     int row = method.MetadataToken & 0xffffff;
-    var rejection = name is nameof(Guest.NarrowClass) or nameof(Guest.WideClass)
+    var rejection = name == nameof(Guest.NarrowClass)
         ? new { status = -2, location = new[] { 0, row, 6 } }
         : null;
     return new { name, row, expected = (int)method.Invoke(null, null)!, rejection };
