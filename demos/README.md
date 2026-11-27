@@ -211,6 +211,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [210 · Unboxing a closed generic reference](stage-210-generic-reference-unbox/README.md) | `npm run demo -- stage-210-generic-reference-unbox` | Match generic reference casts, identity and typed failures across runtimes |
 | [211 · Native aggregate field pointers](stage-211-native-aggregate-field-pointer/README.md) | `npm run demo -- stage-211-native-aggregate-field-pointer` | Keep field pointers attached to stable blittable frame storage |
 | [212 · Scoped native frame layouts](stage-212-scoped-native-frame-layout/README.md) | `npm run demo -- stage-212-scoped-native-frame-layout` | Verify stable frame-field pointers for reference-free ref structs |
+| [213 · In-place native frame constructors](stage-213-native-frame-constructor/README.md) | `npm run demo -- stage-213-native-frame-constructor` | Check native field initialization and borrowed pointer aliasing across runtimes |
 
 ## Adding a stage
 
