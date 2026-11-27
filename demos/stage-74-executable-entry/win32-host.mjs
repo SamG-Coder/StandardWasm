@@ -22,7 +22,7 @@ export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, ...displayContextImportNames,
     "callWindowProcW", "setClassLongW", "deactivateActCtx", "releaseActCtx",
     "getCurrentProcess", "getCurrentThread", "getCurrentThreadId", "closeHandle", "getProcessWindowStation",
-    "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError", "postThreadMessageW"
+    "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError", "postThreadMessageW", "postMessageW"
 ]);
 
 const moduleNotFound = 126;
@@ -228,7 +228,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         invalidateRect: createInvalidateRect(memory, windows, setError),
         adjustWindowRectExForDpi: createAdjustWindowRectExForDpi(memory, setError),
         ...createThreadHandleHost(memory, () => windows.getCurrentThreadId(), setError),
-        ...createThreadMessageQueue(memory, () => windows.getCurrentThreadId(), setError),
+        ...createThreadMessageQueue(memory, windows, setError),
         ...createWindowStationHost(memory, desktop, setError),
         registerWindowMessageW: createWindowMessageRegistration(memory, setError),
         bCryptGenRandom,

@@ -22,6 +22,7 @@ export function createWindowState() {
     let focusedWindow = 0;
     let focusChange = 0;
     let messageRoot = 0;
+    let destroyedWindows = 0;
     if (nextOwnerId > 0xfffffffe) throw new RangeError("Win32 window owner ID space is exhausted.");
     // A launch currently owns one process and one GUI thread. These IDs
     // belong to the guest, independent of the renderer's OS identities.
@@ -82,7 +83,7 @@ export function createWindowState() {
                 const parent = window.attributes.parent >>> 0;
                 changeFocus(windows.has(parent) ? parent : 0);
             }
-            windows.delete(handle);
+            if (windows.delete(handle)) destroyedWindows++;
             return true;
         },
         getActiveWindow() {
@@ -116,6 +117,18 @@ export function createWindowState() {
         },
         hasWindow(handle) {
             return windows.has(handle >>> 0);
+        },
+        getDestroyedWindowCount() {
+            return destroyedWindows;
+        },
+        isWindowChild(parent, handle) {
+            for (let remaining = windows.size; remaining > 0; remaining--) {
+                const child = windows.get(handle);
+                if (!child || (child.style & childStyle) === 0) return false;
+                handle = child.attributes.parent >>> 0;
+                if (handle === parent) return true;
+            }
+            return false;
         },
         getMessageRoot() {
             // Windows resolves HWND_MESSAGE to a real hidden parent before

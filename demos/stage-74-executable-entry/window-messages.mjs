@@ -54,42 +54,70 @@ function integerMessageName(name) {
     return ordinal;
 }
 
-export function createThreadMessageQueue(memory, currentThread, setError) {
+export function createThreadMessageQueue(memory, windows, setError) {
     const messages = [];
     const maximumPostedMessages = 10000;
+    let seenDestructions = windows.getDestroyedWindowCount();
 
     function fail(error) {
         setError(error);
         return 0;
     }
 
+    function pruneDestroyedTargets() {
+        const count = windows.getDestroyedWindowCount();
+        if (count === seenDestructions) return;
+        seenDestructions = count;
+        let live = 0;
+        for (const entry of messages)
+            if (entry.hwnd === 0 || windows.hasWindow(entry.hwnd)) messages[live++] = entry;
+        messages.length = live;
+    }
+
+    function post(hwnd, message, wParam, lParam) {
+        pruneDestroyedTargets();
+        if (messages.length === maximumPostedMessages) return fail(1816); // ERROR_NOT_ENOUGH_QUOTA
+        messages.push({ hwnd, message: message >>> 0, wParam, lParam, time: performance.now() >>> 0 });
+        return 1;
+    }
+
     return {
         postThreadMessageW(thread, message, wParam, lParam) {
-            if ((thread >>> 0) !== (currentThread() >>> 0)) return fail(1444); // ERROR_INVALID_THREAD_ID
-            if (messages.length === maximumPostedMessages) return fail(1816); // ERROR_NOT_ENOUGH_QUOTA
-            messages.push({ message: message >>> 0, wParam, lParam, time: performance.now() >>> 0 });
-            return 1;
+            if ((thread >>> 0) !== (windows.getCurrentThreadId() >>> 0)) return fail(1444); // ERROR_INVALID_THREAD_ID
+            return post(0, message, wParam, lParam);
+        },
+        postMessageW(hwnd, message, wParam, lParam) {
+            hwnd >>>= 0;
+            if (hwnd === 0xffff) return fail(50); // HWND_BROADCAST
+            if (hwnd !== 0 && !windows.hasWindow(hwnd)) return fail(1400); // ERROR_INVALID_WINDOW_HANDLE
+            // These system messages borrow caller memory and require synchronous dispatch.
+            if (message === 0x000c || message === 0x000d || message === 0x004a) return fail(1159); // ERROR_MESSAGE_SYNC_ONLY
+            return post(hwnd, message, wParam, lParam);
         },
         peekMessageW(pointer, window, minimum, maximum, flags) {
-            // Thread messages belong to the guest queue and have no HWND.
-            if (window !== 0 && window !== -1) return 0;
+            const filter = window >>> 0;
+            const threadOnly = filter === 0xffffffff;
+            if (filter !== 0 && !threadOnly && !windows.hasWindow(filter)) return fail(1400);
             const queueStatus = flags >>> 16;
             if (queueStatus !== 0 && (queueStatus & 0x08) === 0) return 0; // QS_POSTMESSAGE
+            pruneDestroyedTargets();
             const first = minimum >>> 0;
             const last = maximum >>> 0;
             const allMessages = first === 0 && last === 0;
             // A thread post of WM_QUIT follows the range filter like any other post.
             // A quit produced by PostQuitMessage is a separate queue operation.
-            const index = messages.findIndex(({ message }) => allMessages || (message >= first && message <= last));
+            const index = messages.findIndex(({ hwnd, message }) =>
+                (allMessages || (message >= first && message <= last)) &&
+                (filter === 0 || (threadOnly ? hwnd === 0 : hwnd === filter || windows.isWindowChild(filter, hwnd))));
             if (index < 0) return 0;
 
             const at = pointer >>> 0;
             const view = new DataView(memory.buffer);
             if (at === 0 || at + 28 > view.byteLength) return fail(998); // ERROR_NOACCESS
-            const { message, wParam, lParam, time } = messages[index];
+            const { hwnd, message, wParam, lParam, time } = messages[index];
             // Native x86 MSG has seven 32-bit words. The queue has no guest
             // cursor coordinates for a thread post. Preserve adjacent bytes.
-            view.setUint32(at, 0, true);
+            view.setUint32(at, hwnd, true);
             view.setUint32(at + 4, message, true);
             view.setUint32(at + 8, wParam, true);
             view.setInt32(at + 12, lParam, true);
