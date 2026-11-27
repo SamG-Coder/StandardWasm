@@ -42,8 +42,13 @@ while its constructor is running. Node and Edge observe three occupied slots
 with two distinct objects during a nested call, and two slots referring to
 the same receiver during an active constructor. They observe one slot during
 the throwing call and an empty stack after each normal return or managed
-exception unwind. The normal compilation entry point keeps the diagnostic
-table private by omitting it entirely.
+exception unwind. The normal compilation entry point enables runtime
+registration and suppression when it links the trusted CoreLib
+`GC.SuppressFinalize` call. It emits the bookkeeping tables without exporting
+diagnostic access. Five cases compiled through that entry point compare calls
+on ordinary objects, objects with direct, inherited and overriding finalizers,
+and a null argument with .NET 10. Automatic collection and callback scheduling
+still require a runtime collection point and host-root coverage.
 
 The same module emits typed reads of reference fields and reference arrays.
 The Wasm mark pass starts from published frames and ordinary managed statics.

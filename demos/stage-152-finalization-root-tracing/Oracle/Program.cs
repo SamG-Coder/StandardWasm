@@ -41,6 +41,8 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     graph = EmitRootProbe.DescribeGraph(),
     allocationFinalizers = EmitRootProbe.ObserveAllocations(),
     suppression = SuppressionCases.Verify(),
+    suppressionRow = typeof(FinalizableAllocations).GetMethod(nameof(FinalizableAllocations.CheckSuppression))!.MetadataToken & 0x00ffffff,
+    publicSuppression = Enumerable.Range(0, 5).Select(FinalizableAllocations.CheckSuppression).ToArray(),
     pin = EmitRootProbe.ObservePinned(),
     protectedExceptions = EmitRootProbe.ObserveProtectedExceptions(),
     initializerResults = EmitRootProbe.ObserveInitializers(),

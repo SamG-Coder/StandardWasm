@@ -21,7 +21,7 @@ namespace PortableCompiler
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
             byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostFeatures, int reflectionHeapFixup,
-            FunctionPointerPlan pointers, int rootCount, int rootWalker)
+            FunctionPointerPlan pointers, int rootCount, int rootWalker, bool rootProbe)
         {
             // Imported functions precede defined functions in the Wasm index
             // space. Emitted bodies already include this offset in their calls.
@@ -153,7 +153,7 @@ namespace PortableCompiler
                 (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) +
                 (nullReference ? 1 : 0) + (invalidCast ? 1 : 0) + (argumentException ? 1 : 0) + (objectTag ? 1 : 0) +
                 (argumentNull ? 1 : 0) + (synchronizationLock ? 1 : 0) + (argumentOutOfRange ? 1 : 0);
-            if (rootCount >= 0) exportCount += RootStackWasm.ExportCount;
+            if (rootProbe) exportCount += RootStackWasm.ExportCount;
             int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
                 (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
                 (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0) +
@@ -162,7 +162,7 @@ namespace PortableCompiler
                 (synchronizationLock ? ExceptionTagsWasm.SynchronizationLockExportSize : 0) +
                 (argumentOutOfRange ? ExceptionTagsWasm.ArgumentOutOfRangeExportSize : 0);
             if (argumentArray != 0) exportSize += EntryArgumentsWasm.ExportBytes(builderIndex);
-            if (rootCount >= 0) exportSize += RootStackWasm.ExportSize(rootCount, rootWalker);
+            if (rootProbe) exportSize += RootStackWasm.ExportSize(rootCount, rootWalker);
             int tagSize = 1 + (tagCount - (objectTag ? 1 : 0)) * (1 + UnsignedSize(tagType)) +
                 (objectTag ? 1 + UnsignedSize(objectTagType) : 0);
             for (int i = 0; i < exports.Length; i++)
@@ -498,7 +498,7 @@ namespace PortableCompiler
             if (synchronizationLock) cursor = ExceptionTagsWasm.WriteSynchronizationLockExport(output, cursor);
             if (argumentOutOfRange) cursor = ExceptionTagsWasm.WriteArgumentOutOfRangeExport(output, cursor);
             if (objectTag) cursor = ExceptionTagsWasm.WriteObjectExport(output, cursor);
-            if (rootCount >= 0) cursor = RootStackWasm.WriteExports(output, cursor, rootCount, rootWalker);
+            if (rootProbe) cursor = RootStackWasm.WriteExports(output, cursor, rootCount, rootWalker);
 
             if (elements)
             {

@@ -18,6 +18,21 @@ namespace ManagedFinalizationExperiment
         public static int ValueOf(object value) => ((Registered)value).Value;
         public static void Suppress(object value) => System.GC.SuppressFinalize(value);
 
+        public static int CheckSuppression(int kind)
+        {
+            object value = kind == 4 ? null : Allocate(kind, 31 + kind);
+            try
+            {
+                Suppress(value);
+                Suppress(value);
+                return kind == 0 ? 0 : ValueOf(value);
+            }
+            catch (System.ArgumentNullException)
+            {
+                return -101;
+            }
+        }
+
         public static int Finalized => finalized;
         public static int Total => total;
         public static int OverridesRan => overrides;

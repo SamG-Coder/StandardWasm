@@ -69,7 +69,8 @@ namespace PortableCompiler
 
         private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location, int hostFeatures, bool rootProbe = false)
         {
-            var features = new int[] { hostFeatures };
+            // Finalization is an internal runtime feature and has no host import indices.
+            var features = new int[] { hostFeatures, rootProbe ? 1 : 0 };
             var addressedStatics = new AddressedStaticFields();
             var typeCalls = new RuntimeTypeCalls();
             int status = Reemit;
@@ -82,6 +83,7 @@ namespace PortableCompiler
             int[] features, AddressedStaticFields addressedStatics, RuntimeTypeCalls typeCalls, bool rootProbe)
         {
             int hostFeatures = features[0];
+            bool tracksFinalizers = features[1] != 0;
             int knownAddressedStatics = addressedStatics.Count;
             int hostImports = WasmImports.FunctionCount(hostFeatures);
             CompileLocation.Clear(location);
@@ -199,18 +201,22 @@ namespace PortableCompiler
             var pinRegistry = new int[1]; // the live-pin count global + 1 (decision 0077)
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * 3];
-            int rootCount = rootProbe ? StaticFields.Register(globals, 0, RootStackWasm.GlobalKey, I32) : -1;
-            int markedCount = rootProbe ? StaticFields.Register(globals, 0, ReachabilityWasm.GlobalKey, I32) : -1;
-            int registeredCount = rootProbe ? StaticFields.Register(globals, 0, FinalizerQueueWasm.RegisteredKey, I32) : -1;
-            int pendingCount = rootProbe ? StaticFields.Register(globals, 0, FinalizerQueueWasm.PendingKey, I32) : -1;
-            int suppressedCount = rootProbe ? StaticFields.Register(globals, 0, FinalizerSuppressionWasm.GlobalKey, I32) : -1;
-            if (rootProbe && (rootCount < 0 || markedCount < 0 || registeredCount < 0 || pendingCount < 0 || suppressedCount < 0)) return -3;
+            int rootCount = tracksFinalizers ? StaticFields.Register(globals, 0, RootStackWasm.GlobalKey, I32) : -1;
+            int markedCount = tracksFinalizers ? StaticFields.Register(globals, 0, ReachabilityWasm.GlobalKey, I32) : -1;
+            int registeredCount = tracksFinalizers ? StaticFields.Register(globals, 0, FinalizerQueueWasm.RegisteredKey, I32) : -1;
+            int pendingCount = tracksFinalizers ? StaticFields.Register(globals, 0, FinalizerQueueWasm.PendingKey, I32) : -1;
+            int suppressedCount = tracksFinalizers ? StaticFields.Register(globals, 0, FinalizerSuppressionWasm.GlobalKey, I32) : -1;
+            if (tracksFinalizers && (rootCount < 0 || markedCount < 0 || registeredCount < 0 || pendingCount < 0 || suppressedCount < 0)) return -3;
             FinalizerSlots finalizers = null;
-            if (rootProbe)
+            if (tracksFinalizers || bundle.Count > 1)
             {
                 finalizers = new FinalizerSlots();
                 int rootStatus = finalizers.ReadRoot(bundle);
-                if (rootStatus < 0) return rootStatus;
+                if (rootStatus < 0)
+                {
+                    if (tracksFinalizers) return rootStatus;
+                    finalizers = null;
+                }
             }
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
             var nativePlans = new NativeAggregatePlans();
@@ -219,7 +225,7 @@ namespace PortableCompiler
             var pinned = new int[frame.Length];
             var booleanLocals = new byte[frame.Length];
             var initializerSlot = new int[1];
-            int exceptionTags = rootProbe ? ExceptionTypes.ArgumentNull : 0;
+            int exceptionTags = tracksFinalizers ? ExceptionTypes.ArgumentNull : 0;
             var noCatch = new int[0];
             var sizingBuffer = new byte[0];
 
@@ -434,7 +440,7 @@ namespace PortableCompiler
                     ExactManagedReads.FoldExactManagedReads(bundle, image, layout, heaps, owner, context,
                         methodArguments, objects, frame, records, catchRegion);
                     byte[] frameRoots = null;
-                    if (rootProbe)
+                    if (tracksFinalizers)
                     {
                         if (location.Length != 0) location[2] = -1;
                         frameRoots = RootStackWasm.MapFrame(records, frame, parameters + locals, catchRegion.Length != 0, parameters, filters);
@@ -467,7 +473,15 @@ namespace PortableCompiler
                         parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
                         initializers, reflection, instantiations, methodArguments, inlineLocations, frameCells, parameters,
-                        nativePlans, addressedStatics, booleanLocals, pointers, finalizers);
+                        nativePlans, addressedStatics, booleanLocals, pointers, finalizers, tracksFinalizers);
+                    if (functions == Reemit)
+                    {
+                        // Allocation can precede the first reachable suppression call.
+                        // Re-emit every body so its registration and roots agree.
+                        features[0] = hostFeatures | hostUse[0];
+                        features[1] = 1;
+                        return Reemit;
+                    }
                     if (functions < 0)
                         return functions;
                     functions = LinkCallIndirect(bundle, image, heaps, layout, count, owner, context, records, owners, rows,
@@ -545,7 +559,7 @@ namespace PortableCompiler
 
                     if (location.Length != 0) location[2] = -1;
                     int capacity = body[1] * 64 + 32;
-                    if (rootProbe)
+                    if (tracksFinalizers)
                     {
                         var finalizerTarget = new int[2];
                         for (int pc = 0; pc < depths.Length; pc++)
@@ -614,7 +628,7 @@ namespace PortableCompiler
                         // nominal ref.test and clear the other kind's saved reference (decision 0054).
                         int handlerBytes = 32 + (ExceptionTagsWasm.Count + 1) * 20 +
                             catchRegion.Length / ExceptionClauses.Width * (48 * (ExceptionTagsWasm.Count + 1));
-                        if (rootProbe) handlerBytes += (ExceptionTagsWasm.Count + 1) * 32;
+                        if (tracksFinalizers) handlerBytes += (ExceptionTagsWasm.Count + 1) * 32;
                         if (capacity > int.MaxValue - handlerBytes) return -3;
                         capacity += handlerBytes;
                     }
@@ -870,7 +884,8 @@ namespace PortableCompiler
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
                         arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers,
-                        reflection, inlineLocations, nativePlans.Plans, filters, frameCells, pointers, rootCount, frameRoots, finalizers);
+                        reflection, inlineLocations, nativePlans.Plans, filters, frameCells, pointers, rootCount, frameRoots,
+                        tracksFinalizers ? finalizers : null);
                 }
 
                 if (used < 0) return used;
@@ -946,7 +961,7 @@ namespace PortableCompiler
                 }
             }
             int rootWalker = -1;
-            if (rootProbe)
+            if (tracksFinalizers)
             {
                 rootWalker = hostImports + functions;
                 WasmIndexFixups.Resolve(moduleCode, finalizers.RegistrationFixups[0], rootWalker + FinalizerQueueWasm.Register);
@@ -984,7 +999,7 @@ namespace PortableCompiler
             CompileLocation.Clear(location);
             if (linearMemory) hostFeatures |= WasmImports.Memory;
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0], pointers, rootCount, rootWalker);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0], pointers, rootCount, rootWalker, rootProbe);
         }
 
         private static bool IsExported(int[] exports, int target)
@@ -1000,7 +1015,7 @@ namespace PortableCompiler
             TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, MethodInstantiations instantiations, int[] methodArguments,
             int[] inlineLocations, int[] frameCells, int parameterCount, NativeAggregatePlans nativePlans,
             AddressedStaticFields addressedStatics, byte[] booleanLocals,
-            FunctionPointerPlan pointers, FinalizerSlots finalizers)
+            FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
@@ -1907,6 +1922,7 @@ namespace PortableCompiler
                         int targetOwner = symbol[0], targetRow = symbol[1], targetContext = symbol[3];
                         if (opcode == 0x28 && finalizers != null && finalizers.IsSuppression(targetOwner, targetRow))
                         {
+                            if (!tracksFinalizers) return Reemit;
                             records[slot] = BranchIl.SuppressFinalizer;
                             continue;
                         }
@@ -1994,6 +2010,7 @@ namespace PortableCompiler
                 {
                     if (records[slot + 3] == 0 && finalizers != null && finalizers.IsSuppression(owner, target))
                     {
+                        if (!tracksFinalizers) return Reemit;
                         records[slot] = BranchIl.SuppressFinalizer;
                         continue;
                     }

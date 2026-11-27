@@ -5,33 +5,34 @@ import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { root, run } from "../../scripts/toolchain.mjs";
 import { wasm32Runtime } from "../../scripts/runtime-packs.mjs";
+import { packEntry } from "../stage-74-executable-entry/companions.mjs";
 
 const stage = join(root, "demos", "stage-152-finalization-root-tracing");
 const artifacts = join(root, "artifacts", "finalization-root-tracing");
 mkdirSync(artifacts, { recursive: true });
 const evidence = mkdtempSync(join(artifacts, "run-"));
 const oraclePath = join(evidence, "oracle.json");
+const runtime = wasm32Runtime();
 run("dotnet", ["run", "-c", "Release", "--project", join(stage, "Oracle"), "--", oraclePath,
-    join(wasm32Runtime().directory, "System.Private.CoreLib.dll")]);
+    join(runtime.directory, "System.Private.CoreLib.dll")]);
 const oracle = JSON.parse(readFileSync(oraclePath, "utf8"));
+const fixture = readFileSync(join(stage, "Fixture", "bin", "Release", "netstandard2.0", "Fixture.dll"));
+const framework = ["System.Private.CoreLib.dll", "netstandard.dll", "System.Runtime.dll"]
+    .map(path => ({ path, bytes: readFileSync(join(runtime.directory, path)) }));
 const assets = {
     compiler: readFileSync(process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts", "StandardWasm.Compiler.wasm")),
-    fixture: readFileSync(join(stage, "Fixture", "bin", "Release", "netstandard2.0", "Fixture.dll")),
-    rootProbe: readFileSync(join(evidence, "root-probe.wasm")),
-    row: oracle.row,
-    count: oracle.result.length
+    basicBundle: Buffer.from(packEntry({ bytes: fixture }, [], oracle.row)[0]),
+    suppressionBundle: Buffer.from(packEntry({ bytes: fixture }, framework, oracle.suppressionRow)[0]),
+    rootProbe: readFileSync(join(evidence, "root-probe.wasm"))
 };
 
-async function probe({ compiler, fixture, row, count }) {
+async function probe({ compiler, bundle, row, count }) {
     const { instance: { exports: tool } } = await WebAssembly.instantiate(compiler);
     function upload(bytes) {
         const data = tool.CreateBytes(bytes.length);
         for (let i = 0; i < bytes.length; i++) tool.SetByte(data, i, bytes[i]);
         return data;
     }
-    const bundle = new Uint8Array(fixture.length + 4);
-    new DataView(bundle.buffer).setUint32(0, fixture.length, true);
-    bundle.set(fixture, 4);
     const entries = new Uint8Array(11);
     new DataView(entries.buffer).setUint32(0, row, true);
     entries[4] = 3;
@@ -324,8 +325,11 @@ const expectedRoots = { values: oracle.rootProbeResult,
     clearedOnReturn: true, clearedOnUnwind: true, graph: oracle.graph, staticRoot: true, discovered: [0, 1, 0, 1, 2],
     allocationReceivers: { count: oracle.allocationFinalizers.count, total: oracle.allocationFinalizers.total },
     allocationFinalizers: oracle.allocationFinalizers, suppression: oracle.suppression, pin: oracle.pin, protectedExceptions: oracle.protectedExceptions, initializerResults: oracle.initializerResults };
-const node = await probe(assets);
+const node = await probe({ compiler: assets.compiler, bundle: assets.basicBundle, row: oracle.row, count: oracle.result.length });
 assert.deepEqual(node, oracle.result);
+const nodeSuppression = await probe({ compiler: assets.compiler, bundle: assets.suppressionBundle,
+    row: oracle.suppressionRow, count: oracle.publicSuppression.length });
+assert.deepEqual(nodeSuppression, oracle.publicSuppression);
 const nodeRoots = await observeRoots(assets.rootProbe);
 assert.deepEqual(nodeRoots, expectedRoots);
 const browser = await chromium.launch({ channel: "msedge" });
@@ -337,20 +341,29 @@ try {
             route.fulfill({ body: "<!doctype html>", contentType: "text/html" });
     });
     await page.goto("http://127.0.0.1/");
-    const edge = await page.evaluate(async ({ source, row, count }) => {
+    const [edge, edgeSuppression] = await page.evaluate(async ({ source, cases }) => {
         const compiler = new Uint8Array(await (await fetch("/compiler")).arrayBuffer());
-        const fixture = new Uint8Array(await (await fetch("/fixture")).arrayBuffer());
-        return (0, eval)("(" + source + ")")({ compiler, fixture, row, count });
-    }, { source: probe.toString(), row: assets.row, count: assets.count });
+        const probe = (0, eval)("(" + source + ")");
+        const results = [];
+        for (const { name, row, count } of cases) {
+            const bundle = new Uint8Array(await (await fetch("/" + name)).arrayBuffer());
+            results.push(await probe({ compiler, bundle, row, count }));
+        }
+        return results;
+    }, { source: probe.toString(), cases: [
+        { name: "basicBundle", row: oracle.row, count: oracle.result.length },
+        { name: "suppressionBundle", row: oracle.suppressionRow, count: oracle.publicSuppression.length } ] });
     assert.deepEqual(edge, oracle.result);
+    assert.deepEqual(edgeSuppression, oracle.publicSuppression);
     const edgeRoots = await page.evaluate(async source => {
         const bytes = await (await fetch("/rootProbe")).arrayBuffer();
         return (0, eval)("(" + source + ")")(bytes);
     }, observeRoots.toString());
     assert.deepEqual(edgeRoots, expectedRoots);
-    const result = { nodeVersion: process.version, edgeVersion: browser.version(), oracle, node, edge, nodeRoots, edgeRoots,
+    const result = { nodeVersion: process.version, edgeVersion: browser.version(), oracle, node, edge,
+        nodeSuppression, edgeSuppression, nodeRoots, edgeRoots,
         compilerSha256: createHash("sha256").update(assets.compiler).digest("hex"),
-        fixtureSha256: createHash("sha256").update(assets.fixture).digest("hex"),
+        fixtureSha256: createHash("sha256").update(fixture).digest("hex"),
         rootProbeSha256: createHash("sha256").update(assets.rootProbe).digest("hex") };
     writeFileSync(join(evidence, "results.json"), JSON.stringify(result, null, 2) + "\n");
     console.log(JSON.stringify(result));
