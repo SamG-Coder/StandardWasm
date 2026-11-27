@@ -120,6 +120,36 @@ async function exercise(instantiate, createWindows, variants) {
         malformedError, preservedError, fresh, foreign, foreignError, noProvider, noProviderError, namesOnly };
 }
 
+async function exerciseCompiled(instantiate, compilerBytes, assemblyBytes, row) {
+    const { instance: { exports: tool } } = await WebAssembly.instantiate(compilerBytes);
+    const image = tool.CreateBytes(assemblyBytes.byteLength);
+    new Uint8Array(assemblyBytes).forEach((value, index) => tool.SetByte(image, index, value));
+    const destination = tool.CreateBytes(65536);
+    const diagnostic = tool.CreateDiagnostic();
+    const size = tool.CompileDetailed(image, row, destination, diagnostic);
+    if (size <= 0) throw Error("Window procedure fixture status " + size + " at " +
+        [0, 1, 2].map(index => tool.ReadDiagnostic(diagnostic, index)));
+    const module = new WebAssembly.Module(Uint8Array.from({ length: size }, (_, index) => tool.ReadByte(destination, index)));
+    let library, token, memory;
+    const { exports } = await instantiate(module, tool, [], {}, undefined, undefined, undefined, {
+        configureNativeLibraries({ memory: guestMemory, registerLibrary, loadLibrary, getProcAddress }) {
+            registerLibrary("user32", new Map([
+                ["DefWindowProcW", { signature: "stdcall:i32(p32,u32,u32,i32)", invoke() { throw Error("lookup only"); } }]
+            ]));
+            library = loadLibrary("user32");
+            token = getProcAddress(library, "DefWindowProcW");
+            memory = guestMemory;
+        }
+    });
+    const address = memory.grow(1) * 65536;
+    new Uint8Array(memory.buffer, address).set(new TextEncoder().encode("DefWindowProcW\0"));
+    const found = exports.run(library, address) === token;
+    new Uint8Array(memory.buffer, address)[0] = 0x64;
+    const missing = exports.run(library, address);
+    const imports = WebAssembly.Module.imports(module).map(({ module, name }) => module + "/" + name);
+    return { found, missing, imports };
+}
+
 const variants = { full: fixture(true), module: fixture(false) };
 const node = await exercise(instantiateManagedModule, createWindowState, variants);
 assert.deepEqual(node, {
@@ -128,21 +158,40 @@ assert.deepEqual(node, {
     foreignError: 6, noProvider: 0, noProviderError: 126, namesOnly: true
 });
 
+const compiler = process.argv[2] ? readFileSync(process.argv[2]) : null;
+const fixtureAssembly = compiler ? readFileSync(oracle.fixtureAssembly) : null;
+const compiled = compiler ? await exerciseCompiled(instantiateManagedModule, compiler, fixtureAssembly, oracle.fixtureRow) : null;
+if (compiled) assert.deepEqual(compiled, {
+    found: oracle.nominal, missing: 0,
+    imports: ["standardwasm:resources/memory", "standardwasm:win32/getProcAddress"]
+});
+
 const server = await serveLaunch(0, new Uint8Array());
 const edge = await chromium.launch({ channel: "msedge" });
 try {
     const page = await edge.newPage();
+    if (compiled) {
+        await page.route(server.url + "/compiler", route => route.fulfill({ body: compiler }));
+        await page.route(server.url + "/fixture", route => route.fulfill({ body: fixtureAssembly }));
+    }
     await page.goto(server.url);
-    const browser = await page.evaluate(async ({ source, variants }) => {
+    const { browser, edgeCompiled } = await page.evaluate(async ({ source, compiledSource, variants, row }) => {
         const { instantiateManagedModule } = await import("/launch/resource-host.mjs");
         const { createWindowState } = await import("/launch/window-state.mjs");
-        return (0, eval)("(" + source + ")")(instantiateManagedModule, createWindowState, variants);
-    }, { source: exercise.toString(), variants });
+        const browser = await (0, eval)("(" + source + ")")(instantiateManagedModule, createWindowState, variants);
+        const assets = compiledSource ? await Promise.all(["/compiler", "/fixture"]
+            .map(async url => (await fetch(url)).arrayBuffer())) : null;
+        const edgeCompiled = assets ? await (0, eval)("(" + compiledSource + ")")(instantiateManagedModule, ...assets, row) : null;
+        return { browser, edgeCompiled };
+    }, { source: exercise.toString(), compiledSource: compiled ? exerciseCompiled.toString() : null,
+        variants, row: oracle.fixtureRow });
     assert.deepEqual(browser, node);
+    assert.deepEqual(edgeCompiled, compiled);
     writeFileSync(join(evidence, "results.json"), JSON.stringify({
-        oracle, node, browser, nodeVersion: process.version, edgeVersion: edge.version()
+        oracle, node, browser, compiled, nodeVersion: process.version, edgeVersion: edge.version()
     }, null, 2) + "\n");
     console.log("Node and Edge matched Windows x86 module/export lookup and checked browser registry isolation.");
+    if (compiled) console.log("Compiled HMODULE/PCSTR/FARPROC lookup matched the Windows x86 result in both engines.");
 } finally {
     await edge.close();
     await server.close();

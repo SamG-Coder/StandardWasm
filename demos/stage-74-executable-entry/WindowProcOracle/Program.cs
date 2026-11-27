@@ -16,10 +16,19 @@ try
     var property = typeof(NativeWindow).GetProperty("DefaultWindowProc", BindingFlags.NonPublic | BindingFlags.Static)!;
     var readOriginal = property.GetMethod!.CreateDelegate<Func<nint>>();
     nint original = readOriginal();
+    bool nominal;
+    unsafe
+    {
+        fixed (byte* name = "DefWindowProcW\0"u8)
+            nominal = WindowProcBindingFixture.Lookup(user32, name) == procedure;
+    }
     var result = new
     {
         architecture = RuntimeInformation.ProcessArchitecture.ToString(),
         winForms = typeof(NativeWindow).Assembly.GetName().Version!.ToString(),
+        fixtureAssembly = typeof(WindowProcBindingFixture).Assembly.Location,
+        fixtureRow = typeof(WindowProcBindingFixture).GetMethod(nameof(WindowProcBindingFixture.Lookup))!.MetadataToken & 0x00ffffff,
+        nominal,
         lookup = new
         {
             sameModule = module == user32,

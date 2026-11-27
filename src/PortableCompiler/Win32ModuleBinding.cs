@@ -10,7 +10,7 @@ namespace PortableCompiler
             IsValidDpiContext = 7, SetProcessDpiContext = 8, SetLegacyDpi = 9, SetProcessAwareness = 10,
             GetThreadDpiContext = 11, EqualDpiContexts = 12, GetDpiAwareness = 13, IsProcessDpiAware = 14,
             IsWindowEnabled = 15, EnableWindow = 16, GetWindowLong = 17, GetWindowLongPtr = 18,
-            BCryptGenRandom = 19, GetProcessAwareness = 20, LoadLibrary = 21, Count = LoadLibrary;
+            BCryptGenRandom = 19, GetProcessAwareness = 20, LoadLibrary = 21, GetProcedure = 22, Count = GetProcedure;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -23,17 +23,17 @@ namespace PortableCompiler
             member == IsWindowEnabled ? "IsWindowEnabled" : member == EnableWindow ? "EnableWindow" :
             member == GetWindowLong ? "GetWindowLongW" : member == GetWindowLongPtr ? "GetWindowLongPtrW" :
             member == GetProcessAwareness ? "GetProcessDpiAwareness" :
-            member == LoadLibrary ? "LoadLibraryExW" : "BCryptGenRandom";
+            member == LoadLibrary ? "LoadLibraryExW" : member == GetProcedure ? "GetProcAddress" : "BCryptGenRandom";
 
         private static string Library(int member) => member == LoadLibrary ? "kernel32.dll" :
-            member <= ReleaseContext ? "KERNEL32.dll" :
+            member <= ReleaseContext || member == GetProcedure ? "KERNEL32.dll" :
             member == SetProcessAwareness ? "api-ms-win-shcore-scaling-l1-1-1.dll" :
             member == BCryptGenRandom ? "BCrypt.dll" : "USER32.dll";
 
         internal static int Arity(int member) =>
             member == BCryptGenRandom ? 4 : member == LoadLibrary ? 3 :
             member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ? 0 :
-            member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts || member == EnableWindow ||
+            member == GetProcedure || member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts || member == EnableWindow ||
             UsesLastError(member) ? 2 : 1;
 
         internal static bool UsesLastError(int member) => member == GetWindowLong || member == GetWindowLongPtr;
@@ -73,6 +73,10 @@ namespace PortableCompiler
             if (member == LoadLibrary)
                 return result == Native && types[offset + 1] == Native &&
                     types[offset + 2] == Native && types[offset + 3] == I32;
+            if (member == GetProcedure)
+                return IsAbiShape(bundle, objects, types[offset + 1], Native, "HMODULE") &&
+                    IsAbiShape(bundle, objects, types[offset + 2], Native, "PCSTR") &&
+                    IsAbiShape(bundle, objects, result, Native, "FARPROC");
             if (member == BCryptGenRandom)
                 return types[offset + 1] == Native && types[offset + 2] == Native &&
                     types[offset + 3] == I32 && types[offset + 4] == I32 && result == I32;

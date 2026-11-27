@@ -267,3 +267,9 @@ the default procedure and implementing its message behavior are separate
 platform work.
 [WinForms getter](https://github.com/dotnet/winforms/blob/v10.0.10/src/System.Windows.Forms/System/Windows/Forms/NativeWindow.cs#L149-L169) ·
 [Win32 GetProcAddress](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getprocaddress)
+
+Pass a native-emitted compiler path as the verifier's first argument to run
+the compiler check as well. The ordinary C# fixture uses one-field
+`HMODULE`, `PCSTR`, and `FARPROC` structures matching the generated
+WinForms P/Invoke. Its known and missing exports match Windows x86 in both
+JavaScript engines.
