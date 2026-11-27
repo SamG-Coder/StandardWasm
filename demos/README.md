@@ -231,6 +231,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [235 · Closed generic protected virtual calls](stage-235-protected-virtual/README.md) | `npm run demo -- stage-235-protected-virtual` | Resolve protected declarations and reuse verified virtual dispatch |
 | [237 · Compare-exchange on volatile Int32 fields](stage-237-volatile-int32-compare-exchange/README.md) | `npm run demo -- stage-237-volatile-int32-compare-exchange` | Preserve signed Int32 compare-exchange, null behavior and location aliasing |
 | [240 · Proven closed interface casts](stage-240-proven-interface-casts/README.md) | `npm run demo -- stage-240-proven-interface-casts` | Preserve exact closed interface identity and null through proven casts |
+| [241 · Closed generic static reference addresses](stage-241-static-reference-address/README.md) | `npm run demo -- stage-241-static-reference-address` | Preserve per-instantiation storage across direct and byref accesses |
 
 ## Adding a stage
 

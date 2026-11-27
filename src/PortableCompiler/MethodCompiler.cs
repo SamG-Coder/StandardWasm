@@ -2398,9 +2398,11 @@ namespace PortableCompiler
                         StaticFields.ResolveLocal(bundle, image, layout, heaps, owner, field, write, objects, globals, symbol, callerRow, context);
                     if (status < 0) return status;
                     int fieldContext = StaticFields.Context(globals, symbol[0]);
-                    // Generic backing globals are per instantiation. Addressable
-                    // native or traced backing needs a stable context across passes.
-                    if (addressOf && fieldContext != 0) return -2;
+                    bool referenceCell = IsReferenceLocation(LocationFromIdentity(objects, symbol[1]));
+                    // A reference-cell demand is keyed by FieldDef across retries.
+                    // Each reference-compatible closed layout still gets its own global.
+                    // Scalar and native storage retain their existing generic boundary.
+                    if (addressOf && fieldContext != 0 && !referenceCell) return -2;
                     if (symbol[3] != 0)
                     {
                         // Bound declaring owner, so an inherited field initializes only its base.
@@ -2412,7 +2414,7 @@ namespace PortableCompiler
                     }
                     int staticOwner = StaticFields.Owner(globals, symbol[0]);
                     int staticRow = StaticFields.Row(globals, symbol[0]);
-                    int address = fieldContext == 0 ? addressedFields.Find(staticOwner, staticRow) : -1;
+                    int address = fieldContext == 0 || referenceCell ? addressedFields.Find(staticOwner, staticRow) : -1;
                     if (address == AddressedFields.Int32Cell || addressOf && symbol[5] == 8)
                     {
                         if (address == -1) addressedFields.AddInt32Cell(staticOwner, staticRow);
@@ -2422,8 +2424,7 @@ namespace PortableCompiler
                         records[slot + 3] = addressOf ? StaticInt32Wasm.Address : write ? StaticInt32Wasm.Write : StaticInt32Wasm.Read;
                         continue;
                     }
-                    if (address == AddressedFields.ReferenceCell ||
-                        addressOf && IsReferenceLocation(LocationFromIdentity(objects, symbol[1])))
+                    if (address == AddressedFields.ReferenceCell || addressOf && referenceCell)
                     {
                         if (address == -1) addressedFields.AddReferenceCell(staticOwner, staticRow);
                         status = StaticFields.UseReferenceCell(globals, symbol[0], symbol[1], objects, records, slot,
