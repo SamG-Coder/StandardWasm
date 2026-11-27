@@ -835,6 +835,8 @@ namespace PortableCompiler
                     }
                     if (locals != 0)
                     {
+                        NativeFrameFieldPaths.Lower(bundle, image, layout, heaps, owner, source, context, methodArguments,
+                            objects, globals, records, catchRegion, frame, parameters);
                         NativeAggregateFieldPointers.Lower(bundle, image, layout, heaps, owner, source, context,
                             methodArguments, objects, globals, records, catchRegion, frame, parameters);
                         scopedCalls = ScopedNativeReceivers.FindCalls(bundle, image, layout, heaps, owner, source,
@@ -1419,6 +1421,7 @@ namespace PortableCompiler
                             else if (kind == BranchIl.RuntimeTypeDisplayName || kind == BranchIl.RuntimeTypeIsGeneric || kind == BranchIl.RuntimeTypeIsEnum ||
                                 kind == BranchIl.RuntimeTypeGenericDefinition || kind == BranchIl.RuntimeTypeGenericArguments || kind == BranchIl.RuntimeTypeIsValue || kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || kind == BranchIl.ClearInteriorField || kind == BranchIl.TakeProjectedFieldAddress ||
+                                kind == BranchIl.NativeFieldPointer ||
                                 nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit ||
                                 kind == BranchIl.GetReferenceField || kind == BranchIl.SetReferenceField || kind == BranchIl.TakeReferenceFieldAddress ||
                                 kind == BranchIl.StringRange || kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.InvokeDelegate ||

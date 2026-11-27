@@ -314,6 +314,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [341 · Fixed-buffer copies](stage-341-mutable-fixed-buffer-copies/README.md) | `npm run demo -- stage-341-mutable-fixed-buffer-copies` | Preserve all native fixed-buffer elements across aggregate value copies |
 | [342 · Native UTF-16 string construction](stage-342-native-utf16-string-constructor/README.md) | `npm run demo -- stage-342-native-utf16-string-constructor` | Link the CoreLib pointer constructor and copy native UTF-16 into a managed string |
 | [343 · Reads through fixed-buffer field addresses](stage-343-fixed-buffer-field-reads/README.md) | `npm run demo -- stage-343-fixed-buffer-field-reads` | Read a verified unsigned 16-bit field through its immediate address |
+| [344 · Native addresses of nested local fields](stage-344-native-frame-field-paths/README.md) | `npm run demo -- stage-344-native-frame-field-paths` | Preserve the native addresses and managed reads of nested blittable fields |
 
 ## Adding a stage
 
