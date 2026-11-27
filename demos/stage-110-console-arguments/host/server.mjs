@@ -24,6 +24,7 @@ export function serveConsoleLaunch(port, compiler) {
         script("stage-74-executable-entry/long-path-host.mjs"),
         script("stage-74-executable-entry/win32-path-input.mjs"),
         script("stage-74-executable-entry/window-state.mjs"),
+        script("stage-74-executable-entry/window-rect.mjs"),
         script("stage-74-executable-entry/window-messages.mjs"),
         script("stage-74-executable-entry/thread-handle-host.mjs"),
         script("stage-74-executable-entry/window-station-host.mjs"),

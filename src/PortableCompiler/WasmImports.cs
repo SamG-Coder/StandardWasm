@@ -20,6 +20,7 @@ namespace PortableCompiler
             (FirstNativeFeature << (Win32ModuleBinding.GetLongPathName - 1)) |
             (FirstNativeFeature << (Win32ModuleBinding.RedrawWindow - 1)) |
             (FirstNativeFeature << (Win32ModuleBinding.InvalidateRect - 1)) |
+            (FirstNativeFeature << (Win32ModuleBinding.AdjustWindowRectForDpi - 1)) |
             (FirstNativeFeature << (Win32ModuleBinding.RegisterWindowMessage - 1)) |
             (FirstNativeFeature << (Win32ModuleBinding.GetWindowThreadProcessId - 1)) |
             (FirstNativeFeature << (Win32ModuleBinding.DuplicateHandle - 1)) |

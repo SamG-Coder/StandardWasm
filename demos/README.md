@@ -285,10 +285,11 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [288 · Constrained Int32 comparison](stage-288-constrained-int32-compare/README.md) | `npm run demo -- stage-288-constrained-int32-compare` | Bind the original Int32 comparison through its exact interface slot |
 | [289 · Closed type guards and Boolean branches](stage-289-closed-type-boolean-guards/README.md) | `npm run demo -- stage-289-closed-type-boolean-guards` | Eliminate impossible generic branches and preserve operand evaluation |
 | [290 · Direct private calls with a known false argument](stage-290-private-bool-specialization/README.md) | `npm run demo -- stage-290-private-bool-specialization` | Reuse a private Boolean method body with proven normal-flow reachability |
-| [294 · Assembly type definitions by name](stage-294-assembly-type-lookup/README.md) | `npm run demo -- stage-294-assembly-type-lookup` | Find canonical CLR TypeDefs by exact name within a chosen assembly |
 | [291 · Managed native-word class fields](stage-291-native-word-class-fields/README.md) | `npm run demo -- stage-291-native-word-class-fields` | Verify traced mutable native-word fields and typed null handling |
 | [292 · Nested value fields in constructors](stage-292-ctor-nested-value-fields/README.md) | `npm run demo -- stage-292-ctor-nested-value-fields` | Preserve nested overlay bytes and outer value snapshots |
 | [293 · Scoped pinned value references](stage-293-scoped-pinned-values/README.md) | `npm run demo -- stage-293-scoped-pinned-values` | Compare verified synchronous pointer calls and managed copy-back |
+| [294 · Assembly type definitions by name](stage-294-assembly-type-lookup/README.md) | `npm run demo -- stage-294-assembly-type-lookup` | Find canonical CLR TypeDefs by exact name within a chosen assembly |
+| [295 · DPI-aware window rectangle adjustment](stage-295-dpi-window-rect/README.md) | `npm run demo -- stage-295-dpi-window-rect` | Compare the original Win32 RECT adjustment with the browser host |
 
 ## Adding a stage
 

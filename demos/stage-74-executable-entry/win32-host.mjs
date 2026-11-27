@@ -4,6 +4,7 @@ import { createDpiAwareness, dpiImportNames } from "./dpi-awareness.mjs";
 import { createDisplayContexts, displayContextImportNames } from "./display-context.mjs";
 import { createFullPathHost } from "./full-path-host.mjs";
 import { createLongPathHost } from "./long-path-host.mjs";
+import { createAdjustWindowRectExForDpi } from "./window-rect.mjs";
 import { createWindowMessageRegistration } from "./window-messages.mjs";
 import { createThreadHandleHost } from "./thread-handle-host.mjs";
 import { createWindowStationHost } from "./window-station-host.mjs";
@@ -13,7 +14,7 @@ export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
     "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom",
     "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "getLongPathNameW", "redrawWindow", "invalidateRect", "registerWindowMessageW",
-    "getWindowThreadProcessId", "duplicateHandle", "getExitCodeThread", "getUserObjectInformationW"
+    "adjustWindowRectExForDpi", "getWindowThreadProcessId", "duplicateHandle", "getExitCodeThread", "getUserObjectInformationW"
 ]);
 export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, ...displayContextImportNames,
@@ -217,6 +218,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         createWindowExW: createWindowCreation(memory, windows, classes, bindProcedure, setError, windowCreationMetrics),
         redrawWindow: createRedrawWindow(memory, windows, setError),
         invalidateRect: createInvalidateRect(memory, windows, setError),
+        adjustWindowRectExForDpi: createAdjustWindowRectExForDpi(memory, setError),
         ...createThreadHandleHost(memory, () => windows.getCurrentThreadId(), setError),
         ...createWindowStationHost(memory, desktop, setError),
         registerWindowMessageW: createWindowMessageRegistration(memory, setError),

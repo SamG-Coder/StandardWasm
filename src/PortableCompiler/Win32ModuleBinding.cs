@@ -18,7 +18,7 @@ namespace PortableCompiler
             DuplicateHandle = 36, GetExitCodeThread = 37, CloseHandle = 38,
             GetProcessWindowStation = 39, GetUserObjectInformation = 40,
             GetLongPathName = 41, SetClassLong = 42, GetDeviceCaps = 43,
-            GetDC = 44, ReleaseDC = 45, InvalidateRect = 46, Count = InvalidateRect;
+            GetDC = 44, ReleaseDC = 45, InvalidateRect = 46, AdjustWindowRectForDpi = 47, Count = AdjustWindowRectForDpi;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -47,7 +47,8 @@ namespace PortableCompiler
             member == GetLongPathName ? "GetLongPathNameW" :
             member == SetClassLong ? "SetClassLongW" : member == GetDeviceCaps ? "GetDeviceCaps" :
             member == GetDC ? "GetDC" : member == ReleaseDC ? "ReleaseDC" :
-            member == InvalidateRect ? "InvalidateRect" : "BCryptGenRandom";
+            member == InvalidateRect ? "InvalidateRect" :
+            member == AdjustWindowRectForDpi ? "AdjustWindowRectExForDpi" : "BCryptGenRandom";
 
         private static string Library(int member) => member == LoadLibrary || member == GetFullPathName ||
             member == GetLongPathName ? "kernel32.dll" :
@@ -58,7 +59,7 @@ namespace PortableCompiler
 
         internal static int Arity(int member) =>
             member == CreateWindow ? 12 : member == DuplicateHandle ? 7 :
-            member == CallWindowProcedure || member == GetUserObjectInformation ? 5 :
+            member == CallWindowProcedure || member == GetUserObjectInformation || member == AdjustWindowRectForDpi ? 5 :
             member == BCryptGenRandom || member == GetFullPathName || member == RedrawWindow ? 4 :
             member == LoadLibrary || member == GetClassInfo || member == GetLongPathName ||
             member == SetClassLong || member == InvalidateRect || IsWindowLongSetter(member) ? 3 :
@@ -110,6 +111,7 @@ namespace PortableCompiler
                     if (member >= GetDeviceCaps && member <= ReleaseDC && !MatchesDisplaySignature(image, heaps, methods, row, member))
                         return 0;
                     if (member == InvalidateRect && !MatchesInvalidateRect(bundle, image, heaps, methods, owner, row)) return 0;
+                    if (member == AdjustWindowRectForDpi && !MatchesAdjustWindowRect(bundle, image, heaps, methods, owner, row)) return 0;
                     return member;
                 }
             return 0;
@@ -125,8 +127,27 @@ namespace PortableCompiler
             int pointee = ImageBytes.CompressedUnsigned(image, cursor[0], end, cursor);
             if (pointee < 1 || ReadAbiWord(image, cursor, end, 0x08) < 0 || cursor[0] != end) return false;
 
-            // A native stack tag erases the distinction between RECT* and, for
-            // example, int*. Verify the resolved Win32 declaration and extent.
+            return MatchesRect(bundle, image, heaps, methods, owner, pointee);
+        }
+
+        private static bool MatchesAdjustWindowRect(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int owner, int row)
+        {
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4), 5, cursor);
+            if (bundle == null || end < 0 || ReadAbiWord(image, cursor, end, 0x08) < 0 ||
+                !SignatureReader.TakeElement(image, cursor, end, 0x0f) ||
+                !SignatureReader.TakeElement(image, cursor, end, 0x11)) return false;
+            int pointee = ImageBytes.CompressedUnsigned(image, cursor[0], end, cursor);
+            return pointee > 0 && ReadAbiWord(image, cursor, end, 0x09) >= 0 &&
+                ReadAbiWord(image, cursor, end, 0x08) >= 0 && ReadAbiWord(image, cursor, end, 0x09) >= 0 &&
+                SignatureReader.TakeElement(image, cursor, end, 0x09) && cursor[0] == end &&
+                MatchesRect(bundle, image, heaps, methods, owner, pointee);
+        }
+
+        private static bool MatchesRect(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int owner, int pointee)
+        {
+            // A native stack tag erases the difference between RECT* and int*.
+            // Validate the resolved Win32 declaration and its byte extent.
             var identity = new int[2];
             if (AssemblyBundle.ClassIdentity(bundle, image, methods, heaps, owner, pointee, identity) < 0) return false;
             byte[] target = bundle.Get(identity[0]);
@@ -292,6 +313,10 @@ namespace PortableCompiler
                 return IsAbiShape(bundle, objects, result, I32, "BOOL") &&
                     IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") && types[offset + 2] == Native &&
                     IsAbiShape(bundle, objects, types[offset + 3], I32, "BOOL");
+            if (member == AdjustWindowRectForDpi)
+                return IsAbiShape(bundle, objects, result, I32, "BOOL") && types[offset + 1] == Native &&
+                    types[offset + 2] == I32 && IsAbiShape(bundle, objects, types[offset + 3], I32, "BOOL") &&
+                    types[offset + 4] == I32 && types[offset + 5] == I32;
             if (member == RedrawWindow)
                 return IsAbiShape(bundle, objects, result, I32, "BOOL") &&
                     IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
