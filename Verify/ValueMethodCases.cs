@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Reflection;
+using System.Reflection.Emit;
 using BootstrapLibrary;
 using ValueMethodDemo;
 using ValueMethodDependency;
@@ -30,12 +31,17 @@ internal static class ValueMethodCases
             }
         Check(nameof(Kernels.DefaultReceiver), [], Kernels.DefaultReceiver());
 
-        // Methods that write through their receiver run on the CLR but need
-        // copy-out. They are diagnosed inside the callee, in the dependency.
+        // A field store through the receiver must be visible to its caller.
+        foreach (int value in samples)
+            Check(nameof(Kernels.RejectStore), [value], Kernels.RejectStore(value));
+
+        // Keep coverage of unsupported whole-receiver updates separately.
         if (Kernels.RejectStore(5) != 5 || Kernels.RejectReset(5) != 0 || Kernels.RejectReplace(5) != 5)
             throw new InvalidOperationException("CLR did not run the mutating value methods.");
-        Reject(nameof(Kernels.RejectStore), nameof(Counter.Store), 0);
-        Reject(nameof(Kernels.RejectReset), nameof(Counter.Reset), 0);
+        byte[] reset = typeof(Counter).GetMethod(nameof(Counter.Reset))!.GetMethodBody()!.GetILAsByteArray()!;
+        int resetOffset = IlOffsets.Find(reset, OpCodes.Initobj);
+        if (resetOffset < 0) throw new InvalidOperationException("Counter.Reset did not emit initobj.");
+        Reject(nameof(Kernels.RejectReset), nameof(Counter.Reset), resetOffset);
         Reject(nameof(Kernels.RejectReplace), nameof(Counter.Replace), 7);
 
         void Check(string name, object[] arguments, object expected)
