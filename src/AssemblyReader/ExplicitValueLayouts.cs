@@ -56,7 +56,7 @@ namespace PeLibrary
             return extent;
         }
 
-        private static int ReadClassLayout(byte[] image, int[] heaps, int[] methods, int[] counts, int row, uint[] declared)
+        internal static int ReadClassLayout(byte[] image, int[] heaps, int[] methods, int[] counts, int row, uint[] declared)
         {
             if (counts[15] == 0) return 0;
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 15);
