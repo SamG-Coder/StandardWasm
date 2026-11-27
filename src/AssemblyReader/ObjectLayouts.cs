@@ -214,8 +214,10 @@ namespace PeLibrary
         internal static int ArrayElementKey(int[] registry, int type) =>
             type >= FirstClass && type - FirstClass < registry[0] ? registry[Slot(type) + Element] : 0;
 
-        internal static bool HasArguments(int[] registry, int type) =>
-            type >= FirstClass && type - FirstClass < registry[0] && registry[Slot(type) + Arity] != 0;
+        internal static int ArgumentCount(int[] registry, int type) =>
+            type >= FirstClass && type - FirstClass < registry[0] ? registry[Slot(type) + Arity] : 0;
+
+        internal static bool HasArguments(int[] registry, int type) => ArgumentCount(registry, type) != 0;
 
         internal static int Argument(int[] registry, int type, int index)
         {

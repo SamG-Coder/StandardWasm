@@ -694,6 +694,22 @@ namespace PortableCompiler
                     used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, ObjectReference, top));
                 }
+                else if (kind == BoxAggregate || kind == UnboxAggregate || kind == UnboxAggregateAddress || kind == TestAggregateBox)
+                {
+                    int box = AggregateBoxing.FindLayout(objects), descriptor = records[slot + 3];
+                    int source = Spill(spills, maximum, spillFlags, states[state + top], top);
+                    bool address = kind == UnboxAggregateAddress;
+                    int resultType = address ? ValueLocation(operand) : kind == UnboxAggregate ? operand : ObjectReference;
+                    int target = Spill(spills, maximum, spillFlags, resultType, top);
+                    if (kind == BoxAggregate)
+                        used = AggregateBoxing.Box(code, used, source, target, box, descriptor, tracksRoots);
+                    else
+                    {
+                        used = kind == UnboxAggregate || address ? AggregateBoxing.Unbox(code, used, source, operand, box, descriptor, address) :
+                            AggregateBoxing.Test(code, used, source, box, descriptor);
+                        used = Local(code, used, 0x21, target);
+                    }
+                }
                 else if (kind == BoxValue || kind == UnboxValue || kind == TestBox)
                 {
                     int local = Spill(spills, maximum, spillFlags, states[state + top], top);

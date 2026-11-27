@@ -61,6 +61,12 @@ namespace PortableCompiler
             for (int i = 0; i < objects[0]; i++)
             {
                 int classType = FirstClass + i, fields = LayoutFieldCount(objects, classType);
+                if (AggregateBoxing.IsLayout(objects, classType))
+                {
+                    if (AggregateBoxing.TypeBytes > output.Length - classBytes) return -3;
+                    classBytes += AggregateBoxing.TypeBytes;
+                    continue;
+                }
                 if (PrimitiveBoxing.IsLayout(objects, classType))
                 {
                     if (PrimitiveBoxing.TypeBytes > output.Length - classBytes) return -3;
@@ -327,6 +333,11 @@ namespace PortableCompiler
             for (int i = 0; i < objects[0]; i++)
             {
                 int classType = FirstClass + i, fields = LayoutFieldCount(objects, classType);
+                if (AggregateBoxing.IsLayout(objects, classType))
+                {
+                    cursor = AggregateBoxing.WriteType(output, cursor);
+                    continue;
+                }
                 if (PrimitiveBoxing.IsLayout(objects, classType))
                 {
                     cursor = PrimitiveBoxing.WriteType(output, cursor);

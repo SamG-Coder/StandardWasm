@@ -59,7 +59,7 @@ namespace PortableCompiler
             return WasmIndexFixups.WriteAt(code, used, bodyStart, heads, type - FirstClass);
         }
 
-        internal int Write(byte[] code, int[] position, int[] objects, int[] offsets, int[] signatures,
+        internal int Write(BundleImages bundle, byte[] code, int[] position, int[] objects, AggregateBoxPlan aggregateBoxes, int[] offsets, int[] signatures,
             int[] sizes, int[] bodyOffsets, int[] arities, int functions, int hostImports)
         {
             if (heads == null) return functions;
@@ -76,7 +76,7 @@ namespace PortableCompiler
                 arities[functions] = 1;
                 bodyOffsets[functions] = used;
                 int matches = boxMatches == null ? 0 : boxMatches[index] & ~BoundPrimitivePlan;
-                int end = WriteTest(code, used, objects, FirstClass + index, matches);
+                int end = WriteTest(bundle, code, used, objects, FirstClass + index, matches, aggregateBoxes);
                 if (end < 0) return end;
                 WasmIndexFixups.Resolve(code, heads[index], hostImports + functions);
                 sizes[functions++] = end - used;
@@ -86,7 +86,8 @@ namespace PortableCompiler
             return functions;
         }
 
-        private static int WriteTest(byte[] code, int used, int[] objects, int target, int boxElements)
+        private static int WriteTest(BundleImages bundle, byte[] code, int used, int[] objects,
+            int target, int boxElements, AggregateBoxPlan aggregateBoxes)
         {
             if (code.Length - used < 5) return -3;
             code[used++] = 0; // no additional locals
@@ -109,10 +110,46 @@ namespace PortableCompiler
                     if (used < 0) return used;
                 }
             }
+            if (aggregateBoxes.Count != 0)
+            {
+                used = WriteAggregateBoxTest(bundle, code, used, objects, target, aggregateBoxes);
+                if (used < 0) return used;
+            }
             // Null succeeds for castclass and remains null for isinst.
             if (code.Length - used < 4) return -3;
             used = Local(code, used, 0x20, 0);
             code[used++] = 0xd1;
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        private static int WriteAggregateBoxTest(BundleImages bundle, byte[] code, int used, int[] objects,
+            int target, AggregateBoxPlan boxes)
+        {
+            if (code.Length - used < 12) return -3;
+            int layout = AggregateBoxing.FindLayout(objects);
+            int parameters = ArgumentCount(objects, target);
+            var required = new int[2 + parameters];
+            required[0] = AssemblyOf(objects, target);
+            required[1] = TypeDef(objects, target);
+            for (int i = 0; i < parameters; i++) required[i + 2] = Argument(objects, target, i);
+
+            used = AggregateBoxing.TestCarrier(code, used, 0, layout);
+            code[used++] = 0x04;
+            code[used++] = 0x40;
+            for (int i = 0; i < boxes.Count; i++)
+            {
+                int match = BundleConstraints.Implements(bundle, objects, boxes.Type(i), required, 0);
+                if (match < 0) return match;
+                if (match == 0) continue;
+                if (code.Length - used < 30) return -3;
+                used = AggregateBoxing.TestDescriptor(code, used, 0, layout, boxes.Descriptor(i));
+                code[used++] = 0x04;
+                code[used++] = 0x40;
+                used = Const(code, used, 1);
+                code[used++] = 0x0f;
+                code[used++] = 0x0b;
+            }
             code[used++] = 0x0b;
             return used;
         }

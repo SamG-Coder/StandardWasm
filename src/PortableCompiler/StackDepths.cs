@@ -418,6 +418,17 @@ namespace PortableCompiler
                 if (stack[depth - 1] != NullValue) stack[depth - 1] = EventHandlerReference;
                 return depth;
             }
+            if (kind == BoxAggregate || kind == UnboxAggregate || kind == UnboxAggregateAddress || kind == TestAggregateBox)
+            {
+                if (depth == 0) return -2;
+                int source = stack[depth - 1];
+                if (kind == BoxAggregate)
+                    return source == operand ? Push(stack, allocated, depth - 1, ObjectReference) : -2;
+                if (source != NullValue && (!IsObjectReference(source) || IsValueType(objects, source))) return -2;
+                int result = kind == UnboxAggregateAddress ? ValueLocation(operand) :
+                    kind == UnboxAggregate ? operand : ObjectReference;
+                return Push(stack, allocated, depth - 1, result);
+            }
             if (kind == BoxValue || kind == UnboxValue || kind == TestBox)
             {
                 if (depth < 1) return -1;

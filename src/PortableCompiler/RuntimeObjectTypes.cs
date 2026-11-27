@@ -27,7 +27,7 @@ namespace PortableCompiler
         internal void IncludePrimitiveArray(int element) => primitiveArrays |= 1 << element;
 
         internal int Write(BundleImages bundle, byte[] code, int position, int[] objects, int[] globals,
-            PrimitiveArrayWasm arrayHeaps)
+            PrimitiveArrayWasm arrayHeaps, AggregateBoxPlan aggregateBoxes)
         {
             if (code.Length - position < 3) return -3;
             code[position++] = 0; // no locals besides the receiver
@@ -37,7 +37,7 @@ namespace PortableCompiler
             {
                 int type = FirstClass + index;
                 if (IsValueType(objects, type) || IsInterface(objects, type) || PrimitiveBoxing.IsLayout(objects, type) ||
-                    !Includes(objects, type)) continue;
+                    AggregateBoxing.IsLayout(objects, type) || !Includes(objects, type)) continue;
                 int descriptor = RuntimeTypeTokens.BindLayout(bundle, objects, type, globals);
                 if (descriptor < 0) return descriptor;
                 position = HeapCase(code, position, WasmBinary.HeapType(type), descriptor);
@@ -68,6 +68,11 @@ namespace PortableCompiler
                     if (position < 0) return position;
                 }
             }
+            if ((anyClass || interfaceReceiver) && aggregateBoxes.Count != 0)
+            {
+                position = WriteAggregateTypes(code, position, objects, aggregateBoxes);
+                if (position < 0) return position;
+            }
             for (int element = PrimitiveArrayWasm.FirstElement; element < PrimitiveArrayWasm.EndElement; element++)
             {
                 if ((primitiveArrays & (1 << element)) == 0 ||
@@ -81,6 +86,24 @@ namespace PortableCompiler
             // Representations without exact runtime type identity must fail
             // rather than substituting the static Object type.
             code[position++] = 0x00;
+            code[position++] = 0x0b;
+            return position;
+        }
+
+        private static int WriteAggregateTypes(byte[] code, int position, int[] objects, AggregateBoxPlan boxes)
+        {
+            if (code.Length - position < 12) return -3;
+            int layout = AggregateBoxing.FindLayout(objects);
+            position = AggregateBoxing.TestCarrier(code, position, 0, layout);
+            code[position++] = 0x04;
+            code[position++] = 0x40;
+            for (int i = 0; i < boxes.Count; i++)
+            {
+                if (code.Length - position < 32) return -3;
+                int descriptor = boxes.Descriptor(i);
+                position = AggregateBoxing.TestDescriptor(code, position, 0, layout, descriptor);
+                position = ReturnCase(code, position, descriptor);
+            }
             code[position++] = 0x0b;
             return position;
         }

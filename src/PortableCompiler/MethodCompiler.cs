@@ -1058,6 +1058,7 @@ namespace PortableCompiler
                                     dispatch.AddAllocation(operation);
                             }
                             if (kind == BranchIl.BoxValue) dispatch.AddBox(operation);
+                            if (kind == BranchIl.BoxAggregate) reflection.AggregateBoxes.Include(operation, records[slot + 3]);
                             if (hasNull)
                             {
                                 capacity = NullSpillWasm.Transfer(sizingBuffer, capacity, records, pc,
@@ -1097,7 +1098,7 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.Overflow;
                             else if (kind == BranchIl.NewDelegate)
                                 tags = ExceptionTypes.Argument;
-                            else if (kind == BranchIl.UnboxValue)
+                            else if (kind == BranchIl.UnboxValue || kind == BranchIl.UnboxAggregate || kind == BranchIl.UnboxAggregateAddress)
                                 tags = ExceptionTypes.InvalidCast | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.CastClass)
                                 tags = ExceptionTypes.InvalidCast;
@@ -1221,7 +1222,7 @@ namespace PortableCompiler
                 hostImports, location, reflection, primitiveArrays);
             if (length < 0) return length;
             var interfacePosition = new[] { length };
-            functions = reflection.InterfaceTests.Write(moduleCode, interfacePosition, objects, offsets, signatures,
+            functions = reflection.InterfaceTests.Write(bundle, moduleCode, interfacePosition, objects, reflection.AggregateBoxes, offsets, signatures,
                 sizes, bodyOffsets, arities, functions, hostImports);
             if (functions < 0) return functions;
             length = interfacePosition[0];
@@ -1235,7 +1236,7 @@ namespace PortableCompiler
                 arities[functions] = 1;
                 offsets[functions] = offset;
                 bodyOffsets[functions] = length;
-                length = reflection.ObjectTypes.Write(bundle, moduleCode, length, objects, globals, primitiveArrays);
+                length = reflection.ObjectTypes.Write(bundle, moduleCode, length, objects, globals, primitiveArrays, reflection.AggregateBoxes);
                 if (length < 0) return length;
                 WasmIndexFixups.Resolve(moduleCode, reflection.ObjectTypes.Fixups[0], hostImports + functions);
                 sizes[functions] = length - bodyOffsets[functions];
@@ -1403,18 +1404,20 @@ namespace PortableCompiler
                     if (array < 0) return array;
                     continue;
                 }
-                if (kind == BranchIl.BoxValue || kind == BranchIl.UnboxValue || kind == BranchIl.TestClass)
+                if (kind == BranchIl.BoxValue || kind == BranchIl.UnboxValue || kind == BranchIl.UnboxAggregateAddress || kind == BranchIl.TestClass)
                 {
                     int operand = records[slot + 1];
                     if (kind == BranchIl.TestClass)
                     {
-                        int table = (operand & 3) == 1 ? 1 : 2;
+                        int tag = operand & 3;
+                        int table = tag == 1 ? 1 : tag == 0 ? 2 : 0x1b;
                         operand = table << 24 | operand >> 2;
                     }
                     int element = PrimitiveBoxing.Element(bundle, image, layout, heaps,
                         owner, operand, context, methodArguments, objects);
                     if (element > 0)
                     {
+                        if (kind == BranchIl.UnboxAggregateAddress) return -2;
                         int boxing = PrimitiveBoxing.Layout(objects);
                         if (boxing < 0) return boxing;
                         if (kind == BranchIl.TestClass) records[slot] = BranchIl.TestBox;
@@ -1422,24 +1425,38 @@ namespace PortableCompiler
                         records[slot + 3] = boxing;
                         continue;
                     }
-                    if (kind == BranchIl.BoxValue && element == -2 && (operand >> 24) == 0x1b)
+                    if (element != -2) return element;
+                    int type = AggregateBoxing.ValueIdentity(bundle, image, layout, heaps, owner, operand, context, methodArguments, objects);
+                    if (type < 0 && type != -2) return type;
+                    if (kind == BranchIl.BoxValue && (operand >> 24) == 0x1b)
                     {
-                        int type = ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps,
-                            owner, operand & 0xffffff, context, objects, methodArguments);
-                        if (type < 0) return type;
                         if ((ObjectLayouts.IsEnumKey(type) || ObjectLayouts.IsValueType(objects, type) &&
                             !ObjectLayouts.IsNullableValueType(objects, type) && !ObjectLayouts.IsByRefLikeValue(objects, type)) &&
                             BoxNullTests.TryFoldBoxNullTest(records, slot, clauses))
                             continue;
                         if (IsObjectReference(type) && !ObjectLayouts.IsValueType(objects, type))
                         {
-                            // A closed reference T is already a CLR object. box T widens its type and preserves identity.
+                            // A closed reference T is already a CLR object. box T widens it and preserves identity.
                             records[slot] = BranchIl.WidenReference;
                             records[slot + 1] = type;
                             continue;
                         }
                     }
-                    if (kind != BranchIl.TestClass || element != -2) return element;
+                    if (ObjectLayouts.IsValueType(objects, type))
+                    {
+                        if (ObjectLayouts.IsNullableValueType(objects, type) || ObjectLayouts.IsByRefLikeValue(objects, type)) return -2;
+                        int box = AggregateBoxing.Layout(objects);
+                        if (box < 0) return box;
+                        int descriptor = RuntimeTypeTokens.BindLayout(bundle, objects, type, globals);
+                        if (descriptor < 0) return descriptor;
+                        if (kind != BranchIl.UnboxAggregateAddress)
+                            records[slot] = kind == BranchIl.BoxValue ? BranchIl.BoxAggregate :
+                                kind == BranchIl.UnboxValue ? BranchIl.UnboxAggregate : BranchIl.TestAggregateBox;
+                        records[slot + 1] = type;
+                        records[slot + 3] = descriptor;
+                        continue;
+                    }
+                    if (kind != BranchIl.TestClass || (records[slot + 1] & 3) == 2) return -2;
                 }
                 if ((kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet) && records[slot + 3] != 0)
                 {

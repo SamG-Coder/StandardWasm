@@ -81,6 +81,7 @@ namespace PortableCompiler
         internal const int NativePresent = 163, NativeHelper = 164, CallNative = 165, LoadNativeMessage = 166;
         internal const int EnumHasFlag = 169, TakeProjectedFieldAddress = 170, CallNativeIndirect = 171;
         internal const int NativeAddressView = 172, NullManagedLocation = 173, TestNullLocation = 174;
+        internal const int BoxAggregate = 175, UnboxAggregate = 176, TestAggregateBox = 177, UnboxAggregateAddress = 178;
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
@@ -291,11 +292,11 @@ namespace PortableCompiler
                     uint token = ImageBytes.U32(image, (uint)(start + pc));
                     pc += 4;
                     uint table = token >> 24;
-                    if (table != 1 && table != 2) return -2;
+                    if (table != 1 && table != 2 && (table != 0x1b || op != 0x75)) return -2;
                     int row = (int)(token & 0xffffff);
                     if (row == 0) return -1;
                     kind = op == 0x74 ? CastClass : TestClass;
-                    operand = (row << 2) | (table == 1 ? 1 : 0);
+                    operand = (row << 2) | (table == 1 ? 1 : table == 2 ? 0 : 2);
                 }
                 else if (op == 0x14) kind = NullLiteral;
                 else if (op == 0x7a) kind = ThrowNull; // Stack analysis verifies the operand.
@@ -308,12 +309,12 @@ namespace PortableCompiler
                     kind = LoadString;
                     operand = (int)(token & 0xffffff);
                 }
-                else if (op == 0x8c || op == 0xa5)
+                else if (op == 0x8c || op == 0xa5 || op == 0x79)
                 {
                     if (length - pc < 4) return -1;
                     operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
                     pc += 4;
-                    kind = op == 0x8c ? BoxValue : UnboxValue;
+                    kind = op == 0x8c ? BoxValue : op == 0xa5 ? UnboxValue : UnboxAggregateAddress;
                 }
                 else if (op == 0x8d)
                 {

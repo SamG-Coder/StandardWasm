@@ -15,6 +15,7 @@ namespace PortableCompiler
         internal readonly int[] HeapFixups = new int[1];
         internal readonly RuntimeObjectTypes ObjectTypes = new RuntimeObjectTypes();
         internal readonly RuntimeInterfaceTests InterfaceTests = new RuntimeInterfaceTests();
+        internal readonly AggregateBoxPlan AggregateBoxes = new AggregateBoxPlan();
         internal int[] Slots { get; private set; }
         internal int ResourceOwner { get; private set; } = -1;
         internal int ResourceOpen { get; private set; }
