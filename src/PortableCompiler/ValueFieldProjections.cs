@@ -114,7 +114,10 @@ namespace PortableCompiler
             int end = next[0] + size;
             next[0]++;
             int modifier = ReadFieldModifier(image, heaps, layout, next, end);
-            if (modifier != 0) return modifier < 0 ? modifier : -2;
+            if (modifier < 0) return modifier;
+            // IsVolatile changes ordinary access ordering through the IL prefix,
+            // not the address of the signed Int32 field in this single-agent heap.
+            if (modifier != 0 && !classInt32) return -2;
             if (classInt32)
             {
                 int type = ManagedReferenceSignatures.Read(bundle, image, layout, heaps,
