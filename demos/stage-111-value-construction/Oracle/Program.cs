@@ -16,6 +16,8 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     values = inputs.Select(Kernels.InvokeValueOverride).ToArray(),
     typeBranches = inputs.Select(Kernels.CheckTypeBranches).ToArray(),
     debuggerStatus = DebuggerProbe.ReadManagedDebuggerStatus(),
+    primitiveDescriptors = inputs.Select(PrimitiveTypeProbe.CheckPrimitiveDescriptors).ToArray(),
+    closedValueTypes = inputs.Select(PrimitiveTypeProbe.CheckClosedValueType).ToArray(),
     entryAliases = inputs.Select(EntryArrayProbe.UpdateEntryArray).ToArray(),
     entryFailures = inputs.Select(EntryArrayProbe.CheckEntryArrayFailure).ToArray(),
     bucketAliases = inputs.Select(BucketProbe.ReadManagedBuckets).ToArray(),

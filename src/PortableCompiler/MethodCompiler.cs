@@ -424,7 +424,7 @@ namespace PortableCompiler
                     if (status < 0)
                         return status;
                     RuntimeTypeBranches.FoldClosedTypeBranches(bundle, image, layout, heaps, owner, context,
-                        methodArguments, objects, records, catchRegion);
+                        methodArguments, objects, records, catchRegion, count);
                     ExactManagedReads.FoldExactManagedReads(bundle, image, layout, heaps, owner, context,
                         methodArguments, objects, frame, records, catchRegion);
                     byte[] frameRoots = null;
@@ -1907,6 +1907,11 @@ namespace PortableCompiler
                     if (records[slot + 3] == 0 && finalizers != null && finalizers.IsSuppression(owner, target))
                     {
                         records[slot] = BranchIl.SuppressFinalizer;
+                        continue;
+                    }
+                    if (records[slot + 3] == 0 && RuntimeTypeMetadata.IsCoreGetTypeFromHandle(image, heaps, layout, target))
+                    {
+                        records[slot] = BranchIl.TypeFromHandle;
                         continue;
                     }
                     int accessor = StringMetadata.AccessorDefinition(image, heaps, layout, target);

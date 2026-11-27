@@ -27,7 +27,15 @@ namespace PortableCompiler
             {
                 int type = ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps, owner,
                     coded >> 2, context, objects, methodArguments);
-                return type < 0 ? type : ReadLayoutIdentity(objects, type, identity);
+                if (type < 0) return type;
+                if (GenericScalar.IsScalar(type))
+                {
+                    // Scalar storage is shared, but each primitive keeps its
+                    // own nominal descriptor from the bundled CoreLib.
+                    int found = BundleConstraints.FindPrimitive(bundle, type, identity);
+                    return found == 0 ? -2 : found < 0 ? found : 0;
+                }
+                return ReadLayoutIdentity(objects, type, identity);
             }
             if ((coded & 3) == 0 && !RuntimeTypeMetadata.ValidDefinition(image, heaps, coded >> 2)) return -1;
             return AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, coded, identity);

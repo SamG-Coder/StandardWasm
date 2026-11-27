@@ -129,5 +129,55 @@ namespace PeLibrary
             return next[0] == end && (parameter & 3) == 1 &&
                 PlatformTypeReferences.Identify(image, heaps, layout, counts, first, parameter >> 2) == PlatformTypeReferences.TypeHandle;
         }
+        internal static bool IsCoreGetTypeFromHandle(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            if (!MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "GetTypeFromHandle")) return false;
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return false;
+            int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+            if (owner < 1 || !ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, owner, "System", "Type")) return false;
+
+            int blob = MethodDefinitions.ReadColumn(image, layout, row, 4), limit = heaps[0] + heaps[1];
+            if (blob <= 0 || blob >= heaps[1]) return false;
+            var next = new int[1];
+            int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
+            int start = next[0];
+            if (size < 6 || size > limit - start || image[start] != 0 || image[start + 1] != 1 || image[start + 2] != 0x12)
+                return false;
+            int end = start + size;
+            int result = CompressedUnsigned(image, start + 3, end, next);
+            int cursor = next[0];
+            if (result != owner << 2 || cursor >= end || image[cursor] != 0x11) return false;
+            int parameter = CompressedUnsigned(image, cursor + 1, end, next);
+            return parameter > 0 && (parameter & 3) == 0 && next[0] == end &&
+                ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, parameter >> 2, "System", "RuntimeTypeHandle");
+        }
+        internal static bool IsValueTypeGetter(byte[] image, int[] heaps, int[] layout, int row, bool definition)
+        {
+            int signature;
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0) return false;
+            if (definition)
+            {
+                if (row < 1 || row > counts[6] || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return false;
+                int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+                if (owner < 1 || !ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, owner, "System", "Type") ||
+                    !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "get_IsValueType")) return false;
+                signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
+            }
+            else
+            {
+                var member = new int[AssemblyReferences.SymbolWidth];
+                if (AssemblyReferences.ReadMember(image, heaps, layout, row, member) < 0 || member[AssemblyReferences.Depth] != 0 ||
+                    !MatchesAscii(image, heaps, (uint)member[4], "get_IsValueType") ||
+                    PlatformTypeReferences.Identify(image, heaps, layout, counts, first, member[AssemblyReferences.Leaf]) != PlatformTypeReferences.Type)
+                    return false;
+                signature = member[5];
+            }
+            if (signature < 1 || !Fits((uint)signature, 4, (uint)heaps[1])) return false;
+            return U32(image, (uint)(heaps[0] + signature)) == 0x02002003; // instance bool (); length prefix 3
+        }
     }
 }

@@ -45,3 +45,7 @@ also checks the diagnostic for an exported managed address.
 The struct-array fixture takes two references to one closed generic element.
 It checks default slots, value copies, direct array stores, writes through
 aliases, and typed failures from taking an element address.
+
+The primitive descriptor fixture compares closed `typeof(T)` against the
+canonical primitive types, including pairs with shared Wasm storage. It also
+checks the `IsValueType` branch on both a primitive and a reference type.

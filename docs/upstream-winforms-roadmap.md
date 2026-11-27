@@ -128,8 +128,9 @@ runtime host for attachment state. Array-backed `Int32` references now use
 the same traced owner and index as existing managed array locations, including
 when passed to another assembly or returned to a compiled caller. The startup
 replay decodes the generic `Entry` array element address in CoreLib's
-`Dictionary<TKey,TValue>.Remove`. Linking now reaches the descriptor lookup
-for its primitive `TKey` specialization.
+`Dictionary<TKey,TValue>.Remove`. Its primitive `TKey` now resolves to the
+canonical CoreLib type descriptor. The startup replay stops at the comparer
+call through `IEqualityComparer<TKey>.GetHashCode`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

@@ -60,6 +60,8 @@ async function verify(compiler, fixture, packed, inputs) {
     const debuggerImports = { "standardwasm:runtime": { isDebuggerAttached: () => 0 } };
     const [debuggerStatus] = await runEntry("ReadManagedDebuggerStatus", debuggerImports, [undefined]);
     return { values: await runEntry("InvokeValueOverride"), typeBranches: await runEntry("CheckTypeBranches"), debuggerStatus,
+        primitiveDescriptors: await runEntry("CheckPrimitiveDescriptors"),
+        closedValueTypes: await runEntry("CheckClosedValueType"),
         entryAliases: await runEntry("UpdateEntryArray"), entryFailures: await runEntry("CheckEntryArrayFailure"),
         bucketAliases: await runEntry("ReadManagedBuckets"), bucketFailures: await runEntry("CheckBucketFailure"),
         bucketExportRejection: compileEntry("RejectExportedBucket"), rejection: compileEntry("RejectInheritedValueHash") };
@@ -70,6 +72,8 @@ const expected = {
     values: oracle.values,
     typeBranches: oracle.typeBranches,
     debuggerStatus: oracle.debuggerStatus,
+    primitiveDescriptors: oracle.primitiveDescriptors,
+    closedValueTypes: oracle.closedValueTypes,
     entryAliases: oracle.entryAliases,
     entryFailures: oracle.entryFailures,
     bucketAliases: oracle.bucketAliases,

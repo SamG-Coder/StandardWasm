@@ -5,13 +5,13 @@ namespace PortableCompiler
 {
     internal static class RuntimeTypeBranches
     {
-        // Fold only two direct typeof expressions followed by a platform Type
-        // equality test and a branch. No other instruction can enter the test
+        // Fold branches over closed typeof expressions and canonical Type
+        // tests. No other instruction can enter the test
         // sequence after its first operand, so replacing it preserves stack depth.
         internal static void FoldClosedTypeBranches(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
-            int context, int[] methodArguments, int[] objects, int[] records, int[] clauses)
+            int context, int[] methodArguments, int[] objects, int[] records, int[] clauses, int methodCount)
         {
-            if (methodArguments == null || clauses.Length != 0) return;
+            if ((methodArguments == null && context == 0) || clauses.Length != 0) return;
             bool changed = false;
             var left = new int[2];
             var right = new int[2];
@@ -19,11 +19,17 @@ namespace PortableCompiler
             {
                 if (records[first] != LoadTypeToken) continue;
                 int leftCall = Next(records, first);
-                if (!GetTypeCall(image, layout, heaps, records, leftCall)) continue;
+                if (!GetTypeCall(image, layout, heaps, records, leftCall, methodCount)) continue;
                 int second = Next(records, leftCall);
-                if (second >= records.Length || records[second] != LoadTypeToken) continue;
+                if (second >= records.Length) continue;
+                if (records[second] != LoadTypeToken)
+                {
+                    if (FoldValueTypeBranch(bundle, image, layout, heaps, owner, context, methodArguments, objects,
+                        records, clauses, first, leftCall, second)) changed = true;
+                    continue;
+                }
                 int rightCall = Next(records, second);
-                if (!GetTypeCall(image, layout, heaps, records, rightCall)) continue;
+                if (!GetTypeCall(image, layout, heaps, records, rightCall, methodCount)) continue;
                 int compare = Next(records, rightCall);
                 if (!IsStaticMember(records, compare)) continue;
                 int operation = RuntimeTypeMetadata.ObjectTypeMember(image, heaps, layout, records[compare + 1]);
@@ -61,8 +67,37 @@ namespace PortableCompiler
         private static bool IsStaticMember(int[] records, int slot) =>
             slot < records.Length && records[slot] == MemberCall && records[slot + 3] == 0x28;
 
-        private static bool GetTypeCall(byte[] image, int[] layout, int[] heaps, int[] records, int slot) =>
-            IsStaticMember(records, slot) && RuntimeTypeMetadata.IsGetTypeFromHandle(image, heaps, layout, records[slot + 1]);
+        private static bool GetTypeCall(byte[] image, int[] layout, int[] heaps, int[] records, int slot, int methodCount) =>
+            slot < records.Length && (records[slot] == Call && records[slot + 3] == 0
+                ? records[slot + 1] > 0 && records[slot + 1] <= methodCount &&
+                    RuntimeTypeMetadata.IsCoreGetTypeFromHandle(image, heaps, layout, records[slot + 1])
+                : IsStaticMember(records, slot) && RuntimeTypeMetadata.IsGetTypeFromHandle(image, heaps, layout, records[slot + 1]));
+
+        private static bool FoldValueTypeBranch(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
+            int context, int[] methodArguments, int[] objects, int[] records, int[] clauses, int first, int handle, int getter)
+        {
+            int coded = records[first + 1];
+            if ((coded & 3) != 2 || records[getter] != Call && records[getter] != MemberCall ||
+                !RuntimeTypeMetadata.IsValueTypeGetter(image, heaps, layout, records[getter + 1], records[getter] == Call)) return false;
+            int branch = Next(records, getter);
+            if (branch >= records.Length || records[branch] != Conditional ||
+                (records[branch + 3] != 0x45 && records[branch + 3] != 0) ||
+                ValueOperands.Entry(records, handle / Width, clauses) || ValueOperands.Entry(records, getter / Width, clauses) ||
+                ValueOperands.Entry(records, branch / Width, clauses)) return false;
+            int type = ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps, owner,
+                coded >> 2, context, objects, methodArguments);
+            bool isValue = GenericScalar.IsScalar(type) || ObjectLayouts.IsEnumKey(type) || ObjectLayouts.IsValueType(objects, type);
+            if (!isValue && type != SignatureTypes.String && type != ObjectLayouts.ObjectReference &&
+                (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0])) return false;
+
+            records[first] = Nop;
+            records[handle] = Nop;
+            records[getter] = Nop;
+            bool taken = records[branch + 3] == 0x45 ? !isValue : isValue;
+            records[branch] = taken ? Branch : Nop;
+            records[branch + 3] = 0;
+            return true;
+        }
 
         private static void RemoveUnreachable(int[] records)
         {
