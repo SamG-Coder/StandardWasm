@@ -63,6 +63,12 @@ instances of the same type, inherited finalizers, re-registration and
 resurrection. A collector design needs to keep the finalizable object and its
 fields available to its managed finalizer after the last ordinary root is gone.
 Evaluate explicit managed root tracing and a finalization queue for that contract.
+The [Stage 152 experiment](../demos/stage-152-finalization-root-tracing/README.md)
+exercises that queue on Wasm GC references with explicit roots. A live CLR
+oracle shows that suppression and registration multiplicity need separate
+state: a re-registration can clear suppression or add a queue entry. The next
+step is to make generated code supply roots and field traversal at collection
+points so the queue can work with the unchanged upstream classes.
 JavaScript cleanup notifications can release independent host resources, but
 notification timing and delivery alone cannot satisfy the managed queue and
 resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)

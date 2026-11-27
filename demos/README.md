@@ -154,6 +154,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [148 · Executing assembly identity](stage-148-executing-assembly/README.md) | `npm run demo -- stage-148-executing-assembly` | Resolve the defining assembly of the executing method across linked DLLs |
 | [149 · Fixed strings](stage-149-fixed-strings/README.md) | `npm run demo -- stage-149-fixed-strings` | `fixed (char* p = s)` in the netstandard2.0 and net10.0 IL forms, read through a frame-owned UTF-16 copy |
 | [150 · Function pointers](stage-150-function-pointers/README.md) | `npm run demo -- stage-150-function-pointers` | `delegate*<...>` through `ldftn` and `calli`: a funcref table slot and `call_indirect` |
+| [152 · Finalization root tracing](stage-152-finalization-root-tracing/README.md) | `npm run demo -- stage-152-finalization-root-tracing` | Trace explicit roots and retain finalizer receivers using Wasm GC references |
 
 ## Adding a stage
 
