@@ -23,6 +23,8 @@ for (int which = 0; which <= 2; which++) Run("Select", which, 7, 5);
 Run("Select", 1, int.MinValue, 1);
 foreach (int count in new[] { 0, 1, 2, 5, 12 }) Run("Fold", count);
 for (int which = 0; which <= 2; which++) Run("Field", which, 11);
+Run("Constructed", 0, 21);
+Run("Constructed", 1, 21);
 Run("Wide", 3, 4);
 Run("Wide", -7, 2000);
 Run("Void", 42);

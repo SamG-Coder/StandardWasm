@@ -6,6 +6,16 @@ namespace FunctionPointerFixture
         public delegate*<int, int, int> Combine;
     }
 
+    // A class whose constructor takes a function pointer: Roslyn emits ldftn directly before
+    // this newobj, which is not a delegate construction (Codex review of c6b68c7). The generic
+    // Holder<T> form also needs generic class field stores, which main does not lower yet.
+    public unsafe sealed class Holder
+    {
+        private readonly delegate*<int, int> callback;
+        public Holder(delegate*<int, int> callback) => this.callback = callback;
+        public int Invoke(int value) => callback(value);
+    }
+
     // Stage 150 (decision 0078): managed function pointers. ldftn of a static method yields
     // a native-size code address and calli calls through it with the call-site signature.
     public static unsafe class Kernels
@@ -68,6 +78,15 @@ namespace FunctionPointerFixture
         {
             delegate*<int, int, int> function = null;
             return function(value, value);
+        }
+
+        private static int Double(int value) => value * 2;
+        private static int Negate(int value) => -value;
+
+        public static int Constructed(int which, int value)
+        {
+            var holder = which == 0 ? new Holder(&Double) : new Holder(&Negate);
+            return holder.Invoke(value);
         }
 
         // Recursion through a pointer.

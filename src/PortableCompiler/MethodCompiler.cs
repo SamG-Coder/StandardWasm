@@ -1127,8 +1127,10 @@ namespace PortableCompiler
                 {
                     // Decision 0078: an ldftn that feeds no delegate constructor takes a
                     // static method's address as a table-2 slot. Instance pointers stay diagnosed.
+                    // Only the delegate constructor shape counts: an ordinary constructor can take
+                    // a function pointer straight from ldftn (Codex review of c6b68c7).
                     int following = records[slot + 2] * BranchIl.Width;
-                    if (following >= records.Length || records[following] != BranchIl.MemberCall || records[following + 3] != 0x73)
+                    if (!FeedsDelegateConstructor(image, heaps, layout, records, following))
                     {
                         if ((MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) == 0) return -2;
                         records[slot] = BranchIl.FunctionAddress;
@@ -1423,6 +1425,31 @@ namespace PortableCompiler
                 next = records[next + 2] * BranchIl.Width;
             }
             return status;
+        }
+
+        // A delegate constructor is `instance void .ctor(object, native int)` (ECMA-335 II.14.6.1).
+        // A constructor taking a function pointer declares FNPTR instead, so the signature alone
+        // tells the two newobj forms apart before either path is chosen.
+        private static bool FeedsDelegateConstructor(byte[] image, int[] heaps, int[] layout, int[] records, int following)
+        {
+            if (following >= records.Length) return false;
+            int kind = records[following], blob;
+            if (kind == BranchIl.MemberCall && records[following + 3] == 0x73)
+            {
+                var member = new int[AssemblyReferences.SymbolWidth];
+                if (AssemblyReferences.ReadMember(image, heaps, layout, records[following + 1], member, allowClosedParent: true) < 0)
+                    return false;
+                blob = member[5];
+            }
+            else if (kind == BranchIl.NewObject)
+                blob = MethodDefinitions.ReadColumn(image, layout, records[following + 1], 4);
+            else return false;
+            if (blob <= 0 || blob >= heaps[1]) return false;
+            var next = new int[1];
+            int size = ImageBytes.CompressedUnsigned(image, heaps[0] + blob, heaps[0] + heaps[1], next);
+            int at = next[0];
+            return size == 5 && image[at] == 0x20 && image[at + 1] == 2 && image[at + 2] == 1 &&
+                image[at + 3] == 0x1c && image[at + 4] == 0x18;
         }
 
         // Decision 0078: link each calli to the carrier for its StandAloneSig. Only the

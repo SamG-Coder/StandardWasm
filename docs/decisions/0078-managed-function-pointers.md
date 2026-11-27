@@ -13,10 +13,24 @@ module table 2, a funcref table:
 - **`ldftn M`** of a static method that does not feed a delegate constructor is
   lowered to `i32.const k`. `k` is `M`'s slot, assigned at link time. Slot 0
   stays null, so a null pointer cannot call anything.
+- **Delegate or pointer.** Roslyn emits `ldftn` directly before `newobj` both for a
+  delegate and for an ordinary constructor that takes a function pointer. Only a
+  constructor with the delegate signature `instance void .ctor(object, native int)`
+  (ECMA-335 II.14.6.1) takes the delegate path (Codex review of c6b68c7). Any
+  other constructor receives the slot as an argument.
 - **Identity.** One method always gets one slot, so two loads of `&M` compare
   equal, as on the CLR.
 - **`ELEMENT_TYPE_FNPTR`.** Locals, parameters and fields of this type are
   stored as `Native`. `SignatureExtents` skips the embedded method signature.
+
+## Signature matching
+
+A member reference whose signature contains `FNPTR` matches a definition when
+both embedded method signatures are free of type tokens and byte-identical.
+That covers primitives, generic parameters, pointers and nested function
+pointers. Exact nested types are preserved, so a layout-compatible type never
+aliases a different signature. A function-pointer signature that names a class
+or value type token stays unmatched, and linking reports it.
 
 ## Calls
 
@@ -68,3 +82,6 @@ covers ordinary managed `delegate*` code. Those sites still need unmanaged
   non-default convention): P/Invoke and host imports, #274
 - `ldvirtftn` into a pointer, and instance-method pointers (`HASTHIS` call sites)
 - vararg `calli`
+- a function-pointer signature in a member reference that names a type token
+- generic `Holder<T>(delegate*<T, T>)`: main does not yet lower stores into a
+  generic class's fields (`Box<int>` fails the same way), which is separate from this stage

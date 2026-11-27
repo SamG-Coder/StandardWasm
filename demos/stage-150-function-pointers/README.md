@@ -14,6 +14,7 @@ The CLR runs each kernel, and Node and Edge must return its values. The kernels 
 - choosing among three targets
 - an array of pointers in `stackalloc` memory (`sizeof(delegate*)` included)
 - a pointer kept in a struct field and passed as an argument
+- a pointer passed straight from `&M` to an ordinary constructor, which is not a delegate construction
 - `long` and `void` signatures, the latter writing through an `int*`
 - recursion through a pointer
 - equality of two loads of the same method
