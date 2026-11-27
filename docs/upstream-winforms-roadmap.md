@@ -186,9 +186,12 @@ for the verified CoreLib `String.Create` body with native-integer callback
 state. The original branches and delegate invocation remain in the compiled
 body. The compiler now preserves the duplicated span receiver in CoreLib's
 `Path.JoinInternal` when the method computes the element index from the span
-length. The startup replay advances to `Path.GetFullPath` at `IL_002a`,
-where the original method calls `String.Contains(char)` to check for embedded
-nulls.
+length. The internal root-tracing replay advances to `Path.GetFullPath` at
+`IL_002a`, where the original method calls `String.Contains(char)` to check
+for embedded nulls. The normal compiler entry point reaches an earlier
+diagnostic in `GC.SuppressFinalize` at `IL_0011`, where CoreLib tests whether
+the object has a finalizer. The launcher needs production finalization
+support before it can pass that call.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.
