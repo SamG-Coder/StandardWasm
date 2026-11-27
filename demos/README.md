@@ -191,6 +191,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [187 · Compiled window class bindings](stage-187-window-class-bindings/README.md) | `npm run demo -- stage-187-window-class-bindings` | Compile SDK-shaped class and window procedure imports for the browser host |
 | [188 · Readonly character reference identity](stage-188-readonly-character-reference-identity/README.md) | `npm run demo -- stage-188-readonly-character-reference-identity` | Preserve readonly aliases through exact same-character reinterpretations |
 | [189 · Synchronous Win32 window creation](stage-189-window-creation/README.md) | `npm run demo -- stage-189-window-creation` | Compare hidden window creation, current procedure dispatch, and nested callback memory against Windows |
+| [190 · Compiled window creation binding](stage-190-window-creation-binding/README.md) | `npm run demo -- stage-190-window-creation-binding` | Compile the SDK-shaped window creation import and dispatch through the production host |
 
 ## Adding a stage
 

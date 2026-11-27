@@ -4,6 +4,9 @@ using Windows.Win32.UI.WindowsAndMessaging;
 
 public static unsafe class Guest
 {
+    public static int Register(nint definition) => RegisterClassW((void*)definition);
+    public static int SystemError() => Marshal.GetLastSystemError();
+
     public static nint Create(int exStyle, nint className, nint caption, int style,
         int x, int y, int width, int height, nint parent, nint menu, nint instance, nint data) =>
         CreateWindowExW((WINDOW_EX_STYLE)exStyle, new PCWSTR((char*)className),
@@ -16,6 +19,9 @@ public static unsafe class Guest
     [DllImport("USER32.dll", ExactSpelling = true)]
     private static extern HWND CreateWindowExW(WINDOW_EX_STYLE exStyle, PCWSTR className, PCWSTR caption,
         WINDOW_STYLE style, int x, int y, int width, int height, HWND parent, HMENU menu, HINSTANCE instance, void* data);
+
+    [DllImport("USER32.dll", ExactSpelling = true)]
+    private static extern ushort RegisterClassW(void* definition);
 }
 
 namespace Windows.Win32.Foundation
