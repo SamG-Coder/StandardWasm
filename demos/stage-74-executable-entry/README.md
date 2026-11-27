@@ -1,9 +1,12 @@
 # Stage 74 · Run a dropped .NET entry point
 
 Run `npm run demo -- stage-74-executable-entry` on Windows with the .NET 10
-SDK, Windows Desktop runtime, Node and Microsoft Edge. The runner rebuilds
-the self-hosted compiler, publishes the ordinary console app in both formats,
-and compares both managed entry executions with the original process exit.
+SDK, matching win-x86 .NET and Windows Desktop runtimes 10.0.10, Node and
+Microsoft Edge. Set `STANDARDWASM_DESKTOP_VERSION` to use another installed pair.
+The runner rebuilds the self-hosted compiler, publishes the ordinary console app
+in both formats, and compares both managed entry executions with the original
+process exit. Pass `--no-rebuild` with `STANDARDWASM_COMPILER_PATH` to test a
+specific compiler build.
 
 After building the compiler, run `node demos/stage-74-executable-entry/run.mjs --serve`.
 Open the printed local URL. Add the publish output or the original single-file
@@ -18,10 +21,12 @@ and no runtime imports. [Stage 95](../stage-95-managed-companions/README.md)
 covers the launch path for original managed companion DLLs. Console streams,
 arguments, and execution with a browser framework require separate work. It also sends
 the unchanged Stage 72 WinForms entry through the same compiler path. The
-compiler currently rejects it. An independent metadata probe records the first
-form allocation in the entry and its upstream base class; the current compiler
-status does not include an IL offset. Evidence is under
-`artifacts/executable-entry/run-*/results.json`.
+supplied-framework check uses the same-version x86 packs for Wasm32 and
+includes the Win32 type forwarder facade. It compares the complete launcher
+result in Node and Edge and records the selected assembly hashes. This probe
+currently reaches a compiler diagnostic. An independent metadata probe
+records the first form allocation and its upstream base class. Evidence is
+under `artifacts/executable-entry/run-*/results.json`.
 
 The browser loader accepts the Win32 module lookup and last-error host imports
 for a single managed execution instance. Module lookup uses the original
