@@ -63,3 +63,7 @@ The monitor probe checks the CLR's reentrant lock behavior on the launch
 worker's single managed execution agent. It verifies lockTaken and typed
 failure paths. Monitor wait and pulse and scheduling across multiple
 managed threads require separate support.
+
+The span probe verifies a single-object read-only span over an argument or
+local. The span reads a traced cell shared with the original frame slot. Both
+views of an argument observe later writes, and indexing still checks bounds.

@@ -29,6 +29,15 @@ namespace PortableCompiler
             return Local(code, used, 0x21, target);
         }
 
+        internal static int CreateSingleObject(byte[] code, int used, int owner, int target)
+        {
+            used = Local(code, used, 0x20, owner);
+            used = Const(code, used, 0);
+            used = Const(code, used, 1);
+            used = Gc(code, used, 0, ObjectSpan);
+            return Local(code, used, 0x21, target);
+        }
+
         // Both views retain their original packed UTF-16 owner. A string
         // contributes its backing array. A null source produces an empty view.
         internal static int FromOwner(byte[] code, int used, int source, bool wrapped)

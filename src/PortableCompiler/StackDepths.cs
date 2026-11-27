@@ -188,6 +188,7 @@ namespace PortableCompiler
                 if (depth < 1 || (!IsNativeInteger(stack[depth - 1]) && stack[depth - 1] != I32)) return -2;
                 return Push(stack, allocated, depth - 1, Native);
             }
+            if (kind == LoadSingleObjectSpan) return Push(stack, allocated, depth, ObjectSpan);
             if (kind == LoadInlineStorage)
                 return Push(stack, allocated, depth, extra);
             if (kind == NewObjectSpan)

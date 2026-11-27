@@ -386,10 +386,11 @@ namespace PortableCompiler
                     }
                     virtualUsed[0] = 0;
                     var inlineLocations = new int[parameters + locals];
+                    var objectCells = new int[parameters + locals];
                     functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
                         parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
-                        initializers, reflection, instantiations, methodArguments, inlineLocations, parameters, nativePlans, nativeStatics);
+                        initializers, reflection, instantiations, methodArguments, inlineLocations, objectCells, parameters, nativePlans, nativeStatics);
                     if (functions < 0)
                         return functions;
 
@@ -436,6 +437,12 @@ namespace PortableCompiler
                         if (inlineLocations[local] == 0) continue;
                         if (capacity > int.MaxValue - 24) return -3;
                         capacity += 24;
+                    }
+                    for (int slot = 0; slot < objectCells.Length; slot++)
+                    {
+                        if (objectCells[slot] == 0) continue;
+                        if (capacity > int.MaxValue - 32) return -3;
+                        capacity += 32;
                     }
                     if (catchRegion.Length != 0)
                     {
@@ -666,7 +673,7 @@ namespace PortableCompiler
                     }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
-                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers, reflection, inlineLocations, nativePlans.Plans, filters);
+                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers, reflection, inlineLocations, nativePlans.Plans, filters, objectCells);
                 }
 
                 if (used < 0) return used;
@@ -735,7 +742,7 @@ namespace PortableCompiler
             int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, bool valueConstructor, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed,
             TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, MethodInstantiations instantiations, int[] methodArguments,
-            int[] inlineLocations, int parameterCount, NativeAggregatePlans nativePlans, NativeStaticFields nativeStatics)
+            int[] inlineLocations, int[] objectCells, int parameterCount, NativeAggregatePlans nativePlans, NativeStaticFields nativeStatics)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
@@ -837,6 +844,20 @@ namespace PortableCompiler
                     int local = records[slot + 1];
                     int type = frame[local];
                     int next = records[slot + 2] * BranchIl.Width;
+                    if (type == ObjectReference && next < records.Length &&
+                        records[next] == BranchIl.MemberCall && records[next + 3] == 0x73 &&
+                        !ValueOperands.Entry(records, next / BranchIl.Width, clauses) &&
+                        SpanMetadata.IsSingleObjectConstructor(bundle, image, layout, heaps, owner,
+                            records[next + 1], context, methodArguments, objects))
+                    {
+                        int vector = ObjectLayouts.RegisterArray(objects, ObjectReference);
+                        if (vector < 0) return vector;
+                        objectCells[local] = vector;
+                        records[slot] = BranchIl.Nop;
+                        records[next] = BranchIl.LoadSingleObjectSpan;
+                        records[next + 1] = local;
+                        continue;
+                    }
                     if (type == I32 && local >= parameterCount && next < records.Length &&
                         records[next] == BranchIl.MemberCall && records[next + 3] == 0x28 &&
                         !ValueOperands.Entry(records, next / BranchIl.Width, clauses) &&

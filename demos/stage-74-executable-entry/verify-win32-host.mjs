@@ -141,7 +141,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
 
     const fixture = upload(fixtureBytes);
     const encoder = new TextEncoder();
-    const names = ["Exchange", "Read", "LookupModule", "Create", "Lifecycle", "PointerRoundTrip", "Alias", "Sum", "LockRoundTrip", "ReleaseDepth", "MatchPair"].map(name => encoder.encode(name));
+    const names = ["Exchange", "Read", "LookupModule", "Create", "Lifecycle", "PointerRoundTrip", "Alias", "Sum", "LockRoundTrip", "ReleaseDepth", "MatchPair", "ObjectSpanAliases", "ObjectSpanBounds"].map(name => encoder.encode(name));
     const manifest = new Uint8Array(names.reduce((size, name) => size + 8 + name.length, 0));
     const view = new DataView(manifest.buffer);
     let offset = 0;
@@ -177,14 +177,15 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
     const staticPin = [exports.Sum(), exports.Alias(2), exports.Sum(), exports.Alias(9), exports.Sum()];
     const monitor = [0, 1, 2, 3].map(exports.LockRoundTrip).concat([0, 1, 2].map(exports.ReleaseDepth));
     const filter = [0, 1, 2, 3].map(exports.MatchPair);
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter };
+    const objectSpans = [0, 1].map(exports.ObjectSpanAliases).concat([-1, 0, 1].map(exports.ObjectSpanBounds));
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans };
 }
 
 const oracle = JSON.parse(execFileSync("dotnet", ["run", "--file",
     fileURLToPath(new URL("./Win32HostOracle.cs", import.meta.url))], { encoding: "utf8" }));
 const compilerPath = process.argv[2];
 const framework = { name: basename(oracle.framework), bytes: readFileSync(oracle.framework) };
-const expectedCompiler = { legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle, pointers: oracle.compiledPointers, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor, filter: oracle.compiledFilter };
+const expectedCompiler = { legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle, pointers: oracle.compiledPointers, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor, filter: oracle.compiledFilter, objectSpans: oracle.compiledObjectSpans };
 let compilerBytes, fixtureBytes;
 if (compilerPath) {
     execFileSync("dotnet", ["build", fileURLToPath(new URL("./Win32Fixture", import.meta.url)), "-c", "Release"],
@@ -236,6 +237,7 @@ try {
         }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes],
             name: framework.name });
         assert.deepEqual(compiled, expectedCompiler);
+        console.log("Single-object spans matched CLR argument and local aliasing and typed bounds failures.");
         console.log("Two-type exception filters matched the CLR for both matches, a rejection, and normal completion.");
         console.log("Monitor reentrancy, lockTaken, and three typed failure paths matched the CLR.");
         console.log("Pinned static aliases matched the CLR across managed stores and separate export calls.");
