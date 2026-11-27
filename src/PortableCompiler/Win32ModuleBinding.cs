@@ -130,7 +130,7 @@ namespace PortableCompiler
             return 0;
         }
 
-        private static bool MatchesIsWindow(byte[] image, int[] heaps, int[] methods, int row)
+        internal static bool MatchesIsWindow(byte[] image, int[] heaps, int[] methods, int row)
         {
             var cursor = new int[1];
             int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4), 1, cursor);

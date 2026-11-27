@@ -10,7 +10,8 @@ namespace PortableCompiler
             WindowRect = Peek + 1, ClientRect = WindowRect + 1, DeleteFile = ClientRect + 1, PostWindow = DeleteFile + 1,
             NotifyWinEvent = PostWindow + 1, SendMessageTimeout = NotifyWinEvent + 1,
             BeginPaint = SendMessageTimeout + 1, EndPaint = BeginPaint + 1,
-            UpdateRect = EndPaint + 1, ValidateRect = UpdateRect + 1, CoCreateInstance = ValidateRect + 1;
+            UpdateRect = EndPaint + 1, ValidateRect = UpdateRect + 1, CoCreateInstance = ValidateRect + 1,
+            IsWindowVisible = CoCreateInstance + 1;
         private const int ImportOwner = -4;
 
         internal static int Find(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int[] counts,
@@ -24,6 +25,8 @@ namespace PortableCompiler
                     ? CoCreateInstance : 0;
             int member = FindEntry(image, heaps, (uint)mapping[2], (uint)mapping[1]);
             if (member == 0) return 0;
+            if (member == IsWindowVisible)
+                return mapping[0] == 0x101 && Win32ModuleBinding.MatchesIsWindow(image, heaps, methods, row) ? member : 0;
 
             var cursor = new int[1];
             int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4),
@@ -149,7 +152,8 @@ namespace PortableCompiler
                 ImageBytes.MatchesAscii(image, heaps, entry, "BeginPaint") ? BeginPaint :
                 ImageBytes.MatchesAscii(image, heaps, entry, "EndPaint") ? EndPaint :
                 ImageBytes.MatchesAscii(image, heaps, entry, "GetUpdateRect") ? UpdateRect :
-                ImageBytes.MatchesAscii(image, heaps, entry, "ValidateRect") ? ValidateRect : 0;
+                ImageBytes.MatchesAscii(image, heaps, entry, "ValidateRect") ? ValidateRect :
+                ImageBytes.MatchesAscii(image, heaps, entry, "IsWindowVisible") ? IsWindowVisible : 0;
         }
 
         private static bool ReadUnsigned(byte[] image, int[] cursor, int end) =>
@@ -200,8 +204,9 @@ namespace PortableCompiler
 
         internal static int Arity(int member) => member == Post || member == PostWindow || member == NotifyWinEvent ? 4 :
             member == SendMessageTimeout ? 7 : member == Peek || member == CoCreateInstance ? 5 :
-            member == DeleteFile ? 1 : member == UpdateRect ? 3 : 2;
-        internal static bool NeedsMemory(int member) => member != Post && member != PostWindow && member != NotifyWinEvent;
+            member == DeleteFile || member == IsWindowVisible ? 1 : member == UpdateRect ? 3 : 2;
+        internal static bool NeedsMemory(int member) => member != Post && member != PostWindow &&
+            member != NotifyWinEvent && member != IsWindowVisible;
 
         internal static bool MatchesSignature(BundleImages bundle, int[] objects, int member, int[] types, int offset)
         {
@@ -225,6 +230,8 @@ namespace PortableCompiler
                 return Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset], Native, "HDC", "Windows.Win32.Graphics.Gdi") &&
                     Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") && types[offset + 2] == Native;
             if (!Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset], I32, "BOOL")) return false;
+            if (member == IsWindowVisible)
+                return Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND");
             if (member == UpdateRect)
                 return Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
                     types[offset + 2] == Native && Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 3], I32, "BOOL");
@@ -262,7 +269,7 @@ namespace PortableCompiler
                 member == WindowRect ? "getWindowRect" : member == ClientRect ? "getClientRect" :
                 member == BeginPaint ? "beginPaint" : member == EndPaint ? "endPaint" :
                 member == UpdateRect ? "getUpdateRect" : member == ValidateRect ? "validateRect" :
-                member == CoCreateInstance ? "coCreateInstance" : "deleteFileW");
+                member == CoCreateInstance ? "coCreateInstance" : member == IsWindowVisible ? "isWindowVisible" : "deleteFileW");
             var types = new byte[Arity(member)];
             for (int i = 0; i < types.Length; i++) types[i] = 0x7f;
             return imports.Add(ImportOwner, member, module, module.Length, name, name.Length, types, types.Length,

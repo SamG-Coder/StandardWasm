@@ -214,6 +214,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         ...createDpiAwareness(value => { errors.system = value; }),
         ...displayContexts,
         isWindow: handle => windows.hasWindow(handle) ? 1 : 0,
+        isWindowVisible: handle => windows.isWindowVisible(handle) ? 1 : 0,
         getActiveWindow: () => windows.getActiveWindow(),
         setActiveWindow: handle => windows.setActiveWindow(handle, setError),
         getFocus: () => windows.getFocus(),

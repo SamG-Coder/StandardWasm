@@ -2,6 +2,7 @@ import { getNonClientInsets } from "./window-rect.mjs";
 
 const disabledStyle = 0x08000000; // WS_DISABLED
 const childStyle = 0x40000000; // WS_CHILD
+const visibleStyle = 0x10000000; // WS_VISIBLE
 const setFocusMessage = 0x0007; // WM_SETFOCUS
 const killFocusMessage = 0x0008; // WM_KILLFOCUS
 const enableMessage = 0x000a; // WM_ENABLE
@@ -11,7 +12,7 @@ const invalidWindow = 1400, invalidIndex = 1413, invalidParameter = 87;
 const procedureIndex = -4; // GWL_WNDPROC
 let nextOwnerId = 1;
 export const windowImportNames = [
-    "isWindow", "isWindowEnabled", "enableWindow", "getWindowLongW", "getWindowLongPtrW", "setWindowLongW", "setWindowLongPtrW",
+    "isWindow", "isWindowVisible", "isWindowEnabled", "enableWindow", "getWindowLongW", "getWindowLongPtrW", "setWindowLongW", "setWindowLongPtrW",
     "getActiveWindow", "setActiveWindow", "getFocus", "setFocus"
 ];
 
@@ -49,12 +50,13 @@ export function createWindowState() {
 
     function topLevel(handle) {
         // Valid HWNDs form an ancestor chain ending at a non-child window.
-        let enabled = true;
+        let enabled = true, visible = true;
         for (let remaining = windows.size; remaining > 0; remaining--) {
             const window = windows.get(handle);
             if (!window) return null;
             enabled = enabled && (window.style & disabledStyle) === 0;
-            if ((window.style & childStyle) === 0) return { handle, enabled };
+            visible = visible && (window.style & visibleStyle) !== 0;
+            if ((window.style & childStyle) === 0) return { handle, enabled, visible };
             handle = window.attributes.parent >>> 0;
         }
         return null;
@@ -117,6 +119,10 @@ export function createWindowState() {
         },
         hasWindow(handle) {
             return windows.has(handle >>> 0);
+        },
+        isWindowVisible(handle) {
+            // The query follows WS_CHILD ancestry and reads only WS_VISIBLE.
+            return topLevel(handle >>> 0)?.visible === true;
         },
         getDestroyedWindowCount() {
             return destroyedWindows;
