@@ -189,6 +189,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [185 · Character span equality](stage-185-character-span-equality/README.md) | `npm run demo -- stage-185-character-span-equality` | Match the CLR on backing identity, range and empty anchors |
 | [186 · Readonly character references](stage-186-readonly-character-references/README.md) | `npm run demo -- stage-186-readonly-character-references` | Compare owner and offset retention and diagnose unverified readonly use across CLR, Node, and Edge |
 | [187 · Compiled window class bindings](stage-187-window-class-bindings/README.md) | `npm run demo -- stage-187-window-class-bindings` | Compile SDK-shaped class and window procedure imports for the browser host |
+| [188 · Readonly character reference identity](stage-188-readonly-character-reference-identity/README.md) | `npm run demo -- stage-188-readonly-character-reference-identity` | Preserve readonly aliases through exact same-character reinterpretations |
 
 ## Adding a stage
 
