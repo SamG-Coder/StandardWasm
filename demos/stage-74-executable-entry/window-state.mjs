@@ -20,6 +20,7 @@ export function createWindowState() {
     const windows = new Map();
     let nextHandle = 1;
     let activeWindow = 0;
+    let reorderedWindows = false;
     let focusedWindow = 0;
     let focusChange = 0;
     let messageRoot = 0;
@@ -44,6 +45,7 @@ export function createWindowState() {
     function activate(handle) {
         if (activeWindow === handle) return false;
         activeWindow = handle;
+        reorderedWindows = reorderedWindows || windows.size > 1;
         changeFocus(handle);
         return true;
     }
@@ -161,6 +163,28 @@ export function createWindowState() {
         getWindowGeometry(handle) {
             const geometry = windows.get(handle >>> 0)?.geometry;
             return geometry && { outer: geometry.outer.slice(), client: geometry.client.slice() };
+        },
+        openThreadWindows(thread) {
+            const candidates = [];
+            let visibleCount = 0;
+            if ((thread >>> 0) === owner.threadId) {
+                for (const [handle, window] of windows) {
+                    if (handle === messageRoot || window.attributes.messageOnly || (window.style & childStyle) !== 0) continue;
+                    if ((window.style & visibleStyle) !== 0) visibleCount++;
+                    candidates.push(handle);
+                }
+                // Creation order describes the supported initial z-order for
+                // same-visibility siblings. Activation and mixed styles may reorder it.
+                if (candidates.length > 1 && (reorderedWindows || visibleCount !== 0 && visibleCount !== candidates.length))
+                    throw new Error("StandardWasm: EnumThreadWindows requires z-order tracking for mixed or activated windows.");
+            }
+            return () => {
+                while (candidates.length !== 0) {
+                    const handle = candidates.pop();
+                    if (windows.has(handle)) return handle | 0;
+                }
+                return 0;
+            };
         },
         getCurrentThreadId() {
             return owner.threadId;
