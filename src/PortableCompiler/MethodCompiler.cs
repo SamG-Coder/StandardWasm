@@ -1650,7 +1650,10 @@ namespace PortableCompiler
             int shape = offsets[constructor];
             if (arities[constructor] != 4) return functions;
             int exceptionType = signatures[shape + 4];
-            int cache = StaticFields.Register(globals, int.MinValue + 200 + owner, source, ObjectReference);
+            // Owner 0 with a reserved negative row, as the shadow-stack and pin globals use: an
+            // owner of -2 or below would be read as a runtime type descriptor.
+            if (owner > 255 || source >= 1 << 22) return functions;
+            int cache = StaticFields.Register(globals, 0, int.MinValue + 4096 + (owner << 22) + source, ObjectReference);
             if (cache < 0) return cache;
             literalSize[0] = messageStart + 2 * messageLength;
             failure[TypeInitializerWasm.FailureConstructor] = constructor;
