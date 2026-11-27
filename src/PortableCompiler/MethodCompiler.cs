@@ -1574,6 +1574,13 @@ namespace PortableCompiler
                 {
                     // starg.0 would replace the address itself.
                     if (kind == BranchIl.Store) return -2;
+                    if (valueConstructor)
+                    {
+                        int inline = InlineObjectAddresses.BindConstructorStore(bundle, image, layout, heaps, owner,
+                            context, methodArguments, records, slot, frame[0], objects, clauses);
+                        if (inline < 0) return inline;
+                        if (inline != 0) continue;
+                    }
                     // A traced receiver is already a real managed byref.
                     // Keep it on the evaluation stack for ordinary field operations and calls.
                     if (IsValueLocation(callerReceiver))
