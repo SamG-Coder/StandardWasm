@@ -103,11 +103,13 @@ namespace PortableCompiler
                 }
                 else if (kind == ExchangeHandlerField)
                 {
+                    // The field's storage: EventHandler or a general delegate key (Stage 221).
+                    int exchanged = FieldAccess.Storage(records[slot + 3]);
                     if ((depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(records[slot + 3]), objects)) ||
-                        frame[records[slot + BranchIl.Width + 1]] != EventHandlerReference ||
-                        frame[records[slot + 2 * BranchIl.Width + 1]] != EventHandlerReference)
+                        frame[records[slot + BranchIl.Width + 1]] != exchanged ||
+                        frame[records[slot + 2 * BranchIl.Width + 1]] != exchanged)
                         return -1;
-                    next = Push(stack, allocated, depth - 1, EventHandlerReference);
+                    next = Push(stack, allocated, depth - 1, exchanged);
                 }
                 else if ((kind == GetField || fieldStore || kind == FieldAddress || kind == TakeProjectedFieldAddress) &&
                     records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&

@@ -1137,7 +1137,7 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.InvalidCast | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.CastClass || kind == BranchIl.CastHandler)
                                 tags = ExceptionTypes.InvalidCast;
-                            else if (kind == BranchIl.CombineHandler)
+                            else if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler)
                                 tags = ExceptionTypes.Argument; // decision 0092: mismatched nominal types
                             else if (kind == BranchIl.NativeCharacterSpan || kind == BranchIl.SpanSlice ||
                                 kind == BranchIl.StringAsSpan && operation != 0)
@@ -2100,7 +2100,7 @@ namespace PortableCompiler
                                 return -2;
                             // The existing fusion also serves standalone event fixtures
                             // that do not supply the CoreLib method body.
-                            if (!inCell && !linked && LinkExchange(image, heaps, layout, records, slot)) continue;
+                            if (!inCell && !linked && LinkExchange(bundle, image, heaps, layout, owner, objects, records, slot)) continue;
                             if (!inCell) addressedFields.AddInstanceReference(assembly, field);
                             inCell = true;
                         }
@@ -2203,7 +2203,7 @@ namespace PortableCompiler
                                 return status;
                             records[slot] = BranchIl.TakeValueFieldAddress;
                         }
-                        else if (linked || !LinkExchange(image, heaps, layout, records, slot)) return -2;
+                        else if (linked || !LinkExchange(bundle, image, heaps, layout, owner, objects, records, slot)) return -2;
                     }
                     continue;
                 }
@@ -3514,11 +3514,13 @@ namespace PortableCompiler
         internal static int NextSignature(int[] offsets, int[] arities, int functions) =>
             functions == 0 ? 0 : offsets[functions - 1] + arities[functions - 1] + 1;
 
-        private static bool LinkExchange(byte[] image, int[] heaps, int[] layout, int[] records, int slot)
+        private static bool LinkExchange(BundleImages bundle, byte[] image, int[] heaps, int[] layout, int owner, int[] objects,
+            int[] records, int slot)
         {
             // Keep the interior reference confined to this fused operation.
             // Only local/argument loads can occur between ldflda and the call.
-            if (FieldAccess.Storage(records[slot + 3]) != EventHandlerReference) return false;
+            int storage = FieldAccess.Storage(records[slot + 3]);
+            if (storage != EventHandlerReference && !DelegateShapes.IsKey(storage)) return false;
             int replacement = records[slot + 2] * BranchIl.Width;
             if (replacement >= records.Length || records[replacement] != BranchIl.Load || records[replacement + 3] != 0)
                 return false;
@@ -3527,10 +3529,21 @@ namespace PortableCompiler
                 return false;
             int call = records[comparand + 2] * BranchIl.Width;
             // Stage 181: CoreLib's own accessors name CompareExchange<EventHandler> by MethodDef.
-            if (call >= records.Length || records[call] != BranchIl.MethodSpecCall || records[call + 3] != 0 ||
-                !EventMetadata.IsHandlerExchange(image, heaps, layout, records[call + 1]) &&
-                !CoreLibDelegateDefinitions.IsHandlerExchange(image, heaps, layout, records[call + 1]))
-                return false;
+            if (call >= records.Length || records[call] != BranchIl.MethodSpecCall || records[call + 3] != 0) return false;
+            if (storage == EventHandlerReference)
+            {
+                if (!EventMetadata.IsHandlerExchange(image, heaps, layout, records[call + 1]) &&
+                    !CoreLibDelegateDefinitions.IsHandlerExchange(image, heaps, layout, records[call + 1]))
+                    return false;
+            }
+            else
+            {
+                // Stage 221 (decision 0092): CompareExchange<K> on a field of general delegate key K.
+                // Identity comparison of invocation lists is the CLR's reference comparison.
+                int argument = EventMetadata.ExchangeArgument(image, heaps, layout, records[call + 1]);
+                if (argument <= 0 || BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, argument, objects) != storage)
+                    return false;
+            }
 
             // The field token's operand bytes have no IR instructions. Keep
             // the two captured frame indices in their unused operand slots.

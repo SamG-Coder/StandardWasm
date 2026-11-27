@@ -1060,7 +1060,7 @@ namespace PortableCompiler
                 {
                     int owner = FieldAccess.Owner(records[slot + 3]);
                     int receiver = Spill(spills, maximum, spillFlags, states[state + top], top);
-                    int oldValue = Spill(spills, maximum, spillFlags, EventHandlerReference, top);
+                    int oldValue = Spill(spills, maximum, spillFlags, FieldAccess.Storage(records[slot + 3]), top);
                     // The fused ldflda permits only side-effect-free loads after this check.
                     used = GuardNull(code, used, receiver);
                     used = Local(code, used, 0x20, receiver);

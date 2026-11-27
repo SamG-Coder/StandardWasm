@@ -65,6 +65,7 @@ namespace PortableCompiler
             used = IfNull(code, used, value);
             used = Local(code, used, 0x20, source);
             code[used++] = 0x05;
+            used = RejectMismatch(code, used, source, value);
             used = Length(code, used, source);
             used = Length(code, used, value);
             used = Local(code, used, 0x22, valueLength);
@@ -224,7 +225,7 @@ namespace PortableCompiler
             return used;
         }
 
-        // Decision 0092: Combine of two nonnull delegates of different nominal types raises
+        // Decision 0092: Combine or Remove of two nonnull delegates of different nominal types raises
         // ArgumentException, as on the CLR. Every entry of a list shares its nominal type.
         private static int RejectMismatch(byte[] code, int used, int left, int right)
         {

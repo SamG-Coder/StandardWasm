@@ -34,22 +34,33 @@ namespace PeLibrary
 
         internal static bool IsHandlerExchange(byte[] image, int[] heaps, int[] methods, int row)
         {
+            int type = ExchangeArgument(image, heaps, methods, row);
+            if (type <= 0 || (type & 3) != 1) return false;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
-            if (first < 0) return false;
+            return first >= 0 && ReadType(image, heaps, methods, counts, first, type >> 2) == ObjectLayouts.EventHandlerReference;
+        }
+
+        // The TypeDefOrRef coded class argument T of a MethodSpec for the platform
+        // Interlocked.CompareExchange<T>(ref T, T, T) MemberRef, or 0 (Stage 221: a field-like event of
+        // any delegate type uses it).
+        internal static int ExchangeArgument(byte[] image, int[] heaps, int[] methods, int row)
+        {
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0) return 0;
             var signature = new int[MethodSpecifications.Width];
             if (MethodSpecifications.Read(image, heaps, methods, counts, row, signature) < 0)
-                return false;
+                return 0;
             int member = signature[MethodSpecifications.Target];
             if ((member & 1) != 1 || Member(image, heaps, methods, member >> 1) != ExchangeMember ||
                 signature[MethodSpecifications.Arity] != 1)
-                return false;
+                return 0;
             int argument = signature[MethodSpecifications.Arguments], end = signature[MethodSpecifications.End];
-            if (image[argument] != 0x12) return false;
+            if (image[argument] != 0x12) return 0;
             var next = new int[1];
             int type = CompressedUnsigned(image, argument + 1, end, next);
-            return type > 0 && next[0] == end && (type & 3) == 1 &&
-                ReadType(image, heaps, methods, counts, first, type >> 2) == ObjectLayouts.EventHandlerReference;
+            return type > 0 && next[0] == end && (type & 3) != 2 ? type : 0;
         }
 
         internal static int Member(byte[] image, int[] heaps, int[] methods, int row)
