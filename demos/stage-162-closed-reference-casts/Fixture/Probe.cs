@@ -9,7 +9,16 @@ namespace ClosedCasts
 
     public sealed class Box<T> : IBox<T>
     {
-        public int Read() => 103;
+        public readonly int Number;
+        private readonly bool enabled;
+
+        public Box()
+        {
+            Number = 103;
+            enabled = true;
+        }
+
+        public int Read() => enabled ? Number : 0;
     }
 
     public sealed class GenericCast<T>

@@ -1379,6 +1379,9 @@ namespace PortableCompiler
             FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
+            bool classConstructor = context != 0 && callerReceiver == context && !ObjectLayouts.IsValueType(objects, context) &&
+                (MethodDefinitions.ReadColumn(image, layout, callerRow, 2) & 0x1850) == 0x1800 &&
+                ObjectLayouts.IsConstructor(image, heaps, layout, callerRow);
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
             {
                 int kind = records[slot];
@@ -1456,7 +1459,7 @@ namespace PortableCompiler
                         records[slot + 3] = descriptor;
                         continue;
                     }
-                    if (kind != BranchIl.TestClass || (records[slot + 1] & 3) == 2) return -2;
+                    if (kind != BranchIl.TestClass) return -2;
                 }
                 if ((kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet) && records[slot + 3] != 0)
                 {
@@ -1533,7 +1536,7 @@ namespace PortableCompiler
                         if (bound < 0) return bound;
                         records[slot + 3] = 1;
                     }
-                    else if (type != String && (type < ObjectLayouts.FirstClass ||
+                    else if (type != String && (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0] ||
                         ObjectLayouts.ArrayElement(objects, type) != 0)) return -2;
                     records[slot + 1] = type;
                     continue;
@@ -1881,8 +1884,8 @@ namespace PortableCompiler
                         var linkedField = new int[4];
                         if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
                         if (callerType < 0) return -1;
-                        bool constructorReceiver = initializesConstructorField ||
-                            valueConstructor && kind == BranchIl.SetField && records[slot + BranchIl.Width + 1] == 1;
+                        bool constructorReceiver = initializesConstructorField || kind == BranchIl.SetField &&
+                            (classConstructor || valueConstructor && records[slot + BranchIl.Width + 1] == 1);
                         int status = AssemblyBundle.ResolveField(bundle, image, layout, heaps, owner,
                             field, kind == BranchIl.SetField || initializesField, false, objects, globals, linkedField, context, callerType,
                             methodArguments, constructorReceiver);

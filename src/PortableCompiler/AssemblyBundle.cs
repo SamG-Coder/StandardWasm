@@ -139,7 +139,7 @@ namespace PortableCompiler
         }
 
         internal static int ResolveField(BundleImages bundle, byte[] caller,
-            int[] layout, int[] heaps, int owner, int member, bool write, bool staticField, int[] objects, int[] globals, int[] field, int context, int callerType, int[] methodArguments = null, bool valueConstructorReceiver = false,
+            int[] layout, int[] heaps, int owner, int member, bool write, bool staticField, int[] objects, int[] globals, int[] field, int context, int callerType, int[] methodArguments = null, bool constructorFieldWrite = false,
             bool callerInitializer = false)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
@@ -199,7 +199,8 @@ namespace PortableCompiler
                     if (friend < 0) return friend;
                     local = friend != 0;
                 }
-                bool initializesReceiver = valueConstructorReceiver && type == context &&
+                // A linked initonly field may be written in a constructor of its own closed declaring type.
+                bool initializesReceiver = constructorFieldWrite && type == context &&
                     matched == owner && declaringType == callerType;
                 bool initializesStatic = staticField && callerInitializer && type == context &&
                     matched == owner && declaringType == callerType;

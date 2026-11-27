@@ -10,5 +10,7 @@ The fixture exercises `castclass` and `isinst` on constructed classes and
 interfaces. It verifies null behavior and the typed `InvalidCastException`
 for a different closed argument. It also substitutes the receiver's type
 argument and a generic method argument when those occur in the cast metadata.
+The generic class constructor initializes its own public and private readonly
+instance fields through closed field references.
 
 Expected outcomes are `101`, `103`, `107`, `109`, `113`, `127`, and `131`.
