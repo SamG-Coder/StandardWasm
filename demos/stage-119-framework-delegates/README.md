@@ -26,6 +26,6 @@ The fixture compares the following against the CLR:
   versus a different target
 - a static target that updates shared state when the delegate invokes it
 
-Delegate types other than `EventHandler`, `ldvirtftn`, `System.Delegate`
-typed storage in framework code, and subclasses of the platform `EventArgs`
-are also unsupported.
+Stage 164 covers `Func<int>` and open static targets. General delegate types,
+`ldvirtftn`, `System.Delegate`-typed storage in framework code, and subclasses
+of the platform `EventArgs` remain unsupported.

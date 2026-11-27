@@ -176,7 +176,17 @@ namespace PortableCompiler
             {
                 int end = reference[1];
                 reference[0] = -reference[0];
-                if (image[reference[0]] == PointerStorage.Element)
+                // Stage 164: the same delegate rule as SignatureTypes, so a Func<int> field (a C#
+                // cached-lambda field, for example) stores the value its delegate construction made.
+                var afterDelegate = new int[1];
+                int delegateStorage = image[reference[0]] == 0x15
+                    ? SignatureTypes.GenericDelegateStorage(image, heaps, layout, reference[0], end, afterDelegate) : 0;
+                if (delegateStorage != 0)
+                {
+                    reference[0] = afterDelegate[0];
+                    storage = delegateStorage;
+                }
+                else if (image[reference[0]] == PointerStorage.Element)
                 {
                     // Native integers are scalar handles. Pointer signatures
                     // can carry an address whose lifetime a scope must preserve.

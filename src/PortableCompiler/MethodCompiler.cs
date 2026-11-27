@@ -2714,7 +2714,7 @@ namespace PortableCompiler
                             signatures[first + 1] != EventArgsReference)
                             return -2;
                     }
-                    else if (!instance || !hasReceiver || arities[index] != 1 || signatures[signature] != I32)
+                    else if (instance && !hasReceiver || arities[index] != (instance ? 1 : 0) || signatures[signature] != I32)
                         return -2;
                     int thunk = 0;
                     while (thunk < thunks[0] && thunks[thunk + 1] != index) thunk++;

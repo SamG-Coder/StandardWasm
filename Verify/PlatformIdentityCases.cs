@@ -36,7 +36,10 @@ internal static class PlatformIdentityCases
 
         Reject(nameof(Probe.ObjectBase), OpCodes.Newobj);
         Reject(nameof(Probe.Concat), OpCodes.Call);
-        Reject(nameof(Probe.InvokeFunc), OpCodes.Ldftn);
+        // Stage 164 (decision 0088): open static targets link, so the static FuncValue no longer
+        // stops at ldftn. The third-party System.Func`1 is still not the platform delegate and is
+        // rejected at its constructor call.
+        Reject(nameof(Probe.InvokeFunc), OpCodes.Newobj);
         Reject(nameof(Probe.EventArgsEmpty), OpCodes.Ldsfld);
         Reject(nameof(Probe.InvokeEvent), OpCodes.Callvirt);
         // Taking the address of a managed reference field is supported.

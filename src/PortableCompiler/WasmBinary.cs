@@ -199,7 +199,7 @@ namespace PortableCompiler
             for (int i = 0; i < thunks[0]; i++)
             {
                 int function = thunks[i + 1];
-                int receiver = types[offsets[function] + 1];
+                int receiver = IsStaticThunk(arities[function]) ? 0 : types[offsets[function] + 1];
                 int thunkSize = ThunkSize(receiver, hostImports + function, arities[function]);
                 if (1 + thunkSize > output.Length - codeSize ||
                     UnsignedSize(hostImports + functions + i) > output.Length - elementSize)
@@ -428,7 +428,7 @@ namespace PortableCompiler
                 int target = thunks[i + 1];
                 int arity = arities[target], signature = offsets[target];
                 bool span = CharacterSpanCallbackMetadata.MatchesTarget(types, signature, arity, arity == 3);
-                output[cursor++] = span ? (byte)CharacterSpanThunkType : arity == 1 ? (byte)ScalarThunkType : (byte)EventThunkType;
+                output[cursor++] = span ? (byte)CharacterSpanThunkType : arity < 2 ? (byte)ScalarThunkType : (byte)EventThunkType;
             }
             if (hasRemainder) cursor = Unsigned(output, cursor, typeOffset + functions);
             if (argumentArray != 0)
@@ -551,11 +551,12 @@ namespace PortableCompiler
             }
             for (int i = 0; i < thunks[0]; i++)
             {
-                int function = thunks[i + 1], receiver = types[offsets[function] + 1];
-                int arity = arities[function];
+                int function = thunks[i + 1], arity = arities[function];
+                bool open = IsStaticThunk(arity);
+                int receiver = open ? 0 : types[offsets[function] + 1];
                 cursor = Unsigned(output, cursor, ThunkSize(receiver, hostImports + function, arity));
                 output[cursor++] = 0; // local declarations
-                if (arity != 2)
+                if (!open)
                 {
                     output[cursor++] = 0x20;
                     output[cursor++] = 0;
@@ -563,8 +564,8 @@ namespace PortableCompiler
                     output[cursor++] = 22; // ref.cast to the target's concrete receiver
                     cursor = Signed(output, cursor, HeapType(receiver));
                 }
-                // Static callbacks ignore the leading target parameter.
-                for (int argument = 1; argument < (arity == 2 ? 3 : arity); argument++)
+                // A static target ignores the thunk's leading target parameter.
+                for (int argument = 1; argument < (open ? arity + 1 : arity); argument++)
                 {
                     output[cursor++] = 0x20;
                     output[cursor++] = (byte)argument;
@@ -629,8 +630,15 @@ namespace PortableCompiler
         // bit reserves one additional bit compared with an unsigned index.
         internal static int HeapTypeSize(int index) => UnsignedSize(index * 2);
 
+        // Stage 164 (decision 0088): thunk targets are exactly the shapes MethodCompiler links:
+        // Func<int> takes (receiver) or, open static, (); EventHandler takes (receiver, sender, e)
+        // or, open static, (sender, e). Character-span callbacks use the same
+        // two or three argument convention as EventHandler.
+        internal static bool IsStaticThunk(int arity) => arity == 0 || arity == 2;
+
         private static int ThunkSize(int receiver, int function, int arity) =>
-            (arity == 2 ? 7 : 7 + HeapTypeSize(HeapType(receiver)) + 2 * (arity - 1)) + UnsignedSize(function);
+            IsStaticThunk(arity) ? 3 + 2 * arity + UnsignedSize(function) :
+            7 + HeapTypeSize(HeapType(receiver)) + 2 * (arity - 1) + UnsignedSize(function);
 
         private static int Reserve(int remaining, int size)
         {
