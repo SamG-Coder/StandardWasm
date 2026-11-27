@@ -105,7 +105,7 @@ assert.deepEqual(node.browserOnly, {
     absolute: { length: 66, error: 17185 },
     extended: { length: 70, error: 17185 },
     nestedDirectory: { length: "Wide Name Example.document".length, error: 17185 },
-    outsideMount: { length: 0, error: 50 },
+    outsideMount: { length: 0, error: 3 },
     parentTraversal: { length: 0, error: 50 },
     conflict: true,
     requiresMemory: true

@@ -329,6 +329,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [357 - COM class activation](stage-357-com-activation/README.md) | `npm run demo -- stage-357-com-activation` | Compare HRESULT, output pointers and typed vtable dispatch after class activation |
 | [358 · Volatile reference-field addresses](stage-358-volatile-reference-field-address/README.md) | `npm run demo -- stage-358-volatile-reference-field-address` | Compare array-rooted managed aliases to volatile reference fields |
 | [359 · Window visibility](stage-359-window-visibility/README.md) | `npm run demo -- stage-359-window-visibility` | Compare WS_VISIBLE through live child ancestry against Windows |
+| [360 · Launch-directory long paths](stage-360-launch-long-paths/README.md) | `npm run demo -- stage-360-launch-long-paths` | Mount the dropped publish as the virtual executable directory and match Windows GetLongPathNameW respelling, case folding and short-buffer writes |
 
 ## Adding a stage
 

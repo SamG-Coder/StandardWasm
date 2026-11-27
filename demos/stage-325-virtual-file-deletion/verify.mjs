@@ -102,7 +102,7 @@ assert.equal(node.isolated, true);
 assert.deepEqual(node.deletedAlias, { result: 1, error: 0 });
 assert.deepEqual(node.invalidAddress, { result: 0, error: 998 });
 assert.deepEqual(node.noMount, { result: 0, error: 2 });
-assert.deepEqual(node.outsideMount, { result: 0, error: 50 });
+assert.deepEqual(node.outsideMount, { result: 0, error: 2 });
 
 const server = await serveLaunch(0, compilerPath);
 const browser = await chromium.launch({ channel: "msedge" });

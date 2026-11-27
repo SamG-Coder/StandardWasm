@@ -1,28 +1,44 @@
 import { deviceComponent, maximumUnits, readPath } from "./win32-path-input.mjs";
 import { resolveFullPath } from "./full-path-host.mjs";
+import { foldWin32Name as fold } from "./win32-upcase.mjs";
 
 const fileNotFound = 2, pathNotFound = 3, accessDenied = 5, notSupported = 50, filenameTooLong = 206;
 const notDirectory = 267, noAccess = 998;
 const invalidComponent = /[\\/:*?"<>|\u0000-\u001f]/u;
 const dosName = /^[A-Z0-9!#$%&'()@^_`{}~\-]{1,8}(?:\.[A-Z0-9!#$%&'()@^_`{}~\-]{1,3})?$/i;
 
-function fold(name) {
-    // The mount uses ASCII ordinal case matching and preserves other UTF-16 units.
-    return name.replace(/[a-z]/g, character => character.toUpperCase());
+// Names compare through the Windows single-unit upcase table (win32-upcase.mjs).
+
+// Windows x86 measurement (Stage 360): GetLongPathNameW looks up and rewrites only
+// components whose input could be an 8.3 name by shape: no leading dot, at most
+// one dot, at most 8 units before it and 3 after. Any characters qualify, including
+// spaces, '+' and non-ASCII. Such a component takes its stored spelling (or the
+// long name its alias stands for); every other component keeps the caller's spelling.
+export function shortShaped(name) {
+    if (name.length === 0 || name.startsWith(".")) return false;
+    const dot = name.indexOf(".");
+    if (dot < 0) return name.length <= 8;
+    return dot <= 8 && name.indexOf(".", dot + 1) < 0 && name.length - dot - 1 <= 3;
 }
 
-function validName(name) {
+export function validName(name) {
     return name.length > 0 && name.length <= 255 && !invalidComponent.test(name) &&
         !/[. ]$/u.test(name) && !deviceComponent.test(name);
 }
 
-function absoluteDirectory(path) {
+function absoluteDirectory(path, aliases = []) {
     if (typeof path !== "string" || !/^[A-Za-z]:\\/u.test(path) || path.length > maximumUnits)
         throw new TypeError("StandardWasm: expected a canonical Win32 mount directory");
     const names = path.length === 3 ? [] : path.slice(3).split("\\");
     if (!names.every(validName))
         throw new TypeError("StandardWasm: expected a canonical Win32 mount directory");
-    return { drive: fold(path.slice(0, 2)), names };
+    // rootDosNames[i] is the optional 8.3 alias of the i-th root component, as a
+    // volume with short names enabled would have created for the mount's ancestors.
+    if (!Array.isArray(aliases) || aliases.length > names.length ||
+        !aliases.every(alias => alias == null || (typeof alias === "string" && dosName.test(alias))))
+        throw new TypeError("StandardWasm: invalid long-path mount root aliases");
+    const folded = names.map((_, index) => aliases[index] ? fold(aliases[index]) : undefined);
+    return { drive: fold(path.slice(0, 2)), names, aliases: folded };
 }
 
 function childDirectory(node, names) {
@@ -35,7 +51,7 @@ function childDirectory(node, names) {
 }
 
 function indexMount(filesystem, mount) {
-    const root = absoluteDirectory(mount?.root), cwd = absoluteDirectory(filesystem.currentDirectory);
+    const root = absoluteDirectory(mount?.root, mount?.rootDosNames ?? []), cwd = absoluteDirectory(filesystem.currentDirectory);
     const rootMatches = names => root.names.every((name, index) => fold(name) === fold(names[index] ?? ""));
     if (!Array.isArray(mount?.entries) || root.drive !== cwd.drive || !rootMatches(cwd.names))
         throw new TypeError("StandardWasm: expected a virtual current directory within the long-path mount");
@@ -78,16 +94,23 @@ function resolvePath(path, mount) {
         (extended && (!drive || !rest.startsWith("\\") || rest.includes("/"))) || !rest)
         return { error: notSupported };
 
-    // Keep original separators and spelling for names that are already in long form.
-    const segments = rest.split(/([\\/]+)/u);
+    // Keep original separators and the spelling of components that are not short-shaped.
+    const segments = rest.split(/([\\/]+)/u), spelled = segments.slice();
     let index = absolute ? 2 : 0;
     let node = absolute ? mount.tree : mount.directory;
     let parent;
     if (absolute) {
-        for (const name of mount.root.names) {
+        // The virtual drive contains only the mount root's ancestors and the mount.
+        // A path that ends on an ancestor names an existing directory; one that
+        // leaves the ancestor chain names nothing, as on a real otherwise-empty volume.
+        for (const [position, name] of mount.root.names.entries()) {
             const inputName = segments[index];
-            if (inputName === undefined || fold(inputName) !== fold(name)) return { error: notSupported };
-            if (dosName.test(inputName)) segments[index] = name;
+            if (inputName === undefined || inputName === "") return finish(ancestorDirectory);
+            if (inputName === "." || !validName(inputName)) return { error: notSupported };
+            const key = fold(inputName);
+            if (key !== fold(name) && key !== mount.root.aliases[position])
+                return { error: segments[index + 2] ? pathNotFound : fileNotFound };
+            if (shortShaped(inputName)) segments[index] = name;
             index += 2;
         }
     }
@@ -100,12 +123,34 @@ function resolvePath(path, mount) {
         parent = node;
         node = node.children.get(fold(name));
         if (!node) return { error: segments[index + 2] ? pathNotFound : fileNotFound };
-        if (dosName.test(name)) segments[index] = node.name;
+        if (shortShaped(name)) segments[index] = node.name;
     }
-    if (/[\\/]$/u.test(rest) && !node.children) return { error: notDirectory };
-    const text = extended + drive + segments.join("");
-    return text.length > maximumUnits ? { error: filenameTooLong } : { text, node, parent };
+    return finish(node);
+
+    function finish(found) {
+        if (/[\\/]$/u.test(rest) && !found.children) return { error: notDirectory };
+        const text = extended + drive + segments.join("");
+        if (text.length > maximumUnits) return { error: filenameTooLong };
+        // Windows x86 (Stage 360) writes the output as it meets each short-shaped
+        // component: first everything since the previous write, as one piece, then
+        // the respelled component. Text after the last short-shaped component, and a
+        // path without one, is written only with the complete result.
+        const pieces = [];
+        let offset = extended.length + drive.length;
+        for (const [position, piece] of segments.entries()) {
+            if (position % 2 === 0 && piece !== "." && shortShaped(spelled[position])) {
+                if (offset > (pieces.at(-1) ?? 0)) pieces.push(offset);
+                pieces.push(offset + piece.length);
+            }
+            offset += piece.length;
+        }
+        return { text, node: found, parent, pieces };
+    }
 }
+
+// The drive root and the mount root's ancestors exist but list nothing outside
+// the mount. They are directories, so a deletion reports access denied.
+const ancestorDirectory = Object.freeze({ name: "", children: new Map() });
 
 export function createFilePathHost(memory, filesystem, errors) {
     const fail = error => { errors.system = error; return 0; };
@@ -128,7 +173,18 @@ export function createFilePathHost(memory, filesystem, errors) {
 
         const path = resolvePath(input.path, mount);
         if (path.error) return fail(path.error);
-        if (capacity <= path.text.length) return path.text.length + 1;
+        if (capacity <= path.text.length) {
+            // A short buffer keeps the whole leading pieces that fit in capacity - 1
+            // units. It is never terminated. Measured on Windows x86 (Stage 360).
+            let written = 0;
+            for (const end of path.pieces) {
+                if (end > capacity - 1) break;
+                written = end;
+            }
+            for (let index = 0; index < written; index++)
+                view.setUint16(target + 2 * index, path.text.charCodeAt(index), true);
+            return path.text.length + 1;
+        }
         for (let index = 0; index < path.text.length; index++)
             view.setUint16(target + 2 * index, path.text.charCodeAt(index), true);
         view.setUint16(target + 2 * path.text.length, 0, true);

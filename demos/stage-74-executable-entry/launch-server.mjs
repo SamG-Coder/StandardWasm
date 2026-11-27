@@ -11,7 +11,7 @@ export function launchAssets(compiler, route) {
         ["/stage-73-executable-intake/loader/pe.mjs", ["text/javascript",
             join(root, "demos/stage-73-executable-intake/loader/pe.mjs")]],
         ...["launch", "launch-worker", "companions", "resource-host", "fatal-host", "com-host",
-            "dynamic-library-host", "temp-path-host", "full-path-host", "long-path-host", "win32-path-input",
+            "dynamic-library-host", "temp-path-host", "full-path-host", "long-path-host", "win32-path-input", "win32-upcase",
             "frameworks", "win32-host", "activation-context", "dpi-awareness", "display-context", "windows-version",
             "window-state", "window-rect", "window-messages", "window-events", "window-send", "window-paint",
             "thread-handle-host", "window-station-host"].map(name => [
