@@ -2164,6 +2164,10 @@ namespace PortableCompiler
                     }
                     int descriptor = records[slot + 3];
                     int declaring = FieldAccess.Owner(descriptor);
+                    if (kind == BranchIl.GetField && ObjectLayouts.HasExplicitSlots(objects, declaring) &&
+                        ObjectLayouts.IsInterface(objects, FieldAccess.Storage(descriptor)) &&
+                        ObjectLayouts.LayoutFieldType(objects, declaring, records[slot + 1] / ObjectLayouts.ExplicitSlotWidth) == ObjectReference)
+                        return -2; // A shared reference slot has no nominal interface heap to cast to.
                     int storage = FieldAccess.Storage(descriptor);
                     if (!ObjectLayouts.IsValueType(objects, declaring) && IsReferenceLocation(LocationFromIdentity(objects, storage)))
                     {

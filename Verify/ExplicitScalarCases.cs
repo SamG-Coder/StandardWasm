@@ -29,6 +29,10 @@ internal static class ExplicitScalarCases
         Check(nameof(Kernels.ManagedDefault), [], Kernels.ManagedDefault());
         Check(nameof(Kernels.ManagedAlias), [17, -20], Kernels.ManagedAlias(17, -20));
         Check(nameof(Kernels.ManagedAlias), [int.MinValue, 0], Kernels.ManagedAlias(int.MinValue, 0));
+        Check(nameof(Kernels.FrameNumericSlots), [-2, 3], Wide(Kernels.FrameNumericSlots(-2, 3)));
+        Check(nameof(Kernels.FrameNumericSlots), [int.MinValue, int.MaxValue], Wide(Kernels.FrameNumericSlots(int.MinValue, int.MaxValue)));
+        Check(nameof(Kernels.FrameReferenceSlots), [], Kernels.FrameReferenceSlots());
+        Check(nameof(Kernels.ShortReferenceSlots), [], Kernels.ShortReferenceSlots());
 
         foreach (int bits in new[] { int.MinValue, 0, 1, 0x3f800000, 0x7f800000, 0x7fc12345 })
             Check(nameof(Kernels.SingleBits), [bits], Kernels.SingleBits(bits));

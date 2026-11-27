@@ -1629,6 +1629,8 @@ namespace PortableCompiler
                         }
                         if (UsesPackedExplicitValue(objects, type))
                             used = ExplicitValueWasm.Load(code, used, objects, type, operand, storage, Spill(spills, maximum, spillFlags, I64, top));
+                        else if (HasExplicitSlots(objects, type))
+                            used = ExplicitValueWasm.LoadSlot(code, used, objects, type, operand, storage);
                         else
                         {
                             // Packed cells truncate on assignment. The load selects the CLI extension.
@@ -1673,6 +1675,9 @@ namespace PortableCompiler
                         used = InlineObjectStorageWasm.Set(code, used, inlineLocations[local], local, operand, replacement);
                     else if (UsesPackedExplicitValue(objects, type))
                         used = ExplicitValueWasm.Update(code, used, objects, type, local, operand, FieldAccess.Storage(descriptor), replacement, source);
+                    else if (HasExplicitSlots(objects, type))
+                        used = ExplicitValueWasm.UpdateSlot(code, used, objects, type, local, temporaries + type - FirstClass,
+                            operand, FieldAccess.Storage(descriptor), replacement, source);
                     else
                     {
                         bool frameCell = IsValueLocation(frameCells[local]);
