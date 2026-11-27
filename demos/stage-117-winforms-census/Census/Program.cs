@@ -371,6 +371,14 @@ var report = new
         reachedMethods = graph.Reached.Count,
         withIlBody = graph.Bodies.Count,
         instantiatedTypes = graph.Instantiated.Count,
+        finalizableTypes = graph.Finalizers.Select(pair => new
+        {
+            assembly = set.All[pair.Key.Assembly].Name,
+            type = set.Type(pair.Key).FullName,
+            id = Id(pair.Value),
+            implementation = set.Display(pair.Value),
+            inherited = set.TypeOf(pair.Value).Id != pair.Key,
+        }).OrderBy(item => item.assembly, StringComparer.Ordinal).ThenBy(item => item.type, StringComparer.Ordinal).ToList(),
         initializedTypes = graph.InitializedTypes.Count,
         virtualSlots = graph.VirtualSlots.Count,
         unresolvedReferences = graph.UnresolvedCount,

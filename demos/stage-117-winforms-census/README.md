@@ -22,6 +22,8 @@ compiler's own verdict. Results go to `artifacts/winforms-census/`:
 - `census.json` lists every reached method with its assembly, MethodDef row,
   the edge that reached it, static feature tags, any P/Invoke import, and the
   compiler status with its [assembly, MethodDef, IL offset] location.
+  The graph also lists instantiated types with an effective `Object.Finalize`
+  override and records whether each type inherits its implementation.
 - `census-summary.json` holds the same rankings without the per-method list.
 - `summary.md` holds the ranked tables.
 
