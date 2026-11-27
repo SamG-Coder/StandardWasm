@@ -11,18 +11,18 @@ namespace PortableCompiler
             NativeVector = NativeStorage.Vector;
         // A location is a traced alias outside the ordinary reference
         // conversion lattice. CLI int32& and unsigned int32& share one
-        // verification type (ECMA-335 I.8.7.2) and the same four-byte cell.
+        // verification type (ECMA-335 I.8.7.2). The 64-bit pair similarly shares a cell.
         internal const int ObjectLocation = 0x80, ObjectSpan = 0x81, CharacterSpan = 0x82;
         internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84, BooleanLocation = 0x86, StringLocation = 0x87;
         internal const int ReadOnlyByteSpan = 0x88, StaticByteLocation = 0x89, CharacterSpanCallback = 0x8a, Int32Location = 0x8b;
         internal const int EventHandlerLocation = 0x8c, Int16Location = 0x8d, NativeIntLocation = 0x8e, ReadOnlyCharacterLocation = 0x8f;
-        internal const int ReadOnlyInt32Span = 0x90;
+        internal const int ReadOnlyInt32Span = 0x90, Int64Location = 0x91;
         // Reference locations retain their nominal element type in the verifier,
         // even when their Wasm representation is the shared object cell.
         private const int ReferenceLocationBase = 32768;
         internal static bool IsManagedLocation(int type) =>
             IsReferenceLocation(type) || IsPacked16ReadLocation(type) || type == BooleanLocation ||
-            type == StaticByteLocation || type == Int32Location || type == NativeIntLocation;
+            type == StaticByteLocation || type == Int32Location || type == Int64Location || type == NativeIntLocation;
 
         internal static bool IsPacked16Location(int type) => type == CharacterLocation || type == Int16Location;
 
@@ -44,11 +44,13 @@ namespace PortableCompiler
             type == GenericScalar.Key(0x18) ? NativeIntLocation :
             type == GenericScalar.Key(5) ? StaticByteLocation :
             type == GenericScalar.Key(8) || type == GenericScalar.Key(9) ? Int32Location :
+            type == GenericScalar.Key(0x0a) || type == GenericScalar.Key(0x0b) ? Int64Location :
             ObjectLayouts.IsValueType(objects, type) ? ValueLocation(type) :
             type >= ObjectLayouts.FirstClass && type - ObjectLayouts.FirstClass < objects[0] ? ReferenceLocationBase + type : 0;
         internal static int CellValue(int location) =>
             IsValueLocation(location) ? LocatedValue(location) :
-            location == BooleanLocation || location == Int32Location ? I32 : location == NativeIntLocation ? Native : location == StringLocation ? String :
+            location == BooleanLocation || location == Int32Location ? I32 : location == Int64Location ? I64 :
+            location == NativeIntLocation ? Native : location == StringLocation ? String :
             location == ObjectLocation ? ObjectLayouts.ObjectReference :
             location == EventHandlerLocation ? ObjectLayouts.EventHandlerReference : location - ReferenceLocationBase;
 

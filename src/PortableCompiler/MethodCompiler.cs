@@ -1925,17 +1925,17 @@ namespace PortableCompiler
                         continue;
                     }
                     int referenceLocation = LocationFromIdentity(objects, type);
-                    if (type == I32 || type == Native || IsReferenceLocation(referenceLocation))
+                    if (type == I32 || type == I64 || type == Native || IsReferenceLocation(referenceLocation))
                     {
                         // Native words still use managed cells when their address
                         // crosses managed calls. Explicit pointers use NativeFrameWasm.
-                        int vector = type == Native ? NativeVector : type == I32 ? booleanSlot ? Bytes : Ints :
+                        int vector = type == Native ? NativeVector : type == I64 ? Longs : type == I32 ? booleanSlot ? Bytes : Ints :
                             ObjectLayouts.RegisterArray(objects, ObjectReference);
                         if (vector < 0) return vector;
                         frameCells[local] = vector;
                         records[slot] = BranchIl.LoadFrameLocation;
                         records[slot + 3] = type == Native ? NativeIntLocation :
-                            type == I32 ? booleanSlot ? BooleanLocation : Int32Location : referenceLocation;
+                            type == I32 ? booleanSlot ? BooleanLocation : Int32Location : type == I64 ? Int64Location : referenceLocation;
                         continue;
                     }
                     if (IsSpan(type))
@@ -2220,12 +2220,14 @@ namespace PortableCompiler
                             continue;
                         }
                         // Roslyn emits ldobj/stobj for a closed generic scalar
-                        // byref. The resolved CLI type shares the Int32 cell.
+                        // byref. Use the vector for the resolved CLI storage width.
                         bool int32Access = locationType == Int32Location && kind != BranchIl.InitializeValue;
+                        bool int64Access = locationType == Int64Location;
                         if (!IsValueLocation(locationType) && locationType != BooleanLocation &&
-                            !IsReferenceLocation(locationType) && !int32Access) return -2;
+                            !IsReferenceLocation(locationType) && !int32Access && !int64Access) return -2;
                         int vector = IsValueLocation(locationType) ? 0 :
-                            locationType == BooleanLocation ? Bytes : int32Access ? Ints : ObjectLayouts.RegisterArray(objects, ObjectReference);
+                            locationType == BooleanLocation ? Bytes : int32Access ? Ints : int64Access ? Longs :
+                            ObjectLayouts.RegisterArray(objects, ObjectReference);
                         if (vector < 0) return vector;
                         records[slot] = kind == BranchIl.LoadObject ? BranchIl.LoadManagedCell :
                             kind == BranchIl.StoreObject ? BranchIl.StoreManagedCell : BranchIl.ClearManagedCell;
@@ -2412,11 +2414,12 @@ namespace PortableCompiler
                             continue;
                         }
                         bool valueOwner = ObjectLayouts.IsValueType(objects, fieldOwner);
-                        bool classInt32 = !valueOwner && fieldStorage == I32 && !ObjectLayouts.IsInterface(objects, fieldOwner);
-                        if (classInt32 || valueOwner && !ObjectLayouts.IsExplicitValue(objects, fieldOwner) &&
+                        int classScalar = !valueOwner && (fieldStorage == I32 || fieldStorage == I64) &&
+                            !ObjectLayouts.IsInterface(objects, fieldOwner) ? fieldStorage : 0;
+                        if (classScalar != 0 || valueOwner && !ObjectLayouts.IsExplicitValue(objects, fieldOwner) &&
                             !ObjectLayouts.IsByRefLikeValue(objects, fieldOwner))
                         {
-                            int projected = ValueFieldProjections.Bind(bundle, objects, fieldOwner, field, classInt32);
+                            int projected = ValueFieldProjections.Bind(bundle, objects, fieldOwner, field, classScalar);
                             if (projected != -2)
                             {
                                 if (projected < 0) return projected;
