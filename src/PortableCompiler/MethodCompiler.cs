@@ -910,7 +910,8 @@ namespace PortableCompiler
                     bodyOffsets[functions] = length;
                     if (entry < ReachabilityWasm.Mark) length = HeapEdgesWasm.Write(moduleCode, length, objects, read);
                     else if (entry < ReachabilityWasm.End)
-                        length = ReachabilityWasm.Write(moduleCode, length, entry, rootWalker, rootCount, markedCount, pendingCount, globals);
+                        length = ReachabilityWasm.Write(moduleCode, length, entry, rootWalker, rootCount, markedCount, pendingCount,
+                            pinRegistry[0] - 1, globals);
                     else if (entry == FinalizerQueueWasm.RunNext)
                         length = FinalizerDispatchWasm.Write(moduleCode, length, objects, finalizers, rootWalker, hostImports, rootCount);
                     else if (entry < FinalizerQueueWasm.End)

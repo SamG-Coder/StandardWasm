@@ -54,10 +54,13 @@ async function observeRoots(bytes) {
     const addressedSnapshots = [];
     let inspectAddress = false;
     let inspectCell = false;
+    let pinnedOwner = null;
+    let pinObservations = 0;
     let published;
     let inspectGraph = false;
     let reachable;
     const { instance } = await WebAssembly.instantiate(bytes, {
+        "standardwasm:resources": { memory: new WebAssembly.Memory({ initial: 1 }) },
         "standardwasm:console": {
             write() { throw new Error("The probe emits only line breaks"); },
             newLine() {
@@ -66,6 +69,12 @@ async function observeRoots(bytes) {
                 if (roots.some(value => value === null)) throw new Error("Expected a live object in every snapshot slot");
                 published = roots;
                 if (inspectGraph) reachable = instance.exports.__root_probe_mark();
+                if (pinnedOwner !== null) {
+                    const { __root_probe_mark: mark, __root_probe_contains: contains } = instance.exports;
+                    if (roots.length !== 0 || mark() !== 1 || contains(pinnedOwner) !== 1)
+                        throw new Error("The pin registry did not retain the sole managed owner");
+                    pinObservations++;
+                }
                 if (inspectAddress || inspectCell) {
                     const { __root_probe_mark: mark, __root_probe_edge_read: read, __root_probe_contains: contains } = instance.exports;
                     mark();
@@ -85,7 +94,7 @@ async function observeRoots(bytes) {
         __root_probe_pop: pop, ObserveFrames, ObserveConstructor, ConstructValue, ObserveAddressedFrame, ObserveReferenceCell,
         ThrowWithRoot, BuildGraph, SetStaticRoot,
         __root_probe_run_next: runNext, Allocate, ValueOf, Suppress, get_Finalized, get_Total, get_OverridesRan,
-        TakeResurrected } = instance.exports;
+        TakeResurrected, MakePinOwner, ObservePinned } = instance.exports;
     function assertEmpty() {
         if (count.value !== 0) throw new Error("Root scope was not restored");
         for (let i = 0; i < table.length; i++)
@@ -97,6 +106,19 @@ async function observeRoots(bytes) {
     assertEmpty();
     const constructedValue = ConstructValue(11);
     if (discover() !== 0) throw new Error("Value construction must not register a finalizer");
+    pinnedOwner = MakePinOwner(0x6f22);
+    const codeUnit = ObservePinned(pinnedOwner, 0);
+    if (mark() !== 0 || contains(pinnedOwner) !== 0) throw new Error("The pin survived a normal return");
+    let pinError;
+    try { ObservePinned(pinnedOwner, 1); }
+    catch (error) { pinError = error; }
+    if (!(pinError instanceof WebAssembly.Exception) || !pinError.is(instance.exports["\0nullReference"]) ||
+        mark() !== 0 || contains(pinnedOwner) !== 0 || pinObservations !== 2)
+        throw new Error("The pin survived exceptional unwind or the managed exception changed");
+    pinnedOwner = null;
+    clear();
+    assertEmpty();
+    const pin = { codeUnit, exceptional: true };
     inspectAddress = true;
     const addressedValue = ObserveAddressedFrame(23);
     inspectAddress = false;
@@ -231,15 +253,16 @@ async function observeRoots(bytes) {
         throw new Error("Suppression should consume one registration and leave no root afterward");
     const suppression = { nullException, registered, pending, duplicate, total: get_Total() - allocationFinalizers.total };
     return { values: [value, constructed, constructedValue, addressedValue, cellValue], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph, staticRoot: true,
-        discovered, allocationReceivers, allocationFinalizers, suppression };
+        discovered, allocationReceivers, allocationFinalizers, suppression, pin };
 }
 
 const expectedRoots = { values: oracle.rootProbeResult,
-    snapshots: [{ count: 3, unique: 2 }, { count: 2, unique: 1 }, { count: 1, unique: 1 }, { count: 2, unique: 1 },
+    snapshots: [{ count: 3, unique: 2 }, { count: 2, unique: 1 }, { count: 0, unique: 0 }, { count: 0, unique: 0 },
+        { count: 1, unique: 1 }, { count: 2, unique: 1 },
         { count: 1, unique: 1 }, { count: 2, unique: 2 }, { count: 1, unique: 1 }, { count: 3, unique: 2 }, { count: 1, unique: 1 }],
     clearedOnReturn: true, clearedOnUnwind: true, graph: oracle.graph, staticRoot: true, discovered: [0, 1, 0, 1, 2],
     allocationReceivers: { count: oracle.allocationFinalizers.count, total: oracle.allocationFinalizers.total },
-    allocationFinalizers: oracle.allocationFinalizers, suppression: oracle.suppression };
+    allocationFinalizers: oracle.allocationFinalizers, suppression: oracle.suppression, pin: oracle.pin };
 const node = await probe(assets);
 assert.deepEqual(node, oracle.result);
 const nodeRoots = await observeRoots(assets.rootProbe);

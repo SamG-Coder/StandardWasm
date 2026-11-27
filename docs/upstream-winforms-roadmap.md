@@ -90,10 +90,11 @@ queue work includes re-registration and scheduling collection. The probe
 already dispatches the managed destructor, executes its base call chain,
 and binds the trusted suppression method for registered and pending receivers.
 Addressed value slots and reference cells are now traced through `finally`.
-The unchanged sample's experimental compile proceeds beyond `Control.Dock`
-to the `Windows.Win32.PInvoke.GetModuleHandle` wrapper, which has a pinned
-managed char reference. Pinned frame handling remains part of runtime
-integration.
+The mark pass includes active pin owners, and one unwind path releases the
+frame's managed roots and native pin storage. The unchanged sample's
+experimental compile proceeds past `Control.Dock` and the pinned Win32
+`GetModuleHandle` wrapper to CoreLib's `RuntimeAssembly.GetManifestResourceStream`.
+The resource-opening path still needs integration with root tracking.
 JavaScript cleanup notifications can release independent host resources, but
 notification timing and delivery alone cannot satisfy the managed queue and
 resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)

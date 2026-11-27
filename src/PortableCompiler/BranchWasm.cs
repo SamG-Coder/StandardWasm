@@ -170,7 +170,7 @@ namespace PortableCompiler
             }
             if (tracksRoots)
             {
-                if (stackPointer >= 0 || guard >= 0) return -2;
+                if (guard >= 0) return -2;
                 code[used++] = 1;
                 code[used++] = 0x7f;
             }
@@ -204,9 +204,6 @@ namespace PortableCompiler
             if (tracksRoots)
             {
                 used = RootStackWasm.SaveBase(code, used, rootCount, rootFrame);
-                code[used++] = 0x02; code[used++] = ExceptionDispatchWasm.ExceptionReference;
-                code[used++] = 0x1f; code[used++] = 0x40; code[used++] = 1;
-                code[used++] = 0x03; code[used++] = 0; // catch_all_ref to the cleanup block
             }
             // Raw Wasm callers supply i32. Enforce the CLI argument width before
             // the first instruction, including on entry from a managed call.
@@ -230,7 +227,10 @@ namespace PortableCompiler
             {
                 used = StackAllocationWasm.Begin(code, used, stackPointer, stackFrame);
                 if (pins >= 0) used = PinRegistryWasm.Begin(code, used, pins, pinFrame);
-                // An exception leaving this frame releases its allocations, then continues.
+            }
+            if (tracksRoots || stackPointer >= 0)
+            {
+                // A single cleanup region owns the frame's roots, pins and native allocations.
                 code[used++] = 0x02; code[used++] = ExceptionDispatchWasm.ExceptionReference; // block (result exnref)
                 code[used++] = 0x1f; code[used++] = 0x40; code[used++] = 1;                  // try_table
                 code[used++] = 0x03; code[used++] = 0;                                         // catch_all_ref 0
@@ -1413,21 +1413,14 @@ namespace PortableCompiler
             code[used++] = 0x0b;
             code[used++] = 0;
             if (guard >= 0) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers);
-            if (tracksRoots)
+            if (tracksRoots || stackPointer >= 0)
             {
                 code[used++] = 0x0b; // end try_table
                 code[used++] = 0x00;
                 code[used++] = 0x0b; // the caught exnref is on the stack
-                used = RootStackWasm.Leave(code, used, rootCount, rootFrame);
-                code[used++] = 0x0a; // throw_ref
-            }
-            if (stackPointer >= 0)
-            {
-                code[used++] = 0x0b; // end try_table
-                code[used++] = 0x00;
-                code[used++] = 0x0b; // end block: the caught exnref is on the stack
+                if (tracksRoots) used = RootStackWasm.Leave(code, used, rootCount, rootFrame);
                 if (pins >= 0) used = PinRegistryWasm.Release(code, used, pins, pinFrame);
-                used = StackAllocationWasm.Release(code, used, stackPointer, stackLimit, stackFrame);
+                if (stackPointer >= 0) used = StackAllocationWasm.Release(code, used, stackPointer, stackLimit, stackFrame);
                 code[used++] = 0x0a; // throw_ref
             }
             code[used++] = 0x0b;

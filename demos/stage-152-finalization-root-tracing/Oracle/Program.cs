@@ -40,6 +40,7 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     graph = EmitRootProbe.DescribeGraph(),
     allocationFinalizers = EmitRootProbe.ObserveAllocations(),
     suppression = SuppressionCases.Verify(),
+    pin = EmitRootProbe.ObservePinned(),
 }));
 
 [MethodImpl(MethodImplOptions.NoInlining)]

@@ -34,6 +34,25 @@ namespace ManagedFinalizationExperiment
         public static int ObserveConstructor(int seed) => new ConstructorReceiver(seed).Value;
         public static int ConstructValue(int seed) => new ValueBox(seed).Value;
 
+        public static string MakePinOwner(int first)
+        {
+            var characters = new char[1];
+            characters[0] = (char)first;
+            return new string(characters);
+        }
+
+        public static unsafe int ObservePinned(string owner, int throwAfterObservation)
+        {
+            fixed (char* text = owner)
+            {
+                Notify();
+                if (throwAfterObservation != 0) Raise();
+                return text[0];
+            }
+        }
+
+        private static void Raise() => throw null;
+
         public static int ObserveAddressedFrame(int seed)
         {
             AddressedScope scope = default;

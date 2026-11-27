@@ -24,7 +24,7 @@ internal static class EmitRootProbe
         using var entries = new BinaryWriter(manifest);
         foreach (string name in new[] { nameof(RootProbe.ObserveFrames), nameof(RootProbe.ObserveConstructor), nameof(RootProbe.ConstructValue),
             nameof(RootProbe.ObserveAddressedFrame), nameof(RootProbe.ObserveReferenceCell), nameof(RootProbe.ThrowWithRoot),
-            nameof(RootProbe.BuildGraph), nameof(RootProbe.SetStaticRoot) })
+            nameof(RootProbe.BuildGraph), nameof(RootProbe.SetStaticRoot), nameof(RootProbe.MakePinOwner), nameof(RootProbe.ObservePinned) })
             Export(typeof(RootProbe), name);
         Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.Allocate));
         Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.ValueOf));
@@ -62,6 +62,21 @@ internal static class EmitRootProbe
                     RootProbe.ObserveAddressedFrame(23), RootProbe.ObserveReferenceCell(31)];
             }
             throw new Exception("The CLR root probe did not throw NullReferenceException");
+        }
+        finally { Console.SetOut(original); }
+    }
+
+    internal static object ObservePinned()
+    {
+        TextWriter original = Console.Out;
+        try
+        {
+            Console.SetOut(TextWriter.Null);
+            string owner = RootProbe.MakePinOwner(0x6f22);
+            int codeUnit = RootProbe.ObservePinned(owner, 0);
+            try { RootProbe.ObservePinned(owner, 1); }
+            catch (NullReferenceException) { return new { codeUnit, exceptional = true }; }
+            throw new Exception("The CLR pin probe did not throw NullReferenceException");
         }
         finally { Console.SetOut(original); }
     }
