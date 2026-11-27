@@ -9,8 +9,9 @@ namespace PortableCompiler
         // its current value. A constructor initializes the destination slot.
         internal static int Bind(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
             int context, int[] methodArguments, int[] records, int address, int spanType, int[] objects, int[] clauses,
-            bool field = false)
+            int fieldCaller = 0)
         {
+            bool field = fieldCaller != 0;
             int call = records[address + 2] * Width;
             if (call >= records.Length || ValueOperands.Entry(records, call / Width, clauses)) return 0;
             if ((spanType == SignatureTypes.CharacterSpan || spanType == SignatureTypes.WritableCharacterSpan) &&
@@ -44,12 +45,12 @@ namespace PortableCompiler
             }
             else if (indexed)
             {
-                call = AfterArgumentRead(records, call, clauses);
+                call = AfterArgumentRead(image, layout, heaps, records, call, clauses, fieldCaller);
                 if (call < 0) return 0;
                 // Argument reads cannot replace the original span before the call.
                 // The descriptor snapshot still shares its backing storage.
                 bool explicitLength = records[call] == Load || records[call] == Constant;
-                int slice = explicitLength ? AfterArgumentRead(records, call, clauses) : call;
+                int slice = explicitLength ? AfterArgumentRead(image, layout, heaps, records, call, clauses, fieldCaller) : call;
                 int arity = explicitLength ? 2 : 1;
                 if (slice >= 0 && IsDirectMemberCall(records, slice) &&
                     SpanMetadata.IsSlice(bundle, image, layout, heaps, owner, records[slice + 1],
@@ -141,12 +142,14 @@ namespace PortableCompiler
             return next < records.Length / Width && !ValueOperands.Entry(records, next, clauses) ? next * Width : -1;
         }
 
-        private static int AfterArgumentRead(int[] records, int read, int[] clauses)
+        private static int AfterArgumentRead(byte[] image, int[] layout, int[] heaps, int[] records, int read, int[] clauses, int caller)
         {
             int next = Next(records, read, clauses);
             // A receiver load followed by a field read supplies one argument,
             // for example this._pos in Span<T>.Slice(this._pos).
-            if (next >= 0 && records[read] == Load && records[next] == GetField)
+            if (next >= 0 && records[read] == Load && (records[next] == GetField ||
+                caller != 0 && records[next] == Call && records[next + 3] == 0 &&
+                ScopedFieldReaders.IsInt32(image, layout, heaps, caller, records[next + 1])))
                 next = Next(records, next, clauses);
             return next;
         }

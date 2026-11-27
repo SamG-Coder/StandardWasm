@@ -2019,7 +2019,7 @@ namespace PortableCompiler
                         if (ObjectLayouts.IsByRefLikeValue(objects, fieldOwner) && IsSpan(fieldStorage))
                         {
                             int span = SpanOperands.Bind(bundle, image, layout, heaps, owner, context, methodArguments,
-                                records, slot, fieldStorage, objects, clauses, field: true);
+                                records, slot, fieldStorage, objects, clauses, fieldCaller: callerRow);
                             if (span < 0) return span;
                             if (span != 0) continue;
                         }
