@@ -7,6 +7,26 @@ namespace PeLibrary
     {
         internal const int TypeModule = 1, TypeAssembly = 2, ModuleAssembly = 3, ModuleName = 4, ResourceStream = 5, ExecutingAssembly = 6, TypeName = 7;
 
+        internal static bool IsCoreTypeAssemblyGetter(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            if (!MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "get_Assembly") ||
+                (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x450) != 0x440) return false;
+
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return false;
+            int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+            if (owner < 1 || !ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, owner, "System", "Type"))
+                return false;
+
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), 0, cursor);
+            if (end < 0 || !SignatureReader.TakeElement(image, cursor, end, 0x12)) return false;
+            int result = CompressedUnsigned(image, cursor[0], end, cursor);
+            return result > 0 && (result & 3) == 0 && cursor[0] == end &&
+                ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, result >> 2, "System.Reflection", "Assembly");
+        }
+
         internal static int Identify(byte[] image, int[] heaps, int[] layout, int row, bool staticCall)
         {
             var member = new int[AssemblyReferences.SymbolWidth];

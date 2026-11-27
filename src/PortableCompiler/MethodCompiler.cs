@@ -2693,6 +2693,16 @@ namespace PortableCompiler
                         records[slot] = BranchIl.GetObjectType;
                         continue;
                     }
+                    if (records[slot + 3] != 0 && ReflectionMembers.IsCoreTypeAssemblyGetter(image, heaps, layout, target))
+                    {
+                        // CoreLib's virtual Type.Assembly uses the same descriptor
+                        // as external callers that refer to this declaration.
+                        int status = reflection.Bind(bundle, globals, literals, literalSize);
+                        if (status < 0) return status;
+                        records[slot] = BranchIl.ReadReflection;
+                        records[slot + 1] = ReflectionMembers.TypeAssembly;
+                        continue;
+                    }
                     int accessor = StringMetadata.AccessorDefinition(image, heaps, layout, target);
                     if (accessor != 0)
                     {

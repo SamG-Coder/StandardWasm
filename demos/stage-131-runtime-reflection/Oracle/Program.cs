@@ -33,7 +33,7 @@ foreach (string mode in modes)
         resourceResults.Add(new { mode, length = resource.Length,
             digest = Convert.ToHexString(SHA256.HashData(resource)).ToLowerInvariant() });
     }
-    foreach (string method in new[] { "ModuleName", "DependencyModuleName", "ModuleIdentity", "AssemblyIdentity", "NullModule", "ResourceBufferIdentity", "OrdinalResourceNames", "OrdinalNullAndEmpty", "OrdinalSeparateStrings" })
+    foreach (string method in new[] { "ModuleName", "DependencyModuleName", "ModuleIdentity", "AssemblyIdentity", "NullTypeAssembly", "NullModule", "ResourceBufferIdentity", "OrdinalResourceNames", "OrdinalNullAndEmpty", "OrdinalSeparateStrings" })
     {
         MethodInfo info = type.GetMethod(method)!;
         results.Add(new { mode, method, row = info.MetadataToken & 0xffffff, expected = (int)info.Invoke(null, null)! });
