@@ -140,7 +140,8 @@ export async function runJob(job, load, cases) {
         const bytes = await buildGeneration(compiler, fixture);
         // The produced compiler must itself instantiate with every export (decision 0004).
         await instantiateCompiler(bytes, fixture);
-        return { kind: "generation", generation: job.generation, hex: toHex(bytes) };
+        // Compare here, so only a flag crosses a worker or DevTools boundary, not megabytes of hex.
+        return { kind: "generation", generation: job.generation, matchesClr: toHex(bytes) === fixture.expectedHex, length: bytes.length };
     }
     if (job.kind === "second") {
         const second = await instantiateCompiler(hexBytes(fixture.expectedHex), fixture);
@@ -184,15 +185,16 @@ export async function verifyConcurrently(cases, jobs, execute, saveCompiler) {
     const generation = n => {
         const index = jobs.findIndex(job => job.kind === "generation" && job.generation === n);
         if (settled[index].status === "rejected") throw settled[index].reason;
-        return results[index].hex;
+        return results[index].matchesClr;
     };
-    if (generation(1) !== fixture.expectedHex) throw Error("First generated compiler differs from the CLR output");
+    if (!generation(1)) throw Error("First generated compiler differs from the CLR output");
     // G2 ran on an instance of C's bytes, which G1 now equals; likewise G3 on G2's.
     for (const n of [2, 3])
-        if (generation(n) !== fixture.expectedHex) throw Error("Self-recompiled compiler differs from the first generation");
+        if (!generation(n)) throw Error("Self-recompiled compiler differs from the first generation");
     failure(job => job.kind === "second");
     const tested = results.filter(r => r.kind === "second").reduce((sum, r) => sum + r.tested, 0);
-    const second = hexBytes(generation(2));
+    // G2 equals C byte for byte, so C's bytes are G2's bytes.
+    const second = hexBytes(fixture.expectedHex);
     if (saveCompiler) saveCompiler(second);
     return summary + "\n  Self-recompiled: " + second.length + " byte-identical compiler bytes and " + tested + " generated-code cases";
 }
