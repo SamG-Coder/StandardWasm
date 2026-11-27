@@ -30,19 +30,27 @@ namespace PortableCompiler
             return Local(code, used, 0x21, result);
         }
 
-        internal static int TakeCell(byte[] code, int used, int cell, int result)
+        internal static int TakeCell(byte[] code, int used, int cell, int result, int type)
         {
             used = Local(code, used, 0x20, cell);
             used = Const(code, used, 0);
-            used = Gc(code, used, 0, BooleanLocation);
+            used = Gc(code, used, 0, type);
             return Local(code, used, 0x21, result);
         }
 
-        internal static int LoadCell(byte[] code, int used, int cell, int vector)
+        internal static int LoadCell(byte[] code, int used, int cell, int vector, int type)
         {
             used = Local(code, used, 0x20, cell);
             used = Const(code, used, 0);
-            return Gc(code, used, vector == Bytes ? 0x0d : 0x0b, vector);
+            used = Gc(code, used, vector == Bytes ? 0x0d : 0x0b, vector);
+            return type == String ? CastString(code, used) : used;
+        }
+
+        internal static int CastString(byte[] code, int used)
+        {
+            code[used++] = 0xfb;
+            code[used++] = 0x17; // ref.cast null string heap
+            return WasmBinary.Signed(code, used, WasmBinary.HeapType(String));
         }
 
         // Leave [owner, index] for the array instruction. The owner and its

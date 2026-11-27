@@ -642,6 +642,7 @@ namespace PortableCompiler
                                 kind == BranchIl.SetField || nativeField || kind == BranchIl.StringLength || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection || kind == BranchIl.GetObjectType ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
+                                kind == BranchIl.LoadManagedCell || kind == BranchIl.StoreManagedCell || kind == BranchIl.ClearManagedCell ||
                                 kind == BranchIl.LoadObjectIndirect || kind == BranchIl.StoreObjectIndirect ||
                                 kind == BranchIl.LoadObject || kind == BranchIl.StoreObject || kind == BranchIl.InitializeNative ||
                                 (kind == BranchIl.PinString && records[slot + 3] != 0) ||
@@ -912,11 +913,14 @@ namespace PortableCompiler
                         hostUse[0] = hostUse[0] | WasmImports.Monitor;
                         continue;
                     }
-                    if (type == I32 && local >= parameterCount && booleanLocals[local - parameterCount] != 0)
+                    bool booleanSlot = type == I32 && local >= parameterCount && booleanLocals[local - parameterCount] != 0;
+                    if (booleanSlot || type == String)
                     {
-                        // Preserve the originating CLI type even though by-value Boolean and Int32 share i32.
-                        frameCells[local] = Bytes;
-                        records[slot] = BranchIl.LoadBooleanLocation;
+                        int vector = booleanSlot ? Bytes : ObjectLayouts.RegisterArray(objects, ObjectReference);
+                        if (vector < 0) return vector;
+                        frameCells[local] = vector;
+                        records[slot] = BranchIl.LoadFrameLocation;
+                        records[slot + 3] = booleanSlot ? BooleanLocation : StringLocation;
                         continue;
                     }
                     if (IsSpan(type))
@@ -1044,6 +1048,21 @@ namespace PortableCompiler
                     uint token = unchecked((uint)records[slot + 1]);
                     uint table = token >> 24;
                     int row = (int)(token & 0xffffff);
+                    if (table == 0x1b)
+                    {
+                        int locationType = ManagedReferenceSignatures.TypeSpecLocation(bundle, image, layout, heaps,
+                            owner, row, context, objects, methodArguments);
+                        if (locationType < 0) return locationType;
+                        if (locationType != BooleanLocation && locationType != StringLocation && locationType != ObjectLocation)
+                            return -2;
+                        int vector = locationType == BooleanLocation ? Bytes : ObjectLayouts.RegisterArray(objects, ObjectReference);
+                        if (vector < 0) return vector;
+                        records[slot] = kind == BranchIl.LoadObject ? BranchIl.LoadManagedCell :
+                            kind == BranchIl.StoreObject ? BranchIl.StoreManagedCell : BranchIl.ClearManagedCell;
+                        records[slot + 1] = vector;
+                        records[slot + 3] = locationType;
+                        continue;
+                    }
                     if (table != 1 && table != 2) return -2;
                     int coded = row << 2 | (table == 1 ? 1 : 0);
                     int type = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true);
@@ -1444,8 +1463,11 @@ namespace PortableCompiler
                         int targetOwner = symbol[0], targetRow = symbol[1], targetContext = symbol[3];
                         if (address < 0) targetContext = ~targetContext;
                         int linked = Lookup(owners, rows, contexts, bases, indices, functions, targetOwner, targetRow, targetContext);
-                        bool virtualMethod = symbol[4] != 0;
-                        bool deferred = opcode == 0x6f && virtualMethod;
+                        bool virtualMethod = (symbol[4] & 0x40) != 0;
+                        // A final implementation in a closed class uses the closed method body.
+                        // Keep callvirt's null check even when dispatch cannot select another body.
+                        bool finalClosedMethod = targetContext > 0 && (symbol[4] & 0x20) != 0;
+                        bool deferred = opcode == 0x6f && virtualMethod && !finalClosedMethod;
                         if (deferred && targetContext != 0) return -2;
                         if (deferred || linked < 0)
                         {
@@ -1945,7 +1967,7 @@ namespace PortableCompiler
         // Class slots have already resolved to an assembly-qualified layout.
         private static bool IsSharedBundleType(int type) =>
             IsScalar(type) || type == String || type == ObjectReference || type == NullPointer ||
-            RuntimeTypeMetadata.IsStorage(type) || type == BooleanLocation || IsSpan(type) || IsArray(StackType(type)) || IsValueLocation(type) ||
+            RuntimeTypeMetadata.IsStorage(type) || IsManagedLocation(type) || IsSpan(type) || IsArray(StackType(type)) || IsValueLocation(type) ||
             // The platform event types share a compiler-owned ABI across assemblies.
             // A Delegate slot currently holds only supported EventHandler values.
             type == EventArgsReference || type == EventHandlerReference || type == DelegateReference ||

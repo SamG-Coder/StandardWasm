@@ -69,7 +69,10 @@ The managed Boolean probe takes the address of local Boolean slots and
 passes those locations through ordinary `ref bool` and `out bool` calls. It
 checks that direct assignments and aliased reads still see the same value,
 including when the slot also serves as `Monitor.Enter`'s lock flag. The
-probe also exercises a Boolean cell and a single-object span in one frame.
+probe also exercises a Boolean cell and a single-object span in one frame. The generic
+fixture specializes `ref T` and `out T` with Boolean and string. Its checks
+cover loads through the location, copies between locations, and overwriting
+a live slot with `default(T)`.
 
 The monitor probe checks the CLR's reentrant lock behavior on the launch
 worker's single managed execution agent. It verifies lockTaken and typed

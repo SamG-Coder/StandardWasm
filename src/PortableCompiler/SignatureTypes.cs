@@ -12,11 +12,16 @@ namespace PortableCompiler
         // A location is a traced alias with invariant element type, outside
         // the ordinary Object/reference conversion lattice.
         internal const int ObjectLocation = 0x80, ObjectSpan = 0x81, CharacterSpan = 0x82;
-        internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84, BooleanLocation = 0x86;
+        internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84, BooleanLocation = 0x86, StringLocation = 0x87;
         internal static bool IsManagedLocation(int type) =>
-            type == ObjectLocation || type == CharacterLocation || type == BooleanLocation;
-        internal static int LocationFromElement(int element) =>
-            element == 0x1c ? ObjectLocation : element == 3 ? CharacterLocation : element == 2 ? BooleanLocation : 0;
+            type == ObjectLocation || type == CharacterLocation || type == BooleanLocation || type == StringLocation;
+
+        internal static int LocationFromIdentity(int type) =>
+            type == ObjectLayouts.ObjectReference ? ObjectLocation : type == String ? StringLocation :
+            type == GenericScalar.Key(3) ? CharacterLocation : type == GenericScalar.Key(2) ? BooleanLocation : 0;
+        internal static int CellValue(int location) =>
+            location == BooleanLocation ? I32 : location == StringLocation ? String : ObjectLayouts.ObjectReference;
+
         internal static bool IsSpan(int type) => type == ObjectSpan || type == CharacterSpan || type == WritableCharacterSpan;
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
         // Keep the located CLI type in the verifier even though all cells share a Wasm heap.
@@ -195,10 +200,14 @@ namespace PortableCompiler
                     types[target] = String;
                 else if (element == 0x1c)
                     types[target] = ObjectLayouts.ObjectReference;
-                else if (element == 0x10 && (locals || i > 0) && cursor < end &&
-                    LocationFromElement(image[cursor]) != 0)
+                else if (element == 0x10 && (locals || i > 0))
                 {
-                    types[target] = LocationFromElement(image[cursor++]);
+                    next[0] = cursor;
+                    int location = ManagedReferenceSignatures.ReadLocation(bundle, image, methods, heap,
+                        assembly, next, end, context, objects, methodArguments);
+                    if (location < 0) return location;
+                    cursor = next[0];
+                    types[target] = location;
                 }
                 else if (element == 0x1d && cursor < end)
                 {

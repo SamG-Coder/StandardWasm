@@ -11,6 +11,38 @@ namespace PortableCompiler
             ObjectLayouts.SignatureStorage(objects, Read(bundle, image, layout, heaps, owner,
                 next, end, context, objects, 0, methodArguments: methodArguments));
 
+        // Read the element identity before mapping its by-reference ABI.
+        // Boolean and Int32 share Wasm i32 values but have different locations.
+        internal static int ReadLocation(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int[] next, int end, int context, int[] objects, int[] methodArguments = null)
+        {
+            int at = next[0];
+            if (at >= end) return -1;
+            int element = image[at];
+            if (element != 2 && element != 3 && element != 0x0e && element != 0x1c &&
+                element != 0x13 && element != 0x1e) return -2;
+            int type = Read(bundle, image, layout, heaps, owner, next, end, context, objects, 0,
+                methodArguments: methodArguments);
+            if (type < 0) return type;
+            int location = LocationFromIdentity(type);
+            return location != 0 ? location : -2;
+        }
+
+        internal static int TypeSpecLocation(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int row, int context, int[] objects, int[] methodArguments)
+        {
+            int blob = AssemblyReferences.TypeSpecBlob(image, heaps, layout, row);
+            if (blob < 0) return blob;
+            int limit = heaps[0] + heaps[1];
+            var next = new int[1];
+            int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
+            int start = next[0];
+            if (size < 1 || size > limit - start) return -1;
+            int end = start + size;
+            int type = ReadLocation(bundle, image, layout, heaps, owner, next, end, context, objects, methodArguments);
+            return type < 0 || next[0] == end ? type : -1;
+        }
+
         internal static int ReadInstantiation(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int blob, int[] objects, int context = 0, int[] methodArguments = null)
         {

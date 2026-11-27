@@ -190,6 +190,13 @@ namespace PortableCompiler
                 return PeLibrary.MarshalErrorMetadata.IsSetter(operand)
                     ? Match(stack, depth, I32) ? depth - 1 : -1
                     : Push(stack, allocated, depth, I32);
+            if (kind == LoadManagedCell)
+                return Match(stack, depth, extra) ? Push(stack, allocated, depth - 1, CellValue(extra)) : -2;
+            if (kind == StoreManagedCell)
+                return depth >= 2 && Match(stack, depth - 1, extra) &&
+                    Assignable(stack[depth - 1], CellValue(extra), objects) ? depth - 2 : -2;
+            if (kind == ClearManagedCell)
+                return Match(stack, depth, extra) ? depth - 1 : -2;
             if (kind == LoadObject)
                 return depth >= 1 && IsNativeInteger(stack[depth - 1]) ? Push(stack, allocated, depth - 1, operand) : -2;
             if (kind == StoreObject)
@@ -208,7 +215,7 @@ namespace PortableCompiler
                 if (depth < 1 || (!IsNativeInteger(stack[depth - 1]) && stack[depth - 1] != I32)) return -2;
                 return Push(stack, allocated, depth - 1, Native);
             }
-            if (kind == LoadBooleanLocation) return Push(stack, allocated, depth, BooleanLocation);
+            if (kind == LoadFrameLocation) return Push(stack, allocated, depth, extra);
             if (kind == LoadSingleObjectSpan) return Push(stack, allocated, depth, ObjectSpan);
             if (kind == LoadInlineStorage)
                 return Push(stack, allocated, depth, extra);
@@ -240,10 +247,17 @@ namespace PortableCompiler
                 return Push(stack, allocated, depth - 2, ObjectLocation);
             }
             if (kind == LoadObjectIndirect)
+            {
+                if (Match(stack, depth, StringLocation)) return Push(stack, allocated, depth - 1, String);
                 return Match(stack, depth, ObjectLocation) ? Push(stack, allocated, depth - 1, ObjectReference) : -2;
+            }
             if (kind == StoreObjectIndirect)
-                return Match(stack, depth - 1, ObjectLocation) &&
-                    Assignable(stack[depth - 1], ObjectReference, objects) ? depth - 2 : -2;
+            {
+                if (depth < 2) return -2;
+                int type = stack[depth - 2];
+                int item = type == StringLocation ? String : type == ObjectLocation ? ObjectReference : 0;
+                return item != 0 && Assignable(stack[depth - 1], item, objects) ? depth - 2 : -2;
+            }
             if (kind == LoadIndirect)
             {
                 if (depth < 1) return -2;

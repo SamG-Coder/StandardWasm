@@ -140,27 +140,42 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
     }
 
     const fixture = upload(fixtureBytes);
-    const encoder = new TextEncoder();
-    const names = ["Exchange", "Read", "LookupModule", "Create", "Lifecycle", "PointerRoundTrip", "Alias", "Sum", "LockRoundTrip", "ReleaseDepth", "MatchPair", "ObjectSpanAliases", "ObjectSpanBounds", "DpiValid", "DpiAwareness", "DpiApply", "DpiCurrent", "DpiIsAware", "BooleanAliases", "BooleanWithMonitor"].map(name => encoder.encode(name));
-    const manifest = new Uint8Array(names.reduce((size, name) => size + 8 + name.length, 0));
-    const view = new DataView(manifest.buffer);
-    let offset = 0;
-    for (const name of names) {
-        const row = compiler.FindRow(fixture, upload(name));
-        if (row <= 0) throw Error("Missing Win32 fixture export " + new TextDecoder().decode(name));
-        view.setInt32(offset, row, true);
-        view.setInt32(offset + 4, name.length, true);
-        manifest.set(name, offset + 8);
-        offset += 8 + name.length;
+    async function compile(exportNames, bundled = false) {
+        const encoder = new TextEncoder();
+        const names = exportNames.map(name => encoder.encode(name));
+        const manifest = new Uint8Array(names.reduce((size, name) => size + 8 + name.length, 0));
+        const view = new DataView(manifest.buffer);
+        let offset = 0;
+        for (const name of names) {
+            const row = compiler.FindRow(fixture, upload(name));
+            if (row <= 0) throw Error("Missing Win32 fixture export " + new TextDecoder().decode(name));
+            view.setInt32(offset, row, true);
+            view.setInt32(offset + 4, name.length, true);
+            manifest.set(name, offset + 8);
+            offset += 8 + name.length;
+        }
+
+        const output = compiler.CreateBytes(65536);
+        const location = compiler.CreateDiagnostic();
+        let length;
+        if (bundled) {
+            const bundle = new Uint8Array(fixtureBytes.length + 4);
+            new DataView(bundle.buffer).setUint32(0, fixtureBytes.length, true);
+            bundle.set(fixtureBytes, 4);
+            length = compiler.CompileBundleDetailed(upload(bundle), upload(manifest), output, location);
+        } else {
+            length = compiler.CompileModuleDetailed(fixture, upload(manifest), output, location);
+        }
+        if (length <= 0) throw Error("Win32 fixture failed to compile at " +
+            [0, 1, 2].map(index => compiler.ReadDiagnostic(location, index)));
+        const code = Uint8Array.from({ length }, (_, i) => compiler.ReadByte(output, i));
+        return WebAssembly.compile(code);
     }
 
-    const output = compiler.CreateBytes(65536);
-    const location = compiler.CreateDiagnostic();
-    const length = compiler.CompileModuleDetailed(fixture, upload(manifest), output, location);
-    if (length <= 0) throw Error("Marshal fixture failed to compile at " +
-        [0, 1, 2].map(index => compiler.ReadDiagnostic(location, index)));
-    const code = Uint8Array.from({ length }, (_, i) => compiler.ReadByte(output, i));
-    const module = await WebAssembly.compile(code);
+    const module = await compile(["Exchange", "Read", "LookupModule", "Create", "Lifecycle", "PointerRoundTrip",
+        "Alias", "Sum", "LockRoundTrip", "ReleaseDepth", "MatchPair", "ObjectSpanAliases", "ObjectSpanBounds",
+        "DpiValid", "DpiAwareness", "DpiApply", "DpiCurrent", "DpiIsAware", "BooleanAliases", "BooleanWithMonitor",
+        "GenericBooleanLocations", "GenericStringLocations"]);
     const nativeImports = new Set(WebAssembly.Module.imports(module)
         .filter(entry => entry.module === "standardwasm:win32").map(entry => entry.name));
     for (const name of ["createActCtxW", "getCurrentActCtx", "activateActCtx", "deactivateActCtx", "releaseActCtx"])
@@ -180,6 +195,11 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
     const objectSpans = [0, 1].map(exports.ObjectSpanAliases).concat([-1, 0, 1].map(exports.ObjectSpanBounds));
     const booleanLocations = [0, 1, 2].map(exports.BooleanAliases)
         .concat([0, 1].map(exports.BooleanWithMonitor));
+    const genericLocations = [0, 1, 2].map(exports.GenericBooleanLocations)
+        .concat([0, 1, 2].map(exports.GenericStringLocations));
+    const finalWriterModule = await compile(["InvokeFinalWriter"], true);
+    const { exports: finalWriterExports } = await instantiate(finalWriterModule, compiler, []);
+    const finalWriter = [0, 1].map(finalWriterExports.InvokeFinalWriter);
     const dpi = [];
     // Each Windows oracle invocation starts a fresh process.
     for (const scenario of dpiScenarios) {
@@ -191,7 +211,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans, booleanLocations, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, dpi };
 }
 
 function readOracle(...args) {
@@ -203,7 +223,7 @@ const oracle = readOracle();
 const dpiScenarios = [[0, -4, -2, 98], [98, -4], [99, 102, 101, 103], [-5, -4]];
 const compilerPath = process.argv[2];
 const framework = { name: basename(oracle.framework), bytes: readFileSync(oracle.framework) };
-const expectedCompiler = { legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle, pointers: oracle.compiledPointers, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor, filter: oracle.compiledFilter, objectSpans: oracle.compiledObjectSpans, booleanLocations: oracle.compiledBooleanLocations };
+const expectedCompiler = { legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle, pointers: oracle.compiledPointers, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor, filter: oracle.compiledFilter, objectSpans: oracle.compiledObjectSpans, booleanLocations: oracle.compiledBooleanLocations, genericLocations: oracle.compiledGenericLocations, finalWriter: oracle.compiledFinalWriter };
 let compilerBytes, fixtureBytes;
 if (compilerPath) {
     execFileSync("dotnet", ["build", fileURLToPath(new URL("./Win32Fixture", import.meta.url)), "-c", "Release"],
@@ -256,6 +276,8 @@ try {
         }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes],
             name: framework.name, dpiScenarios });
         assert.deepEqual(compiled, expectedCompiler);
+        console.log("Calls to a final generic method matched the CLR for live and null receivers.");
+        console.log("Six generic Boolean and string location cases matched the CLR in Node and Edge.");
         console.log("Five managed Boolean alias cases matched the CLR in Node and Edge.");
         console.log("Four isolated DPI startup sequences matched Windows CLR in Node and Edge.");
         console.log("Single-object spans matched CLR argument and local aliasing and typed bounds failures.");

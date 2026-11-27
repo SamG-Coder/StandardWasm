@@ -234,7 +234,7 @@ namespace PortableCompiler
                     {
                         pushed = StackType(frame[operand]);
                         if (frameCells[operand] != 0)
-                            used = ManagedLocationWasm.LoadCell(code, used, cellLocals[operand], frameCells[operand]);
+                            used = ManagedLocationWasm.LoadCell(code, used, cellLocals[operand], frameCells[operand], pushed);
                         else used = inlineLocations[operand] == 0 ? Local(code, used, 0x20, operand) :
                             InlineObjectStorageWasm.Snapshot(code, used, pushed, inlineLocations[operand], operand, FieldCount(objects, pushed));
                     }
@@ -682,7 +682,7 @@ namespace PortableCompiler
                     bool backed = operand > 0 && frameCells[operand - 1] == Bytes;
                     if (backed)
                     {
-                        used = ManagedLocationWasm.LoadCell(code, used, cellLocals[operand - 1], Bytes);
+                        used = ManagedLocationWasm.LoadCell(code, used, cellLocals[operand - 1], Bytes, I32);
                         used = Local(code, used, 0x21, operand - 1);
                     }
                     used = MonitorWasm.Emit(code, used, target, operand, frameShape[23]);
@@ -696,6 +696,32 @@ namespace PortableCompiler
                     code[used++] = 0x10;
                     used = WasmBinary.Unsigned(code, used, frameShape[20] + operand - 1);
                     if (!setter) used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, depth));
+                }
+                else if (kind == LoadManagedCell || kind == StoreManagedCell || kind == ClearManagedCell)
+                {
+                    int type = records[slot + 3];
+                    int position = kind == StoreManagedCell ? top - 1 : top;
+                    int address = Spill(spills, maximum, spillFlags, type, position);
+                    used = ManagedLocationWasm.AccessElement(code, used, address, operand);
+                    if (kind == LoadManagedCell)
+                    {
+                        used = Gc(code, used, operand == Bytes ? 0x0d : 0x0b, operand);
+                        if (type == StringLocation) used = ManagedLocationWasm.CastString(code, used);
+                        used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, CellValue(type), top));
+                    }
+                    else
+                    {
+                        if (kind == StoreManagedCell)
+                            used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
+                        else if (operand == Bytes)
+                            used = Const(code, used, 0);
+                        else
+                        {
+                            code[used++] = 0xd0; // ref.null eq
+                            code[used++] = 0x6d;
+                        }
+                        used = Gc(code, used, 0x0e, operand);
+                    }
                 }
                 else if (kind == LoadObject)
                 {
@@ -741,10 +767,11 @@ namespace PortableCompiler
                     used = Local(code, used, 0x20, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, records[slot + 3], depth));
                 }
-                else if (kind == LoadBooleanLocation)
+                else if (kind == LoadFrameLocation)
                 {
-                    int target = Spill(spills, maximum, spillFlags, BooleanLocation, depth);
-                    used = ManagedLocationWasm.TakeCell(code, used, cellLocals[operand], target);
+                    int type = records[slot + 3];
+                    int target = Spill(spills, maximum, spillFlags, type, depth);
+                    used = ManagedLocationWasm.TakeCell(code, used, cellLocals[operand], target, type);
                 }
                 else if (kind == LoadSingleObjectSpan)
                 {
@@ -805,14 +832,17 @@ namespace PortableCompiler
                 }
                 else if (kind == LoadObjectIndirect)
                 {
-                    int address = Spill(spills, maximum, spillFlags, ObjectLocation, top);
+                    int type = states[state + top];
+                    int address = Spill(spills, maximum, spillFlags, type, top);
                     used = ManagedLocationWasm.AccessElement(code, used, address, operand);
                     used = Gc(code, used, 0x0b, operand); // array.get
-                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, ObjectReference, top));
+                    if (type == StringLocation) used = ManagedLocationWasm.CastString(code, used);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags,
+                        type == StringLocation ? String : ObjectReference, top));
                 }
                 else if (kind == StoreObjectIndirect)
                 {
-                    int address = Spill(spills, maximum, spillFlags, ObjectLocation, top - 1);
+                    int address = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);
                     used = ManagedLocationWasm.AccessElement(code, used, address, operand);
                     used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
                     used = Gc(code, used, 0x0e, operand); // array.set

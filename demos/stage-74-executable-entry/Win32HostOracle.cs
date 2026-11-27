@@ -45,6 +45,9 @@ Console.WriteLine(JsonSerializer.Serialize(new { executable, results, errors = n
         ObjectCellSpanProbe.ObjectSpanBounds(-1), ObjectCellSpanProbe.ObjectSpanBounds(0), ObjectCellSpanProbe.ObjectSpanBounds(1) },
     compiledBooleanLocations = Enumerable.Range(0, 3).Select(BooleanLocationProbe.BooleanAliases)
         .Concat(Enumerable.Range(0, 2).Select(BooleanLocationProbe.BooleanWithMonitor)).ToArray(),
+    compiledFinalWriter = Enumerable.Range(0, 2).Select(FinalWriterProbe.InvokeFinalWriter).ToArray(),
+    compiledGenericLocations = Enumerable.Range(0, 3).Select(GenericLocationProbe.GenericBooleanLocations)
+        .Concat(Enumerable.Range(0, 3).Select(GenericLocationProbe.GenericStringLocations)).ToArray(),
     compiledFilter = Enumerable.Range(0, 4).Select(ExceptionFilterProbe.MatchPair).ToArray(), compiledMonitor = Enumerable.Range(0, 4).Select(MonitorProbe.LockRoundTrip)
         .Concat(Enumerable.Range(0, 3).Select(MonitorProbe.ReleaseDepth)).ToArray(), compiledStaticPin = new[] { PinnedStaticProbe.Sum(), PinnedStaticProbe.Alias(2),
         PinnedStaticProbe.Sum(), PinnedStaticProbe.Alias(9), PinnedStaticProbe.Sum() }, framework = forms.Assembly.Location, frameworkLookup = new[] { moduleHandle == 0 ? 0 : 1, moduleError },

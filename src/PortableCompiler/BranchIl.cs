@@ -51,7 +51,8 @@ namespace PortableCompiler
         // 118 matches the integration line, where 116 and 117 are runtime-type kinds.
         internal const int PinString = 118;
         internal const int StaticFieldAddress = 121, LoadNativeStatic = 122, StoreNativeStatic = 123, Monitor = 124, FilterSkip = 125, LoadSingleObjectSpan = 126;
-        internal const int LoadBooleanLocation = 127;
+        internal const int LoadFrameLocation = 127;
+        internal const int LoadManagedCell = 128, StoreManagedCell = 129, ClearManagedCell = 130;
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.

@@ -8,7 +8,7 @@ namespace PortableCompiler
         // Friend access has not been evaluated yet; distinct from every FriendAssemblies.Allows result.
         private const int FriendUnknown = int.MinValue;
         // symbol receives [owner, MethodDef, constructor declaring TypeDef or 0,
-        // closed declaring layout or 0]. context is the caller's own closed
+        // closed declaring layout or 0, dispatch flags, protected receiver]. context is the caller's own closed
         // declaring layout, which substitutes VAR in a TypeSpec parent.
         internal static int Resolve(BundleImages bundle, byte[] caller,
             int[] layout, int[] heaps, int owner, int member, int opcode, bool baseCall, int[] objects, int[] symbol, int context, int callerType,
@@ -124,7 +124,7 @@ namespace PortableCompiler
                 if (row != 0) return -5;
                 row = candidate;
                 symbol[2] = constructor ? declaring : 0;
-                if (allowVirtual) symbol[4] = flags & 0x40;
+                if (allowVirtual) symbol[4] = flags & 0x60; // Virtual and Final
                 if (family && !constructor) symbol[5] = callerReceiver;
             }
             if (row == 0) return -6;

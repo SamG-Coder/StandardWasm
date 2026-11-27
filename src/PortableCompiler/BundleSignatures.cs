@@ -133,10 +133,26 @@ namespace PortableCompiler
                 }
                 else if (element == 0x10 && !field && i > 0)
                 {
-                    if (left >= leftEnd || right >= rightEnd || caller[left] != target[right] ||
-                        SignatureTypes.LocationFromElement(caller[left]) == 0) return 0;
-                    left++;
-                    right++;
+                    if (left >= leftEnd || right >= rightEnd || caller[left] != target[right]) return 0;
+                    int byRefElement = caller[left];
+                    if (byRefElement == 0x13 || byRefElement == 0x1e)
+                    {
+                        // Preserve overload identity even when two variables substitute the same type.
+                        int leftIndex = CompressedUnsigned(caller, left + 1, leftEnd, next);
+                        int rightIndex = CompressedUnsigned(target, right + 1, rightEnd, next);
+                        if (leftIndex < 0) return -1;
+                        if (leftIndex != rightIndex) return 0;
+                    }
+                    next[0] = left;
+                    int leftType = ManagedReferenceSignatures.ReadLocation(bundle, caller, callerLayout, callerHeaps,
+                        callerOwner, next, leftEnd, context, objects);
+                    left = next[0];
+                    next[0] = right;
+                    int rightType = ManagedReferenceSignatures.ReadLocation(bundle, target, targetLayout, targetHeaps,
+                        targetOwner, next, rightEnd, context, objects);
+                    if (leftType == -1) return -1;
+                    if (leftType < 0 || leftType != rightType) return 0;
+                    right = next[0];
                 }
                 else if (element == PointerStorage.Element)
                 {
