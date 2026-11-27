@@ -417,10 +417,8 @@ namespace PortableCompiler
                     if (rootProbe)
                     {
                         if (location.Length != 0) location[2] = -1;
-                        if (initializerPrologue >= 0 || filterEnds != null) return -2;
-                        for (int clause = 0; clause < catchRegion.Length; clause += ExceptionClauses.Width)
-                            if (!ExceptionClauses.IsFinally(catchRegion, clause)) return -2;
-                        frameRoots = RootStackWasm.MapFrame(records, frame, parameters + locals, catchRegion.Length != 0);
+                        if (initializerPrologue >= 0) return -2;
+                        frameRoots = RootStackWasm.MapFrame(records, frame, parameters + locals, catchRegion.Length != 0, parameters, filters);
                         if (frameRoots == null) return -2;
                     }
                     if (filterEnds != null)
@@ -556,7 +554,8 @@ namespace PortableCompiler
                             finalizers.BindCallback(type, callback);
                             if (location.Length != 0) location[2] = -1;
                         }
-                        long extra = (long)body[1] * (96L + 20L * (parameters + locals + maximum));
+                        int handlers = catchRegion.Length / ExceptionClauses.Width;
+                        long extra = (long)body[1] * (96L + 20L * (parameters + locals + maximum + handlers));
                         if (extra > int.MaxValue - capacity) return -3;
                         capacity += (int)extra;
                     }

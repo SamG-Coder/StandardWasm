@@ -53,6 +53,28 @@ namespace ManagedFinalizationExperiment
 
         private static void Raise() => throw null;
 
+        public static int ObserveProtectedException(int divisor)
+        {
+            try
+            {
+                try
+                {
+                    if (divisor != 0) ThrowManaged();
+                    return 1 / divisor;
+                }
+                finally { Notify(); }
+            }
+            catch (Exception error) when (error is ProbeException or DivideByZeroException)
+            {
+                Notify();
+                throw;
+            }
+        }
+
+        private static void ThrowManaged() => throw new ProbeException();
+
+        private sealed class ProbeException : Exception { }
+
         public static int ObserveAddressedFrame(int seed)
         {
             AddressedScope scope = default;

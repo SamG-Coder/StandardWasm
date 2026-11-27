@@ -95,9 +95,11 @@ frame's managed roots and native pin storage. The unchanged sample's
 experimental compile proceeds past `Control.Dock` and the pinned Win32
 `GetModuleHandle` wrapper to CoreLib's `RuntimeAssembly.GetManifestResourceStream`.
 The verified resource prelude now publishes both the assembly descriptor
-and name across the host lookup. Compilation of the same sample in probe
-mode gets past the prelude and stops at the exception filter in
-`ThemingScope.CreateActivationContext`. Browser startup remains unverified.
+and name across the host lookup. The probe also retains the original managed
+exception across calls in `finally` and supported type-filtered catch handlers.
+Compilation of the unchanged sample in probe mode gets past
+`ThemingScope.CreateActivationContext` and stops at
+`System.Windows.Forms.Application..cctor`. Browser startup remains unverified.
 JavaScript cleanup notifications can release independent host resources, but
 notification timing and delivery alone cannot satisfy the managed queue and
 resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)

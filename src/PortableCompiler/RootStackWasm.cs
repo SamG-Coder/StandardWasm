@@ -24,7 +24,8 @@ namespace PortableCompiler
         internal static bool IsTraced(int type) => IsObjectReference(type) || IsManagedLocation(type) ||
             IsValueLocation(type) || IsSpan(type);
 
-        internal static byte[] MapFrame(int[] records, int[] frame, int slots, bool protectedRegion)
+        internal static byte[] MapFrame(int[] records, int[] frame, int slots, bool protectedRegion,
+            int parameters = 0, int[] filters = null)
         {
             int length = records.Length / BranchIl.Width;
             if (slots != 0 && length > int.MaxValue / slots) return null;
@@ -33,6 +34,8 @@ namespace PortableCompiler
             for (int slot = 0; slot < slots; slot++)
             {
                 if (!IsTraced(frame[slot])) continue;
+                // Verified filter scratch locals are never assigned by the emitted method.
+                if (filters != null && slot >= parameters && ExceptionFilters.LocalKind(filters, slot - parameters) != 0) continue;
                 bool conservative = protectedRegion;
                 for (int pc = 0; pc < length && !conservative; pc++)
                 {
@@ -77,6 +80,25 @@ namespace PortableCompiler
             for (int i = 0; i < name.Length; i++) code[used++] = (byte)name[i];
             code[used++] = kind;
             return WasmBinary.Unsigned(code, used, index);
+        }
+
+        internal static int CountExceptionRoots(int[] clauses, int pc)
+        {
+            int count = 0;
+            for (int clause = 0; clause < clauses.Length; clause += ExceptionClauses.Width)
+                if (ExceptionClauses.InHandler(clauses, clause, pc)) count++;
+            return count;
+        }
+
+        // Rethrow and endfinally use hidden payload locals. Nested handlers may
+        // have several active payloads, each visible only within its own handler.
+        internal static int PublishExceptionRoots(byte[] code, int used, int[] clauses, int pc,
+            int frame, int index, int objectBase)
+        {
+            for (int clause = 0; clause < clauses.Length; clause += ExceptionClauses.Width)
+                if (ExceptionClauses.InHandler(clauses, clause, pc))
+                    used = Store(code, used, frame, index++, objectBase + 1 + clause / ExceptionClauses.Width);
+            return used;
         }
 
         internal static int SaveBase(byte[] code, int used, int count, int frame)

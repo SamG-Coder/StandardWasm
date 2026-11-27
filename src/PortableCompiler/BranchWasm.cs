@@ -260,6 +260,7 @@ namespace PortableCompiler
                     int first = kind == ResourceLookup ? depth : depth - arities[operand] + (kind == NewObject ? 1 : 0);
                     int frameStart = pc * (arguments + locals);
                     for (int local = 0; local < arguments + locals; local++) tracked += frameRoots[frameStart + local];
+                    if (exceptionLocals > 1) tracked += RootStackWasm.CountExceptionRoots(catchRegion, pc);
                     for (int index = 0; index < first; index++)
                         if (RootStackWasm.IsTraced(states[state + index])) tracked++;
                     if (kind == NewObject && !IsValueType(objects, signatures[offsets[operand] + 1])) tracked++;
@@ -281,6 +282,9 @@ namespace PortableCompiler
                             if (RootStackWasm.IsTraced(type))
                                 used = RootStackWasm.Store(code, used, rootFrame, root++, Spill(spills, maximum, spillFlags, type, index));
                         }
+                        // Hidden payload locals follow the visible frame and stack roots.
+                        if (exceptionLocals > 1)
+                            used = RootStackWasm.PublishExceptionRoots(code, used, catchRegion, pc, rootFrame, root, objectBase);
                     }
                 }
 

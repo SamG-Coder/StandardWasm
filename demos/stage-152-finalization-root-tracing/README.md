@@ -87,14 +87,21 @@ object or `ParamName`.
 [CoreLib suppression implementation](https://github.com/dotnet/runtime/blob/v10.0.10/src/coreclr/System.Private.CoreLib/src/System/GC.CoreCLR.cs#L317-L330)
 
 Binding re-registration and scheduling collection remain open, along with host roots,
-event-delegate traversal, catch and filter roots, indirect calls and a
-cleanup policy for raw Wasm traps. Addressed slots are kept live
+event-delegate traversal, indirect calls, and a cleanup policy for raw Wasm
+traps. General executable filters are outside the compiler's supported
+pure type-disjunction pattern. Addressed slots are kept live
 conservatively. For a mutable frame cell, the root is its backing storage.
 Managed location and value-cell wrappers expose their owner or snapshot to
 the mark pass. Node and Edge verify that an addressed struct's reference and
 an updated `ref object` cell both survive the protected call and its `finally`,
 then become unreachable after the frame returns. JavaScript invokes the pass
 at probe observation points. The Wasm module performs the traversal.
+
+A protected-frame fixture compares a fixed divide-by-zero exception and a
+managed exception with the CLR. Both engines execute the `finally` and
+filtered catch, and the managed payload is marked during both calls. Rethrow
+preserves the original object and clears its published root as the frame
+unwinds. The fixed-tag case keeps its tag and has no managed payload.
 
 The pinning test observes a string whose only managed root is its active pin.
 The mark pass visits the owner in each pin registry pair. The paired native

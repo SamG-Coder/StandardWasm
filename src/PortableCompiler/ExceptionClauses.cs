@@ -149,6 +149,9 @@ namespace PortableCompiler
         internal static bool InProtectedRange(int[] clauses, int clause, int pc) =>
             InRange(clauses, clause + TryStart, pc);
 
+        internal static bool InHandler(int[] clauses, int clause, int pc) =>
+            InRange(clauses, clause + HandlerStart, pc);
+
         private static bool InRange(int[] clauses, int range, int pc) =>
             pc >= clauses[range] && pc - clauses[range] < clauses[range + 1];
 

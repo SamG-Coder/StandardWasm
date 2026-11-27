@@ -52,6 +52,7 @@ async function probe({ compiler, fixture, row, count }) {
 async function observeRoots(bytes) {
     const snapshots = [];
     const addressedSnapshots = [];
+    let exceptionSnapshots = null;
     let inspectAddress = false;
     let inspectCell = false;
     let pinnedOwner = null;
@@ -65,8 +66,15 @@ async function observeRoots(bytes) {
             write() { throw new Error("The probe emits only line breaks"); },
             newLine() {
                 const { __root_probe_count: count, __root_probe_table: table } = instance.exports;
-                const roots = Array.from({ length: count.value }, (_, index) => table.get(index));
-                if (roots.some(value => value === null)) throw new Error("Expected a live object in every snapshot slot");
+                // Fixed-tag exceptions and normal finally entries have no managed payload.
+                const roots = Array.from({ length: count.value }, (_, index) => table.get(index)).filter(value => value !== null);
+                if (exceptionSnapshots !== null) {
+                    instance.exports.__root_probe_mark();
+                    if (roots.some(root => instance.exports.__root_probe_contains(root) !== 1))
+                        throw new Error("An exception payload was published but absent from the marked graph");
+                    exceptionSnapshots.push(roots);
+                    return;
+                }
                 published = roots;
                 if (inspectGraph) reachable = instance.exports.__root_probe_mark();
                 if (pinnedOwner !== null) {
@@ -92,7 +100,7 @@ async function observeRoots(bytes) {
         __root_probe_edge_read: read, __root_probe_mark: mark, __root_probe_contains: contains,
         __root_probe_clear: clear, __root_probe_register: register, __root_probe_discover: discover,
         __root_probe_pop: pop, ObserveFrames, ObserveConstructor, ConstructValue, ObserveAddressedFrame, ObserveReferenceCell,
-        ThrowWithRoot, BuildGraph, SetStaticRoot,
+        ThrowWithRoot, BuildGraph, SetStaticRoot, ObserveProtectedException,
         __root_probe_run_next: runNext, Allocate, ValueOf, Suppress, get_Finalized, get_Total, get_OverridesRan,
         TakeResurrected, MakePinOwner, ObservePinned } = instance.exports;
     function assertEmpty() {
@@ -134,6 +142,29 @@ async function observeRoots(bytes) {
     if (addressedSnapshots.length !== 2 || addressedSnapshots[0] !== addressedSnapshots[1] || mark() !== 0)
         throw new Error("The frame cell lost the updated reference or remained rooted after return");
     clear();
+    const protectedExceptions = [0, 1].map(divisor => {
+        exceptionSnapshots = [];
+        let error;
+        try { ObserveProtectedException(divisor); }
+        catch (caught) { error = caught; }
+        if (!(error instanceof WebAssembly.Exception) || exceptionSnapshots.length !== 2)
+            throw new Error("The finally and filtered catch must run before the rethrow");
+        const objectTag = instance.exports["\0object"];
+        if (divisor === 0) {
+            if (!error.is(instance.exports["\0divideByZero"]) || exceptionSnapshots.some(roots => roots.length !== 0))
+                throw new Error("A fixed exception must rethrow its tag without a managed payload");
+        } else {
+            if (!error.is(objectTag)) throw new Error("Expected the original managed exception");
+            const payload = error.getArg(objectTag, 0);
+            if (payload === null || exceptionSnapshots.some(roots => roots.length !== 1 || roots[0] !== payload))
+                throw new Error("The finally or filtered catch lost the original exception payload");
+        }
+        exceptionSnapshots = null;
+        assertEmpty();
+        if (mark() !== 0) throw new Error("The unwound exception remained rooted");
+        clear();
+        return divisor === 0 ? "DivideByZeroException" : "ProbeException";
+    });
     let exception;
     try { ThrowWithRoot(11); }
     catch (error) { exception = error; }
@@ -253,7 +284,7 @@ async function observeRoots(bytes) {
         throw new Error("Suppression should consume one registration and leave no root afterward");
     const suppression = { nullException, registered, pending, duplicate, total: get_Total() - allocationFinalizers.total };
     return { values: [value, constructed, constructedValue, addressedValue, cellValue], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph, staticRoot: true,
-        discovered, allocationReceivers, allocationFinalizers, suppression, pin };
+        discovered, allocationReceivers, allocationFinalizers, suppression, pin, protectedExceptions };
 }
 
 const expectedRoots = { values: oracle.rootProbeResult,
@@ -262,7 +293,7 @@ const expectedRoots = { values: oracle.rootProbeResult,
         { count: 1, unique: 1 }, { count: 2, unique: 2 }, { count: 1, unique: 1 }, { count: 3, unique: 2 }, { count: 1, unique: 1 }],
     clearedOnReturn: true, clearedOnUnwind: true, graph: oracle.graph, staticRoot: true, discovered: [0, 1, 0, 1, 2],
     allocationReceivers: { count: oracle.allocationFinalizers.count, total: oracle.allocationFinalizers.total },
-    allocationFinalizers: oracle.allocationFinalizers, suppression: oracle.suppression, pin: oracle.pin };
+    allocationFinalizers: oracle.allocationFinalizers, suppression: oracle.suppression, pin: oracle.pin, protectedExceptions: oracle.protectedExceptions };
 const node = await probe(assets);
 assert.deepEqual(node, oracle.result);
 const nodeRoots = await observeRoots(assets.rootProbe);
