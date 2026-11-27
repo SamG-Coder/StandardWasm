@@ -41,12 +41,13 @@ function referenceMetrics(dpi) {
 function nonClientInsets(style, extendedStyle, hasMenu, metrics) {
     const caption = (style & captionStyle) === captionStyle;
     const thick = (style & thickFrameStyle) !== 0;
+    const border = (style & borderStyle) !== 0;
     const edge = (extendedStyle & staticEdge) !== 0 ? metrics.border : 0;
     let outer;
     if ((extendedStyle & modalFrame) !== 0) outer = metrics.fixedFrame;
-    else if (caption || (style & dialogFrameStyle) !== 0) outer = metrics.fixedFrame - edge;
+    else if ((style & dialogFrameStyle) !== 0 || thick && border) outer = metrics.fixedFrame - edge;
     else if (thick) outer = metrics.fixedFrame - metrics.border - edge;
-    else outer = ((style & borderStyle) !== 0 ? metrics.border : 0) + edge;
+    else outer = (border ? metrics.border : 0) + edge;
 
     if (caption || thick) outer += metrics.sizeFrame - metrics.fixedFrame + metrics.padding;
     if ((extendedStyle & clientEdge) !== 0) outer += metrics.clientEdge;

@@ -7,6 +7,13 @@ int[] styles = [unchecked((int)0x80000000), 0x40000000, 0x00400000, 0x00800000, 
 int[] extendedStyles = [0, 1, 0x80, 0x100, 0x200, 0x40000, 0x20000, 0x20001, 0x201, 0x280];
 var cases = (from dpi in dpis from style in styles from extendedStyle in extendedStyles
              from menu in new[] {0, 1} select Probe(style, extendedStyle, menu, dpi, [10, 20, 310, 220])).ToList();
+int[] compoundStyles = [0, 0x50000000, 0x50C80000, 0x50CF0000, unchecked((int)0x80C80000), 0x00C40000,
+    0x00840000, 0x00440000, 0x20CF0000, 0x01CF0000, 0x10CF0000];
+int[] compoundExtended = [0, 1, 0x40, 0x80, 0x200, 0x400, 0x800, 0x2000, 0x10000, 0x20000, 0x400000, 0x20021, 0x282];
+cases.AddRange(from dpi in new[] {96, 120, 144, 192} from style in compoundStyles
+               from extendedStyle in compoundExtended from menu in new[] {0, 1}
+               select Probe(style, extendedStyle, menu, dpi, [10, 20, 310, 220]));
+
 foreach (int dpi in Enumerable.Range(0, 69))
     cases.Add(Probe(0x00CF0000, 0x200, -1, dpi, [-12, -25, 88, 211]));
 cases.Add(Probe(0x00C80000, 0, 0, 192, [60, 70, -22, -51]));
