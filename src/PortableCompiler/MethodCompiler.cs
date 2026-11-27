@@ -26,16 +26,16 @@ namespace PortableCompiler
             entries[8] = 0x72;
             entries[9] = 0x75;
             entries[10] = 0x6e;
-            return CompileProgram(BundleImages.Single(image), entries, output, location, 0);
+            return CompileProgram(BundleImages.Single(image), entries, output, location, 0, new int[1]);
         }
 
         internal static int CompileExports(byte[] image, byte[] entries, byte[] output) =>
-            CompileProgram(BundleImages.Single(image), entries, output, new int[0], 0);
+            CompileProgram(BundleImages.Single(image), entries, output, new int[0], 0, new int[1]);
 
         internal static int CompileModuleDetailed(byte[] image, byte[] entries, byte[] output, int[] location)
         {
             if (location.Length < CompileLocation.Size) return -3;
-            return CompileProgram(BundleImages.Single(image), entries, output, location, 0);
+            return CompileProgram(BundleImages.Single(image), entries, output, location, 0, new int[1]);
         }
 
         internal static int CompileBundle(byte[] bundle, byte[] entries, byte[] output) =>
@@ -51,13 +51,51 @@ namespace PortableCompiler
         {
             CompileLocation.Clear(location);
             BundleImages images = BundleImages.Unpack(bundle);
-            return images == null ? -1 : CompileProgram(images, entries, output, location, 0);
+            return images == null ? -1 : CompileProgram(images, entries, output, location, 0, new int[1]);
+        }
+
+        // Issue #299 (opt in): a method whose body needs an assembly missing from the bundle (-4)
+        // compiles to a stub that fails on entry, as the CLR's JIT fails that method and the
+        // call site throws FileNotFoundException. Each -4 names the method being compiled; it is
+        // recorded and the program is recompiled. warnings receives [count, then
+        // (assembly, MethodDef row, IL offset) per stubbed method].
+        internal static int CompileBundleDeferred(byte[] bundle, byte[] entries, byte[] output, int[] location, int[] warnings)
+        {
+            if (location.Length < CompileLocation.Size || warnings.Length < 1) return -3;
+            BundleImages images = BundleImages.Unpack(bundle);
+            if (images == null) return -1;
+            int capacity = (warnings.Length - 1) / 3;
+            var stubs = new int[1 + 2 * capacity];
+            warnings[0] = 0;
+            while (true)
+            {
+                int status = CompileProgram(images, entries, output, location, 0, stubs);
+                if (status != -4 || location[1] <= 0) return status;
+                int count = stubs[0];
+                for (int i = 0; i < count; i++)
+                    if (stubs[1 + 2 * i] == location[0] && stubs[2 + 2 * i] == location[1]) return status; // no progress
+                if (count == capacity) return -3;
+                stubs[1 + 2 * count] = location[0];
+                stubs[2 + 2 * count] = location[1];
+                stubs[0] = count + 1;
+                warnings[1 + 3 * count] = location[0];
+                warnings[2 + 3 * count] = location[1];
+                warnings[3 + 3 * count] = location[2];
+                warnings[0] = count + 1;
+            }
+        }
+
+        private static bool IsStub(int[] stubs, int owner, int row)
+        {
+            for (int i = 0; i < stubs[0]; i++)
+                if (stubs[1 + 2 * i] == owner && stubs[2 + 2 * i] == row) return true;
+            return false;
         }
 
         // Imported functions precede defined functions. Discovery can add
         // a host feature, so re-emit with its function indices reserved.
         private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location,
-            int hostFeatures)
+            int hostFeatures, int[] stubs)
         {
             int hostImports = WasmImports.FunctionCount(hostFeatures);
             CompileLocation.Clear(location);
@@ -199,6 +237,17 @@ namespace PortableCompiler
                 }
                 if (rows[current] == 0) continue; // Synthetic dispatcher, emitted after discovery.
                 int owner = owners[current], source = rows[current], context = contexts[current];
+                if (IsStub(stubs, owner, source))
+                {
+                    // Issue #299 prototype: the body fails on entry. (A typed FileNotFoundException follows.)
+                    if (moduleCode.Length - length < 3) return -3;
+                    bodyOffsets[current] = length;
+                    moduleCode[length++] = 0; // no locals
+                    moduleCode[length++] = 0x00; // unreachable
+                    moduleCode[length++] = 0x0b;
+                    sizes[current] = 3;
+                    continue;
+                }
                 CompileLocation.Set(location, owner, source, -1);
                 if (owner != activeOwner)
                 {
@@ -602,7 +651,7 @@ namespace PortableCompiler
                 length += used;
             }
             if ((hostUse[0] & ~hostFeatures) != 0)
-                return CompileProgram(bundle, entries, output, location, hostFeatures | hostUse[0]);
+                return CompileProgram(bundle, entries, output, location, hostFeatures | hostUse[0], stubs);
             length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, length, hostImports, location);
             if (length < 0) return length;
             for (int c = 0; c < pointers.CarrierCount; c++)
