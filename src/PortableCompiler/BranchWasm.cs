@@ -270,6 +270,7 @@ namespace PortableCompiler
                 int tracked = 0;
                 bool publishesRoots = tracksRoots && (kind == Call || kind == NewObject || kind == ConstructValue ||
                     kind == ResourceLookup || kind == InvokeDelegate || kind == CallNativeIndirect ||
+                    kind == CallDynamicNative ||
                     TypeInitializerWasm.HasFieldTrigger(kind, operand, fieldInitializers));
                 if (publishesRoots)
                 {
@@ -921,6 +922,17 @@ namespace PortableCompiler
                     if (type == CharacterLocation)
                         used = ManagedLocationWasm.TestCharacterAddress(code, used, address);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top));
+                }
+                else if (kind == CallDynamicNative)
+                {
+                    // CLI: [scalar, data pointer, export token]. The host takes
+                    // the token first; scalar and pointer order stays unchanged.
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, Native, top));
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, I32, top - 2));
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, Native, top - 1));
+                    code[used++] = 0x10;
+                    used = WasmBinary.Unsigned(code, used, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top - 2));
                 }
                 else if (kind == CallNativeIndirect)
                 {

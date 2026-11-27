@@ -8,7 +8,7 @@ namespace PortableCompiler
     //   P/Invoke (and CoreLib QCall):  module "native:<ModuleRef name>", name = ImplMap entry point
     //   InternalCall:                  module "internalcall", name = "Namespace.Type::Method"
     //   Host helpers:                  module "standardwasm:native"
-    //   Routed native indirect calls:  module "standardwasm:com", name = the host signature
+    //   Routed native indirect calls:  module "standardwasm:com" or "standardwasm:native-indirect", name = the host signature
     // Self-hosting: flat arrays and one byte pool, no jagged arrays or ref helpers.
     internal sealed class NativeImportTable
     {

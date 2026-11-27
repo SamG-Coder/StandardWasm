@@ -956,7 +956,8 @@ namespace PortableCompiler
                         }
                         int pc = slot / BranchIl.Width;
                         int operation = records[slot + 1];
-                        if (kind == BranchIl.CallNativeIndirect && depths[pc] != 0) linearMemory = true;
+                        if ((kind == BranchIl.CallNativeIndirect || kind == BranchIl.CallDynamicNative) && depths[pc] != 0)
+                            linearMemory = true;
                         if ((kind == BranchIl.Load || kind == BranchIl.Store) && frameCells[operation] < 0 && depths[pc] != 0)
                         {
                             // Native layout nesting is bounded to 16 levels. Each stored leaf
@@ -3211,8 +3212,8 @@ namespace PortableCompiler
             return "ArgumentNullException";
         }
 
-        // Managed calli uses the type carrier. Supported stdcall calls send the
-        // loaded guest target and receiver through the typed COM host route.
+        // Managed calli uses the type carrier. Native call sites preserve their
+        // loaded tokens and dispatch through the selected typed host route.
         private static int LinkCallIndirect(BundleImages bundle, byte[] image, int[] heaps, int[] layout, int count,
             int owner, int context, int[] records, int[] owners, int[] rows, int[] contexts, int[] arities,
             int[] offsets, int[] signatures, int[] objects, int functions, FunctionPointerPlan pointers, int[] location,
@@ -3226,6 +3227,12 @@ namespace PortableCompiler
                 if (blob < 0) return -1;
                 int nativeResult = NativeIndirectImports.ReadResult(bundle, image, heaps, layout, blob, owner, objects);
                 if (nativeResult < 0) return nativeResult;
+                if (nativeResult == NativeIndirectImports.DynamicUInt32)
+                {
+                    records[slot] = BranchIl.CallDynamicNative;
+                    records[slot + 1] = nativeBase + NativeIndirectImports.RegisterDynamic(natives);
+                    continue;
+                }
                 if (nativeResult != 0)
                 {
                     records[slot] = BranchIl.CallNativeIndirect;

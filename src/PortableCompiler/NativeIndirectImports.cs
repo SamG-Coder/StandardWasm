@@ -7,6 +7,19 @@ namespace PortableCompiler
 {
     internal static class NativeIndirectImports
     {
+        // Keep this parser result outside the Wasm scalar and nominal type ranges.
+        // It selects the dynamic-export calling contract, whose result is I32.
+        internal const int DynamicUInt32 = 0x40000000;
+
+        internal static int RegisterDynamic(NativeImportTable imports)
+        {
+            int existing = imports.Find(-2, 2);
+            if (existing >= 0) return existing;
+            byte[] module = NativeImportTable.Ascii("standardwasm:native-indirect");
+            byte[] entry = NativeImportTable.Ascii("platform:u32(i32,p32)");
+            return imports.Add(-2, 2, module, module.Length, entry, entry.Length, new byte[] { 0x7f, 0x7f, 0x7f }, 3, 0x7f);
+        }
+
         // A guest COM vtable slot names a host-issued token. The original
         // pointer load remains in the IL; the host validates the token and receiver.
         internal static int Register(NativeImportTable imports)
@@ -31,11 +44,23 @@ namespace PortableCompiler
             int length = CompressedUnsigned(image, heaps[0] + blob, limit, next);
             int start = next[0];
             if (length < 1 || length > limit - start) return -1;
-            if (image[start] != 0x02) return 0;
+            int convention = image[start];
+            if (convention != 0x02 && convention != 0x09) return 0;
             int end = start + length;
             int count = CompressedUnsigned(image, start + 1, end, next);
             int at = next[0];
             if (count < 0 || at >= end) return -1;
+            if (convention == 0x09)
+            {
+                // Platform-default unmanaged call with a scalar and an explicit
+                // linear-memory pointer. Resolve the target independently of
+                // the managed site that loaded or cached the export token.
+                if (count != 2 || end - at < 4 || image[at] != 0x09 || image[at + 1] != 0x08 ||
+                    image[at + 2] != PointerStorage.Element) return -2;
+                int storage = PointerSignatures.ReadStorage(bundle, image, layout, heaps, owner, at + 3, end, next);
+                if (storage < 0) return storage;
+                return storage == Native && next[0] == end ? DynamicUInt32 : -2;
+            }
             if (count != 1) return -2;
 
             int element = image[at++], coded = 0;

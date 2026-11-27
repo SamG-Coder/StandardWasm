@@ -483,6 +483,12 @@ namespace PortableCompiler
                 return IsNativeInteger(address) || extra != 0 && address == extra
                     ? Push(stack, allocated, depth - 1, I32) : -2;
             }
+            if (kind == CallDynamicNative)
+            {
+                if (depth < 3 || !IsNativeInteger(stack[depth - 1]) || !IsNativeInteger(stack[depth - 2]) ||
+                    stack[depth - 3] != I32) return -2;
+                return Push(stack, allocated, depth - 3, I32);
+            }
             if (kind == CallNativeIndirect)
             {
                 if (depth < 2 || !IsNativeInteger(stack[depth - 1]) || !IsNativeInteger(stack[depth - 2])) return -2;
