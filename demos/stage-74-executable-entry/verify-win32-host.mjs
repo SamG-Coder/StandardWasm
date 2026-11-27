@@ -131,7 +131,7 @@ async function exercise(instantiate, bytes, executable, framework) {
         embeddedFramework: [embedded, second.getLastSystemError()] };
 }
 
-async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framework) {
+async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framework, dpiScenarios) {
     const { instance: { exports: compiler } } = await WebAssembly.instantiate(new Uint8Array(compilerBytes));
     function upload(bytes) {
         const result = compiler.CreateBytes(bytes.length);
@@ -141,7 +141,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
 
     const fixture = upload(fixtureBytes);
     const encoder = new TextEncoder();
-    const names = ["Exchange", "Read", "LookupModule", "Create", "Lifecycle", "PointerRoundTrip", "Alias", "Sum", "LockRoundTrip", "ReleaseDepth", "MatchPair", "ObjectSpanAliases", "ObjectSpanBounds"].map(name => encoder.encode(name));
+    const names = ["Exchange", "Read", "LookupModule", "Create", "Lifecycle", "PointerRoundTrip", "Alias", "Sum", "LockRoundTrip", "ReleaseDepth", "MatchPair", "ObjectSpanAliases", "ObjectSpanBounds", "DpiValid", "DpiAwareness", "DpiApply", "DpiCurrent", "DpiIsAware"].map(name => encoder.encode(name));
     const manifest = new Uint8Array(names.reduce((size, name) => size + 8 + name.length, 0));
     const view = new DataView(manifest.buffer);
     let offset = 0;
@@ -178,11 +178,27 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
     const monitor = [0, 1, 2, 3].map(exports.LockRoundTrip).concat([0, 1, 2].map(exports.ReleaseDepth));
     const filter = [0, 1, 2, 3].map(exports.MatchPair);
     const objectSpans = [0, 1].map(exports.ObjectSpanAliases).concat([-1, 0, 1].map(exports.ObjectSpanBounds));
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans };
+    const dpi = [];
+    // Each Windows oracle invocation starts a fresh process.
+    for (const scenario of dpiScenarios) {
+        const { exports: probe } = await instantiate(module, compiler, []);
+        const contexts = [0, -1, -2, -3, -4, -5, -6];
+        dpi.push({
+            valid: contexts.map(probe.DpiValid), awareness: contexts.map(probe.DpiAwareness),
+            initial: probe.DpiCurrent(),
+            steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
+        });
+    }
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans, dpi };
 }
 
-const oracle = JSON.parse(execFileSync("dotnet", ["run", "--file",
-    fileURLToPath(new URL("./Win32HostOracle.cs", import.meta.url))], { encoding: "utf8" }));
+function readOracle(...args) {
+    return JSON.parse(execFileSync("dotnet", ["run", "--file",
+        fileURLToPath(new URL("./Win32HostOracle.cs", import.meta.url)), "--", ...args], { encoding: "utf8" }));
+}
+
+const oracle = readOracle();
+const dpiScenarios = [[0, -4, -2, 98], [98, -4], [99, 102, 101, 103], [-5, -4]];
 const compilerPath = process.argv[2];
 const framework = { name: basename(oracle.framework), bytes: readFileSync(oracle.framework) };
 const expectedCompiler = { legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle, pointers: oracle.compiledPointers, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor, filter: oracle.compiledFilter, objectSpans: oracle.compiledObjectSpans };
@@ -192,7 +208,8 @@ if (compilerPath) {
         { stdio: "inherit" });
     compilerBytes = readFileSync(compilerPath);
     fixtureBytes = readFileSync(new URL("./Win32Fixture/bin/Release/net10.0/Win32Fixture.dll", import.meta.url));
-    assert.deepEqual(await exerciseCompiler(instantiateManagedModule, compilerBytes, fixtureBytes, framework), expectedCompiler);
+    expectedCompiler.dpi = dpiScenarios.map(scenario => readOracle("dpi", ...scenario.map(String)));
+    assert.deepEqual(await exerciseCompiler(instantiateManagedModule, compilerBytes, fixtureBytes, framework, dpiScenarios), expectedCompiler);
 }
 const bytes = probeModule();
 const node = await exercise(instantiateManagedModule, bytes, oracle.executable, framework);
@@ -217,7 +234,7 @@ try {
         if (path === "/stage-73-executable-intake/loader/pe.mjs")
             return route.fulfill({ contentType: "text/javascript",
                 body: readFileSync(new URL("../stage-73-executable-intake/loader/pe.mjs", import.meta.url)) });
-        if (["/resource-host.mjs", "/win32-host.mjs", "/activation-context.mjs"].includes(path))
+        if (["/resource-host.mjs", "/win32-host.mjs", "/activation-context.mjs", "/dpi-awareness.mjs"].includes(path))
             return route.fulfill({ contentType: "text/javascript", body: readFileSync(new URL("." + path, import.meta.url)) });
         return route.abort();
     });
@@ -230,13 +247,14 @@ try {
     }, { source: exercise.toString(), bytes: [...bytes], executable: oracle.executable, frameworkName: framework.name });
     assert.deepEqual(edge, node);
     if (compilerBytes) {
-        const compiled = await page.evaluate(async ({ source, compilerBytes, fixtureBytes, name }) => {
+        const compiled = await page.evaluate(async ({ source, compilerBytes, fixtureBytes, name, dpiScenarios }) => {
             const { instantiateManagedModule } = await import("/resource-host.mjs");
             const bytes = await (await fetch("/test-framework")).arrayBuffer();
-            return (0, eval)("(" + source + ")")(instantiateManagedModule, compilerBytes, fixtureBytes, { name, bytes });
+            return (0, eval)("(" + source + ")")(instantiateManagedModule, compilerBytes, fixtureBytes, { name, bytes }, dpiScenarios);
         }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes],
-            name: framework.name });
+            name: framework.name, dpiScenarios });
         assert.deepEqual(compiled, expectedCompiler);
+        console.log("Four isolated DPI startup sequences matched Windows CLR in Node and Edge.");
         console.log("Single-object spans matched CLR argument and local aliasing and typed bounds failures.");
         console.log("Two-type exception filters matched the CLR for both matches, a rejection, and normal completion.");
         console.log("Monitor reentrancy, lockTaken, and three typed failure paths matched the CLR.");

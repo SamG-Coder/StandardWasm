@@ -6,7 +6,7 @@ namespace PortableCompiler
     {
         internal const int Console = 1, Resources = 2, Memory = 4, Win32Errors = 8;
         private const int FirstNativeFeature = 16;
-        private const int NativeFeatures = ((1 << Win32ModuleBinding.Count) - 1) * FirstNativeFeature;
+        private const int NativeMemoryFeatures = ((1 << Win32ModuleBinding.ReleaseContext) - 1) * FirstNativeFeature;
 
         internal static int Win32NativeFeature(int member) => FirstNativeFeature << (member - 1);
 
@@ -41,7 +41,7 @@ namespace PortableCompiler
         private static int ConsoleFunctions(int features) => (features & Console) != 0 ? ConsoleWasm.ImportCount : 0;
 
         // Resource calls and native indirection share one memory index.
-        private static bool HasMemory(int features) => (features & (Resources | Memory | NativeFeatures)) != 0;
+        private static bool HasMemory(int features) => (features & (Resources | Memory | NativeMemoryFeatures)) != 0;
 
         private static int EntryCount(int features) => FunctionCount(features) + (HasMemory(features) ? 1 : 0);
 

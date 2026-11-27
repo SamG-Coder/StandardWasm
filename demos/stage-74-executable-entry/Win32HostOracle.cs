@@ -5,6 +5,19 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
+if (args.Length > 0 && args[0] == "dpi")
+{
+    int[] contexts = [0, -1, -2, -3, -4, -5, -6];
+    int[] valid = contexts.Select(DpiProbe.DpiValid).ToArray();
+    int[] awareness = contexts.Select(DpiProbe.DpiAwareness).ToArray();
+    int initial = DpiProbe.DpiCurrent();
+    var steps = new List<int[]>();
+    foreach (int mode in args.Skip(1).Select(int.Parse))
+        steps.Add([DpiProbe.DpiApply(mode), Win32ErrorProbe.Read(), DpiProbe.DpiCurrent(), DpiProbe.DpiIsAware()]);
+    Console.WriteLine(JsonSerializer.Serialize(new { valid, awareness, initial, steps }));
+    return;
+}
+
 string executable = Path.GetFileName(Environment.ProcessPath)!;
 nint original = Lookup(null);
 var results = new List<int[]>();

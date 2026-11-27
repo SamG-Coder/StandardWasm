@@ -1,12 +1,13 @@
 import { readPeResource } from "../stage-73-executable-intake/loader/pe.mjs";
 import { createActivationContexts } from "./activation-context.mjs";
+import { createDpiAwareness, dpiImportNames } from "./dpi-awareness.mjs";
 
 export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
     "getModuleHandleW", "createActCtxW", "getCurrentActCtx", "activateActCtx"
 ]);
 export const win32ImportNames = new Set([
-    ...win32MemoryImports, "deactivateActCtx", "releaseActCtx",
+    ...win32MemoryImports, ...dpiImportNames, "deactivateActCtx", "releaseActCtx",
     "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError"
 ]);
 
@@ -76,6 +77,7 @@ export function createWin32Host(memory, executablePath, assets = []) {
     return {
         getModuleHandleW,
         ...createActivationContexts(memory, findManifest, value => { systemError = value; }),
+        ...createDpiAwareness(value => { systemError = value; }),
         getLastSystemError: () => systemError,
         setLastSystemError: value => { systemError = value | 0; },
         getLastPInvokeError: () => pinvokeError,

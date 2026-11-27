@@ -35,6 +35,12 @@ deactivation, and release entries with their scalar and SDK HANDLE or BOOL
 shapes. Side-by-side dependency resolution and file-path manifests are still
 pending.
 
+The browser host models the Win32 DPI awareness context for one process and
+one managed thread per execution. The managed fixture compares context
+validation and queries, modern and legacy setters, and error handling with
+fresh Windows processes. Browser viewport scaling, per-monitor DPI changes,
+and manifest-defined initial awareness are outside this contract.
+
 Run `node demos/stage-74-executable-entry/verify-win32-host.mjs` on Windows to
 compare the host import contract in Node and Edge against native .NET calls.
 The probe invokes the imports through Wasm. Pass the path to the self-hosted

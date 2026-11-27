@@ -6,13 +6,26 @@ namespace PortableCompiler
     internal static class Win32ModuleBinding
     {
         internal const int Module = 1, CreateContext = 2, CurrentContext = 3,
-            ActivateContext = 4, DeactivateContext = 5, ReleaseContext = 6, Count = ReleaseContext;
+            ActivateContext = 4, DeactivateContext = 5, ReleaseContext = 6,
+            IsValidDpiContext = 7, SetProcessDpiContext = 8, SetLegacyDpi = 9, SetProcessAwareness = 10,
+            GetThreadDpiContext = 11, EqualDpiContexts = 12, GetDpiAwareness = 13, IsProcessDpiAware = 14,
+            Count = IsProcessDpiAware;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
-            member == ActivateContext ? "ActivateActCtx" : member == DeactivateContext ? "DeactivateActCtx" : "ReleaseActCtx";
+            member == ActivateContext ? "ActivateActCtx" : member == DeactivateContext ? "DeactivateActCtx" :
+            member == ReleaseContext ? "ReleaseActCtx" : member == IsValidDpiContext ? "IsValidDpiAwarenessContext" :
+            member == SetProcessDpiContext ? "SetProcessDpiAwarenessContext" : member == SetLegacyDpi ? "SetProcessDPIAware" :
+            member == SetProcessAwareness ? "SetProcessDpiAwareness" : member == GetThreadDpiContext ? "GetThreadDpiAwarenessContext" :
+            member == EqualDpiContexts ? "AreDpiAwarenessContextsEqual" : member == GetDpiAwareness ? "GetAwarenessFromDpiAwarenessContext" :
+            "IsProcessDPIAware";
 
-        internal static int Arity(int member) => member == ActivateContext || member == DeactivateContext ? 2 : 1;
+        private static string Library(int member) => member <= ReleaseContext ? "KERNEL32.dll" :
+            member == SetProcessAwareness ? "api-ms-win-shcore-scaling-l1-1-1.dll" : "USER32.dll";
+
+        internal static int Arity(int member) =>
+            member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ? 0 :
+            member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts ? 2 : 1;
 
         internal static int FindImport(byte[] image, int[] heaps, int[] methods, int row, int implementation)
         {
@@ -20,7 +33,7 @@ namespace PortableCompiler
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return 0;
             for (int member = 1; member <= Count; member++)
-                if (NativeImports.Find(image, heaps, methods, counts, "KERNEL32.dll", EntryName(member), row, 0x101) == row)
+                if (NativeImports.Find(image, heaps, methods, counts, Library(member), EntryName(member), row, 0x101) == row)
                     return member;
             return 0;
         }
@@ -28,7 +41,9 @@ namespace PortableCompiler
         internal static bool MatchesSignature(BundleImages bundle, int[] objects, int member, int[] types, int offset, int arity)
         {
             if (arity != Arity(member)) return false;
-            int result = types[offset], input = types[offset + 1];
+            int result = types[offset];
+            if (member >= IsValidDpiContext) return MatchesDpiSignature(bundle, objects, member, types, offset, arity);
+            int input = types[offset + 1];
             if (member == Module)
                 return IsAbiShape(bundle, objects, input, Native, "PCWSTR") && IsAbiShape(bundle, objects, result, Native, "HMODULE");
             if (member == CreateContext)
@@ -42,7 +57,25 @@ namespace PortableCompiler
             return member == ActivateContext ? IsAbiShape(bundle, objects, input, Native, "HANDLE") : input == I32;
         }
 
-        private static bool IsAbiShape(BundleImages bundle, int[] objects, int type, int field, string name)
+        private static bool MatchesDpiSignature(BundleImages bundle, int[] objects, int member, int[] types, int offset, int arity)
+        {
+            int result = types[offset];
+            if (member == GetThreadDpiContext) return IsDpiContext(bundle, objects, result);
+            if (member == SetProcessAwareness)
+                return types[offset + 1] == I32 && IsAbiShape(bundle, objects, result, I32, "HRESULT");
+            if (member == GetDpiAwareness)
+                return result == I32 && IsDpiContext(bundle, objects, types[offset + 1]);
+            if (!IsAbiShape(bundle, objects, result, I32, "BOOL")) return false;
+            for (int argument = 1; argument <= arity; argument++)
+                if (!IsDpiContext(bundle, objects, types[offset + argument])) return false;
+            return true;
+        }
+
+        private static bool IsDpiContext(BundleImages bundle, int[] objects, int type) =>
+            IsAbiShape(bundle, objects, type, Native, "DPI_AWARENESS_CONTEXT", "Windows.Win32.UI.HiDpi");
+
+        private static bool IsAbiShape(BundleImages bundle, int[] objects, int type, int field, string name,
+            string space = "Windows.Win32.Foundation")
         {
             if (type == field) return true;
             if (!ObjectLayouts.IsValueType(objects, type) || ObjectLayouts.IsExplicitValue(objects, type) ||
@@ -57,7 +90,7 @@ namespace PortableCompiler
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return false;
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
             return first >= 0 && ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first,
-                ObjectLayouts.TypeDef(objects, type), "Windows.Win32.Foundation", name);
+                ObjectLayouts.TypeDef(objects, type), space, name);
         }
 
     }
