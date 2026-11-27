@@ -2676,6 +2676,21 @@ namespace PortableCompiler
                     int folded = ResourceStringFolding.FoldResourceCall(image, heaps, layout, records, slot, clauses, literals, literalSize);
                     if (folded < 0) return folded;
                     if (folded > 0) continue;
+                    // Stage 181 (issue #256): CoreLib's own event accessors call Delegate.Combine/Remove
+                    // by MethodDef and cast the result to EventHandler. Lower exactly that shape to the
+                    // EventHandler composition records; any other Combine keeps its original body.
+                    int composition = CoreLibDelegateDefinitions.CombineMember(image, heaps, layout, records[slot + 1]);
+                    if (composition != 0)
+                    {
+                        int cast = records[slot + 2] * BranchIl.Width;
+                        if (cast < records.Length && records[cast] == BranchIl.CastClass &&
+                            !ValueOperands.Entry(records, cast / BranchIl.Width, clauses) &&
+                            CoreLibDelegateDefinitions.IsEventHandlerTypeDef(image, heaps, layout, records[cast + 1]))
+                        {
+                            records[slot] = composition == EventMetadata.CombineHandler ? BranchIl.CombineHandler : BranchIl.RemoveHandler;
+                            continue;
+                        }
+                    }
                 }
                 if (kind == BranchIl.Call)
                 {
@@ -3424,8 +3439,10 @@ namespace PortableCompiler
             if (comparand >= records.Length || records[comparand] != BranchIl.Load || records[comparand + 3] != 0)
                 return false;
             int call = records[comparand + 2] * BranchIl.Width;
+            // Stage 181: CoreLib's own accessors name CompareExchange<EventHandler> by MethodDef.
             if (call >= records.Length || records[call] != BranchIl.MethodSpecCall || records[call + 3] != 0 ||
-                !EventMetadata.IsHandlerExchange(image, heaps, layout, records[call + 1]))
+                !EventMetadata.IsHandlerExchange(image, heaps, layout, records[call + 1]) &&
+                !CoreLibDelegateDefinitions.IsHandlerExchange(image, heaps, layout, records[call + 1]))
                 return false;
 
             // The field token's operand bytes have no IR instructions. Keep
