@@ -8,7 +8,7 @@ namespace PortableCompiler
         // Neither accessor mutates the descriptor itself. A load can supply
         // its current value. A constructor initializes the destination slot.
         internal static int Bind(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
-            int context, int[] methodArguments, int[] records, int address, int spanType, int[] objects, int[] clauses, int[] frame, int[] hostUse,
+            int context, int[] methodArguments, int[] records, int address, int spanType, int[] objects, int[] clauses, int[] frame, long[] hostUse,
             int fieldCaller = 0)
         {
             bool field = fieldCaller != 0;
@@ -92,7 +92,7 @@ namespace PortableCompiler
                         records[address] = Nop;
                         records[constructor] = NativeCharacterSpan;
                         records[constructor + 3] = records[address + 1] + 1;
-                        hostUse[0] |= WasmImports.NativeCharacterViews;
+                        hostUse[0] = hostUse[0] | WasmImports.NativeCharacterViews;
                         return 1;
                     }
                 }

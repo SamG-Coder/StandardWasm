@@ -11,7 +11,8 @@ namespace PortableCompiler
             GetThreadDpiContext = 11, EqualDpiContexts = 12, GetDpiAwareness = 13, IsProcessDpiAware = 14,
             IsWindowEnabled = 15, EnableWindow = 16, GetWindowLong = 17, GetWindowLongPtr = 18,
             BCryptGenRandom = 19, GetProcessAwareness = 20, LoadLibrary = 21, GetProcedure = 22,
-            CallWindowProcedure = 23, Count = CallWindowProcedure;
+            CallWindowProcedure = 23, RegisterClass = 24, GetClassInfo = 25,
+            SetWindowLong = 26, SetWindowLongPtr = 27, Count = SetWindowLongPtr;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -25,7 +26,9 @@ namespace PortableCompiler
             member == GetWindowLong ? "GetWindowLongW" : member == GetWindowLongPtr ? "GetWindowLongPtrW" :
             member == GetProcessAwareness ? "GetProcessDpiAwareness" :
             member == LoadLibrary ? "LoadLibraryExW" : member == GetProcedure ? "GetProcAddress" :
-            member == CallWindowProcedure ? "CallWindowProcW" : "BCryptGenRandom";
+            member == CallWindowProcedure ? "CallWindowProcW" : member == RegisterClass ? "RegisterClassW" :
+            member == GetClassInfo ? "GetClassInfoW" : member == SetWindowLong ? "SetWindowLongW" :
+            member == SetWindowLongPtr ? "SetWindowLongPtrW" : "BCryptGenRandom";
 
         private static string Library(int member) => member == LoadLibrary ? "kernel32.dll" :
             member <= ReleaseContext || member == GetProcedure ? "KERNEL32.dll" :
@@ -33,12 +36,16 @@ namespace PortableCompiler
             member == BCryptGenRandom ? "BCrypt.dll" : "USER32.dll";
 
         internal static int Arity(int member) =>
-            member == CallWindowProcedure ? 5 : member == BCryptGenRandom ? 4 : member == LoadLibrary ? 3 :
+            member == CallWindowProcedure ? 5 : member == BCryptGenRandom ? 4 :
+            member == LoadLibrary || member == GetClassInfo || IsWindowLongSetter(member) ? 3 :
             member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ? 0 :
             member == GetProcedure || member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts || member == EnableWindow ||
             UsesLastError(member) ? 2 : 1;
 
-        internal static bool UsesLastError(int member) => member == GetWindowLong || member == GetWindowLongPtr;
+        internal static bool UsesLastError(int member) =>
+            member == GetWindowLong || member == GetWindowLongPtr || IsWindowLongSetter(member);
+
+        private static bool IsWindowLongSetter(int member) => member == SetWindowLong || member == SetWindowLongPtr;
 
         internal static int FindImport(byte[] image, int[] heaps, int[] methods, int row, int implementation)
         {
@@ -87,6 +94,16 @@ namespace PortableCompiler
                     IsAbiShape(bundle, objects, types[offset + 4], Native, "WPARAM") &&
                     IsAbiShape(bundle, objects, types[offset + 5], Native, "LPARAM") &&
                     IsAbiShape(bundle, objects, result, Native, "LRESULT");
+            // The source-generated wrappers retain pinning and manual error capture.
+            if (member == RegisterClass) return result == Unsigned16 && types[offset + 1] == Native;
+            if (member == GetClassInfo)
+                return IsAbiShape(bundle, objects, result, I32, "BOOL") &&
+                    IsAbiShape(bundle, objects, types[offset + 1], Native, "HINSTANCE") &&
+                    IsAbiShape(bundle, objects, types[offset + 2], Native, "PCWSTR") &&
+                    types[offset + 3] == Native;
+            if (IsWindowLongSetter(member))
+                return IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
+                    types[offset + 2] == I32 && types[offset + 3] == Native && result == Native;
             if (member == BCryptGenRandom)
                 return types[offset + 1] == Native && types[offset + 2] == Native &&
                     types[offset + 3] == I32 && types[offset + 4] == I32 && result == I32;

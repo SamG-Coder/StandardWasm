@@ -20,7 +20,7 @@ namespace PortableCompiler
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
-            byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostFeatures, int reflectionHeapFixup,
+            byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, long hostFeatures, int reflectionHeapFixup,
             FunctionPointerPlan pointers, int rootCount, int rootWalker, bool rootProbe, NativeImportTable natives,
             PrimitiveArrayWasm primitiveArrays)
         {

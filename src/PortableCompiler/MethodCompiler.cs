@@ -190,10 +190,10 @@ namespace PortableCompiler
         internal const int Reemit = -1000;
 
         private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location,
-            int hostFeatures, MissingAssemblyStubs stubs, bool rootProbe = false)
+            long hostFeatures, MissingAssemblyStubs stubs, bool rootProbe = false)
         {
             // Finalization is an internal runtime feature and has no host import indices.
-            var features = new int[] { hostFeatures, rootProbe ? 1 : 0, 0 };
+            var features = new long[] { hostFeatures, rootProbe ? 1 : 0, 0 };
             var natives = new NativeImportTable();
             var addressedFields = new AddressedFields();
             var typeCalls = new RuntimeTypeCalls();
@@ -204,9 +204,9 @@ namespace PortableCompiler
         }
 
         private static int CompileProgramPass(BundleImages bundle, byte[] entries, byte[] output, int[] location,
-            int[] features, AddressedFields addressedFields, RuntimeTypeCalls typeCalls, MissingAssemblyStubs stubs, bool rootProbe, NativeImportTable natives)
+            long[] features, AddressedFields addressedFields, RuntimeTypeCalls typeCalls, MissingAssemblyStubs stubs, bool rootProbe, NativeImportTable natives)
         {
-            int hostFeatures = features[0];
+            long hostFeatures = features[0];
             bool tracksFinalizers = features[1] != 0;
             int knownAddressedFields = addressedFields.Count;
             // Native discovery participates in the same fixed point as the fixed host groups.
@@ -264,7 +264,7 @@ namespace PortableCompiler
             // Closed instantiations have distinct field slices and argument
             // vectors even when they share a CLI definition.
             var objects = new int[ObjectLayouts.FieldMapStart + imageBytes / 6 + interfaces * 2 + output.Length / 4];
-            var projections = new ValueFieldProjections(features[2], objects);
+            var projections = new ValueFieldProjections((int)features[2], objects);
             if (projections.ReferenceVector < 0) return projections.ReferenceVector;
             // One MethodDef can have a body per closed declaring instantiation.
             // Reserve as many specialized bodies as definitions; exceeding that
@@ -291,7 +291,7 @@ namespace PortableCompiler
             var remainderFixup = new int[1];
             var primitiveArrays = new PrimitiveArrayWasm();
             var reflection = new RuntimeReflectionPlan();
-            var hostUse = new int[1];
+            var hostUse = new long[1];
             int functions = 0, length = 0, closedSignaturesThrough = 0;
             bool externalObjects = false, externalVectors = false;
             // Any reachable ldind/stind needs the host-lent memory 0 (decision 0060).
@@ -1220,7 +1220,7 @@ namespace PortableCompiler
                     frameShape[17] = allocates ? shadowStack[1] : 0;
                     frameShape[18] = allocates ? shadowStack[2] : 0;
                     frameShape[24] = pins ? pinRegistry[0] : 0;
-                    frameShape[25] = hostFeatures & WasmImports.NativeCharacterViews;
+                    frameShape[25] = (hostFeatures & WasmImports.NativeCharacterViews) != 0 ? 1 : 0;
                     // Stage 151 (decision 0079): readLine's function index + 1, when the body reads a line.
                     frameShape[26] = readsLine ? WasmImports.InputFunction(hostFeatures) + 1 : 0;
                     for (int i = 0; i < ExceptionDispatchWasm.FrameWidth; i++)
@@ -1259,7 +1259,7 @@ namespace PortableCompiler
                 natives.Count != reservedNatives || (projections.Kinds & ~projections.KnownKinds) != 0)
             {
                 features[0] = hostFeatures | hostUse[0];
-                features[2] |= projections.Kinds;
+                features[2] = features[2] | (uint)projections.Kinds;
                 return Reemit;
             }
             length = receiverDemand.WriteCarriers(moduleCode, length, functions, contexts, sizes, bodyOffsets);
@@ -1417,7 +1417,7 @@ namespace PortableCompiler
 
         private static int LinkOperands(BundleImages bundle, byte[] image, int[] layout,
             int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, bool valueConstructor, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
-            int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed,
+            int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, long[] hostUse, int[] virtualTypes, int[] virtualUsed,
             TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, RuntimeTypeCalls typeCalls,
             MethodInstantiations instantiations, int[] methodArguments,
             int[] inlineLocations, int[] frameCells, int parameterCount, NativeAggregatePlans nativePlans,
@@ -2288,7 +2288,7 @@ namespace PortableCompiler
                     {
                         records[slot] = BranchIl.Monitor;
                         records[slot + 1] = monitor == MonitorMetadata.Exit ? -1 : 0;
-                        hostUse[0] |= WasmImports.Monitor;
+                        hostUse[0] = hostUse[0] | WasmImports.Monitor;
                         continue;
                     }
                     int arity = SpanMetadata.StringAsSpanArity(image, layout, heaps, records[slot + 1], kind == BranchIl.MemberCall);
