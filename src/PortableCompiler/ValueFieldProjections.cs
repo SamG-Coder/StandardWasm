@@ -23,7 +23,7 @@ namespace PortableCompiler
         }
 
         internal const int Scalar = 1, Reference = 2, Aggregate = 4, ClassScalar = 8, BooleanScalar = 16,
-            WideScalar = 32, ClassWideScalar = 64;
+            WideScalar = 32, ClassWideScalar = 64, ClassBooleanScalar = 128;
 
         internal static int Kind(int location) => location == Int32Location ? Scalar :
             location == BooleanLocation ? BooleanScalar : location == Int64Location ? WideScalar :
@@ -38,7 +38,8 @@ namespace PortableCompiler
         internal bool UsesClass(int location) => (KnownKinds & ClassKind(location)) != 0;
 
         private static int ClassKind(int location) =>
-            location == Int32Location ? ClassScalar : location == Int64Location ? ClassWideScalar : 0;
+            location == Int32Location ? ClassScalar : location == Int64Location ? ClassWideScalar :
+            location == BooleanLocation ? ClassBooleanScalar : 0;
         internal bool Aggregates => (KnownKinds & Aggregate) != 0;
 
         internal int Owner(int selector) => fields[selector * Width];
@@ -120,9 +121,9 @@ namespace PortableCompiler
             next[0]++;
             int modifier = ReadFieldModifier(image, heaps, layout, next, end);
             if (modifier < 0) return modifier;
-            // IsVolatile changes ordinary access ordering through the IL prefix,
-            // not the address of the signed Int32 field in this single-agent heap.
-            if (modifier != 0 && classStorage != I32) return -2;
+            // IsVolatile orders the load or store through its IL prefix. The
+            // address still denotes the same field in the single-agent heap.
+            if (modifier != 0 && classStorage != I32 && classStorage != Unsigned8) return -2;
             if (classStorage != 0)
             {
                 int type = ManagedReferenceSignatures.Read(bundle, image, layout, heaps,
@@ -130,6 +131,9 @@ namespace PortableCompiler
                 if (type < 0) return type;
                 if (next[0] != end) return -2;
                 if (classStorage == I32) return type == GenericScalar.Key(8) ? Int32Location : -2;
+                // Boolean and Byte share the packed Wasm field but have
+                // distinct CLI signatures and byref semantics.
+                if (classStorage == Unsigned8) return type == GenericScalar.Key(2) ? BooleanLocation : -2;
                 return ManagedReferenceSignatures.ElementLocation(objects, type) == Int64Location ? Int64Location : -2;
             }
             int location = ManagedReferenceSignatures.ReadLocation(bundle, image, layout, heaps,

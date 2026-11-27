@@ -86,7 +86,8 @@ namespace PortableCompiler
             int value = ValueType(helper);
             int vector = kind == Scalar ? Ints : kind == BooleanScalar ? Bytes :
                 kind == WideScalar ? Longs : projections.ReferenceVector;
-            int scalarLocation = kind == Scalar ? Int32Location : kind == WideScalar ? Int64Location : 0;
+            int scalarLocation = kind == Scalar ? Int32Location : kind == WideScalar ? Int64Location :
+                kind == BooleanScalar ? BooleanLocation : 0;
             const int address = 0, replacement = 1;
             int parent = write ? 2 : 1;
             int descriptor = aggregate ? parent + 1 : address;
@@ -203,7 +204,7 @@ namespace PortableCompiler
                 used = ManagedLocationWasm.LoadField(code, used, address, 0);
                 used = RefType(code, used, 0x16, owner);
                 if (write) used = Local(code, used, 0x20, replacement);
-                used = Gc(code, used, write ? 5 : 2, owner);
+                used = Gc(code, used, write ? 5 : location == BooleanLocation ? 4 : 2, owner);
                 used = WasmBinary.Unsigned(code, used, projections.Ordinal(i));
                 code[used++] = 0x0f;
                 code[used++] = 0x0b;
