@@ -165,19 +165,19 @@ async function exercise(instantiate, createWindows, bytes, metrics) {
     new DataView(guest.memory.buffer).setUint16(last, 0x0063, true);
     const unterminatedCaption = failure(atom, last);
     const visible = failure(atom, 0, popup | 0x10000000);
-    const messageOnly = failure(atom, 0, 0, -3);
+    const unsupportedParent = failure(atom, 0, 0, 1);
     const invalidWidth = failure(atom, 0, popup, 0, -1);
     releaseLibrary();
     const staleProcedure = failure(atom, 0);
     return { outcomes, safeguards: { exceptionCleanup, scratchReused, unknownClass, invalidClass, invalidCaption,
-        unterminatedCaption, visible, messageOnly, invalidWidth, staleProcedure, savedError: guest.getLastPInvokeError() } };
+        unterminatedCaption, visible, unsupportedParent, invalidWidth, staleProcedure, savedError: guest.getLastPInvokeError() } };
 }
 
 const node = await exercise(instantiateManagedModule, createWindowState, bytes, oracle.metrics);
 assert.deepEqual(node.outcomes, oracle.outcomes);
 assert.deepEqual(node.safeguards, { exceptionCleanup: true, scratchReused: true, unknownClass: oracle.unknownClass,
     invalidClass: [0, 998], invalidCaption: [0, 998], unterminatedCaption: [0, 998], visible: [0, 50],
-    messageOnly: [0, 50], invalidWidth: [0, 87], staleProcedure: [0, 87], savedError: 612 });
+    unsupportedParent: [0, 50], invalidWidth: [0, 87], staleProcedure: [0, 87], savedError: 612 });
 const server = await serveLaunch(0, new Uint8Array());
 const edge = await chromium.launch({ channel: "msedge" });
 try {

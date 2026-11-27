@@ -1,3 +1,5 @@
+import { getNonClientInsets } from "./window-rect.mjs";
+
 const disabledStyle = 0x08000000; // WS_DISABLED
 const childStyle = 0x40000000; // WS_CHILD
 const setFocusMessage = 0x0007; // WM_SETFOCUS
@@ -19,6 +21,7 @@ export function createWindowState() {
     let activeWindow = 0;
     let focusedWindow = 0;
     let focusChange = 0;
+    let messageRoot = 0;
     if (nextOwnerId > 0xfffffffe) throw new RangeError("Win32 window owner ID space is exhausted.");
     // A launch currently owns one process and one GUI thread. These IDs
     // belong to the guest, independent of the renderer's OS identities.
@@ -56,16 +59,19 @@ export function createWindowState() {
         return null;
     }
 
+    function register(style, dispatch, attributes = {}) {
+        if (nextHandle > 0xffffffff) throw new Error("Win32 window handle space is exhausted.");
+        const handle = nextHandle++;
+        windows.set(handle, { style: style | 0, dispatch, title: "", attributes: { ...attributes },
+            extra: new DataView(new ArrayBuffer(attributes.extraBytes ?? 0)) });
+        return handle;
+    }
+
     return {
-        register(style, dispatch, attributes = {}) {
-            if (nextHandle > 0xffffffff) throw new Error("Win32 window handle space is exhausted.");
-            const handle = nextHandle++;
-            windows.set(handle, { style: style | 0, dispatch, title: "", attributes: { ...attributes },
-                extra: new DataView(new ArrayBuffer(attributes.extraBytes ?? 0)) });
-            return handle;
-        },
+        register,
         unregister(handle) {
             handle >>>= 0;
+            if (handle === messageRoot) return false;
             const window = windows.get(handle);
             if (!window) return false;
             if (activeWindow === handle) {
@@ -110,6 +116,15 @@ export function createWindowState() {
         },
         hasWindow(handle) {
             return windows.has(handle >>> 0);
+        },
+        getMessageRoot() {
+            // Windows resolves HWND_MESSAGE to a real hidden parent before
+            // dispatching CREATESTRUCT. Give each launch its own parent.
+            if (messageRoot === 0) messageRoot = register(0);
+            return messageRoot;
+        },
+        isMessageOnlyWindow(handle) {
+            return windows.get(handle >>> 0)?.attributes.messageOnly === true;
         },
         getCurrentThreadId() {
             return owner.threadId;
@@ -307,6 +322,7 @@ export function createWindowClassState(memory, isProcedure, setError) {
 const popupStyle = 0x80000000, clipSiblingsStyle = 0x04000000, captionStyle = 0x00c00000;
 const windowEdgeStyle = 0x00000100;
 const useDefault = -0x80000000;
+const messageParent = -3; // HWND_MESSAGE
 const createMessage = 0x0001, destroyMessage = 0x0002, moveMessage = 0x0003, sizeMessage = 0x0005;
 const getMinMaxInfoMessage = 0x0024, ncCreateMessage = 0x0081, ncDestroyMessage = 0x0082, ncCalcSizeMessage = 0x0083;
 const uahDestroyMessage = 0x0090; // Observed in the Windows x86 themed-window abort path.
@@ -368,12 +384,15 @@ export function createDefaultWindowProcedure(memory, windows) {
         }
         const style = windows.getWindowLong(hwnd, -16, () => {});
         const extendedStyle = windows.getWindowLong(hwnd, -20, () => {});
-        if (((style & ~clipSiblingsStyle) >>> 0) !== popupStyle || extendedStyle !== 0)
+        const messageOnly = windows.isMessageOnlyWindow(hwnd);
+        if (!messageOnly && (((style & ~clipSiblingsStyle) >>> 0) !== popupStyle || extendedStyle !== 0))
             throw new Error("StandardWasm: default window procedure currently supports hidden borderless popups.");
 
         // The hidden-popup defaults leave their incoming structures unchanged.
         // WM_NCCREATE copies the text before the creation lease is released.
         if (message === sizeMessage || message === moveMessage) return 0;
+        if (messageOnly && (message === getMinMaxInfoMessage || message === destroyMessage || message === ncDestroyMessage ||
+            message === setFocusMessage || message === killFocusMessage || message === enableMessage)) return 0;
         let size;
         if (message === ncCreateMessage || message === createMessage) size = createStructBytes;
         else if (message === ncCalcSizeMessage && wparam === 0) size = rectBytes;
@@ -381,8 +400,15 @@ export function createDefaultWindowProcedure(memory, windows) {
         const address = lparam >>> 0;
         if (address === 0 || address > memory.buffer.byteLength - size)
             throw new Error("StandardWasm: invalid guest buffer for the default window procedure.");
-        if (message !== ncCreateMessage) return 0;
         const view = new DataView(memory.buffer);
+        if (messageOnly && message === ncCalcSizeMessage) {
+            const { outer, top } = getNonClientInsets(style, extendedStyle, false, 96);
+            const left = view.getInt32(address, true) + outer;
+            const topEdge = view.getInt32(address + 4, true) + top;
+            writeInts(memory, address, [left, topEdge, Math.max(left, view.getInt32(address + 8, true) - outer),
+                Math.max(topEdge, view.getInt32(address + 12, true) - outer)]);
+        }
+        if (message !== ncCreateMessage) return 0;
         const caption = view.getUint32(address + 36, true);
         if (captionError(view, caption) !== 0)
             throw new Error("StandardWasm: invalid creation caption for the default window procedure.");
@@ -416,6 +442,14 @@ function writeInts(memory, address, values) {
 const packPair = (low, high) => (low & 0xffff) | (high << 16);
 const clampTrackSize = (requested, min, max) => Math.max(min, Math.min(requested, max));
 
+function virtualMessageWindowMetrics() {
+    const width = Math.max(136, globalThis.screen?.availWidth || 1024);
+    const height = Math.max(39, globalThis.screen?.availHeight || 768);
+    const { outer, top } = getNonClientInsets(captionStyle, windowEdgeStyle, false, 96);
+    return [0, 0, width + 2 * outer, height + outer + top, -outer, -outer,
+        136, outer + top, width + 2 * outer, height + 2 * outer];
+}
+
 export function createWindowCreation(memory, windows, classes, bindProcedure, setError, minMaxInfo) {
     const trackDefaults = minMaxInfo === undefined ? null : Array.from(minMaxInfo);
     if (trackDefaults && (trackDefaults.length !== 10 || !trackDefaults.every(value => (value | 0) === value) ||
@@ -432,8 +466,12 @@ export function createWindowCreation(memory, windows, classes, bindProcedure, se
     return function createWindowExW(exStyle, className, caption, style, x, y, width, height, parent, menu, instance, param) {
         const windowClass = classes.findClass(instance, className);
         if (!windowClass) return 0;
+        const messageOnly = parent === messageParent;
         const popup = (style >>> 0) === popupStyle;
-        if (exStyle !== 0 || parent !== 0 || menu !== 0 || (!popup && (style !== 0 || trackDefaults === null)) ||
+        const supportedStyle = messageOnly
+            ? (style & (visibleOrChildStyle | popupStyle)) === 0
+            : parent === 0 && (popup || style === 0 && trackDefaults !== null);
+        if (exStyle !== 0 || menu !== 0 || !supportedStyle ||
             x === useDefault || y === useDefault || width === useDefault || height === useDefault)
             return fail(notSupported);
         if (width < 0 || height < 0) return fail(invalidParameter);
@@ -453,9 +491,11 @@ export function createWindowCreation(memory, windows, classes, bindProcedure, se
         try {
             const liveStyle = style | clipSiblingsStyle | (popup ? 0 : captionStyle);
             const liveExStyle = popup ? exStyle : exStyle | windowEdgeStyle;
+            let actualParent;
             try {
+                actualParent = messageOnly ? windows.getMessageRoot() : 0;
                 handle = windows.register(liveStyle, (message, wparam, lparam) => dispatch(handle, message, wparam, lparam), {
-                    procedure: windowClass.procedure, instance, extendedStyle: liveExStyle,
+                    procedure: windowClass.procedure, instance, extendedStyle: liveExStyle, parent: actualParent, messageOnly,
                     extraBytes: windowClass.extraBytes, classRecord: windowClass.record
                 });
             } catch (error) {
@@ -473,10 +513,10 @@ export function createWindowCreation(memory, windows, classes, bindProcedure, se
                     view.setUint16(classCopy + 2 * index, windowClass.name.charCodeAt(index), true);
                 view.setUint16(classCopy + 2 * windowClass.name.length, 0, true);
             }
-            const parameters = [param, instance, menu, parent, height, width, y, x, style, caption, classPointer, exStyle];
+            const parameters = [param, instance, menu, actualParent, height, width, y, x, style, caption, classPointer, exStyle];
             let clientWidth = width, clientHeight = height;
             if (!popup) {
-                writeInts(memory, track, trackDefaults);
+                writeInts(memory, track, trackDefaults ?? virtualMessageWindowMetrics());
                 send(getMinMaxInfoMessage, track);
                 if (!windows.hasWindow(handle)) return 0;
                 // A callback can grow memory or re-enter CreateWindowExW.

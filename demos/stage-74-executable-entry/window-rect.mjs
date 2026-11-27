@@ -38,7 +38,8 @@ function referenceMetrics(dpi) {
     };
 }
 
-function nonClientInsets(style, extendedStyle, hasMenu, metrics) {
+export function getNonClientInsets(style, extendedStyle, hasMenu, dpi) {
+    const metrics = referenceMetrics(dpi);
     const caption = (style & captionStyle) === captionStyle;
     const thick = (style & thickFrameStyle) !== 0;
     const border = (style & borderStyle) !== 0;
@@ -73,7 +74,7 @@ export function createAdjustWindowRectExForDpi(memory, setError) {
         }
 
         // RECT stores independent signed edges, not a width/height pair.
-        const { outer, top } = nonClientInsets(style, extendedStyle, menu !== 0, referenceMetrics(dpi));
+        const { outer, top } = getNonClientInsets(style, extendedStyle, menu !== 0, dpi);
         view.setInt32(address, view.getInt32(address, true) - outer, true);
         view.setInt32(address + 4, view.getInt32(address + 4, true) - top, true);
         view.setInt32(address + 8, view.getInt32(address + 8, true) + outer, true);
