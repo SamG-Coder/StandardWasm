@@ -121,9 +121,10 @@ namespace PortableCompiler
                 storage == String || storage == ObjectLayouts.ObjectReference || DelegateShapes.IsKey(storage) ||
                 storage == Delegate)
                 return storage;
-            if (storage >= ObjectLayouts.FirstClass && storage < ObjectLayouts.FirstClass + ObjectLayouts.MaxClasses &&
-                !ObjectLayouts.IsInterface(objects, storage)) // interfaces: Codex's separate fixture
-                return storage; // Stage 220: value types pass as in an ordinary call (e.g. HWND, BOOL)
+            // The key retains class, interface and value identity. The
+            // thunk uses the same representation as the ordinary call ABI.
+            if (storage >= ObjectLayouts.FirstClass && storage < ObjectLayouts.FirstClass + ObjectLayouts.MaxClasses)
+                return storage;
             return 0;
         }
 
