@@ -1637,7 +1637,7 @@ namespace PortableCompiler
             int typeRow = ObjectLayouts.Owner(image, heaps, layout, source, false);
             if (typeRow < 1) return -1;
             int nameStart = literalSize[0];
-            int nameLength = InitializerFailures.WriteFullName(image, heaps, layout, typeRow, literals, nameStart);
+            int nameLength = InitializerFailures.WriteInitializerName(image, heaps, layout, typeRow, literals, nameStart);
             if (nameLength < 0) return nameLength; // malformed metadata or literal capacity, never a silent trap
             if (nameLength == 0) return -1;
             int messageStart = nameStart + 2 * nameLength;

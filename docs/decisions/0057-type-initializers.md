@@ -86,7 +86,11 @@ becomes the CLR's `TypeInitializationException`:
   from `catch_all`.
 - **Construction.** It builds CoreLib's own `TypeInitializationException` through the upstream
   internal constructor `(string fullTypeName, string message, Exception innerException)`:
-  - `fullTypeName` is `Type.FullName` (`Namespace.Outer+Inner`), written at compile time.
+  - `fullTypeName` is the name the CLR reports: the failing TypeDef's own namespace and name,
+    UTF-16 from its UTF-8 metadata, written at compile time. A nested type has no namespace and
+    no enclosing prefix: `Ns.Outer+Inner` fails as `Inner` (CLR 10.0.10, `TypeName` and `Message`).
+    Stage 129's verifier checks both strings against the CLR's for a top-level, a nested and a
+    non-ASCII nested type.
   - `message` is `The type initializer for '<fullTypeName>' threw an exception.`
   - The constructor's untaken `SR` fallback compiles because #304 folds CoreLib resource
     strings (decision 0081).

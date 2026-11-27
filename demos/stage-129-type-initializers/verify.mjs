@@ -124,6 +124,24 @@ async function runCases(compiler, images, cases) {
             continue;
         }
 
+        if (test.initializerMessage) {
+            // The wrapper's literals are the CLR's own TypeName and Message (UTF-16 in a data segment).
+            // Self-contained: this function also runs inside the browser page.
+            const carries = text => {
+                const pattern = new Uint8Array(2 * text.length);
+                for (let i = 0; i < text.length; i++) {
+                    pattern[2 * i] = text.charCodeAt(i) & 255;
+                    pattern[2 * i + 1] = text.charCodeAt(i) >> 8;
+                }
+                search: for (let at = 0; at + pattern.length <= code.length; at++) {
+                    for (let j = 0; j < pattern.length; j++) if (code[at + j] !== pattern[j]) continue search;
+                    return true;
+                }
+                return false;
+            };
+            for (const text of [test.initializerTypeName, test.initializerMessage])
+                if (!carries(text)) throw Error(test.name + " does not carry the CLR initializer string " + JSON.stringify(text));
+        }
         const value = String(instance.exports.run());
         if (value !== test.wasm) throw Error(test.name + " returned " + value + ", the CLR returned " + test.clr);
         results.push({ name: test.name, value });

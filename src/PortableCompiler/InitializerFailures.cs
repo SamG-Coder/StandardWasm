@@ -66,36 +66,25 @@ namespace PortableCompiler
             return 0;
         }
 
-        // Writes Type.FullName of TypeDef row typeRow (Namespace.Outer+Inner) as UTF-16 into
-        // literals at start. Returns the code-unit count, or a negative status.
-        internal static int WriteFullName(byte[] image, int[] heaps, int[] layout, int typeRow, byte[] literals, int start)
+        // Writes the name the CLR gives a failing initializer's type (TypeInitializationException.TypeName,
+        // also quoted in its Message) as UTF-16 into literals at start: the TypeDef's own namespace and
+        // name, "Namespace.Name", or just "Name" with no namespace. A nested type has no namespace of its
+        // own and the CLR does not prefix its enclosing types (Outer+Inner reports "Inner"). Returns the
+        // code-unit count, or a negative status.
+        internal static int WriteInitializerName(byte[] image, int[] heaps, int[] layout, int typeRow, byte[] literals, int start)
         {
-            var counts = new int[45];
-            if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;
-            // Collect the chain from the outermost type inward (nesting is shallow).
-            var chain = new int[16];
-            int depth = 0;
-            for (int row = typeRow; row != 0; row = NestedTypes.Enclosing(image, heaps, layout, counts, row))
-            {
-                if (depth == chain.Length) return -2;
-                chain[depth++] = row;
-            }
             var names = new int[2];
+            if (ObjectLayouts.TypeDefinitionNames(image, heaps, layout, typeRow, names) < 0) return -1;
             int used = start;
-            for (int level = depth - 1; level >= 0; level--)
+            if (names[1] != 0 && image[heaps[2] + names[1]] != 0)
             {
-                if (ObjectLayouts.TypeDefinitionNames(image, heaps, layout, chain[level], names) < 0) return -1;
-                if (level == depth - 1 && names[1] != 0)
-                {
-                    used = Copy(image, heaps, (uint)names[1], literals, used);
-                    if (used < 0) return used;
-                    used = Put(literals, used, '.');
-                }
-                else if (level != depth - 1) used = Put(literals, used, '+');
+                used = Copy(image, heaps, (uint)names[1], literals, used);
                 if (used < 0) return used;
-                used = Copy(image, heaps, (uint)names[0], literals, used);
+                used = Put(literals, used, '.');
                 if (used < 0) return used;
             }
+            used = Copy(image, heaps, (uint)names[0], literals, used);
+            if (used < 0) return used;
             return (used - start) / 2;
         }
 

@@ -30,7 +30,33 @@ foreach (string name in new[]
     var (kernels, context) = Load(name);
     MethodInfo method = kernels.GetMethod(name)!;
     string value = ((int)method.Invoke(null, null)!).ToString();
-    cases.Add(new { name, row = Row(method), images, clr = value, wasm = value });
+    // Issue #170: the CLR's TypeName and Message for the exception the kernel caught. The compiled
+    // module must carry exactly these strings for CoreLib's TypeInitializationException constructor.
+    string? failing = name switch
+    {
+        "ObjectFailureCaught" => "TypeInitializerFixture.ThrowsObject",
+        "NestedObjectFailure" => "TypeInitializerFixture.Outer+InnerThrows",
+        "NonAsciiNameFailure" => "TypeInitializerFixture.Outer+Caf\u00e9Failure",
+        _ => null
+    };
+    if (failing == null) cases.Add(new { name, row = Row(method), images, clr = value, wasm = value });
+    else
+    {
+        Type type = kernels.Assembly.GetType(failing, throwOnError: true)!;
+        try
+        {
+            System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(type.TypeHandle);
+            throw new InvalidOperationException(name + ": the initializer did not fail.");
+        }
+        catch (TypeInitializationException error)
+        {
+            cases.Add(new
+            {
+                name, row = Row(method), images, clr = value, wasm = value,
+                initializerTypeName = error.TypeName, initializerMessage = error.Message
+            });
+        }
+    }
     context.Unload();
 }
 
