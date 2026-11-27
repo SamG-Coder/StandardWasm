@@ -26,16 +26,20 @@ async function phase(name, body) {
         console.log(`[phase] ${name}: ${seconds.toFixed(1)}s`);
     }
 }
-// Each engine runs this many jobs at once. Node and Edge run side by side, so together
-// they use about every logical core. STANDARDWASM_TEST_LANES overrides the per-engine count.
-const lanes = Number(process.env.STANDARDWASM_TEST_LANES) || Math.max(2, Math.floor((availableParallelism() - 2) / 2));
+// Owner direction (#316): per-change suites verify in Edge, the shipping engine. A release
+// (--release, or `npm run test:release`) also verifies the same jobs in Node.
+const release = process.argv.includes("--release");
+// Each engine runs this many jobs at once; with both engines they share the logical cores.
+// STANDARDWASM_TEST_LANES overrides the per-engine count.
+const lanes = Number(process.env.STANDARDWASM_TEST_LANES) ||
+    Math.max(2, release ? Math.floor((availableParallelism() - 2) / 2) : availableParallelism() - 2);
 
 // Runtime pack selection (decision 0044) picks the newest installed version.
 assert.deepEqual(["10.0.10", "10.0.9", "10.0.0", "10.0.0-rc.2.25502.107", "10.0.0-rc.10.1", "10.0.0-preview.7.1", "10.0.11-alpha"]
     .sort(compareRuntimeVersions),
     ["10.0.0-preview.7.1", "10.0.0-rc.2.25502.107", "10.0.0-rc.10.1", "10.0.0", "10.0.9", "10.0.10", "10.0.11-alpha"]);
 // Development aid: --verify-only reuses the oracle and modules of an earlier full run and
-// repeats only the Node and Edge verification. A gate always runs the whole suite.
+// repeats only the verification phases. A gate always runs the whole suite.
 const verifyOnly = process.argv.includes("--verify-only");
 mkdirSync("artifacts", { recursive: true });
 if (!verifyOnly) await phase("Verify oracle (dotnet)", () =>
@@ -125,29 +129,31 @@ const jobLog = engine => (job, seconds, error) =>
     console.log(`  [job] ${engine} ${job.kind}${job.generation ? " G" + job.generation : ""}` +
         `${job.indices ? " (" + job.indices.length + " cases)" : ""}: ${seconds.toFixed(1)}s${error ? " FAILED" : ""}`);
 
+// Stage runners read the verified G2 compiler from this path.
+const saveCompiler = bytes => writeFileSync("artifacts/StandardWasm.Compiler.wasm", bytes);
+
 async function verifyNode() {
     const pool = startNodePool(oraclePath, join(root, "artifacts"), lanes, jobLog("Node"));
     try {
-        return "Node: " + await verifyConcurrently(cases, jobs, pool.execute,
-            bytes => writeFileSync("artifacts/StandardWasm.Compiler.wasm", bytes));
+        return "Node: " + await verifyConcurrently(cases, jobs, pool.execute, saveCompiler);
     } finally {
         await pool.close();
     }
 }
 
 async function verifyBrowser() {
-    const { result, version } = await verifyBrowserSuite(demos, oraclePath, cases, jobs, lanes, jobLog("Edge"));
+    const { result, version } = await verifyBrowserSuite(demos, oraclePath, cases, jobs, lanes, jobLog("Edge"),
+        release ? undefined : saveCompiler);
     return "Chromium " + version + ": " + result;
 }
 
-// Node and Edge verify the same jobs at the same time. Either failure fails the suite.
-const [nodeSummary, browserSummary] = await Promise.all([
-    phase("Node verify", verifyNode),
+// In a release Node and Edge verify the same jobs at the same time. Any failure fails the suite.
+const summaries = await Promise.all([
+    ...(release ? [phase("Node verify", verifyNode)] : []),
     phase("Edge verify", verifyBrowser)
 ]);
-console.log(nodeSummary);
-console.log(browserSummary);
+for (const summary of summaries) console.log(summary);
 timings.push({ name: "Total", seconds: (performance.now() - suiteStart) / 1000 });
-console.log("Phase timings (" + lanes + " lanes per engine):\n" +
+console.log(`Phase timings (${release ? "release: Node and Edge" : "Edge"}, ${lanes} lanes per engine):\n` +
     timings.map(({ name, seconds }) => `  ${name.padEnd(24)} ${seconds.toFixed(1).padStart(7)}s`).join("\n"));
-writeFileSync("artifacts/test-timings.json", JSON.stringify({ lanes, timings }, null, 2));
+writeFileSync("artifacts/test-timings.json", JSON.stringify({ release, lanes, timings }, null, 2));

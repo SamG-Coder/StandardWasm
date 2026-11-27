@@ -15,7 +15,7 @@ Semantics are unchanged. Every generated module's bytes change. The compiler mod
 
 ## 2. Concurrent jobs (harness)
 
-`scripts/verify-jobs.mjs` splits `verify()` into independent jobs. Node runs them on worker threads and Edge on separate browser contexts, and the two engines run at the same time:
+`scripts/verify-jobs.mjs` splits `verify()` into independent jobs. Edge runs them on separate browser contexts. In a release, Node also runs them on worker threads, at the same time:
 
 - **Direct comparisons** stay grouped by module, in oracle order, on one instance per module, so static state evolves as it does on the CLR.
 - **Generated-code cases** compile and instantiate a fresh module each, so they shard by case.
@@ -26,6 +26,10 @@ Results are combined in the sequential suite's order: CLR comparisons, then G1 =
 `STANDARDWASM_TEST_LANES` sets the number of jobs per engine. The default is (logical cores − 2) / 2. `--verify-only` repeats only the two verification phases over an earlier run's artifacts, for development. A gate always runs the whole suite.
 
 **Engine stack.** Node worker threads default to a 4 MB stack. With every core busy, V8's tier-up lags, and one oracle case (`BootstrapLibrary generic base RecursiveTypeArgument`, 236 levels deep) still runs in Liftoff frames that overflow V8's default ~1 MB limit. The sequential suite passed only because tier-up had finished by then. Edge is launched with `--js-flags=--stack-size=3800`, which the renderer thread accommodates: `--liftoff-only` with that limit passes and does not crash. #318 tracks the compiler's stack depth itself.
+
+## Engines per suite
+
+Owner direction (#316): `npm test` runs for every change and every gate and verifies in Edge, the engine the product ships to. `npm run test:release` (`--release`) also runs the same jobs in Node, concurrently, and is required only for an actual release of the library. An Edge-only run gives Edge every lane. Both paths save the verified G2 compiler to `artifacts/StandardWasm.Compiler.wasm` for the stage runners.
 
 ## 3. Binary oracle store (harness)
 

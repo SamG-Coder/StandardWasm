@@ -8,7 +8,7 @@ import { verifyConcurrently } from "./verify-jobs.mjs";
 // Runs the verification jobs in Edge, `lanes` at a time, one browser context per lane so each
 // has its own renderer process and main thread (decision 0102). Results are combined exactly as
 // in Node. `onJob(job, seconds, error)` reports each finished job.
-export async function verifyBrowserSuite(demos, oraclePath, cases, jobs, lanes, onJob) {
+export async function verifyBrowserSuite(demos, oraclePath, cases, jobs, lanes, onJob, saveCompiler) {
     // Browser traffic stays on loopback. Large shared blobs exceed the
     // DevTools pipe's message limit when fulfilled through Playwright routes.
     const assets = new Map([
@@ -76,7 +76,7 @@ export async function verifyBrowserSuite(demos, oraclePath, cases, jobs, lanes, 
                     if (next) next(page); else idle.push(page);
                 }
             };
-            return { result: await verifyConcurrently(cases, jobs, execute), version: browser.version() };
+            return { result: await verifyConcurrently(cases, jobs, execute, saveCompiler), version: browser.version() };
         } finally {
             await browser.close();
         }
