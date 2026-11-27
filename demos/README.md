@@ -280,6 +280,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [282 · Readonly static value locations](stage-282-readonly-static-value-location/README.md) | `npm run demo -- stage-282-readonly-static-value-location` | Preserve initonly aggregate addresses and value snapshots across assemblies |
 | [283 · CoreLib ordinal string comparison](stage-283-string-ordinal-sequence/README.md) | `npm run demo -- stage-283-string-ordinal-sequence` | Compare original linked string inequality, UTF-16 data and ordinary null and length checks |
 | [284 · Exact readonly SZ-array interface assignment](stage-284-readonly-szarray-assignment/README.md) | `npm run demo -- stage-284-readonly-szarray-assignment` | Pass SZ arrays to their exact readonly list and collection interfaces |
+| [286 · Copy exact managed value vectors](stage-286-value-vector-copy/README.md) | `npm run demo -- stage-286-value-vector-copy` | Copy immutable snapshots while preserving destination aliases and overlap behavior |
 
 ## Adding a stage
 
