@@ -794,7 +794,8 @@ namespace PortableCompiler
                 if (location.Length != 0) location[2] = slot / BranchIl.Width;
                 if (kind == BranchIl.LoadTypeToken)
                 {
-                    int global = RuntimeTypeTokens.Bind(bundle, image, layout, heaps, owner, records[slot + 1], globals);
+                    int global = RuntimeTypeTokens.Bind(bundle, image, layout, heaps, owner, records[slot + 1],
+                        globals, context, objects, methodArguments);
                     if (global < 0) return global;
                     records[slot + 1] = global;
                     continue;
@@ -835,6 +836,19 @@ namespace PortableCompiler
                         records[slot + 1] = element;
                         records[slot + 3] = boxing;
                         continue;
+                    }
+                    if (kind == BranchIl.BoxValue && element == -2 && (operand >> 24) == 0x1b)
+                    {
+                        int type = ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps,
+                            owner, operand & 0xffffff, context, objects, methodArguments);
+                        if (type < 0) return type;
+                        if (IsObjectReference(type) && !ObjectLayouts.IsValueType(objects, type))
+                        {
+                            // A closed reference T is already a CLR object. box T widens its type and preserves identity.
+                            records[slot] = BranchIl.WidenReference;
+                            records[slot + 1] = type;
+                            continue;
+                        }
                     }
                     if (kind != BranchIl.TestClass || element != -2) return element;
                 }
@@ -886,6 +900,16 @@ namespace PortableCompiler
                     int local = records[slot + 1];
                     int type = frame[local];
                     int next = records[slot + 2] * BranchIl.Width;
+                    if (IsObjectReference(type) && !ObjectLayouts.IsValueType(objects, type))
+                    {
+                        int constrained = ConstrainedReferenceCalls.Lower(bundle, image, layout, heaps, owner, context,
+                            objects, methodArguments, records, slot, type, clauses, bases[owner + 1] - bases[owner]);
+                        if (constrained != 0)
+                        {
+                            if (constrained < 0) return constrained;
+                            continue;
+                        }
+                    }
                     if (type == ObjectReference && next < records.Length &&
                         records[next] == BranchIl.MemberCall && records[next + 3] == 0x73 &&
                         !ValueOperands.Entry(records, next / BranchIl.Width, clauses) &&
@@ -942,6 +966,7 @@ namespace PortableCompiler
                     if (lowered < 0) return ManagedObjectCopy(records, slot, location, lowered);
                     continue;
                 }
+                if (kind == BranchIl.ConstrainedInstance) return -2;
                 if (kind == BranchIl.ConstrainedStatic)
                 {
                     var symbol = new int[3];
@@ -1301,9 +1326,10 @@ namespace PortableCompiler
                         records[slot] = BranchIl.GetObjectType;
                         continue;
                     }
-                    if (objectTypeMember == 2 && opcode == 0x28)
+                    if (objectTypeMember >= 2 && opcode == 0x28)
                     {
                         records[slot] = BranchIl.EqualRuntimeTypes;
+                        records[slot + 3] = objectTypeMember == 3 ? 1 : 0;
                         continue;
                     }
                     int marshalError = !addressed && opcode == 0x28

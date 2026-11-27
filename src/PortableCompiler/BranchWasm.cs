@@ -278,6 +278,7 @@ namespace PortableCompiler
                     used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1));
                     used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
                     code[used++] = 0xd3; // ref.eq on canonical Type descriptors
+                    if (records[slot + 3] != 0) code[used++] = 0x45; // i32.eqz for inequality
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top - 1));
                 }
                 // TypeFromHandle changes the CLI category while retaining the reference in the same spill.
@@ -452,6 +453,11 @@ namespace PortableCompiler
                         used = NormalizeSlot(code, used, type);
                         used = Local(code, used, 0x21, operand);
                     }
+                }
+                else if (kind == WidenReference)
+                {
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, ObjectReference, top));
                 }
                 else if (kind == BoxValue || kind == UnboxValue || kind == TestBox)
                 {

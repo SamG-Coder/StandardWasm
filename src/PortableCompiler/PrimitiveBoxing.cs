@@ -27,17 +27,9 @@ namespace PortableCompiler
             if (table == 1 || table == 2)
                 return ArrayTypeRefs.PrimitiveElement(image, heaps, layout, row << 2 | (table == 1 ? 1 : 0));
             if (table != 0x1b) return -2;
-            int blob = AssemblyReferences.TypeSpecBlob(image, heaps, layout, row);
-            if (blob < 0) return blob;
-            var next = new int[1];
-            int limit = heaps[0] + heaps[1];
-            int size = ImageBytes.CompressedUnsigned(image, heaps[0] + blob, limit, next);
-            if (size < 1 || size > limit - next[0]) return -1;
-            int end = next[0] + size;
-            int type = ManagedReferenceSignatures.Read(bundle, image, layout, heaps, owner, next,
-                end, context, objects, 0, methodArguments: methodArguments);
+            int type = ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps,
+                owner, row, context, objects, methodArguments);
             if (type < 0) return type;
-            if (next[0] != end) return -1;
             return GenericScalar.IsScalar(type) ? GenericScalar.Element(type) : -2;
         }
 

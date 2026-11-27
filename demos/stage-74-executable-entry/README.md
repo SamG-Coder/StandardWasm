@@ -76,6 +76,12 @@ a live slot with `default(T)`. A bundled probe also constructs a closed
 generic value, initializes its own readonly fields, and invokes its
 original read-only getters on populated and default values.
 
+The constrained-reference probe covers a base implementation, an override,
+a null receiver, and reference identity after `box T` for a reference-type
+specialization. The type-descriptor probe checks that `typeof` and `GetType`
+share one descriptor per closed generic type and that different type
+arguments produce distinct descriptors.
+
 The monitor probe checks the CLR's reentrant lock behavior on the launch
 worker's single managed execution agent. It verifies lockTaken and typed
 failure paths. Monitor wait and pulse and scheduling across multiple

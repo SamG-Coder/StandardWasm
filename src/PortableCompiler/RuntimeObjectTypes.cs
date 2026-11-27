@@ -25,9 +25,7 @@ namespace PortableCompiler
                 int type = FirstClass + index;
                 if (IsValueType(objects, type) || IsInterface(objects, type) ||
                     ArrayElement(objects, type) != 0 || !Includes(objects, type)) continue;
-                if (HasArguments(objects, type)) return -2;
-                int descriptor = StaticFields.Register(globals, -3 - AssemblyOf(objects, type),
-                    TypeDef(objects, type), ObjectReference);
+                int descriptor = RuntimeTypeTokens.BindLayout(objects, type, globals);
                 if (descriptor < 0) return descriptor;
                 if (code.Length - position < 24) return -3;
                 position = BranchWasm.Local(code, position, 0x20, 0);

@@ -31,6 +31,15 @@ namespace PortableCompiler
         internal static int TypeSpecLocation(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int row, int context, int[] objects, int[] methodArguments)
         {
+            int type = TypeSpecIdentity(bundle, image, layout, heaps, owner, row, context, objects, methodArguments);
+            if (type < 0) return type;
+            int location = LocationFromIdentity(type);
+            return location != 0 ? location : -2;
+        }
+
+        internal static int TypeSpecIdentity(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int row, int context, int[] objects, int[] methodArguments)
+        {
             int blob = AssemblyReferences.TypeSpecBlob(image, heaps, layout, row);
             if (blob < 0) return blob;
             int limit = heaps[0] + heaps[1];
@@ -39,7 +48,7 @@ namespace PortableCompiler
             int start = next[0];
             if (size < 1 || size > limit - start) return -1;
             int end = start + size;
-            int type = ReadLocation(bundle, image, layout, heaps, owner, next, end, context, objects, methodArguments);
+            int type = Read(bundle, image, layout, heaps, owner, next, end, context, objects, 0, methodArguments: methodArguments);
             return type < 0 || next[0] == end ? type : -1;
         }
 

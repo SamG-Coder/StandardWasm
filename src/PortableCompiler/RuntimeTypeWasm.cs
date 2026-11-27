@@ -17,7 +17,7 @@ namespace PortableCompiler
             output[cursor++] = 2;
             output[cursor++] = 0x7f; // defining module slot
             output[cursor++] = 0;
-            output[cursor++] = 0x7f; // TypeDef row
+            output[cursor++] = 0x7f; // TypeDef row or closed layout key
             output[cursor++] = 0;
             return cursor;
         }

@@ -54,7 +54,7 @@ namespace PeLibrary
             return MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) >= 0 && row <= counts[2];
         }
 
-        // Match the actual platform Object.GetType or Type.op_Equality signature.
+        // Match the platform Object.GetType or a Type comparison operator.
         internal static int ObjectTypeMember(byte[] image, int[] heaps, int[] layout, int row)
         {
             var member = new int[AssemblyReferences.SymbolWidth];
@@ -65,10 +65,11 @@ namespace PeLibrary
             bool getType = MatchesAscii(image, heaps, name, "GetType") &&
                 ObjectLayouts.IsCoreObjectType(image, heaps, layout, leaf << 2 | 1);
             bool equality = MatchesAscii(image, heaps, name, "op_Equality");
-            if (!getType && !equality) return 0;
+            bool inequality = MatchesAscii(image, heaps, name, "op_Inequality");
+            if (!getType && !equality && !inequality) return 0;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
-            if (first < 0 || equality &&
+            if (first < 0 || !getType &&
                 PlatformTypeReferences.Identify(image, heaps, layout, counts, first, leaf) != PlatformTypeReferences.Type) return 0;
             int limit = heaps[0] + heaps[1], blob = member[5];
             if (blob <= 0 || blob >= heaps[1]) return 0;
@@ -95,7 +96,7 @@ namespace PeLibrary
                     return 0;
                 cursor = next[0];
             }
-            return cursor != end ? 0 : getType ? 1 : 2;
+            return cursor != end ? 0 : getType ? 1 : equality ? 2 : 3;
         }
 
         internal static bool IsGetTypeFromHandle(byte[] image, int[] heaps, int[] layout, int row)

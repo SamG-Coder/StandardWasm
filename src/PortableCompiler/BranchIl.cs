@@ -53,6 +53,7 @@ namespace PortableCompiler
         internal const int StaticFieldAddress = 121, LoadNativeStatic = 122, StoreNativeStatic = 123, Monitor = 124, FilterSkip = 125, LoadSingleObjectSpan = 126;
         internal const int LoadFrameLocation = 127;
         internal const int LoadManagedCell = 128, StoreManagedCell = 129, ClearManagedCell = 130;
+        internal const int WidenReference = 131, ConstrainedInstance = 132;
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
@@ -292,11 +293,11 @@ namespace PortableCompiler
                     operand = (int)(token & 0xffffff);
                     uint table = token >> 24;
                     if (table == 4) kind = FieldToken;
-                    else if (table == 1 || table == 2)
+                    else if (table == 1 || table == 2 || table == 0x1b)
                     {
                         if (operand == 0) return -1;
                         kind = LoadTypeToken;
-                        operand = (operand << 2) | (table == 1 ? 1 : 0);
+                        operand = (operand << 2) | (table == 2 ? 0 : table == 1 ? 1 : 2);
                     }
                     else return -2;
                 }
@@ -362,16 +363,17 @@ namespace PortableCompiler
                         kind = LocalAllocate;
                     else if (extended == 0x16)
                     {
-                        // Only the static MemberRef call form is lowered here.
                         if (length - pc < 9) return -1;
                         operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
                         pc += 4;
-                        if (image[start + pc++] != 0x28) return -2;
+                        int call = image[start + pc++];
+                        if (call != 0x28 && call != 0x6f) return -2;
                         uint member = ImageBytes.U32(image, (uint)(start + pc));
                         pc += 4;
-                        if ((member >> 24) != 0x0a || (member & 0xffffff) == 0) return -2;
-                        kind = ConstrainedStatic;
-                        comparison = (int)(member & 0xffffff);
+                        uint table = member >> 24;
+                        if ((member & 0xffffff) == 0 || (table != 0x0a && (call != 0x6f || table != 6))) return -2;
+                        kind = call == 0x28 ? ConstrainedStatic : ConstrainedInstance;
+                        comparison = kind == ConstrainedStatic ? (int)(member & 0xffffff) : (int)member;
                     }
                     else if (extended == 0x1c)
                     {

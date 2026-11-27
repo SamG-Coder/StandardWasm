@@ -179,6 +179,9 @@ namespace PortableCompiler
         private static int Transition(int[] stack, byte[] allocated, int depth, int kind, int operand, int extra, int[] frame,
             int[] signatures, int[] offsets, int[] arities, int[] objects)
         {
+            if (kind == WidenReference)
+                return depth > 0 && Assignable(stack[depth - 1], operand, objects)
+                    ? Push(stack, allocated, depth - 1, ObjectReference) : -2;
             if (kind == LoadString) return Push(stack, allocated, depth, String);
             if (kind == LoadTypeToken) return Push(stack, allocated, depth, PeLibrary.RuntimeTypeMetadata.Handle);
             // Only an unmanaged pointer (a native int, decision 0060) addresses memory 0.
