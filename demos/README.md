@@ -252,6 +252,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [260 · Identical interface constraints](stage-260-identical-interface-constraints/README.md) | `npm run demo -- stage-260-identical-interface-constraints` | Accept an interface as its own exact nominal bound |
 | [265 · Mono Interlocked increment](stage-265-mono-interlocked-increment/README.md) | `npm run demo -- stage-265-mono-interlocked-increment` | Preserve alias-visible Int32 updates and original TaskScheduler IDs |
 | [268 · Fieldless explicit-size values](stage-268-fieldless-explicit-size/README.md) | `npm run demo -- stage-268-fieldless-explicit-size` | Preserve managed padding, nominal identity and exact declared size |
+| [269 · Boolean class-field byrefs](stage-269-boolean-class-byrefs/README.md) | `npm run demo -- stage-269-boolean-class-byrefs` | Alias writable packed Boolean fields while retaining their owners |
 
 ## Adding a stage
 
