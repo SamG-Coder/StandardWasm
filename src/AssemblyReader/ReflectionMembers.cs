@@ -10,6 +10,28 @@ namespace PeLibrary
 
         internal const int EntryGetter = 1, EntrySetter = 2, MonoEntryLeaf = 3;
 
+        internal static bool IsCoreAssemblyEqualityCall(byte[] image, int[] heaps, int[] layout, int caller, int target)
+        {
+            if ((MethodDefinitions.ReadColumn(image, layout, caller, 2) & 0x2057) != 0x16 ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, caller, 3), "op_Equality") ||
+                (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x2057) != 0x46 ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, target, 3), "Equals")) return false;
+            var counts = new int[45];
+            if (CoreGetter(image, heaps, layout, caller, counts, "System.Reflection", "Assembly") < 0) return false;
+            int assembly = ObjectLayouts.Owner(image, heaps, layout, caller, false);
+            int root = ObjectLayouts.Owner(image, heaps, layout, target, false);
+            if (root < 1 || !ObjectLayouts.IsCoreObjectType(image, heaps, layout, root << 2)) return false;
+
+            var cursor = new int[1];
+            int callerEnd = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, layout, caller, 4), 2, cursor);
+            if (callerEnd < 0 || !SignatureReader.TakeElement(image, cursor, callerEnd, SignatureReader.Boolean) ||
+                SignatureReader.ReadClass(image, cursor, callerEnd) != assembly << 2 ||
+                SignatureReader.ReadClass(image, cursor, callerEnd) != assembly << 2 || cursor[0] != callerEnd) return false;
+            int targetEnd = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, target, 4), 1, cursor);
+            return targetEnd >= 0 && SignatureReader.TakeElement(image, cursor, targetEnd, SignatureReader.Boolean) &&
+                SignatureReader.TakeElement(image, cursor, targetEnd, 0x1c) && cursor[0] == targetEnd;
+        }
+
         internal static int CoreEntryAssemblyMember(byte[] image, int[] heaps, int[] layout, int row)
         {
             int flags = MethodDefinitions.ReadColumn(image, layout, row, 2);

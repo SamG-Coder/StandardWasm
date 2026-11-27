@@ -61,7 +61,8 @@ namespace PortableCompiler
             return WasmIndexFixups.WriteAt(code, used, bodyStart, heads, type - FirstClass);
         }
 
-        internal int Write(BundleImages bundle, byte[] code, int[] position, int[] objects, AggregateBoxPlan aggregateBoxes, int[] offsets, int[] signatures,
+        internal int Write(BundleImages bundle, byte[] code, int[] position, int[] objects, AggregateBoxPlan aggregateBoxes,
+            bool enumBoxes, int[] offsets, int[] signatures,
             int[] sizes, int[] bodyOffsets, int[] arities, int functions, int hostImports)
         {
             if (heads == null) return functions;
@@ -78,7 +79,7 @@ namespace PortableCompiler
                 arities[functions] = 1;
                 bodyOffsets[functions] = used;
                 int matches = interfaceMatches == null ? 0 : interfaceMatches[index];
-                int end = WriteTest(bundle, code, used, objects, FirstClass + index, matches, aggregateBoxes);
+                int end = WriteTest(bundle, code, used, objects, FirstClass + index, matches, aggregateBoxes, enumBoxes);
                 if (end < 0) return end;
                 WasmIndexFixups.Resolve(code, heads[index], hostImports + functions);
                 sizes[functions++] = end - used;
@@ -89,7 +90,7 @@ namespace PortableCompiler
         }
 
         private static int WriteTest(BundleImages bundle, byte[] code, int used, int[] objects,
-            int target, int matches, AggregateBoxPlan aggregateBoxes)
+            int target, int matches, AggregateBoxPlan aggregateBoxes, bool enumBoxes)
         {
             if (code.Length - used < 5) return -3;
             code[used++] = 0; // no additional locals
@@ -123,10 +124,36 @@ namespace PortableCompiler
                 used = WriteAggregateBoxTest(bundle, code, used, objects, target, aggregateBoxes);
                 if (used < 0) return used;
             }
+            if (enumBoxes)
+            {
+                int implements = BoxedEnums.Implements(bundle, objects, target);
+                if (implements < 0) return implements;
+                if (implements != 0)
+                {
+                    used = WriteEnumTest(code, used, PrimitiveBoxing.FindLayout(objects));
+                    if (used < 0) return used;
+                }
+            }
             // Null succeeds for castclass and remains null for isinst.
             if (code.Length - used < 4) return -3;
             used = Local(code, used, 0x20, 0);
             code[used++] = 0xd1;
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        private static int WriteEnumTest(byte[] code, int used, int layout)
+        {
+            if (code.Length - used < 32) return -3;
+            used = PrimitiveBoxing.TestType(code, used, 0, layout);
+            code[used++] = 0x04;
+            code[used++] = 0x40;
+            used = PrimitiveBoxing.TestEnum(code, used, 0, layout);
+            code[used++] = 0x04;
+            code[used++] = 0x40;
+            used = Const(code, used, 1);
+            code[used++] = 0x0f;
+            code[used++] = 0x0b;
             code[used++] = 0x0b;
             return used;
         }

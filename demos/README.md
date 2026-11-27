@@ -31,7 +31,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [24 · Portable 64-bit integers](stage-24-portable-i64/README.md) | `npm run demo -- stage-24-portable-i64` | Calculate(9007199254740993, 1) = 95496328098598384 |
 | [25 · Switch dispatch](stage-25-switch-dispatch/README.md) | `npm run demo -- stage-25-switch-dispatch` | TokenizeSample(-1, 0) = 20203 |
 | [26 · Portable switch dispatch](stage-26-portable-switch/README.md) | `npm run demo -- stage-26-portable-switch` | Classify(-3) = 17 |
-| [27 · Portable compiler diagnostics](stage-27-portable-diagnostics/README.md) | `npm run demo -- stage-27-portable-diagnostics` | BoxedEnum yields -2 for unsupported nominal enum boxing |
+| [27 · Portable compiler diagnostics](stage-27-portable-diagnostics/README.md) | `npm run demo -- stage-27-portable-diagnostics` | Resolve a located diagnostic for an unsupported framework call |
 | [28 · Managed 64-bit storage](stage-28-wide-storage/README.md) | `npm run demo -- stage-28-wide-storage` | Apply(9007199254740993, 1, 3) = 36028797018963972 |
 | [29 · Math intrinsics](stage-29-math-intrinsics/README.md) | `npm run demo -- stage-29-math-intrinsics` | Hypotenuse(3, 4) = 5 |
 | [30 · Portable floating point](stage-30-portable-floats/README.md) | `npm run demo -- stage-30-portable-floats` | Filter(9, 3) = 8 |
@@ -223,7 +223,9 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [219 · Exact TypeHandle round-trips](stage-219-exact-type-handle/README.md) | `npm run demo -- stage-219-exact-type-handle` | Preserve descriptor identity through TypeHandle on proven typeof receivers |
 | [222 · Explicit type initialization](stage-222-explicit-type-initialization/README.md) | `npm run demo -- stage-222-explicit-type-initialization` | Verify explicit calls to guarded managed initializers |
 | [223 · Win32 process window station](stage-223-window-station/README.md) | `npm run demo -- stage-223-window-station` | Compare the borrowed station handle and user-object flags with x86 Windows |
+| [224 · Interface types in delegate signatures](stage-224-interface-delegate-abi/README.md) | `npm run demo -- stage-224-interface-delegate-abi` | Verify nominal interface arguments and results in typed delegate thunks |
 | [225 · Guarded string-to-span copies](stage-225-proven-string-span-moves/README.md) | `npm run demo -- stage-225-proven-string-span-moves` | Verify original CoreLib copy guards, return values and alias-visible writes |
+| [226 · Delegate reference variance](stage-226-delegate-variance/README.md) | `npm run demo -- stage-226-delegate-variance` | Compare covariant and contravariant calls while preserving closure identity |
 | [227 · Defaulting inline span fields](stage-227-inline-span-field-defaults/README.md) | `npm run demo -- stage-227-inline-span-field-defaults` | Verify exact field defaults through a shared managed owner and through earlier copies |
 | [228 · Readonly aggregate arguments](stage-228-readonly-aggregate-call/README.md) | `npm run demo -- stage-228-readonly-aggregate-call` | Verify nonescaping readonly field arguments, exception identity and null checks |
 | [229 · Current managed thread](stage-229-current-managed-thread/README.md) | `npm run demo -- stage-229-current-managed-thread` | Preserve the original CoreCLR Thread identity, managed fields and scoped QCall write |
@@ -243,22 +245,38 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [243 · Generic SZ-array enumeration](stage-243-sz-array-enumeration/README.md) | `npm run demo -- stage-243-sz-array-enumeration` | Run the original closed CoreLib enumerator from a vector interface call |
 | [244 · CoreLib Math internal calls](stage-244-corelib-math/README.md) | `npm run demo -- stage-244-corelib-math` | Compare original runtime Math method definitions against the x86 CLR |
 | [245 · Strong GC handles](stage-245-strong-gc-handles/README.md) | `npm run demo -- stage-245-strong-gc-handles` | Compare normal handle lifecycle, typed errors and finalizer reachability with Windows |
+| [246 · Assembly metadata attributes](stage-246-assembly-metadata-attributes/README.md) | `npm run demo -- stage-246-assembly-metadata-attributes` | Materialize genuine AssemblyMetadataAttribute rows through the original enumerator |
 | [247 · Projected native-word exchange](stage-247-projected-native-word-exchange/README.md) | `npm run demo -- stage-247-projected-native-word-exchange` | Compare live native-word aliases and native Interlocked.Exchange with Windows |
 | [248 · Class fields with 32-bit enum addresses](stage-248-int32-enum-class-field-projection/README.md) | `npm run demo -- stage-248-int32-enum-class-field-projection` | Compare writable enum field aliases and out parameters with Windows |
 | [249 · Display device capabilities](stage-249-display-device-capabilities/README.md) | `npm run demo -- stage-249-display-device-capabilities` | Compare display capability queries and common device-context lifetime with Windows |
+| [250 · Direct Int32 receivers](stage-250-direct-int32-receiver/README.md) | `npm run demo -- stage-250-direct-int32-receiver` | Execute original Int32 instance bodies on tracked managed addresses |
 | [251 · CoreLib string interface tests](stage-251-string-interface-type-tests/README.md) | `npm run demo -- stage-251-string-interface-type-tests` | Compare dynamic string interface membership, reference identity and typed cast failure with Windows |
+| [252 · SZ-array arguments to generic lists](stage-252-sz-array-list-arguments/README.md) | `npm run demo -- stage-252-sz-array-list-arguments` | Compare exact array interface arguments and preservation of original array identity |
+| [253 · Constraints on another type parameter](stage-253-dependent-type-constraints/README.md) | `npm run demo -- stage-253-dependent-type-constraints` | Check substituted bounds for closed generic methods |
 | [254 · Virtual long-path lookup](stage-254-virtual-long-paths/README.md) | `npm run demo -- stage-254-virtual-long-paths` | Match Windows UTF-16 path expansion over an explicitly mounted browser filesystem |
+| [255 · Generic method constructor constraints](stage-255-method-default-constructors/README.md) | `npm run demo -- stage-255-method-default-constructors` | Validate real closed type constructors before specializing methods |
+| [256 · Nominal enum boxes](stage-256-nominal-enum-boxes/README.md) | `npm run demo -- stage-256-nominal-enum-boxes` | Preserve runtime identity and checked unboxing for original enum values |
+| [257 · 64-bit managed references](stage-257-wide-managed-byrefs/README.md) | `npm run demo -- stage-257-wide-managed-byrefs` | Compare aliased 64-bit locals and instance fields with the CLR |
 | [258 · Constrained Int32 object equality](stage-258-constrained-int32-equals/README.md) | `npm run demo -- stage-258-constrained-int32-equals` | Compare the original override, exact box identity and null managed locations with Windows |
 | [259 · Zero initialization through managed Int32 locations](stage-259-int32-managed-zero/README.md) | `npm run demo -- stage-259-int32-managed-zero` | Compare zero writes through closed generic local and field aliases with Windows |
+| [260 · Identical interface constraints](stage-260-identical-interface-constraints/README.md) | `npm run demo -- stage-260-identical-interface-constraints` | Accept an interface as its own exact nominal bound |
 | [261 · Hidden window invalidation](stage-261-hidden-window-invalidation/README.md) | `npm run demo -- stage-261-hidden-window-invalidation` | Match Windows client invalidation and paint timing for hidden top-level HWNDs |
 | [263 · Canonical String generic constraints](stage-263-canonical-string-constraints/README.md) | `npm run demo -- stage-263-canonical-string-constraints` | Compare real String interface constraints and closed type identity with Windows |
+| [265 · Mono Interlocked increment](stage-265-mono-interlocked-increment/README.md) | `npm run demo -- stage-265-mono-interlocked-increment` | Preserve alias-visible Int32 updates and original TaskScheduler IDs |
 | [266 · Runtime Type vectors](stage-266-runtime-type-vectors/README.md) | `npm run demo -- stage-266-runtime-type-vectors` | Compare descriptor cells and authentic Type[] identity with Windows |
 | [267 · Runtime generic interface Type descriptors](stage-267-runtime-generic-interface-types/README.md) | `npm run demo -- stage-267-runtime-generic-interface-types` | Resolve linked closed interface types from canonical runtime descriptors |
+| [268 · Fieldless explicit-size values](stage-268-fieldless-explicit-size/README.md) | `npm run demo -- stage-268-fieldless-explicit-size` | Preserve managed padding, nominal identity and exact declared size |
+| [269 · Boolean class-field byrefs](stage-269-boolean-class-byrefs/README.md) | `npm run demo -- stage-269-boolean-class-byrefs` | Alias writable packed Boolean fields while retaining their owners |
 | [270 · Assignability to factory-created interfaces](stage-270-runtime-interface-assignability/README.md) | `npm run demo -- stage-270-runtime-interface-assignability` | Compare canonical interface relations and diagnose incomplete graphs |
+| [272 · Boolean storage aliases](stage-272-boolean-storage-aliases/README.md) | `npm run demo -- stage-272-boolean-storage-aliases` | Preserve live aliases through one-field views in the original volatile write |
 | [273 · Runtime generic type classification](stage-273-runtime-type-generic-kind/README.md) | `npm run demo -- stage-273-runtime-type-generic-kind` | Verify generic metadata, arrays, null and nominal virtual overrides |
+| [274 · Runtime assembly equality](stage-274-runtime-assembly-equality/README.md) | `npm run demo -- stage-274-runtime-assembly-equality` | Compare canonical runtime descriptors by reference identity |
+| [275 · Runtime assembly arrays](stage-275-runtime-assembly-arrays/README.md) | `npm run demo -- stage-275-runtime-assembly-arrays` | Resolve authentic assembly array signatures to the same element identity |
 | [276 · Runtime generic type definitions](stage-276-runtime-generic-definitions/README.md) | `npm run demo -- stage-276-runtime-generic-definitions` | Verify exact definition identity, fresh typed failures and nominal dispatch |
 | [277 · Runtime generic type arguments](stage-277-runtime-generic-arguments/README.md) | `npm run demo -- stage-277-runtime-generic-arguments` | Verify ordered canonical generic arguments and independent reflection arrays |
+| [278 · Writable byte spans](stage-278-writable-byte-spans/README.md) | `npm run demo -- stage-278-writable-byte-spans` | Compare ranged byte views and original array aliasing with Windows |
 | [280 · Enum type classification](stage-280-runtime-type-enum-kind/README.md) | `npm run demo -- stage-280-runtime-type-enum-kind` | Verify exact Enum ancestry and nominal virtual overrides |
+| [281 · Closed reference boxes at interface calls](stage-281-reference-box-provenance/README.md) | `npm run demo -- stage-281-reference-box-provenance` | Preserve reference identity, null, and verified interface call arguments |
 
 ## Adding a stage
 

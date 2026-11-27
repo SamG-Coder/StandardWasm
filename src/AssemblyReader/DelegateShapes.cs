@@ -90,6 +90,18 @@ namespace PeLibrary
             return entry == 0 ? -1 : registry[entry + Count];
         }
 
+        internal static int Family(int[] registry, int key)
+        {
+            int entry = Entry(registry, key);
+            return entry == 0 ? 0 : registry[entry + Kind];
+        }
+
+        internal static int NominalArgument(int[] registry, int key, int index)
+        {
+            int entry = Entry(registry, key);
+            return registry[entry + Parameters + registry[entry + Count] + index];
+        }
+
         internal static int InvokeParameter(int[] registry, int key, int index) =>
             registry[Entry(registry, key) + Parameters + index];
 

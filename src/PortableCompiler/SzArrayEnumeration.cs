@@ -12,6 +12,10 @@ namespace PortableCompiler
         internal static bool IsEnumerable(byte[] image, int[] layout, int[] heaps, int row) =>
             IsCoreType(image, layout, heaps, row, "System.Collections.Generic", "IEnumerable`1");
 
+        internal static bool IsList(byte[] image, int[] layout, int[] heaps, int row) =>
+            IsCoreType(image, layout, heaps, row, "System.Collections.Generic", "IList`1") ||
+            IsCoreType(image, layout, heaps, row, "System.Collections.Generic", "ICollection`1");
+
         private static bool IsCoreType(byte[] image, int[] layout, int[] heaps, int row, string space, string name)
         {
             var counts = new int[45];

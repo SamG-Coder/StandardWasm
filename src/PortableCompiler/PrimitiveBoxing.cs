@@ -35,7 +35,7 @@ namespace PortableCompiler
             return GenericScalar.IsScalar(type) ? GenericScalar.Element(type) : -2;
         }
 
-        internal static int Storage(int element) => GenericScalar.Storage(GenericScalar.Key(element));
+        internal static int Storage(int tag) => GenericScalar.Storage(GenericScalar.Key(tag & BoxedEnums.ElementMask));
 
         internal static bool HasPayloadField(int[] objects, int type, int storage)
         {
@@ -53,7 +53,7 @@ namespace PortableCompiler
         {
             output[cursor++] = 0x5f; // struct
             output[cursor++] = 3;
-            output[cursor++] = 0x7f; // exact CLI primitive identity
+            output[cursor++] = 0x7f; // exact CLI scalar box tag
             output[cursor++] = 0;
             output[cursor++] = 0x7e; // payload bits
             output[cursor++] = 0;
@@ -84,7 +84,13 @@ namespace PortableCompiler
             used = GuardNull(code, used, local);
             used = TestType(code, used, local, type);
             used = ThrowUnless(code, used);
-            used = TestElement(code, used, local, type, element);
+            // unbox.any accepts an enum and its exact underlying integer type
+            // in either direction. A type test still compares the full tag.
+            used = Field(code, used, local, type, 0);
+            used = Const(code, used, BoxedEnums.ElementMask);
+            code[used++] = 0x71; // i32.and
+            used = Const(code, used, element & BoxedEnums.ElementMask);
+            code[used++] = 0x46; // i32.eq
             used = ThrowUnless(code, used);
             return Payload(code, used, local, element, type);
         }
@@ -147,6 +153,14 @@ namespace PortableCompiler
             used = Field(code, used, local, type, 0);
             used = Const(code, used, element);
             code[used++] = 0x46; // i32.eq
+            return used;
+        }
+
+        internal static int TestEnum(byte[] code, int used, int local, int type)
+        {
+            used = Field(code, used, local, type, 0);
+            used = Const(code, used, BoxedEnums.ElementMask);
+            code[used++] = 0x4b; // i32.gt_u
             return used;
         }
 

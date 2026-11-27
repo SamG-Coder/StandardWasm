@@ -212,6 +212,7 @@ namespace PortableCompiler
                         continue;
                     }
                     if (i < arguments) used = Local(code, used, 0x20, i);
+                    else if (vector == Longs) used = WideConst(code, used, 0, 0);
                     else if (vector == Bytes || vector == Chars || vector == Ints || vector == NativeVector) used = Const(code, used, 0);
                     else
                     {
@@ -421,11 +422,13 @@ namespace PortableCompiler
                         Spill(spills, maximum, spillFlags, String, top), scratch, scratch + 3, scratch + 4,
                         enumLocals, enumLocals + 1);
                 }
-                else if (kind == EqualRuntimeTypes)
+                else if (kind == EqualRuntimeDescriptors)
                 {
-                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1));
+                    int receiver = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);
+                    if (operand == PeLibrary.RuntimeTypeMetadata.Assembly) used = GuardNull(code, used, receiver);
+                    used = Local(code, used, 0x20, receiver);
                     used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
-                    code[used++] = 0xd3; // ref.eq on canonical Type descriptors
+                    code[used++] = 0xd3; // ref.eq on canonical descriptors
                     if (records[slot + 3] != 0) code[used++] = 0x45; // i32.eqz for inequality
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top - 1));
                 }
@@ -763,16 +766,19 @@ namespace PortableCompiler
                 else if (kind == WidenReference)
                 {
                     used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
-                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, ObjectReference, top));
+                    int target = records[slot + 3];
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, target == 0 ? ObjectReference : target, top));
                 }
-                else if (kind == BoxAggregate || kind == UnboxAggregate || kind == UnboxAggregateAddress || kind == TestAggregateBox)
+                else if (kind == BoxAggregate || kind == BoxAggregateToInterface || kind == UnboxAggregate ||
+                    kind == UnboxAggregateAddress || kind == TestAggregateBox)
                 {
                     int box = AggregateBoxing.FindLayout(objects), descriptor = records[slot + 3];
                     int source = Spill(spills, maximum, spillFlags, states[state + top], top);
                     bool address = kind == UnboxAggregateAddress;
-                    int resultType = address ? ValueLocation(operand) : kind == UnboxAggregate ? operand : ObjectReference;
+                    int resultType = address ? ValueLocation(operand) : kind == UnboxAggregate ? operand :
+                        kind == BoxAggregateToInterface ? FieldAccess.Storage(operand) : ObjectReference;
                     int target = Spill(spills, maximum, spillFlags, resultType, top);
-                    if (kind == BoxAggregate)
+                    if (kind == BoxAggregate || kind == BoxAggregateToInterface)
                         used = AggregateBoxing.Box(code, used, source, target, box, descriptor, tracksRoots);
                     else
                     {
@@ -787,7 +793,8 @@ namespace PortableCompiler
                     int type = records[slot + 3];
                     if (kind == BoxValue)
                     {
-                        reflection.ObjectTypes.IncludeBox(operand);
+                        int boxStatus = reflection.ObjectTypes.IncludeBox(operand);
+                        if (boxStatus < 0) return boxStatus;
                         used = PrimitiveBoxing.Box(code, used, local, operand, type);
                     }
                     else if (kind == UnboxValue) used = PrimitiveBoxing.Unbox(code, used, local, operand, type);
@@ -1300,20 +1307,20 @@ namespace PortableCompiler
                     int resultSpill = Spill(spills, maximum, spillFlags, ObjectSpan, top - 1);
                     used = SpanWasm.Create(code, used, vector, count, resultSpill);
                 }
-                else if (kind == StringAsSpan)
+                else if (kind == StringAsSpan || kind == WritableByteArraySpan)
                 {
+                    int type = kind == StringAsSpan ? CharacterSpan : WritableByteSpan;
                     int first = top - operand;
                     int source = Spill(spills, maximum, spillFlags, states[state + first], first);
-                    int view = Spill(spills, maximum, spillFlags, CharacterSpan, first);
-                    used = SpanWasm.FromOwner(code, used, source, CharacterSpan, true);
+                    int view = Spill(spills, maximum, spillFlags, type, first);
+                    used = SpanWasm.FromOwner(code, used, source, type, kind == StringAsSpan);
                     used = Local(code, used, 0x21, view);
                     if (operand != 0)
                     {
-                        // The ranged overloads use the same zero-length null view
-                        // and unsigned bounds as slicing a full string span.
+                        // Validate ranges against the original owner's bounds.
                         int start = Spill(spills, maximum, spillFlags, I32, first + 1);
                         int length = operand == 2 ? Spill(spills, maximum, spillFlags, I32, top) : -1;
-                        used = SpanWasm.Slice(code, used, CharacterSpan, view, start, length, false);
+                        used = SpanWasm.Slice(code, used, type, view, start, length, false);
                         used = Local(code, used, 0x21, view);
                     }
                 }
@@ -1333,7 +1340,7 @@ namespace PortableCompiler
                     used = Local(code, used, 0x21, destination == 0
                         ? Spill(spills, maximum, spillFlags, WritableCharacterSpan, top - 1) : destination - 1);
                 }
-                // A SpanAsReadOnly operation only changes the logical type.
+                // Read-only conversions only change the logical type.
                 // Both descriptors occupy the same Wasm spill bank.
                 else if (kind == SpanLength || kind == SpanIsEmpty)
                 {
@@ -1344,15 +1351,18 @@ namespace PortableCompiler
                 }
                 else if (kind == SpanAddress)
                 {
-                    int view = Spill(spills, maximum, spillFlags, WritableCharacterSpan, top - 1);
+                    int type = records[slot + 3];
+                    bool bytes = type == WritableByteSpan;
+                    int location = bytes ? WritableByteLocation : CharacterLocation;
+                    int view = Spill(spills, maximum, spillFlags, type, top - 1);
                     int index = Spill(spills, maximum, spillFlags, I32, top);
-                    if (frameShape[25] != 0) used = NativeCharacterViewWasm.ElementLocation(code, used, view, index);
+                    if (!bytes && frameShape[25] != 0) used = NativeCharacterViewWasm.ElementLocation(code, used, view, index);
                     else
                     {
-                        used = SpanWasm.Address(code, used, Chars, view, index);
-                        used = Gc(code, used, 0, CharacterLocation); // struct.new traced location
+                        used = SpanWasm.Address(code, used, bytes ? Bytes : Chars, view, index);
+                        used = Gc(code, used, 0, location); // struct.new traced location
                     }
-                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, CharacterLocation, top - 1));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, location, top - 1));
                 }
                 else if (kind == SpanSlice)
                 {
@@ -1455,11 +1465,11 @@ namespace PortableCompiler
                     bool packed = IsPacked16ReadLocation(type);
                     if (frameShape[25] != 0 && packed)
                         used = NativeCharacterViewWasm.ReadLocation(code, used, address);
-                    else if (packed || type == BooleanLocation || type == StaticByteLocation ||
-                        type == Int32Location || type == NativeIntLocation)
+                    else if (packed || type == BooleanLocation || type == StaticByteLocation || type == WritableByteLocation ||
+                        type == Int32Location || type == Int64Location || type == NativeIntLocation)
                     {
                         int vector = type == NativeIntLocation ? NativeVector :
-                            type == Int32Location ? Ints : packed ? Chars : Bytes;
+                            type == Int32Location ? Ints : type == Int64Location ? Longs : packed ? Chars : Bytes;
                         if (packed) used = GuardNull(code, used, address);
                         used = ValueFieldProjectionWasm.Read(code, used, frameShape[7], address, vector, type, projections);
                     }
@@ -1481,10 +1491,11 @@ namespace PortableCompiler
                     int source = Spill(spills, maximum, spillFlags, value, top);
                     if (frameShape[25] != 0 && IsPacked16Location(type))
                         used = NativeCharacterViewWasm.WriteLocation(code, used, address, source);
-                    else if (IsPacked16Location(type) || type == BooleanLocation || type == Int32Location || type == NativeIntLocation)
+                    else if (IsPacked16Location(type) || type == BooleanLocation || type == WritableByteLocation ||
+                        type == Int32Location || type == Int64Location || type == NativeIntLocation)
                     {
                         int vector = type == NativeIntLocation ? NativeVector :
-                            type == Int32Location ? Ints : IsPacked16Location(type) ? Chars : Bytes;
+                            type == Int32Location ? Ints : type == Int64Location ? Longs : IsPacked16Location(type) ? Chars : Bytes;
                         if (IsPacked16Location(type)) used = GuardNull(code, used, address);
                         used = ValueFieldProjectionWasm.Write(code, used, frameShape[7], address, source, vector, type, projections);
                     }
@@ -2042,7 +2053,7 @@ namespace PortableCompiler
             // Stage 221: general delegate keys share the invocation-list bank (decision 0092).
             type == DelegateReference || PeLibrary.DelegateShapes.IsKey(type) ? EventHandlerReference - 1 :
             type == CharacterSpanCallback ? Delegate - 1 :
-            // ReinterpretPacked16Location is verifier-only. Both nominal
+            // ReinterpretManagedLocation is verifier-only. Both nominal
             // views keep the same reference in the shared location bank.
             IsManagedLocation(type) ? LastScalarBank :
             IsSpan(type) ? LastScalarBank + (flags & LocationSpill) :

@@ -80,10 +80,8 @@ internal static class EnumFieldCases
             catch (MissingFieldException) { }
         }
         Reject("different same-width field signature", BundleCases.Pack(mismatch, dependency), read, load, -6);
-        string box = nameof(Kernels.RejectBox);
-        if (Kernels.RejectBox(8) is not States.Control)
-            throw new InvalidOperationException("The CLR boxing fixture changed.");
-        Reject("boxing", bundle, box, Offset(box, OpCodes.Box), -2);
+        Compare(nameof(Kernels.RoundTripBox), new[] { int.MinValue, -1, 0, 8, int.MaxValue }, value => value,
+            value => Kernels.RoundTripBox(value));
 
         void Compare<T>(string name, T[] values, Func<T, object> argument, Func<T, object> clr)
         {

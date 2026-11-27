@@ -7,7 +7,8 @@ namespace PeLibrary
         private const uint Variance = 3, Reference = 4, NonNullableValue = 8,
             DefaultConstructor = 0x10, AllowByRefLike = 0x20;
 
-        internal static int Check(byte[] image, int[] heaps, int[] methods, int typeRow, int[] arguments, int[] objects, int[] deferred, bool method = false, bool invariant = false)
+        internal static int Check(byte[] image, int[] heaps, int[] methods, int typeRow, int[] arguments, int[] objects,
+            int[] deferred, bool method = false, bool invariant = false, int[] constructors = null)
         {
             int arity = arguments.Length;
             var counts = new int[45];
@@ -41,7 +42,12 @@ namespace PeLibrary
                     invariant && (flags & Variance) != 0)
                     return -2;
                 bool requiresValue = (flags & NonNullableValue) != 0;
-                if ((flags & DefaultConstructor) != 0 && !requiresValue) return -2;
+                if ((flags & DefaultConstructor) != 0 && !requiresValue)
+                {
+                    if (constructors == null || low - first >= constructors.Length) return -2;
+                    // The linker checks the nominal argument's actual constructor metadata.
+                    constructors[low - first] = 1;
+                }
                 if ((flags & Reference) != 0 || requiresValue)
                 {
                     int argument = arguments[low - first];

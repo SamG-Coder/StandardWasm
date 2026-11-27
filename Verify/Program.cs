@@ -148,6 +148,7 @@ ValueMethodCases.Add(cases);
 NestedOverlayCases.Add(cases);
 EnumArgumentCases.Add(cases);
 HandleConstraintCases.Add(cases);
+ExactInterfaceConstraintCases.Add(cases);
 WideLayoutCases.Add(cases);
 StaticStorageCases.Add(cases);
 BeforeFieldInitCases.Add(cases);

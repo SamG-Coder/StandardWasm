@@ -44,7 +44,7 @@ namespace PortableCompiler
             used = Const(code, used, 0);
             bool packed = vector == Bytes || vector == Chars;
             used = Gc(code, used, packed ? 0x0d : 0x0b, vector);
-            return packed || vector == Ints || vector == NativeVector ? used : CastCellValue(code, used, type);
+            return packed || vector == Ints || vector == Longs || vector == NativeVector ? used : CastCellValue(code, used, type);
         }
 
         internal static int CastCellValue(byte[] code, int used, int representation)

@@ -41,7 +41,7 @@ namespace PortableCompiler
         internal const int NewObjectSpan = 104, SpanLength = 105, SpanRead = 106, StringAsSpan = 108;
         internal const int CharacterArrayAsSpan = 109, SpanAddress = 110, SpanAsReadOnly = 111;
         // sizeof <type>: lowered to an int32 Constant once the layout is measured.
-        internal const int GetObjectType = 116, EqualRuntimeTypes = 117, Win32Error = 119, NativePointerConstructor = 120;
+        internal const int GetObjectType = 116, EqualRuntimeDescriptors = 117, Win32Error = 119, NativePointerConstructor = 120;
         internal const int SizeOf = 112; // clear of the reflection kinds 73–75 (Stage 131)
         // ldobj / stobj / initobj of a blittable struct through a native address (decision 0073).
         // Operand: the registry value type; auxiliary: native plan index + 1.
@@ -82,17 +82,19 @@ namespace PortableCompiler
         internal const int EnumHasFlag = 169, TakeProjectedFieldAddress = 170, CallNativeIndirect = 171;
         internal const int NativeAddressView = 172, NullManagedLocation = 173, TestNullLocation = 174;
         internal const int BoxAggregate = 175, UnboxAggregate = 176, TestAggregateBox = 177, UnboxAggregateAddress = 178;
-        internal const int CallDynamicNative = 179, CallPinnedCharacterNative = 180, ReinterpretPacked16Location = 181, CopyCharacterSpan = 182, PinStaticBytes = 183, ArrayClear = 184;
+        internal const int CallDynamicNative = 179, CallPinnedCharacterNative = 180, ReinterpretManagedLocation = 181, CopyCharacterSpan = 182, PinStaticBytes = 183, ArrayClear = 184;
         // [ReadOnlySpan<char>, char, char] -> [first matching index or -1].
         internal const int FindCharacterInSpan = 186, EqualCharacterSpans = 187, TakeReadOnlyCharacterLocation = 188;
         internal const int NativeFieldPointer = 189, NativeFrameFieldAddress = 190, FormatEnum = 191, TypeToHandle = 192;
         internal const int LoadStaticPrimitiveSpan = 193;
         internal const int SetCurrentThreadHandle = 224; // [scoped Thread&] -> []
         internal const int LoadMonoCurrentThread = 225; // [] -> [Thread]
+        internal const int BoxAggregateToInterface = 226; // [aggregate] -> [verified interface]
         internal const int RuntimeTypeIsGeneric = 227; // [canonical Type] -> [Boolean]
         internal const int RuntimeTypeGenericDefinition = 228; // [canonical Type] -> [canonical Type]
         internal const int RuntimeTypeGenericArguments = 229; // [canonical Type] -> [descriptor Type[]]
         internal const int RuntimeTypeIsEnum = 230; // [canonical Type] -> [Boolean]
+        internal const int WritableByteArraySpan = 233, ByteSpanAsReadOnly = 234;
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

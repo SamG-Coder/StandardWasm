@@ -183,7 +183,7 @@ namespace PortableCompiler
                             kind == SetField && depth >= 2 &&
                             Assignable(stack[depth - 2], FieldAccess.Owner(field), objects)))
                         descriptorMismatch[4] = slot + 1;
-                    if (kind == EqualRuntimeTypes && depth >= 2)
+                    if (kind == EqualRuntimeDescriptors && operand == PeLibrary.RuntimeTypeMetadata.Type && depth >= 2)
                     {
                         for (int index = depth - 1; index >= depth - 2; index--)
                         {
@@ -271,7 +271,7 @@ namespace PortableCompiler
         {
             if (kind == WidenReference)
                 return depth > 0 && Assignable(stack[depth - 1], operand, objects)
-                    ? Push(stack, allocated, depth - 1, ObjectReference) : -2;
+                    ? Push(stack, allocated, depth - 1, extra == 0 ? ObjectReference : extra) : -2;
             if (kind == LoadStaticByteSpan) return Push(stack, allocated, depth, ReadOnlyByteSpan);
             if (kind == LoadStaticPrimitiveSpan) return Push(stack, allocated, depth, extra);
             if (kind == TakeStaticByteLocation)
@@ -336,12 +336,13 @@ namespace PortableCompiler
             if (kind == NewObjectSpan)
                 return depth >= 2 && stack[depth - 2] == operand && stack[depth - 1] == I32
                     ? Push(stack, allocated, depth - 2, ObjectSpan) : -2;
-            if (kind == StringAsSpan)
+            if (kind == StringAsSpan || kind == WritableByteArraySpan)
             {
-                if (!Match(stack, depth - operand, String)) return -2;
+                bool bytes = kind == WritableByteArraySpan;
+                if (!Match(stack, depth - operand, bytes ? Bytes : String)) return -2;
                 for (int argument = 0; argument < operand; argument++)
                     if (!Match(stack, depth - argument, I32)) return -2;
-                return Push(stack, allocated, depth - operand - 1, CharacterSpan);
+                return Push(stack, allocated, depth - operand - 1, bytes ? WritableByteSpan : CharacterSpan);
             }
             if (kind == CharacterArrayAsSpan || kind == ByteArrayAsSpan)
             {
@@ -354,9 +355,11 @@ namespace PortableCompiler
                     ? extra == 0 ? Push(stack, allocated, depth - 2, WritableCharacterSpan) : depth - 2 : -2;
             if (kind == SpanAsReadOnly)
                 return Match(stack, depth, WritableCharacterSpan) ? Push(stack, allocated, depth - 1, CharacterSpan) : -2;
+            if (kind == ByteSpanAsReadOnly)
+                return Match(stack, depth, WritableByteSpan) ? Push(stack, allocated, depth - 1, ReadOnlyByteSpan) : -2;
             if (kind == SpanAddress)
-                return Match(stack, depth - 1, WritableCharacterSpan) && Match(stack, depth, I32)
-                    ? Push(stack, allocated, depth - 2, CharacterLocation) : -2;
+                return IsWritableSpan(extra) && Match(stack, depth - 1, extra) && Match(stack, depth, I32)
+                    ? Push(stack, allocated, depth - 2, extra == WritableByteSpan ? WritableByteLocation : CharacterLocation) : -2;
             if (kind == SpanLength || kind == SpanIsEmpty)
                 return Match(stack, depth, extra) ? Push(stack, allocated, depth - 1, I32) : -2;
             if (kind == ArrayClear)
@@ -405,8 +408,9 @@ namespace PortableCompiler
                 int address = stack[depth - 1];
                 if (!IsNativeInteger(address) && (address != CharacterLocation && address != ReadOnlyCharacterLocation || operand != 0x49) &&
                     (address != Int16Location || operand != 0x48) &&
-                    (address != BooleanLocation && address != StaticByteLocation || operand != 0x47) &&
+                    (address != BooleanLocation && address != StaticByteLocation && address != WritableByteLocation || operand != 0x47) &&
                     (address != Int32Location || operand != 0x4a && operand != 0x4b) &&
+                    (address != Int64Location || operand != 0x4c) &&
                     (address != NativeIntLocation || operand != 0x4d)) return -2;
                 return Push(stack, allocated, depth - 1, IndirectType(operand));
             }
@@ -415,8 +419,9 @@ namespace PortableCompiler
                 if (depth < 2 || !IndirectValue(operand, stack[depth - 1])) return -2;
                 int address = stack[depth - 2];
                 if (!IsNativeInteger(address) && (!IsPacked16Location(address) || operand != 0x53) &&
-                    (address != BooleanLocation || operand != 0x52) && (address != Int32Location || operand != 0x54) &&
-                    (address != NativeIntLocation || operand != 0xdf)) return -2;
+                    (address != BooleanLocation && address != WritableByteLocation || operand != 0x52) &&
+                    (address != Int32Location || operand != 0x54) &&
+                    (address != Int64Location || operand != 0x55) && (address != NativeIntLocation || operand != 0xdf)) return -2;
                 return depth - 2;
             }
             if (kind == GetObjectType)
@@ -434,9 +439,9 @@ namespace PortableCompiler
             if (kind == FormatEnum)
                 return Match(stack, depth, EnumFormatting.StackStorage(extra))
                     ? Push(stack, allocated, depth - 1, String) : -2;
-            if (kind == EqualRuntimeTypes)
-                return Match(stack, depth, PeLibrary.RuntimeTypeMetadata.Type) &&
-                    Match(stack, depth - 1, PeLibrary.RuntimeTypeMetadata.Type) ? Push(stack, allocated, depth - 2, I32) : -2;
+            if (kind == EqualRuntimeDescriptors)
+                return Match(stack, depth, operand) && Match(stack, depth - 1, operand)
+                    ? Push(stack, allocated, depth - 2, I32) : -2;
             if (kind == TypeFromHandle)
                 return depth > 0 && stack[depth - 1] == PeLibrary.RuntimeTypeMetadata.Handle
                     ? Push(stack, allocated, depth - 1, PeLibrary.RuntimeTypeMetadata.Type) : -1;
@@ -485,6 +490,9 @@ namespace PortableCompiler
                 stack[depth - 1] = operand;
                 return depth;
             }
+            if (kind == BoxAggregateToInterface)
+                return depth > 0 && stack[depth - 1] == FieldAccess.Owner(operand)
+                    ? Push(stack, allocated, depth - 1, FieldAccess.Storage(operand)) : -2;
             if (kind == BoxAggregate || kind == UnboxAggregate || kind == UnboxAggregateAddress || kind == TestAggregateBox)
             {
                 if (depth == 0) return -2;
@@ -556,7 +564,7 @@ namespace PortableCompiler
             // A managed heap location requires separate pinning support.
             if (kind == NativeAddressView || kind == NativeFieldPointer)
                 return depth > 0 && IsNativeInteger(stack[depth - 1]) ? depth : -2;
-            if (kind == ReinterpretPacked16Location)
+            if (kind == ReinterpretManagedLocation)
             {
                 // Unsafe.As<char, char> preserves the address and its readonly provenance.
                 if (operand == CharacterLocation && extra == CharacterLocation &&

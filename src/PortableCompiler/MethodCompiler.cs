@@ -555,6 +555,17 @@ namespace PortableCompiler
                     sizes[current] = length - bodyOffsets[current];
                     continue;
                 }
+                if (stub < 0 && RuntimeTerminationMetadata.IsMonoFailFast(image, heaps, layout, source))
+                {
+                    if (moduleCode.Length - length < RuntimeTerminationWasm.BodyCapacity) return -3;
+                    int write = nativeBase + RuntimeTerminationWasm.RegisterWrite(natives);
+                    int terminate = nativeBase + RuntimeTerminationWasm.RegisterTerminate(natives);
+                    int initialize = initializerPrologue < 0 ? -1 : hostImports + initializerPrologue;
+                    bodyOffsets[current] = length;
+                    length = RuntimeTerminationWasm.WriteBody(moduleCode, length, write, terminate, initialize);
+                    sizes[current] = length - bodyOffsets[current];
+                    continue;
+                }
                 uint rva = 0;
                 int nativeKind = stub >= 0 ? NativeThunks.None : NativeThunks.Kind(image, heaps, layout, source);
                 int nativeDescription = 0;
@@ -841,7 +852,7 @@ namespace PortableCompiler
                         return -2;
                     var depths = new int[body[1]];
                     var states = new int[body[1] * maximum];
-                    bool hasNull = false, hasBranch = false;
+                    bool hasNull = false, hasBranch = false, hasAggregateBox = false, hasReferenceBox = false;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
@@ -849,6 +860,8 @@ namespace PortableCompiler
                             records[slot + 3] == BranchIl.ProvenNativeZero) hasNull = true;
                         if (kind == BranchIl.Branch || kind == BranchIl.Conditional || kind == BranchIl.Switch)
                             hasBranch = true;
+                        if (kind == BranchIl.BoxAggregate) hasAggregateBox = true;
+                        if (kind == BranchIl.WidenReference && records[slot + 1] != ObjectReference) hasReferenceBox = true;
                     }
                     var outgoingNulls = new byte[hasNull ? states.Length : 0];
                     // Without a control-flow edge into a shared successor, the
@@ -866,6 +879,13 @@ namespace PortableCompiler
                             arities, offsets, signatures, objects, functions, fixedObjects);
                         if (functions < 0) return functions;
                     }
+                    if (hasAggregateBox)
+                    {
+                        status = AggregateBoxAssignments.Bind(bundle, objects, records, frame, result, catchRegion, location);
+                        if (status < 0) return status;
+                    }
+                    if (hasReferenceBox)
+                        ReferenceBoxCalls.Bind(objects, records, catchRegion, arities, offsets, signatures, virtualTypes);
                     var descriptorMismatch = new int[6];
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
                         result, signatures, offsets, arities, location, catchRegion, outgoingNulls, outgoingReferences, objects, virtualTypes, allocatedStates,
@@ -919,6 +939,11 @@ namespace PortableCompiler
                             }
                         }
                         return resourceOpen && status == -1 ? -2 : status;
+                    }
+                    if (reflection.AssemblyMetadata.Vector != 0)
+                    {
+                        dispatch.AddAllocation(reflection.AssemblyMetadata.Vector);
+                        exceptionTags |= ExceptionTypes.ArgumentNull;
                     }
                     ValueObjectOperands.LowerManaged(records, depths, states, maximum);
                     status = projections.BindReachable(records, depths, states, maximum, objects, location);
@@ -1198,7 +1223,8 @@ namespace PortableCompiler
                                     dispatch.AddAllocation(operation);
                             }
                             if (kind == BranchIl.BoxValue) dispatch.AddBox(operation);
-                            if (kind == BranchIl.BoxAggregate) reflection.AggregateBoxes.Include(operation, records[slot + 3]);
+                            if (kind == BranchIl.BoxAggregate || kind == BranchIl.BoxAggregateToInterface)
+                                reflection.AggregateBoxes.Include(kind == BranchIl.BoxAggregate ? operation : FieldAccess.Owner(operation), records[slot + 3]);
                             if (hasNull || hasBranch)
                             {
                                 capacity = StackSpillWasm.Transfer(sizingBuffer, capacity, records, pc,
@@ -1252,6 +1278,7 @@ namespace PortableCompiler
                             else if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler)
                                 tags = ExceptionTypes.Argument; // decision 0092: mismatched nominal types
                             else if (kind == BranchIl.NativeCharacterSpan || kind == BranchIl.SpanSlice ||
+                                kind == BranchIl.WritableByteArraySpan ||
                                 kind == BranchIl.StringAsSpan && operation != 0)
                                 tags = ExceptionTypes.ArgumentOutOfRange;
                             else if (kind == BranchIl.CopyCharacterSpan)
@@ -1298,6 +1325,7 @@ namespace PortableCompiler
                                 kind == BranchIl.GetReferenceField || kind == BranchIl.SetReferenceField || kind == BranchIl.TakeReferenceFieldAddress ||
                                 kind == BranchIl.StringRange || kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection || kind == BranchIl.GetObjectType ||
+                                (kind == BranchIl.EqualRuntimeDescriptors && operation == RuntimeTypeMetadata.Assembly) ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.ReadStaticUInt16 || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
                                 kind == BranchIl.LoadManagedCell || kind == BranchIl.StoreManagedCell || kind == BranchIl.ClearManagedCell ||
                                 kind == BranchIl.SetCurrentThreadHandle ||
@@ -1401,7 +1429,8 @@ namespace PortableCompiler
                 hostImports, location, reflection, primitiveArrays);
             if (length < 0) return length;
             var interfacePosition = new[] { length };
-            functions = reflection.InterfaceTests.Write(bundle, moduleCode, interfacePosition, objects, reflection.AggregateBoxes, offsets, signatures,
+            functions = reflection.InterfaceTests.Write(bundle, moduleCode, interfacePosition, objects, reflection.AggregateBoxes,
+                reflection.ObjectTypes.HasEnumBoxes, offsets, signatures,
                 sizes, bodyOffsets, arities, functions, hostImports);
             if (functions < 0) return functions;
             length = interfacePosition[0];
@@ -1503,6 +1532,8 @@ namespace PortableCompiler
             if (length < 0) return length;
             length = reflection.TypeRelations.WriteAssignableTo(bundle, moduleCode, length, objects, globals,
                 reflection.GenericTypes, bodyOffsets, sizes);
+            if (length < 0) return length;
+            length = reflection.AssemblyMetadata.Write(moduleCode, length, bodyOffsets, sizes, hostImports, reflection);
             if (length < 0) return length;
             var projectionHelpers = new int[ValueFieldProjectionWasm.HelperCount];
             for (int helper = 0; helper < projectionHelpers.Length; helper++)
@@ -1823,6 +1854,18 @@ namespace PortableCompiler
                             continue;
                         }
                     }
+                    if (ObjectLayouts.IsEnumKey(type))
+                    {
+                        if (kind == BranchIl.UnboxAggregateAddress) return -2;
+                        int tag = BoxedEnums.Bind(bundle, objects, type, globals);
+                        if (tag < 0) return tag;
+                        int box = PrimitiveBoxing.Layout(objects);
+                        if (box < 0) return box;
+                        if (kind == BranchIl.TestClass) records[slot] = BranchIl.TestBox;
+                        records[slot + 1] = tag;
+                        records[slot + 3] = box;
+                        continue;
+                    }
                     if (ObjectLayouts.IsValueType(objects, type))
                     {
                         if (ObjectLayouts.IsNullableValueType(objects, type) || ObjectLayouts.IsByRefLikeValue(objects, type)) return -2;
@@ -2041,17 +2084,17 @@ namespace PortableCompiler
                         continue;
                     }
                     int referenceLocation = LocationFromIdentity(objects, type);
-                    if (type == I32 || type == Native || IsReferenceLocation(referenceLocation))
+                    if (type == I32 || type == I64 || type == Native || IsReferenceLocation(referenceLocation))
                     {
                         // Native words still use managed cells when their address
                         // crosses managed calls. Explicit pointers use NativeFrameWasm.
-                        int vector = type == Native ? NativeVector : type == I32 ? booleanSlot ? Bytes : Ints :
+                        int vector = type == Native ? NativeVector : type == I64 ? Longs : type == I32 ? booleanSlot ? Bytes : Ints :
                             ObjectLayouts.RegisterArray(objects, ObjectReference);
                         if (vector < 0) return vector;
                         frameCells[local] = vector;
                         records[slot] = BranchIl.LoadFrameLocation;
                         records[slot + 3] = type == Native ? NativeIntLocation :
-                            type == I32 ? booleanSlot ? BooleanLocation : Int32Location : referenceLocation;
+                            type == I32 ? booleanSlot ? BooleanLocation : Int32Location : type == I64 ? Int64Location : referenceLocation;
                         continue;
                     }
                     if (IsSpan(type))
@@ -2185,11 +2228,14 @@ namespace PortableCompiler
                             int targetLocation = ManagedReferenceSignatures.ElementLocation(objects, elements[1]);
                             if (IsPacked16Location(sourceLocation) && IsPacked16Location(targetLocation))
                             {
-                                records[slot] = BranchIl.ReinterpretPacked16Location;
+                                records[slot] = BranchIl.ReinterpretManagedLocation;
                                 records[slot + 1] = sourceLocation;
                                 records[slot + 3] = targetLocation;
                                 continue;
                             }
+                            int alias = BooleanStorageAliases.Lower(bundle, owner, objects, elements[0], elements[1], records, slot, clauses);
+                            if (alias < 0) return alias;
+                            if (alias > 0) continue;
                         }
                         int searchArity = spec[MethodSpecifications.Arity] == 1
                             ? SpanMetadata.ReadOnlySearchArity(image, layout, heaps, counts, spec[MethodSpecifications.Target]) : 0;
@@ -2251,15 +2297,36 @@ namespace PortableCompiler
                     status = MethodInstantiations.ReadArguments(bundle, image, layout, heaps, owner,
                         context, objects, methodArguments, spec, types);
                     if (status < 0) return status;
+                    bool assemblyMetadata = !instance && !checkReceiver && types.Length == 1 &&
+                        RuntimeAssemblyMetadata.IsQuery(targetImage, targetLayout, targetHeaps, targetOwner, row, objects, types[0]);
                     var deferred = new int[8];
+                    var constructors = new int[types.Length];
                     int constraints = GenericParameters.Check(targetImage, targetHeaps, targetLayout, row,
-                        types, objects, deferred, method: true);
+                        types, objects, deferred, method: true, constructors: constructors);
                     if (constraints < 0) return constraints;
+                    status = GenericConstructorConstraints.Check(bundle, objects, types, constructors);
+                    if (status < 0) return status;
                     if (constraints != 0)
                     {
-                        constraints = BundleConstraints.Check(bundle, targetImage, targetLayout, targetHeaps,
-                            targetOwner, objects, types, deferred, method: true, context: targetContext);
+                        constraints = assemblyMetadata ? RuntimeAssemblyMetadata.CheckConstraint(targetImage, targetLayout,
+                            targetHeaps, targetOwner, objects, types[0], deferred) :
+                            BundleConstraints.Check(bundle, targetImage, targetLayout, targetHeaps,
+                                targetOwner, objects, types, deferred, method: true, context: targetContext);
                         if (constraints < 0) return constraints;
+                    }
+                    else if (assemblyMetadata) return -2;
+
+                    if (assemblyMetadata)
+                    {
+                        var query = new int[1];
+                        functions = reflection.AssemblyMetadata.Bind(bundle, targetImage, targetLayout, targetHeaps,
+                            targetOwner, row, types[0], objects, globals, literals, literalSize, reflection,
+                            owners, rows, contexts, bases, indices, arities, offsets, signatures, functions, query);
+                        if (functions < 0) return functions;
+                        records[slot] = BranchIl.Call;
+                        records[slot + 1] = query[0];
+                        records[slot + 3] = 0;
+                        continue;
                     }
 
                     int implementationContext = targetContext;
@@ -2318,10 +2385,12 @@ namespace PortableCompiler
                         // Closed Int32 and UInt32 operations share the same
                         // managed cell, including the numeric zero of initobj.
                         bool int32Access = locationType == Int32Location;
+                        bool int64Access = locationType == Int64Location;
                         if (!IsValueLocation(locationType) && locationType != BooleanLocation &&
-                            !IsReferenceLocation(locationType) && !int32Access) return -2;
+                            !IsReferenceLocation(locationType) && !int32Access && !int64Access) return -2;
                         int vector = IsValueLocation(locationType) ? 0 :
-                            locationType == BooleanLocation ? Bytes : int32Access ? Ints : ObjectLayouts.RegisterArray(objects, ObjectReference);
+                            locationType == BooleanLocation ? Bytes : int32Access ? Ints : int64Access ? Longs :
+                            ObjectLayouts.RegisterArray(objects, ObjectReference);
                         if (vector < 0) return vector;
                         records[slot] = kind == BranchIl.LoadObject ? BranchIl.LoadManagedCell :
                             kind == BranchIl.StoreObject ? BranchIl.StoreManagedCell : BranchIl.ClearManagedCell;
@@ -2508,11 +2577,12 @@ namespace PortableCompiler
                             continue;
                         }
                         bool valueOwner = ObjectLayouts.IsValueType(objects, fieldOwner);
-                        bool classInt32 = !valueOwner && fieldStorage == I32 && !ObjectLayouts.IsInterface(objects, fieldOwner);
-                        if (classInt32 || valueOwner && !ObjectLayouts.IsExplicitValue(objects, fieldOwner) &&
+                        int classScalar = !valueOwner && (fieldStorage == I32 || fieldStorage == I64 || fieldStorage == Unsigned8) &&
+                            !ObjectLayouts.IsInterface(objects, fieldOwner) ? fieldStorage : 0;
+                        if (classScalar != 0 || valueOwner && !ObjectLayouts.IsExplicitValue(objects, fieldOwner) &&
                             !ObjectLayouts.IsByRefLikeValue(objects, fieldOwner))
                         {
-                            int projected = ValueFieldProjections.Bind(bundle, objects, fieldOwner, field, classInt32);
+                            int projected = ValueFieldProjections.Bind(bundle, objects, fieldOwner, field, classScalar);
                             if (projected != -2)
                             {
                                 if (projected < 0) return projected;
@@ -2748,8 +2818,15 @@ namespace PortableCompiler
                             hostUse[0] = hostUse[0] | WasmImports.NativeCharacterViews;
                             continue;
                         }
+                        if (span == BranchIl.WritableByteArraySpan && opcode == 0x73)
+                        {
+                            records[slot] = span;
+                            records[slot + 1] = 2; // start and count following the owner array
+                            records[slot + 3] = 0;
+                            continue;
+                        }
                         if (span == BranchIl.CharacterArrayAsSpan ||
-                            span == BranchIl.SpanAsReadOnly && opcode == 0x28 ||
+                            (span == BranchIl.SpanAsReadOnly || span == BranchIl.ByteSpanAsReadOnly) && opcode == 0x28 ||
                             span == BranchIl.ByteArrayAsSpan)
                         {
                             records[slot] = span;
@@ -2775,7 +2852,8 @@ namespace PortableCompiler
                     }
                     if (objectTypeMember >= 2 && opcode == 0x28)
                     {
-                        records[slot] = BranchIl.EqualRuntimeTypes;
+                        records[slot] = BranchIl.EqualRuntimeDescriptors;
+                        records[slot + 1] = RuntimeTypeMetadata.Type;
                         records[slot + 3] = objectTypeMember == 3 ? 1 : 0;
                         continue;
                     }
@@ -3111,6 +3189,15 @@ namespace PortableCompiler
                 }
                 if (kind == BranchIl.Call)
                 {
+                    if (records[slot + 3] != 0 && ReflectionMembers.IsCoreAssemblyEqualityCall(image, heaps, layout, callerRow, target))
+                    {
+                        // Keep the operator's original reference and null branches. Only
+                        // its Equals call on canonical descriptors needs runtime semantics.
+                        records[slot] = BranchIl.EqualRuntimeDescriptors;
+                        records[slot + 1] = RuntimeTypeMetadata.Assembly;
+                        records[slot + 3] = 0;
+                        continue;
+                    }
                     if (arrayEnumerator && records[slot + 3] == 0 && SzArrayEnumeration.IsArrayLength(image, layout, heaps, target))
                     {
                         records[slot] = BranchIl.ArrayLength;
@@ -3295,9 +3382,12 @@ namespace PortableCompiler
                     else if (instance && !hasReceiver || arities[index] != (instance ? 1 : 0) || signatures[signature] != I32)
                         return -2;
                     int thunk = 0;
-                    while (thunk < thunks[0] && thunks[thunk + 1] != index) thunk++;
+                    int thunkKey = general ? (instance ? generalKey[0] : -generalKey[0]) : 0;
+                    while (thunk < thunks[0] && (thunks[thunk + 1] != index || GeneralDelegates.ThunkKey(thunks, thunk) != thunkKey))
+                        thunk++;
                     if (thunk == thunks[0])
                     {
+                        if (thunk + 1 >= thunks.Length / 2) return -3;
                         thunks[thunk + 1] = index;
                         thunks[0] = thunk + 1;
                         GeneralDelegates.SetThunkKey(thunks, thunk, general ? generalKey[0] : 0, !instance);
@@ -3628,6 +3718,9 @@ namespace PortableCompiler
             if (IsExactArrayEnumerable(objects, actual, declared))
                 return SzArrayEnumeration.Bind(bundle, objects, actual, declared, owner, row,
                     owners, rows, contexts, bases, indices, arities, offsets, signatures, functions, instantiations);
+            // The array is a valid interface argument even when this profile
+            // cannot yet bind a VM-supplied IList or ICollection method.
+            if (IsExactArrayList(objects, actual, declared)) return -2;
             var symbol = new int[3];
             int status = VirtualSlots.SelectVirtualBody(bundle, objects, actual, allocated, declared, owner, row, symbol);
             if (status < 0) return status;

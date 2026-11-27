@@ -7,7 +7,7 @@ namespace PortableCompiler
 {
     internal static class ValueFieldProjectionWasm
     {
-        internal const int FirstSnapshotHelper = 4, FirstBooleanHelper = 6, FirstNativeHelper = 8, HelperCount = 10;
+        internal const int FirstSnapshotHelper = 4, FirstBooleanHelper = 6, FirstWideHelper = 8, FirstNativeHelper = 10, HelperCount = 12;
 
         internal static bool IsSnapshotHelper(int helper) => helper >= FirstSnapshotHelper && helper < FirstBooleanHelper;
 
@@ -47,7 +47,8 @@ namespace PortableCompiler
             used = dispatch ? Local(code, used, 0x20, address) :
                 ManagedLocationWasm.AccessElement(code, used, address, vector);
             if (source >= 0) used = Local(code, used, 0x20, source);
-            else if (vector == Bytes || vector == Ints) used = Const(code, used, 0);
+            else if (vector == Bytes || vector == Ints || vector == NativeVector) used = Const(code, used, 0);
+            else if (vector == Longs) used = WideConst(code, used, 0, 0);
             else
             {
                 code[used++] = 0xd0; // ref.null eq
@@ -58,8 +59,10 @@ namespace PortableCompiler
 
         private static int Call(byte[] code, int used, int start, int location, bool write, ValueFieldProjections projections)
         {
-            int helper = (location == Int32Location ? 0 : location == BooleanLocation ? FirstBooleanHelper :
-                location == NativeIntLocation ? FirstNativeHelper : 2) + (write ? 1 : 0);
+            int helper = location == Int32Location ? 0 : location == BooleanLocation ? FirstBooleanHelper :
+                location == Int64Location ? FirstWideHelper :
+                location == NativeIntLocation ? FirstNativeHelper : 2;
+            if (write) helper++;
             return CallHelper(code, used, start, helper, projections);
         }
 
@@ -73,6 +76,7 @@ namespace PortableCompiler
         }
 
         internal static int ValueType(int helper) => helper >= FirstNativeHelper ? Native :
+            helper >= FirstWideHelper ? I64 :
             helper < 2 || helper >= FirstBooleanHelper ? I32 : ObjectReference;
 
         internal static int WriteHelper(byte[] code, int used, int[] objects, ValueFieldProjections projections, int helper)
@@ -80,10 +84,12 @@ namespace PortableCompiler
             bool write = (helper & 1) != 0;
             bool aggregate = IsSnapshotHelper(helper);
             int kind = aggregate ? Aggregate : helper < 2 ? Scalar :
-                helper >= FirstNativeHelper ? NativeScalar : helper >= FirstBooleanHelper ? BooleanScalar : Reference;
+                helper >= FirstNativeHelper ? NativeScalar : helper >= FirstWideHelper ? WideScalar : helper >= FirstBooleanHelper ? BooleanScalar : Reference;
             int value = ValueType(helper);
             int vector = kind == Scalar ? Ints : kind == BooleanScalar ? Bytes :
-                kind == NativeScalar ? NativeVector : projections.ReferenceVector;
+                kind == WideScalar ? Longs : kind == NativeScalar ? NativeVector : projections.ReferenceVector;
+            int scalarLocation = kind == Scalar ? Int32Location : kind == WideScalar ? Int64Location :
+                kind == BooleanScalar ? BooleanLocation : 0;
             const int address = 0, replacement = 1;
             int parent = write ? 2 : 1;
             int descriptor = aggregate ? parent + 1 : address;
@@ -109,9 +115,9 @@ namespace PortableCompiler
             }
 
             used = GuardNull(code, used, address);
-            if (kind == Scalar && projections.ClassScalars)
+            if (scalarLocation != 0 && projections.UsesClass(scalarLocation))
             {
-                used = ClassScalars(code, used, objects, projections, address, replacement, write);
+                used = ClassScalars(code, used, objects, projections, address, replacement, write, scalarLocation);
                 if (used < 0) return used;
             }
             used = ProjectionMarker(code, used, address, aggregate);
@@ -181,7 +187,7 @@ namespace PortableCompiler
         }
 
         private static int ClassScalars(byte[] code, int used, int[] objects, ValueFieldProjections projections,
-            int address, int replacement, bool write)
+            int address, int replacement, bool write, int location)
         {
             if (code.Length - used < 96) return -3;
             used = ManagedLocationWasm.LoadField(code, used, address, 1);
@@ -191,7 +197,7 @@ namespace PortableCompiler
             for (int i = 0; i < projections.Count; i++)
             {
                 int owner = projections.Owner(i);
-                if (IsValueType(objects, owner)) continue;
+                if (projections.Location(i) != location || IsValueType(objects, owner)) continue;
                 if (code.Length - used < 96) return -3;
                 used = ManagedLocationWasm.LoadField(code, used, address, 1);
                 used = Const(code, used, ~i);
@@ -200,7 +206,7 @@ namespace PortableCompiler
                 used = ManagedLocationWasm.LoadField(code, used, address, 0);
                 used = RefType(code, used, 0x16, owner);
                 if (write) used = Local(code, used, 0x20, replacement);
-                used = Gc(code, used, write ? 5 : 2, owner);
+                used = Gc(code, used, write ? 5 : location == BooleanLocation ? 4 : 2, owner);
                 used = WasmBinary.Unsigned(code, used, projections.Ordinal(i));
                 code[used++] = 0x0f;
                 code[used++] = 0x0b;

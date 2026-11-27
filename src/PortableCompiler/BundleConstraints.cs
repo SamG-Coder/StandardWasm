@@ -19,15 +19,50 @@ namespace PortableCompiler
                 if (marker < 0) return marker;
                 if (marker != 0) continue;
 
+                int argument = arguments[parameter[0]];
+                int dependent = CheckTypeParameterConstraint(bundle, image, layout, heaps, owner, objects, coded,
+                    argument, method ? null : arguments, context, method ? arguments : null, cursor, 0);
+                if (dependent < 0) return dependent;
+                if (dependent != 0) continue;
+
                 int[] required = ReadInterface(bundle, image, layout, heaps, owner, objects, coded,
                     method ? null : arguments, context, method ? arguments : null);
                 if (required[0] < 0) return required[0];
                 int valid = ValidateInterface(bundle, objects, required, 0);
                 if (valid <= 0) return valid < 0 ? valid : -2;
-                int implemented = Implements(bundle, objects, arguments[parameter[0]], required, 0);
+                int implemented = Implements(bundle, objects, argument, required, 0);
                 if (implemented <= 0) return implemented < 0 ? implemented : -2;
             }
             return 0;
+        }
+
+        private static int CheckTypeParameterConstraint(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int[] objects, int coded, int argument, int[] substitutions, int context,
+            int[] methodArguments, int[] cursor, int depth)
+        {
+            if ((coded & 3) != 2) return 0;
+            int end = Signature(image, layout, heaps, coded >> 2, cursor);
+            if (end < 0) return end;
+            int element = image[cursor[0]];
+            if (element != 0x13 && element != 0x1e) return 0; // VAR or MVAR
+            int target = Argument(bundle, image, layout, heaps, owner, objects, cursor, end, substitutions, context, methodArguments);
+            if (target < 0) return target;
+            if (cursor[0] != end) return -1;
+            // Compare the substituted nominal types before examining boxing.
+            // Int32 and UInt32 therefore remain distinct despite sharing i32 storage.
+            if (argument == target || SignatureTypes.Assignable(argument, target, objects)) return 1;
+            bool value = GenericScalar.IsScalar(argument) || ObjectLayouts.IsEnumKey(argument) ||
+                ObjectLayouts.IsValueType(objects, argument);
+            if (!value) return -2;
+            if (target == ObjectLayouts.ObjectReference) return 1;
+            if (!ObjectLayouts.IsInterface(objects, target)) return -2;
+            int arity = ObjectLayouts.ArgumentCount(objects, target);
+            var required = new int[2 + arity];
+            required[0] = ObjectLayouts.AssemblyOf(objects, target);
+            required[1] = ObjectLayouts.TypeDef(objects, target);
+            for (int i = 0; i < arity; i++) required[2 + i] = ObjectLayouts.Argument(objects, target, i);
+            int implemented = Implements(bundle, objects, argument, required, depth);
+            return implemented == 0 ? -2 : implemented;
         }
 
         // GenericParameters already checked the non-nullable value-type flag.
@@ -64,6 +99,10 @@ namespace PortableCompiler
                     Search(bundle, objects, required, definition[0], definition[1], noParameters, 0, depth);
             }
             if (argument < ObjectLayouts.FirstClass || argument - ObjectLayouts.FirstClass >= objects[0]) return 0;
+            // An interface satisfies its own constraint without an InterfaceImpl edge.
+            // Match the arguments as well as the definition to preserve closed identity.
+            if (ObjectLayouts.IsInterface(objects, argument) && MatchesLayout(objects, argument, required))
+                return 1;
             for (int source = argument; source != 0; source = ObjectLayouts.Parent(objects, source))
             {
                 int row = ObjectLayouts.TypeDef(objects, source);
@@ -73,6 +112,18 @@ namespace PortableCompiler
                 if (status != 0) return status;
             }
             return 0;
+        }
+
+        private static bool MatchesLayout(int[] objects, int argument, int[] required)
+        {
+            int arity = ObjectLayouts.ArgumentCount(objects, argument);
+            if (ObjectLayouts.AssemblyOf(objects, argument) != required[0] ||
+                ObjectLayouts.TypeDef(objects, argument) != required[1] || arity != required.Length - 2)
+                return false;
+            for (int i = 0; i < arity; i++)
+                if (ObjectLayouts.Argument(objects, argument, i) != required[i + 2])
+                    return false;
+            return true;
         }
 
         internal static int FindPrimitive(BundleImages bundle, int argument, int[] definition)
@@ -164,6 +215,20 @@ namespace PortableCompiler
             return ImplementsCoreReference(bundle, objects, required, "ValueType", "System", requireComplete: true);
         }
 
+        internal static int ImplementsCoreEnum(BundleImages bundle, int[] objects, int[] required)
+        {
+            var identity = new int[2];
+            var arguments = new int[0];
+            int status = RuntimeTypeTokens.FindCoreType(bundle, "Enum", identity);
+            if (status < 0) return status;
+            status = Search(bundle, objects, required, identity[0], identity[1], arguments, 0, 0);
+            if (status != 0) return status;
+            // Read the interfaces directly. System.Enum and its ValueType base
+            // are CLR runtime types, not ordinary reference layout definitions.
+            status = RuntimeTypeTokens.FindCoreType(bundle, "ValueType", identity);
+            return status < 0 ? status : Search(bundle, objects, required, identity[0], identity[1], arguments, 0, 0);
+        }
+
         private static int Search(BundleImages bundle, int[] objects, int[] required,
             int owner, int row, int[] substitutions, int context, int depth, bool requireComplete = false)
         {
@@ -240,6 +305,10 @@ namespace PortableCompiler
                 int marker = ValueConstraintMarker(image, layout, heaps, coded, parameter[1], cursor);
                 if (marker < 0) return marker;
                 if (marker != 0) continue;
+                int dependent = CheckTypeParameterConstraint(bundle, image, layout, heaps, identity[0], objects,
+                    coded, args[parameter[0]], args, 0, null, cursor, depth + 1);
+                if (dependent < 0) return dependent;
+                if (dependent != 0) continue;
                 int[] required = ReadInterface(bundle, image, layout, heaps, identity[0], objects, coded, args, 0);
                 if (required[0] < 0) return required[0];
                 if (!Same(required, identity)) return 0;

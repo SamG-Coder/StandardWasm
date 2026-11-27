@@ -35,14 +35,15 @@ namespace PeLibrary
 
         // CoreLib signatures can name either Assembly declaration by TypeDef.
         // Runtime-created instances share the canonical Assembly descriptor.
-        internal static bool IsAssemblyDefinition(byte[] image, int[] heaps, int[] layout, int coded)
+        internal static bool IsAssemblyDefinition(byte[] image, int[] heaps, int[] layout, int coded, bool includeRuntimeAssembly = true)
         {
             if ((coded & 3) != 0) return false;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
             return first >= 0 && PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts) &&
                 (ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2, "System.Reflection", "Assembly") ||
-                    ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2, "System.Reflection", "RuntimeAssembly"));
+                    includeRuntimeAssembly && ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2,
+                        "System.Reflection", "RuntimeAssembly"));
         }
 
         internal static bool IsRuntimeTypeDefinition(byte[] image, int[] heaps, int[] layout, int coded)

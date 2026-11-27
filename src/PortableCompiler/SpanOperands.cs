@@ -155,7 +155,7 @@ namespace PortableCompiler
 
             int accessor = SpanMetadata.Accessor(bundle, image, layout, heaps, owner,
                 records[call + 1], context, methodArguments, spanType, objects);
-            int element = spanType == SignatureTypes.WritableCharacterSpan ? SpanAddress : SpanRead;
+            int element = SignatureTypes.IsWritableSpan(spanType) ? SpanAddress : SpanRead;
             if (indexed ? accessor != element : accessor != SpanLength && accessor != SpanIsEmpty) return 0;
 
             if (accessor == SpanRead)
