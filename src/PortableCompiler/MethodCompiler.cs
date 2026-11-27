@@ -197,14 +197,16 @@ namespace PortableCompiler
             var natives = new NativeImportTable();
             var addressedFields = new AddressedFields();
             var typeCalls = new RuntimeTypeCalls();
+            var readOnlyCharacters = new ReadOnlyCharacterCalls();
             int status = Reemit;
             while (status == Reemit)
-                status = CompileProgramPass(bundle, entries, output, location, features, addressedFields, typeCalls, stubs, rootProbe, natives);
+                status = CompileProgramPass(bundle, entries, output, location, features, addressedFields, typeCalls, stubs, rootProbe, natives, readOnlyCharacters);
             return status;
         }
 
         private static int CompileProgramPass(BundleImages bundle, byte[] entries, byte[] output, int[] location,
-            long[] features, AddressedFields addressedFields, RuntimeTypeCalls typeCalls, MissingAssemblyStubs stubs, bool rootProbe, NativeImportTable natives)
+            long[] features, AddressedFields addressedFields, RuntimeTypeCalls typeCalls, MissingAssemblyStubs stubs, bool rootProbe, NativeImportTable natives,
+            ReadOnlyCharacterCalls readOnlyCharacters)
         {
             long hostFeatures = features[0];
             bool tracksFinalizers = features[1] != 0;
@@ -397,6 +399,7 @@ namespace PortableCompiler
                     else functions = expanded;
                 }
                 if (rows[current] == 0 || sizes[current] != 0 || !receiverDemand.Needed(current, contexts)) continue;
+                readOnlyCharacters.Apply(bases, indices, offsets, signatures);
                 int owner = owners[current], source = rows[current], context = contexts[current];
                 context = NativeReceiverCalls.DeclaringContext(context);
                 int[] methodArguments = instantiations.Arguments(current);
@@ -862,6 +865,7 @@ namespace PortableCompiler
                     }
                     for (int local = 0; local < frameCells.Length; local++)
                         if (frameCells[local] != 0 && inlineLocations[local] != 0) return -2;
+                    readOnlyCharacters.Apply(bases, indices, offsets, signatures);
                     typeCalls.ApplyDescriptorSignatures(bases, indices, offsets, signatures);
                     typeCalls.ApplyClosedSignatures(bundle, owners, rows, contexts, instantiations, offsets, signatures, objects, closedSignaturesThrough, functions);
                     closedSignaturesThrough = functions;
@@ -914,12 +918,32 @@ namespace PortableCompiler
                     }
                     if (hasReferenceBox)
                         ReferenceBoxCalls.Bind(objects, records, catchRegion, arities, offsets, signatures, virtualTypes);
-                    var descriptorMismatch = new int[6];
-                    status = StackDepths.Analyze(records, depths, states, maximum, frame,
-                        result, signatures, offsets, arities, location, catchRegion, outgoingNulls, outgoingReferences, objects, virtualTypes, allocatedStates,
-                        descriptorMismatch, contexts);
+                    var descriptorMismatch = new int[ReadOnlyCharacterCalls.MismatchWidth];
+                    while (true)
+                    {
+                        for (int i = 0; i < descriptorMismatch.Length; i++) descriptorMismatch[i] = 0;
+                        status = StackDepths.Analyze(records, depths, states, maximum, frame,
+                            result, signatures, offsets, arities, location, catchRegion, outgoingNulls, outgoingReferences,
+                            objects, virtualTypes, allocatedStates, descriptorMismatch, contexts);
+                        int borrowedLocal = descriptorMismatch[ReadOnlyCharacterCalls.Local] - 1;
+                        if (status >= 0 || borrowedLocal < parameters || borrowedLocal >= parameters + locals ||
+                            pinned[borrowedLocal - parameters] != 0 || frameCells[borrowedLocal] != 0) break;
+                        frame[borrowedLocal] = ReadOnlyCharacterLocation;
+                        for (int i = 0; i < depths.Length; i++) depths[i] = 0;
+                        for (int i = 0; i < allocatedStates.Length; i++) allocatedStates[i] = 0;
+                    }
                     if (status < 0)
                     {
+                        int borrowedCall = descriptorMismatch[ReadOnlyCharacterCalls.Target] - 1;
+                        if (borrowedCall >= 0 && rows[borrowedCall] > 0 && contexts[borrowedCall] == 0 &&
+                            instantiations.Arguments(borrowedCall) == null && !IsExported(exports, borrowedCall) &&
+                            indices[bases[owners[borrowedCall]] + rows[borrowedCall]] == borrowedCall + 1 &&
+                            readOnlyCharacters.Require(bundle, owners[borrowedCall], rows[borrowedCall],
+                                descriptorMismatch[ReadOnlyCharacterCalls.Argument]))
+                        {
+                            features[0] = hostFeatures | hostUse[0];
+                            return Reemit;
+                        }
                         int fieldSlot = descriptorMismatch[4] - 1;
                         if (fieldSlot >= 0 && bundle.TypeFields.RequireInstance(bundle, image, heaps, layout,
                             owner, source, objects, records[fieldSlot + 3], records[fieldSlot + 1], false))
@@ -2319,6 +2343,12 @@ namespace PortableCompiler
                             }
                         }
                         int intrinsic = StaticByteIntrinsics.Identify(image, layout, heaps, counts, spec, methodArguments);
+                        if (intrinsic == StaticByteIntrinsics.AddCharacterElements)
+                        {
+                            records[slot] = BranchIl.OffsetCharacterLocation;
+                            records[slot + 3] = StaticByteIntrinsics.CharacterElementOffset;
+                            continue;
+                        }
                         if (intrinsic != 0)
                         {
                             if (intrinsic == BranchIl.OffsetCharacterLocation &&

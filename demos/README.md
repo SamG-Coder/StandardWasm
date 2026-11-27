@@ -299,6 +299,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [307 · COM cookie lookup dispatch](stage-307-com-cookie-lookup/README.md) | `npm run demo -- stage-307-com-cookie-lookup` | Compare four-argument COM dispatch and HRESULT/out-pointer behavior |
 | [309 · Active window for a Win32 message queue](stage-309-active-window/README.md) | `npm run demo -- stage-309-active-window` | Compare per-launch activation, lifetime and HWND error behavior |
 | [310 · Keyboard focus for a Win32 message queue](stage-310-window-focus/README.md) | `npm run demo -- stage-310-window-focus` | Compare active/focused HWND state, errors and ordered focus callbacks |
+| [311 · Readonly character location forwarding](stage-311-readonly-character-forwarding/README.md) | `npm run demo -- stage-311-readonly-character-forwarding` | Preserve readonly aliases and bounded offsets through linked managed calls |
 | [312 · Native integer unary operations](stage-312-native-unary/README.md) | `npm run demo -- stage-312-native-unary` | Compare native complements, negation and tagged-word masks |
 | [315 · Windows thread message queue](stage-315-thread-message-queue/README.md) | `npm run demo -- stage-315-thread-message-queue` | Compare posted thread messages and the x86 MSG layout |
 | [316 · CoreLib array initializers](stage-316-corelib-array-initializers/README.md) | `npm run demo -- stage-316-corelib-array-initializers` | Compare original path-character arrays and ordinary C# literals |
