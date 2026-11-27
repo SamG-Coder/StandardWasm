@@ -105,6 +105,7 @@ namespace PortableCompiler
         internal const int NativeUtf16Length = 248; // [native pointer] -> [count before NUL]
         internal const int CopyNativeConstructionString = 249; // [fresh String, pointer, count] -> []
         internal const int CoreVersionOutCall = 250; // Unlinked native-backed call to the original managed wrapper.
+        internal const int ScalarBitCast = 251; // [integer or float] -> [equal-width bit reinterpretation]
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

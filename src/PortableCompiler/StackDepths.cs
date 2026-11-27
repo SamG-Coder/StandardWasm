@@ -565,6 +565,8 @@ namespace PortableCompiler
                 return Match(stack, depth, Native) || Match(stack, depth, I32) ? Push(stack, allocated, depth - 1, String) : -1;
             if (kind == NativeUtf16Length)
                 return Match(stack, depth, Native) ? Push(stack, allocated, depth - 1, I32) : -2;
+            if (kind == ScalarBitCast)
+                return Match(stack, depth, operand) ? Push(stack, allocated, depth - 1, extra) : -2;
             if (kind == CopyNativeConstructionString)
                 return Match(stack, depth - 2, String) && Match(stack, depth - 1, Native) &&
                     Match(stack, depth, Native) ? depth - 3 : -2;
