@@ -32,6 +32,7 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     closedValueTypes = inputs.Select(PrimitiveTypeProbe.CheckClosedValueType).ToArray(),
     specializedTypeResults = inputs.Select(PrimitiveTypeProbe.CheckSpecializedTypeResults).ToArray(),
     virtualTypeResults = inputs.Select(PrimitiveTypeProbe.CheckVirtualTypeResults).ToArray(),
+    staticInt32Aliases = inputs.Select(StaticInt32Probe.CheckStaticInt32Aliases).ToArray(),
     referenceContainment = inputs.Select(ReferenceContainmentProbe.CheckReferenceContainment).ToArray(),
     entryAliases = inputs.Select(EntryArrayProbe.UpdateEntryArray).ToArray(),
     interiorFields = inputs.Select(EntryArrayProbe.ClearInteriorFields).ToArray(),

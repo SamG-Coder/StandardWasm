@@ -11,6 +11,8 @@ namespace PortableCompiler
         internal static int Owner(int[] globals, int index) => globals[1 + index * Width];
         internal static int Row(int[] globals, int index) => globals[2 + index * Width];
         internal static int Storage(int[] globals, int index) => globals[3 + index * Width];
+        internal static void UseInt32Cell(int[] globals, int index) =>
+            globals[3 + index * Width] = AddressedStaticFields.Int32Cell;
 
         internal static int Register(int[] globals, int owner, int row, int storage)
         {
@@ -42,8 +44,9 @@ namespace PortableCompiler
             // A constructed generic needs separate static data for each instantiation.
             status = GenericParameters.Check(image, heaps, layout, declaringType, new int[0], objects, new int[0]);
             if (status < 0) return status;
+            var reference = new int[3];
             int storage = BundleLayouts.ReadFieldStorage(bundle, image, layout, heaps, owner,
-                table, field, 0, objects, new int[2], true, (flags & 0x20) != 0 ? initializer : 0);
+                table, field, 0, objects, reference, true, (flags & 0x20) != 0 ? initializer : 0);
             if (storage < 0) return storage;
             // Value layouts use immutable aggregates. The global holds the
             // current whole value, and loads keep an independent snapshot.
@@ -59,6 +62,7 @@ namespace PortableCompiler
                 result[3] = initializer;
                 result[4] = initializer == 0 ? 0 : declaringType;
             }
+            if (result.Length > 5) result[5] = reference[2];
             return 0;
         }
 

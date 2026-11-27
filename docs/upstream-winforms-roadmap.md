@@ -164,9 +164,11 @@ generic `get_Value` call in `ActiveXImpl.UpdateAccelTable` by resolving
 The compiler gives that receiver a separate body from the one it uses
 for a traced value location. Stage 143 verifies writes through both
 receiver forms. CoreLib's base finalizer call binds the original
-`Object.Finalize` body through the canonical object receiver. The replay
-next reports a diagnostic at the address of the static switch cache in
-`LocalAppContextSwitches.get_EnableMsoComponentManager` at `IL_0005`.
+`Object.Finalize` body through the canonical object receiver. The static
+switch cache in `LocalAppContextSwitches.get_EnableMsoComponentManager`
+now has one managed location shared by direct access and byref callers.
+The replay next reports a diagnostic at the local structure address in
+`SystemInformation.get_UserInteractive` at `IL_0036`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

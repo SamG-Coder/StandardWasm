@@ -554,6 +554,9 @@ namespace PortableCompiler
                 return depth > 0 && stack[depth - 1] >= FirstClass && !IsInterface(objects, stack[depth - 1]) &&
                     !IsValueType(objects, stack[depth - 1]) ? depth - 1 : -1;
             if (kind == StaticFieldAddress) return Push(stack, allocated, depth, Native);
+            if (kind == StaticInt32)
+                return extra == StaticInt32Wasm.Write ? Match(stack, depth, I32) ? depth - 1 : -1 :
+                    Push(stack, allocated, depth, extra == StaticInt32Wasm.Address ? Int32Location : I32);
             if (kind == LoadStaticField || kind == LoadNativeStatic) return Push(stack, allocated, depth, StackType(extra));
             if (kind == StoreStaticField || kind == StoreNativeStatic)
                 return depth > 0 && Assignable(stack[depth - 1], extra, objects) ? depth - 1 : -1;

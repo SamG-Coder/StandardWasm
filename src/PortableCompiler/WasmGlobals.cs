@@ -12,10 +12,12 @@ namespace PortableCompiler
             int size = WasmBinary.UnsignedSize(count);
             for (int index = 0; index < count; index++)
             {
-                int type = ObjectLayouts.Representation(objects, StaticFields.Storage(globals, index));
+                int storage = StaticFields.Storage(globals, index);
+                bool cell = storage == AddressedStaticFields.Int32Cell;
+                int type = cell ? Ints : ObjectLayouts.Representation(objects, storage);
                 int width = WasmBinary.ValueWidth(type);
                 int owner = StaticFields.Owner(globals, index);
-                int init = RuntimeTypeTokens.IsDescriptorOwner(owner)
+                int init = cell ? 4 + WasmBinary.UnsignedSize(WasmBinary.HeapType(Ints)) : RuntimeTypeTokens.IsDescriptorOwner(owner)
                     ? RuntimeTypeWasm.InitializerSize(descriptorHeap, RuntimeTypeTokens.ModuleSlot(owner), StaticFields.Row(globals, index))
                     : owner == StaticFields.EventOwner ? 3 :
                         type == F32 ? 5 : type == F64 ? 9 : IsScalar(type) || type == ObjectLayouts.ObjectReference || RuntimeTypeMetadata.IsStorage(type) ? 2 : width;
@@ -32,12 +34,14 @@ namespace PortableCompiler
             cursor = WasmBinary.Unsigned(output, cursor, count);
             for (int index = 0; index < count; index++)
             {
-                int type = ObjectLayouts.Representation(objects, StaticFields.Storage(globals, index));
+                int storage = StaticFields.Storage(globals, index);
+                bool cell = storage == AddressedStaticFields.Int32Cell;
+                int type = cell ? Ints : ObjectLayouts.Representation(objects, storage);
                 int owner = StaticFields.Owner(globals, index);
                 bool eventArgs = owner == StaticFields.EventOwner;
                 bool descriptor = RuntimeTypeTokens.IsDescriptorOwner(owner);
                 cursor = WasmBinary.ValueType(output, cursor, type);
-                output[cursor++] = eventArgs || descriptor ? (byte)0 : (byte)1;
+                output[cursor++] = eventArgs || descriptor || cell ? (byte)0 : (byte)1;
                 if (descriptor)
                     cursor = RuntimeTypeWasm.WriteInitializer(output, cursor, descriptorHeap, RuntimeTypeTokens.ModuleSlot(owner), StaticFields.Row(globals, index));
                 else if (eventArgs)
@@ -45,6 +49,11 @@ namespace PortableCompiler
                     output[cursor++] = 0xfb;
                     output[cursor++] = 1; // struct.new_default
                     cursor = WasmBinary.Unsigned(output, cursor, WasmBinary.HeapType(type));
+                }
+                else if (cell)
+                {
+                    cursor = BranchWasm.Const(output, cursor, 1);
+                    cursor = BranchWasm.Gc(output, cursor, 7, Ints); // array.new_default
                 }
                 else if (IsScalar(type))
                 {

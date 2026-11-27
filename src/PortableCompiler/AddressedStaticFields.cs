@@ -1,9 +1,10 @@
 namespace PortableCompiler
 {
-    // Address-taken blittable statics use one stable, module-owned memory
-    // allocation. Managed loads and stores use that same backing.
-    internal sealed class NativeStaticFields
+    // An addressed static keeps its backing choice across emission retries.
+    // Aggregate addresses use linear memory and Int32 byrefs use a traced cell.
+    internal sealed class AddressedStaticFields
     {
+        internal const int Int32Cell = -2;
         private const int PageBytes = 65536, FieldWidth = 3;
         private int[] fields = new int[12];
         internal int Count;
@@ -24,6 +25,14 @@ namespace PortableCompiler
             // The native layout model caps field alignment at eight bytes.
             if (size < 1 || bytes > int.MaxValue - size - 7) return -3;
             int offset = (bytes + 7) & -8;
+            bytes = offset + size;
+            return Record(owner, row, offset);
+        }
+
+        internal void AddInt32Cell(int owner, int row) => Record(owner, row, Int32Cell);
+
+        private int Record(int owner, int row, int offset)
+        {
             int at = Count * FieldWidth;
             if (at == fields.Length)
             {
@@ -35,7 +44,6 @@ namespace PortableCompiler
             fields[at + 1] = row;
             fields[at + 2] = offset;
             Count++;
-            bytes = offset + size;
             return offset;
         }
 

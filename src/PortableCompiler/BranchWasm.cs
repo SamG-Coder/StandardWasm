@@ -1145,6 +1145,13 @@ namespace PortableCompiler
                         used = LinearMemoryWasm.Store(code, used, operand);
                     }
                 }
+                else if (kind == StaticInt32)
+                {
+                    used = TypeInitializerWasm.Trigger(code, used, fieldInitializers, operand, hostImports);
+                    used = StaticInt32Wasm.Emit(code, used, records[slot + 3], operand,
+                        Spill(spills, maximum, spillFlags, records[slot + 3] == StaticInt32Wasm.Address ? Int32Location : I32,
+                            records[slot + 3] == StaticInt32Wasm.Write ? top : depth));
+                }
                 else if (kind == StaticFieldAddress || kind == LoadNativeStatic || kind == StoreNativeStatic)
                 {
                     int type = records[slot + 3];

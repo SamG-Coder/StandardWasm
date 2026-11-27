@@ -70,19 +70,19 @@ namespace PortableCompiler
         private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location, int hostFeatures, bool rootProbe = false)
         {
             var features = new int[] { hostFeatures };
-            var nativeStatics = new NativeStaticFields();
+            var addressedStatics = new AddressedStaticFields();
             var typeCalls = new RuntimeTypeCalls();
             int status = Reemit;
             while (status == Reemit)
-                status = CompileProgramPass(bundle, entries, output, location, features, nativeStatics, typeCalls, rootProbe);
+                status = CompileProgramPass(bundle, entries, output, location, features, addressedStatics, typeCalls, rootProbe);
             return status;
         }
 
         private static int CompileProgramPass(BundleImages bundle, byte[] entries, byte[] output, int[] location,
-            int[] features, NativeStaticFields nativeStatics, RuntimeTypeCalls typeCalls, bool rootProbe)
+            int[] features, AddressedStaticFields addressedStatics, RuntimeTypeCalls typeCalls, bool rootProbe)
         {
             int hostFeatures = features[0];
-            int knownNativeStatics = nativeStatics.Count;
+            int knownAddressedStatics = addressedStatics.Count;
             int hostImports = WasmImports.FunctionCount(hostFeatures);
             CompileLocation.Clear(location);
             byte[] image = bundle.Get(0);
@@ -463,7 +463,7 @@ namespace PortableCompiler
                         parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
                         initializers, reflection, instantiations, methodArguments, inlineLocations, frameCells, parameters,
-                        nativePlans, nativeStatics, booleanLocals, pointers, finalizers);
+                        nativePlans, addressedStatics, booleanLocals, pointers, finalizers);
                     if (functions < 0)
                         return functions;
                     functions = LinkCallIndirect(bundle, image, heaps, layout, count, owner, context, records, owners, rows,
@@ -628,7 +628,7 @@ namespace PortableCompiler
                         capacity += 320;
                     }
                     frameShape[21] = 0;
-                    frameShape[22] = nativeStatics.Pages();
+                    frameShape[22] = addressedStatics.Pages();
                     int classBytes = objects[0] * 12;
                     if (classBytes > int.MaxValue - capacity) return -3;
                     capacity += classBytes;
@@ -726,7 +726,7 @@ namespace PortableCompiler
                             if (capacity > int.MaxValue - bytes) return -3;
                             capacity += bytes;
                         }
-                        if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField)
+                        if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField || kind == BranchIl.StaticInt32)
                         {
                             if (capacity > int.MaxValue - TypeInitializerWasm.TriggerCapacity) return -3;
                             capacity += TypeInitializerWasm.TriggerCapacity;
@@ -876,8 +876,8 @@ namespace PortableCompiler
                 length += used;
             }
             // Earlier references to a newly discovered static need the same
-            // native backing as its address-taking use.
-            if ((hostUse[0] & ~hostFeatures) != 0 || nativeStatics.Count != knownNativeStatics)
+            // backing as its address-taking use.
+            if ((hostUse[0] & ~hostFeatures) != 0 || addressedStatics.Count != knownAddressedStatics)
             {
                 features[0] = hostFeatures | hostUse[0];
                 return Reemit;
@@ -992,7 +992,7 @@ namespace PortableCompiler
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed,
             TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, MethodInstantiations instantiations, int[] methodArguments,
             int[] inlineLocations, int[] frameCells, int parameterCount, NativeAggregatePlans nativePlans,
-            NativeStaticFields nativeStatics, byte[] booleanLocals,
+            AddressedStaticFields addressedStatics, byte[] booleanLocals,
             FunctionPointerPlan pointers, FinalizerSlots finalizers)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
@@ -1577,7 +1577,7 @@ namespace PortableCompiler
                 }
                 if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField || kind == BranchIl.StaticFieldAddress)
                 {
-                    var symbol = new int[5];
+                    var symbol = new int[6];
                     int field = records[slot + 1];
                     bool addressOf = kind == BranchIl.StaticFieldAddress;
                     bool write = kind == BranchIl.StoreStaticField || addressOf;
@@ -1622,12 +1622,21 @@ namespace PortableCompiler
                     }
                     int staticOwner = StaticFields.Owner(globals, symbol[0]);
                     int staticRow = StaticFields.Row(globals, symbol[0]);
-                    int address = nativeStatics.Find(staticOwner, staticRow);
+                    int address = addressedStatics.Find(staticOwner, staticRow);
+                    if (address == AddressedStaticFields.Int32Cell || addressOf && symbol[5] == 8)
+                    {
+                        if (address == -1) addressedStatics.AddInt32Cell(staticOwner, staticRow);
+                        StaticFields.UseInt32Cell(globals, symbol[0]);
+                        records[slot] = BranchIl.StaticInt32;
+                        records[slot + 1] = symbol[0];
+                        records[slot + 3] = addressOf ? StaticInt32Wasm.Address : write ? StaticInt32Wasm.Write : StaticInt32Wasm.Read;
+                        continue;
+                    }
                     if (addressOf || address >= 0)
                     {
                         int plan = NativeAggregates.Plan(bundle, objects, symbol[1], nativePlans);
                         if (plan < 0) return plan;
-                        if (address < 0) address = nativeStatics.Add(staticOwner, staticRow, NativeAggregates.Size(nativePlans.Plans, plan));
+                        if (address < 0) address = addressedStatics.Add(staticOwner, staticRow, NativeAggregates.Size(nativePlans.Plans, plan));
                         if (address < 0) return address;
                         records[slot] = addressOf ? BranchIl.StaticFieldAddress : write ? BranchIl.StoreNativeStatic : BranchIl.LoadNativeStatic;
                         records[slot + BranchIl.Width + 1] = plan;
