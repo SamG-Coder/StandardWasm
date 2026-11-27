@@ -25,7 +25,6 @@ The fixture compares the following against the CLR:
 - delegate equality as `Remove` observes it, over the same target and method
   versus a different target
 
-A delegate over a static method stays an explicit diagnostic at its `ldftn`.
-Delegate types other than `EventHandler`, `ldvirtftn`, `System.Delegate`
-typed storage in framework code, and subclasses of the platform `EventArgs`
-are also unsupported.
+Delegates over open static methods are supported since Stage 164 (decision 0088). Delegate types
+other than `EventHandler` and `Func<int>`, `ldvirtftn`, `System.Delegate`-typed storage in framework
+code, and subclasses of the platform `EventArgs` are still unsupported.
