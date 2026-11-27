@@ -33,18 +33,6 @@ namespace ExceptionFixture
 
         private static FixtureException Missing() => null;
 
-        // Issue #304: CoreLib's parameterless exception constructors take their default message
-        // from an SR resource property, folded at compile time from CoreLib's neutral resources.
-        public static int DefaultMessageExceptions()
-        {
-            int score = 0;
-            try { throw new InvalidOperationException(); } catch (InvalidOperationException) { score += 1; }
-            try { throw new ArgumentNullException(); } catch (ArgumentException) { score += 10; }
-            try { throw new NotSupportedException(); } catch (NotSupportedException) { score += 100; }
-            try { throw new FormatException(); } catch (SystemException) { score += 1000; }
-            return score;
-        }
-
         public static int TypedCatch()
         {
             try { Throw(new FixtureException()); return 0; }
