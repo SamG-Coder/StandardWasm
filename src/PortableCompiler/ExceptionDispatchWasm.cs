@@ -43,7 +43,16 @@ namespace PortableCompiler
 
         // pc is the pc local. Saved exception locals: exnref at pc + 1 (scratch) and
         // pc + 2 + clause; eqref at objects (scratch) and objects + 1 + clause.
-        internal static int End(byte[] code, int used, int pc, int[] region, bool saveHandlers, int objects)
+        // Stage 155 (decision 0082): fixedObjects holds, for fixed tags 0 .. FixedObjectCount - 1
+        // (Overflow, DivideByZero, IndexOutOfRange, NullReference), CoreLib's parameterless
+        // constructor as a module function index (or -1) and its class. Those are the tags the
+        // CLR raises with the default message, so a bound handler observes the same object state.
+        internal const int FixedObjectCount = 4;
+        // Where MethodCompiler passes them in the frame shape, after the initializer failure descriptor.
+        internal const int FrameSlot = 23 + TypeInitializerWasm.FailureWidth, FrameWidth = 2 * FixedObjectCount;
+
+        internal static int End(byte[] code, int used, int pc, int[] region, bool saveHandlers, int objects,
+            int spills, int maximum, int[] fixedObjects)
         {
             code[used++] = 0x0b; // try_table
             code[used++] = 0;    // only the catch edges may reach the destinations
@@ -52,13 +61,15 @@ namespace PortableCompiler
                 code[used++] = 0x0b; // tag destination
                 // Remaining fixed blocks plus the object block lie between here and the pc loop.
                 int loop = ExceptionTagsWasm.Count - tag;
-                used = Dispatch(code, used, pc, region, ExceptionTagsWasm.FixedTag(tag), loop, saveHandlers, objects);
+                used = Dispatch(code, used, pc, region, ExceptionTagsWasm.FixedTag(tag), loop, saveHandlers, objects,
+                    spills, maximum, fixedObjects);
             }
             code[used++] = 0x0b; // object destination: [eqref]
-            return DispatchObject(code, used, pc, region, saveHandlers, objects);
+            return DispatchObject(code, used, pc, region, saveHandlers, objects, spills, maximum);
         }
 
-        private static int Dispatch(byte[] code, int used, int pc, int[] clauses, int tag, int loop, bool saveHandlers, int objects)
+        private static int Dispatch(byte[] code, int used, int pc, int[] clauses, int tag, int loop, bool saveHandlers, int objects,
+            int spills, int maximum, int[] fixedObjects)
         {
             int captured = pc + 1;
             used = Local(code, used, 0x21, captured);
@@ -71,6 +82,12 @@ namespace PortableCompiler
                 used = InRange(code, used, pc, clauses, clause);
                 code[used++] = 0x04; // if
                 code[used++] = 0x40;
+                if (ExceptionClauses.IsBound(clauses, clause))
+                {
+                    used = BindFixed(code, used, pc, clauses, clause, tag, loop, saveHandlers, objects, spills, maximum, fixedObjects);
+                    code[used++] = 0x0b;
+                    continue;
+                }
                 if (saveHandlers)
                 {
                     int index = clause / ExceptionClauses.Width;
@@ -86,7 +103,56 @@ namespace PortableCompiler
             return ThrowReference(code, used, captured);
         }
 
-        private static int DispatchObject(byte[] code, int used, int pc, int[] clauses, bool saveHandlers, int objects)
+        // A fixed tag reaching a bound handler: build the CoreLib exception the CLR would have raised,
+        // then enter the handler exactly as for a thrown object. From here on it is that object: a
+        // rethrow raises it on the object tag, so an outer handler sees the same reference.
+        private static int BindFixed(byte[] code, int used, int pc, int[] clauses, int clause, int tag, int loop,
+            bool saveHandlers, int objects, int spills, int maximum, int[] fixedObjects)
+        {
+            if (tag >= FixedObjectCount || fixedObjects[2 * tag] < 0)
+            {
+                // InvalidCast and the argument checks carry messages naming types or parameters,
+                // which the raising site does not supply: stop explicitly rather than bind an
+                // object whose Message would differ from the CLR's.
+                code[used++] = 0x00; // unreachable
+                return used;
+            }
+            int heap = WasmBinary.HeapType(fixedObjects[2 * tag + 1]);
+            code[used++] = 0xfb; code[used++] = 1; // struct.new_default, as newobj allocates
+            used = WasmBinary.Unsigned(code, used, heap);
+            used = Local(code, used, 0x22, objects); // local.tee the eqref scratch
+            code[used++] = 0xfb; code[used++] = 0x17; // ref.cast (ref null class)
+            used = WasmBinary.Signed(code, used, heap);
+            code[used++] = 0x10; // call .ctor()
+            used = WasmBinary.Unsigned(code, used, fixedObjects[2 * tag]);
+            if (saveHandlers)
+            {
+                int index = clause / ExceptionClauses.Width;
+                used = Local(code, used, 0x20, objects);
+                used = Local(code, used, 0x21, objects + 1 + index);
+                code[used++] = 0xd0; // ref.null exn: a rethrow raises the object
+                code[used++] = ExceptionReference;
+                used = Local(code, used, 0x21, pc + 2 + index);
+            }
+            used = StoreCaught(code, used, clauses, clause, objects, spills, maximum);
+            return Resume(code, used, pc, clauses, clause, loop);
+        }
+
+        // [] -> []: the handler's entry stack slot (depth 0, the caught class) takes the scratch object.
+        private static int StoreCaught(byte[] code, int used, int[] clauses, int clause, int objects, int spills, int maximum)
+        {
+            int caught = ManagedExceptionClauses.CaughtClass(clauses[clause + ExceptionClauses.Mask]);
+            used = Local(code, used, 0x20, objects);
+            if (caught != PeLibrary.ObjectLayouts.ObjectReference)
+            {
+                code[used++] = 0xfb; code[used++] = 0x17; // ref.cast (ref null class): already tested or built
+                used = WasmBinary.Signed(code, used, WasmBinary.HeapType(caught));
+            }
+            return Local(code, used, 0x21, Spill(spills, maximum, caught, 0));
+        }
+
+        private static int DispatchObject(byte[] code, int used, int pc, int[] clauses, bool saveHandlers, int objects,
+            int spills, int maximum)
         {
             used = Local(code, used, 0x21, objects);
             for (int clause = 0; clause < clauses.Length; clause += ExceptionClauses.Width)
@@ -120,6 +186,8 @@ namespace PortableCompiler
                     code[used++] = ExceptionReference;
                     used = Local(code, used, 0x21, pc + 2 + index);
                 }
+                if (ExceptionClauses.IsBound(clauses, clause))
+                    used = StoreCaught(code, used, clauses, clause, objects, spills, maximum);
                 // The pc loop lies beyond the clause ifs only: every destination block has closed.
                 used = Resume(code, used, pc, clauses, clause, tested ? 1 : 0);
                 if (tested) code[used++] = 0x0b;

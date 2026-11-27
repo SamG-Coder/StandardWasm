@@ -934,7 +934,18 @@ namespace PortableCompiler
                 code[used++] = 0x0b;
             }
             code[used++] = 0;
-            if (catchRegion.Length != 0) used = ExceptionDispatchWasm.End(code, used, pcLocal, catchRegion, exceptionLocals > 1, objectBase);
+            if (catchRegion.Length != 0)
+            {
+                var fixedObjects = new int[2 * ExceptionDispatchWasm.FixedObjectCount];
+                for (int i = 0; i < fixedObjects.Length; i += 2)
+                {
+                    int function = frameShape[ExceptionDispatchWasm.FrameSlot + i];
+                    fixedObjects[i] = function < 0 ? -1 : hostImports + function;
+                    fixedObjects[i + 1] = frameShape[ExceptionDispatchWasm.FrameSlot + i + 1];
+                }
+                used = ExceptionDispatchWasm.End(code, used, pcLocal, catchRegion, exceptionLocals > 1, objectBase,
+                    spills, maximum, fixedObjects);
+            }
             code[used++] = 0x0b;
             code[used++] = 0;
             if (guard >= 0) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers, failure);
