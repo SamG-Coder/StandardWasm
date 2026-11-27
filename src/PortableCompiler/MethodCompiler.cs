@@ -2674,6 +2674,18 @@ namespace PortableCompiler
                     {
                         int next = records[slot + 2];
                         int fieldOwner = FieldAccess.Owner(descriptor), fieldStorage = FieldAccess.Storage(descriptor);
+                        if (ObjectLayouts.IsValueType(objects, fieldOwner) &&
+                            (fieldStorage == Character || fieldStorage == Unsigned16) &&
+                            nextSlot < records.Length && records[nextSlot] == BranchIl.LoadIndirect &&
+                            records[nextSlot + 1] == 0x49 && !ValueOperands.Entry(records, next, clauses))
+                        {
+                            // An immediate unsigned read uses the field at its
+                            // actual receiver. The interior address never escapes.
+                            records[slot] = BranchIl.GetField;
+                            records[slot + 2] = records[nextSlot + 2];
+                            records[nextSlot] = 0;
+                            continue;
+                        }
                         if (initializesField && ObjectLayouts.IsValueType(objects, fieldOwner) &&
                             !ObjectLayouts.IsExplicitValue(objects, fieldOwner) &&
                             (IsScalar(fieldStorage) || IsObjectReference(fieldStorage) ||
