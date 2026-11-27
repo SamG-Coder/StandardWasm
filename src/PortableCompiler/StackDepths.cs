@@ -506,7 +506,12 @@ namespace PortableCompiler
             if (kind == NativeAddressView)
                 return depth > 0 && IsNativeInteger(stack[depth - 1]) ? depth : -2;
             if (kind == ReinterpretPacked16Location)
+            {
+                // Unsafe.As<char, char> preserves the address and its readonly provenance.
+                if (operand == CharacterLocation && extra == CharacterLocation &&
+                    Match(stack, depth, ReadOnlyCharacterLocation)) return depth;
                 return Match(stack, depth, operand) ? Push(stack, allocated, depth - 1, extra) : -2;
+            }
             if (kind == NullManagedLocation) return Push(stack, allocated, depth, extra);
             if (kind == TestNullLocation)
             {
