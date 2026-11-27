@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <WasmBuildNative>false</WasmBuildNative>
+    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <WasmEnableWebcil>false</WasmEnableWebcil>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.10" />
+    <ProjectReference Include="../Fixture/EntryAssemblyDependency.csproj" />
+    <Compile Include="../Oracle/Probe.cs" Link="Probe.cs" />
+    <TrimmerRootDescriptor Include="Roots.xml" />
+  </ItemGroup>
+</Project>
