@@ -24,7 +24,8 @@ While linking a CoreLib body, the compiler folds a call to the **verified** Core
 `System.SR::GetResourceString(string)` into a string literal. The method is identified by its
 declaring TypeDef `System.SR`, its name and the signature `00 01 0E 0E`, in the image that is the
 CoreLib definition, and the fold applies only when the argument is the literal `ldstr` that
-immediately precedes the call:
+immediately precedes the call, and nothing else enters the call (no branch, switch or
+exception-region boundary targets it, so the literal is the only key that can reach it):
 
 - The key is looked up in CoreLib's own embedded `System.Private.CoreLib.Strings.resources`.
   `ResourceStrings` parses the `.resources` binary format, version 2 (magic `0xBEEFCACE`):

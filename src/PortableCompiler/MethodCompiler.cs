@@ -1192,7 +1192,7 @@ namespace PortableCompiler
                 // neutral resource string, so SR properties compile without ResourceManager.
                 if (kind == BranchIl.Call && records[slot + 3] == 0)
                 {
-                    int folded = ResourceStringFolding.FoldResourceCall(image, heaps, layout, records, slot, literals, literalSize);
+                    int folded = ResourceStringFolding.FoldResourceCall(image, heaps, layout, records, slot, clauses, literals, literalSize);
                     if (folded < 0) return folded;
                     if (folded > 0) continue;
                 }

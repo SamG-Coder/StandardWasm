@@ -15,13 +15,17 @@ namespace PortableCompiler
 
         // Returns 1 when the call at slot was folded, 0 when it is not a foldable call, or a
         // negative status.
-        internal static int FoldResourceCall(byte[] image, int[] heaps, int[] layout, int[] records, int slot,
+        internal static int FoldResourceCall(byte[] image, int[] heaps, int[] layout, int[] records, int slot, int[] clauses,
             byte[] literals, int[] literalSize)
         {
             int target = records[slot + 1];
             if (!NamedGetResourceString(image, heaps, layout, target)) return 0;
             int key = StraightLinePredecessor(records, slot);
             if (key < 0 || records[key] != BranchIl.LoadString) return 0;
+            // Adjacency is not enough: a branch, switch or handler boundary reaching the call (or the
+            // ldstr's successor) could bring a different key on the stack. Fold only when the call is
+            // entered solely by falling through from the literal.
+            if (ValueOperands.Entry(records, slot / BranchIl.Width, clauses)) return 0;
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;
             if (!PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return 0;
