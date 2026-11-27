@@ -103,7 +103,7 @@ namespace PortableCompiler
         // The host never re-enters an export while managed frames are live, so at entry
         // no initializer can legitimately be running and no shadow-stack frame is live.
         internal static int ExportEntry(byte[] code, int used, int epoch, int active, int target, int arity,
-            int stackPointer = -1, int stackLimit = -1)
+            int stackPointer = -1, int stackLimit = -1, int pins = -1)
         {
             if (arity > (code.Length - used - ExportCapacity) / 6) return -3;
             code[used++] = 0; // no locals
@@ -126,6 +126,7 @@ namespace PortableCompiler
                 used = Global(code, used, 0x24, stackPointer);
                 code[used++] = 0x0b;
             }
+            if (pins >= 0) used = PinRegistryWasm.Reset(code, used, pins);
             for (int i = 0; i < arity; i++) used = BranchWasm.Local(code, used, 0x20, i);
             code[used++] = 0x10;
             used = WasmBinary.Unsigned(code, used, target);

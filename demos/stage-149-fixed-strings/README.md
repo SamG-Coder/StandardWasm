@@ -22,7 +22,9 @@ The kernels cover:
 - a managed callee that scans the pointer to its NUL
 - two strings pinned at once and compared
 - a `stackalloc` buffer filled from a fixed string
-- 40 pins in one loop
+- 40 pins in one loop, and 100,000 pins of a 300-unit string, which reuse one copy
+- the same address for the same string pinned twice in one frame and across a call, as on
+  the CLR, and distinct addresses for distinct strings with equal contents
 - a `NullReferenceException` that leaves a fixed statement
 - reads after the pointer is passed to a call
 
