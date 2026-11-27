@@ -29,6 +29,13 @@ namespace PortableCompiler
             // Stage 149 (decision 0077): a pinning frame also saves the live-pin count.
             int pins = frameShape[20] - 1;
             int readLine = frameShape[21] - 1; // decision 0079
+            // Issue #170: the TypeInitializationException description, or null to keep the trap.
+            int[] failure = null;
+            if (frameShape[22] != 0)
+            {
+                failure = new int[TypeInitializerWasm.FailureWidth];
+                for (int i = 0; i < failure.Length; i++) failure[i] = frameShape[23 + i];
+            }
             bool hasNull = outgoingNulls.Length != 0;
             int spillKinds = PeLibrary.ConsoleStorage.Writer + classes;
             // V8 counts parameters together with function locals. Reject
@@ -39,7 +46,7 @@ namespace PortableCompiler
             int spills = arguments + locals + (hasNull ? 1 : 0);
             int fixedLocals = spills + classes + (stringScratch ? 5 : 0) +
                 (eventScratch ? 6 : 0) + (resourceFunction >= 0 ? 7 : 0) + 1 + 2 * exceptionLocals + continuations +
-                (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0);
+                (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0) + (failure != null ? 1 : 0);
             if (fixedLocals > MaxLocals || maximum > (MaxLocals - fixedLocals) / spillKinds) return -2;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
@@ -52,9 +59,11 @@ namespace PortableCompiler
             int objectBase = continuationBase + continuations;
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
                 (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
-                (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0));
+                (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0) + (failure != null ? 1 : 0));
             // The saved shadow-stack pointer follows every other local.
             int stackFrame = objectBase + exceptionLocals, pinFrame = stackFrame + 1;
+            // The escaped exception object of a failing initializer follows the saved $sp and pin count.
+            if (failure != null) failure[TypeInitializerWasm.FailureInner] = stackFrame + (stackPointer >= 0 ? (pins >= 0 ? 2 : 1) : 0);
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < arguments + locals; i++)
             {
@@ -129,6 +138,11 @@ namespace PortableCompiler
                 code[used++] = (byte)(pins >= 0 ? 2 : 1); // saved $sp, then the saved pin count
                 code[used++] = 0x7f;
             }
+            if (failure != null)
+            {
+                code[used++] = 1;
+                code[used++] = 0x6d; // eqref: the escaped managed object
+            }
             // Raw Wasm callers supply i32. Enforce the CLI argument width before
             // the first instruction, including on entry from a managed call.
             for (int i = 0; i < arguments; i++)
@@ -143,7 +157,7 @@ namespace PortableCompiler
                 code[used++] = 0x10; // call the initializer after the caller evaluated the arguments
                 used = WasmBinary.Unsigned(code, used, hostImports + prologue);
             }
-            if (guard >= 0) used = TypeInitializerWasm.Begin(code, used, guard, epoch, activeInitializers, pcLocal);
+            if (guard >= 0) used = TypeInitializerWasm.Begin(code, used, guard, epoch, activeInitializers, pcLocal, failure);
             if (stackPointer >= 0)
             {
                 used = StackAllocationWasm.Begin(code, used, stackPointer, stackFrame);
@@ -923,7 +937,7 @@ namespace PortableCompiler
             if (catchRegion.Length != 0) used = ExceptionDispatchWasm.End(code, used, pcLocal, catchRegion, exceptionLocals > 1, objectBase);
             code[used++] = 0x0b;
             code[used++] = 0;
-            if (guard >= 0) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers);
+            if (guard >= 0) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers, failure);
             if (stackPointer >= 0)
             {
                 code[used++] = 0x0b; // end try_table

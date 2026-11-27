@@ -96,11 +96,13 @@ namespace PortableCompiler
         {
             found[0] = -1;
             found[1] = 0;
-            var layout = new int[4];
-            var heaps = new int[8];
-            var counts = new int[45];
             for (int owner = 0; owner < bundle.Count; owner++)
             {
+                // Fresh tables per image: ReadCounts leaves absent tables untouched, so counts
+                // reused from a previous image would misidentify the CoreLib definition.
+                var layout = new int[4];
+                var heaps = new int[8];
+                var counts = new int[45];
                 byte[] image = bundle.Get(owner);
                 if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
                 if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;

@@ -77,7 +77,56 @@ initialized type:
   `TypeInitializationException` and continues does something this compiler
   cannot yet reproduce. #170 stays open for that gap.
 
-## Root objects
+## Typed failure (#170)
+
+When the bundle supplies CoreLib, a **managed exception object** escaping an initializer body
+becomes the CLR's `TypeInitializationException`:
+
+- **Catching.** The guard's `try_table` catches the object tag with its payload, separately
+  from `catch_all`.
+- **Construction.** It builds CoreLib's own `TypeInitializationException` through the upstream
+  internal constructor `(string fullTypeName, string message, Exception innerException)`:
+  - `fullTypeName` is the name the CLR reports: the failing TypeDef's own namespace and name,
+    UTF-16 from its UTF-8 metadata, written at compile time. A nested type has no namespace and
+    no enclosing prefix: `Ns.Outer+Inner` fails as `Inner` (CLR 10.0.10, `TypeName` and `Message`).
+    Stage 129's verifier checks both strings against the CLR's for a top-level, a nested and a
+    non-ASCII nested type.
+  - `message` is `The type initializer for '<fullTypeName>' threw an exception.`
+  - The constructor's untaken `SR` fallback compiles because #304 folds CoreLib resource
+    strings (decision 0081).
+- **Caching.** The object goes in a per-initializer global (owner 0, a reserved negative row).
+  The guard is marked failed and the object is thrown on the object tag. Every later trigger
+  rethrows the **same** object, as the CLR does.
+- **No epoch advance.** A managed exception unwinds frame by frame, so each enclosing
+  initializer's guard catches and wraps it in turn, and the epoch does not advance. An
+  initializer that reads a failing one fails with a `TypeInitializationException` whose inner
+  exception is the first.
+
+**Fixed-tag exceptions** carry no object. The guard catches each one into its own block,
+which builds the matching CoreLib exception with its parameterless constructor and passes it as
+the inner exception. The default message comes from `SR` (decision 0081). This is exact only
+where the CLR raises the exception with that same default message:
+
+| Tag | CoreLib exception | Wrapped |
+| --- | --- | --- |
+| Overflow | `OverflowException` | yes |
+| DivideByZero | `DivideByZeroException` | yes |
+| IndexOutOfRange | `IndexOutOfRangeException` | yes |
+| NullReference | `NullReferenceException` | yes |
+| InvalidCast | `InvalidCastException` | no: the CLR's message names both types |
+| Argument | `ArgumentException` | no: the CLR's message names the parameter |
+| ArgumentNull | `ArgumentNullException` | no: the CLR's message names the parameter |
+
+A tag marked "no" keeps the trap rather than build an object whose `Message` would differ.
+It can be wrapped once the raising site supplies the exact message.
+
+These cases still trap as described above:
+- a tag whose CoreLib type cannot be bound
+- a bundle without CoreLib's constructors
+- a type name that is not ASCII
+- raw engine traps such as stack exhaustion
+
+
 
 `newobj System.Object::.ctor` allocates the reserved zero-field struct in the
 native-vector recursive group (`RootObjectHeap`). Each allocation has its own

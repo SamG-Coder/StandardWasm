@@ -55,10 +55,16 @@ async function runCases(compiler, images, cases) {
 
     // A trap from the compiler's failed-initializer path is an unreachable RuntimeError.
     // A raw engine trap (stack exhaustion) is any other non-managed error.
-    function outcome(call) {
+    // Issue #170: a failed initializer raises CoreLib's TypeInitializationException on the object
+    // tag; `thrown` keeps each payload so repeated triggers can be checked for the same object.
+    let thrown = [];
+    function outcome(call, tag) {
         try { return String(call()); }
         catch (error) {
-            if (error instanceof WebAssembly.Exception) return "managed exception";
+            if (error instanceof WebAssembly.Exception) {
+                if (tag && error.is(tag)) thrown.push(error.getArg(tag, 0));
+                return "managed exception";
+            }
             if (error instanceof WebAssembly.RuntimeError && /unreachable/i.test(error.message)) return "trap";
             return "raw trap";
         }
@@ -98,17 +104,44 @@ async function runCases(compiler, images, cases) {
         if (WebAssembly.Module.imports(module).length) throw Error(test.name + " has runtime imports");
 
         if (test.sequence) {
-            // Same instance throughout: a failed initializer must trap on every trigger,
-            // run once, and never expose partially initialized state.
-            const observed = test.sequence.map(([name]) => [name, outcome(() => instance.exports[name]())]);
+            // Same instance throughout: a failed initializer raises the same TypeInitializationException
+            // object on every trigger, runs once, and never exposes partially initialized state.
+            thrown = [];
+            const tag = instance.exports["\0object"];
+            const observed = test.sequence.map(([name]) => [name, outcome(() => instance.exports[name](), tag)]);
             const expected = test.sequence.map(([name, value]) =>
-                [name, value === "TypeInitializationException" ? "trap" : value]);
+                [name, value === "TypeInitializationException" ? "managed exception" : value]);
             if (JSON.stringify(observed) !== JSON.stringify(expected))
                 throw Error(test.name + " observed " + JSON.stringify(observed) + ", expected " + JSON.stringify(expected));
+            // Every expected managed exception must have arrived on the object tag (a payload was
+            // observed), and the repeated triggers of ReadFailing must carry one and the same object.
+            const managed = expected.filter(([, value]) => value === "managed exception").length;
+            if (thrown.length !== managed)
+                throw Error(test.name + " observed " + thrown.length + " object-tag payloads, expected " + managed);
+            if (test.name === "ReadFailing" && (managed < 2 || thrown.some(payload => payload !== thrown[0])))
+                throw Error(test.name + " did not raise one exception object on its repeated triggers");
             results.push({ name: test.name, sequence: observed });
             continue;
         }
 
+        if (test.initializerMessage) {
+            // The wrapper's literals are the CLR's own TypeName and Message (UTF-16 in a data segment).
+            // Self-contained: this function also runs inside the browser page.
+            const carries = text => {
+                const pattern = new Uint8Array(2 * text.length);
+                for (let i = 0; i < text.length; i++) {
+                    pattern[2 * i] = text.charCodeAt(i) & 255;
+                    pattern[2 * i + 1] = text.charCodeAt(i) >> 8;
+                }
+                search: for (let at = 0; at + pattern.length <= code.length; at++) {
+                    for (let j = 0; j < pattern.length; j++) if (code[at + j] !== pattern[j]) continue search;
+                    return true;
+                }
+                return false;
+            };
+            for (const text of [test.initializerTypeName, test.initializerMessage])
+                if (!carries(text)) throw Error(test.name + " does not carry the CLR initializer string " + JSON.stringify(text));
+        }
         const value = String(instance.exports.run());
         if (value !== test.wasm) throw Error(test.name + " returned " + value + ", the CLR returned " + test.clr);
         results.push({ name: test.name, value });
