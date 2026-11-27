@@ -287,6 +287,7 @@ namespace PortableCompiler
             var literals = new byte[output.Length];
             var literalSize = new int[1];
             var remainderFixup = new int[1];
+            var primitiveArrays = new PrimitiveArrayWasm();
             var reflection = new RuntimeReflectionPlan();
             var hostUse = new int[1];
             int functions = 0, length = 0, closedSignaturesThrough = 0;
@@ -1175,7 +1176,7 @@ namespace PortableCompiler
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
                         arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers,
                         reflection, inlineLocations, nativePlans.Plans, filters, frameCells, pointers, rootCount, frameRoots,
-                        tracksFinalizers ? finalizers : null, wrapsFailure ? failure : null);
+                        tracksFinalizers ? finalizers : null, wrapsFailure ? failure : null, primitiveArrays);
                 }
 
                 if (used < 0) return used;
@@ -1194,7 +1195,7 @@ namespace PortableCompiler
                 return Reemit;
             }
             length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, objects, length,
-                hostImports, location, reflection);
+                hostImports, location, reflection, primitiveArrays);
             if (length < 0) return length;
             var interfacePosition = new[] { length };
             functions = reflection.InterfaceTests.Write(moduleCode, interfacePosition, objects, offsets, signatures,
@@ -1211,7 +1212,7 @@ namespace PortableCompiler
                 arities[functions] = 1;
                 offsets[functions] = offset;
                 bodyOffsets[functions] = length;
-                length = reflection.ObjectTypes.Write(bundle, moduleCode, length, objects, globals);
+                length = reflection.ObjectTypes.Write(bundle, moduleCode, length, objects, globals, primitiveArrays);
                 if (length < 0) return length;
                 WasmIndexFixups.Resolve(moduleCode, reflection.ObjectTypes.Fixups[0], hostImports + functions);
                 sizes[functions] = length - bodyOffsets[functions];
@@ -1307,7 +1308,8 @@ namespace PortableCompiler
             CompileLocation.Clear(location);
             if (linearMemory) hostFeatures |= WasmImports.Memory;
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0], pointers, rootCount, rootWalker, rootProbe, natives);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0], pointers, rootCount, rootWalker, rootProbe, natives,
+                primitiveArrays);
         }
 
         private static bool IsExported(int[] exports, int target)

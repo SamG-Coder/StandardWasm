@@ -236,7 +236,8 @@ namespace PortableCompiler
         }
 
         internal int Write(byte[] code, int[] bodyOffsets, int[] sizes, int[] arities, int[] offsets,
-            int[] signatures, int[] objects, int length, int hostImports, int[] location, RuntimeReflectionPlan reflection)
+            int[] signatures, int[] objects, int length, int hostImports, int[] location, RuntimeReflectionPlan reflection,
+            PrimitiveArrayWasm arrayHeaps)
         {
             int boxLayout = boxes == 0 ? 0 : PrimitiveBoxing.FindLayout(objects);
             for (int site = 0; site < sitesUsed; site += SiteWidth)
@@ -269,8 +270,7 @@ namespace PortableCompiler
                         if ((primitiveArrays & (1 << element)) == 0) continue;
                         if (code.Length - length < 26) return -3;
                         // Every CLI primitive vector inherits Object.ToString.
-                        length = VirtualDispatchWasm.ArmHeap(code, length, WasmBinary.PrimitiveArrayHeap(element),
-                            ObjectReference, root, arity);
+                        length = VirtualDispatchWasm.ArmHeap(code, length, element, ObjectReference, root, arity, arrayHeaps);
                     }
                 }
 

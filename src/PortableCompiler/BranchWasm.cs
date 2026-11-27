@@ -12,7 +12,8 @@ namespace PortableCompiler
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
             byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection,
             int[] inlineLocations, int[] nativePlans, int[] filters, int[] frameCells,
-            FunctionPointerPlan pointers, int rootCount, byte[] frameRoots, FinalizerSlots finalizers, int[] failure)
+            FunctionPointerPlan pointers, int rootCount, byte[] frameRoots, FinalizerSlots finalizers, int[] failure,
+            PrimitiveArrayWasm primitiveArrays)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -1507,10 +1508,10 @@ namespace PortableCompiler
                     int element = records[slot + BranchIl.Width + 1];
                     // The exact CLR type belongs to the allocation. Existing typed
                     // array instructions and spills consume its storage supertype.
-                    int heap = element == 0 ? WasmBinary.HeapType(operand) : WasmBinary.PrimitiveArrayHeap(element);
                     code[used++] = 0xfb;
                     code[used++] = kind == NewArray ? (byte)7 : (byte)9; // default or passive data
-                    used = WasmBinary.Unsigned(code, used, heap);
+                    used = element == 0 ? WasmBinary.Unsigned(code, used, WasmBinary.HeapType(operand)) :
+                        primitiveArrays.WriteHeap(code, used, frameShape[7], element);
                     if (kind == InitializedArray) code[used++] = 0; // shared data segment index
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, operand, top));
                 }

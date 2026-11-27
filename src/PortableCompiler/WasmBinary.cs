@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal const int ScalarThunkType = 2, EventThunkType = 8, EventEntryHeap = 9, EventHandlerHeap = 10;
         private const int WideArrayHeap = 6, EventArgsHeap = 7, SingleArrayHeap = 11, DoubleArrayHeap = 12;
-        private const int NativeArrayHeap = DoubleArrayHeap + 1;
+        internal const int NativeArrayHeap = DoubleArrayHeap + 1;
         // The zero-field companion of the native vector is distinct from every class heap.
         // A plain System.Object allocates it without widening its static eqref (decision 0057).
         internal const int RootObjectHeap = NativeArrayHeap + 1;
@@ -16,15 +16,13 @@ namespace PortableCompiler
         private const int ObjectLocationHeap = ValueLocationHeap + 1;
         private const int ReadOnlySpanHeap = ObjectLocationHeap + 1;
         internal const int CharacterSpanThunkType = ReadOnlySpanHeap + 1;
-        private const int FirstPrimitiveArrayHeap = CharacterSpanThunkType + 1;
-        private const int FirstClassHeap = FirstPrimitiveArrayHeap + PrimitiveArrayWasm.MemberCount;
-
-        internal static int PrimitiveArrayHeap(int element) => PrimitiveArrayWasm.Heap(FirstPrimitiveArrayHeap, element);
+        private const int FirstClassHeap = CharacterSpanThunkType + 1;
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
             byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostFeatures, int reflectionHeapFixup,
-            FunctionPointerPlan pointers, int rootCount, int rootWalker, bool rootProbe, NativeImportTable natives)
+            FunctionPointerPlan pointers, int rootCount, int rootWalker, bool rootProbe, NativeImportTable natives,
+            PrimitiveArrayWasm primitiveArrays)
         {
             // Imported functions precede defined functions in the Wasm index
             // space. Emitted bodies already include this offset in their calls.
@@ -98,8 +96,9 @@ namespace PortableCompiler
             // types retain individual indices for fields and function signatures.
             // The fixed recursive groups combine seven types into two entries.
             bool hasDescriptors = RuntimeTypeWasm.HasDescriptors(globals);
-            int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 5 -
-                (PrimitiveArrayWasm.MemberCount - 1);
+            primitiveArrays.Prepare();
+            int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 5 +
+                primitiveArrays.EntryCount;
             if (hasRemainder) typeEntries++;
             if (tagCount != 0) typeEntries++;
             if (objectTag) typeEntries++;
@@ -107,7 +106,8 @@ namespace PortableCompiler
             if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
             if (hasDescriptors) typeEntries++;
             int prefix = UnsignedSize(typeEntries) + 70 + ManagedValueLocationWasm.TypeBytes +
-                ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + 7 + PrimitiveArrayWasm.TypeBytes +
+                ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + 7 + PrimitiveArrayWasm.BaseTypeOverhead +
+                primitiveArrays.TypeBytes +
                 (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (tagCount != 0) prefix += 3; // () -> () exception payload
@@ -319,7 +319,6 @@ namespace PortableCompiler
             cursor = ValueType(output, cursor, WritableCharacterSpan);
             output[cursor++] = 0x7f;
             output[cursor++] = 0;
-            cursor = PrimitiveArrayWasm.WriteIdentities(output, cursor);
             if (recursive)
             {
                 output[cursor++] = 0x4e;
@@ -401,6 +400,8 @@ namespace PortableCompiler
             cursor = WasmImports.WriteTypes(output, cursor, hostFeatures, natives);
             if (argumentArray != 0) cursor = EntryArgumentsWasm.WriteTypes(output, cursor, argumentArray);
             if (hasDescriptors) cursor = RuntimeTypeWasm.WriteDescriptor(output, cursor);
+            // Append exact array heaps after every type whose index is fixed earlier.
+            cursor = primitiveArrays.WriteIdentities(output, cursor, bodies, descriptorHeap + (hasDescriptors ? 1 : 0));
             if (WasmImports.Any(hostFeatures, natives))
             {
                 cursor = Section(output, cursor, 2, importSize);

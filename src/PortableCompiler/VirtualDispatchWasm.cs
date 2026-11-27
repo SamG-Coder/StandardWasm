@@ -5,12 +5,13 @@ namespace PortableCompiler
         internal static int Arm(byte[] code, int used, int type, int targetReceiver, int target, int arity) =>
             ArmHeap(code, used, WasmBinary.HeapType(type), targetReceiver, target, arity);
 
-        internal static int ArmHeap(byte[] code, int used, int heap, int targetReceiver, int target, int arity)
+        internal static int ArmHeap(byte[] code, int used, int heap, int targetReceiver, int target, int arity,
+            PrimitiveArrayWasm arrayHeaps = null)
         {
             used = BranchWasm.Local(code, used, 0x20, 0);
             code[used++] = 0xfb;
             code[used++] = 20; // ref.test (ref T)
-            used = WasmBinary.Signed(code, used, heap);
+            used = arrayHeaps == null ? WasmBinary.Signed(code, used, heap) : arrayHeaps.WriteHeap(code, used, 0, heap);
             code[used++] = 0x04; // if
             code[used++] = 0x40; // empty block
             used = BranchWasm.Local(code, used, 0x20, 0);

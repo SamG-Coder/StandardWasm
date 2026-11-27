@@ -3,14 +3,42 @@ using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
-    internal static class PrimitiveArrayWasm
+    internal sealed class PrimitiveArrayWasm
     {
-        internal const int MemberCount = 14;
-        internal const int TypeBytes = 7 * 2 + 2 + MemberCount * 6;
         internal const int FirstElement = 2, EndElement = 26;
+        internal const int BaseTypeOverhead = 7 * 2;
+        private readonly int[] heads = new int[EndElement];
+        private readonly byte[] families = new byte[WasmBinary.NativeArrayHeap + 1];
+        internal int EntryCount { get; private set; }
+        internal int TypeBytes { get; private set; }
 
-        internal static int Heap(int first, int element) =>
-            first + (element < 0x18 ? element - FirstElement : element - 0x18 + 12);
+        internal int WriteHeap(byte[] code, int position, int bodyStart, int element) =>
+            WasmIndexFixups.WriteAt(code, position, bodyStart, heads, element);
+
+        internal void Prepare()
+        {
+            int reached = 0;
+            for (int element = FirstElement; element < EndElement; element++)
+            {
+                if (heads[element] != 0)
+                    reached |= 1 << WasmBinary.HeapType(ArrayTypeRefs.Storage(element));
+            }
+            for (int element = FirstElement; element < EndElement; element++)
+            {
+                int storage = ArrayTypeRefs.Storage(element);
+                if (storage == 0) continue;
+                int heap = WasmBinary.HeapType(storage);
+                if ((reached & (1 << heap)) != 0)
+                    families[heap] = (byte)(families[heap] + 1);
+            }
+            for (int heap = 0; heap < families.Length; heap++)
+            {
+                int count = families[heap];
+                if (count == 0) continue;
+                EntryCount++;
+                TypeBytes += 6 * count + (count > 1 ? 2 : 0);
+            }
+        }
 
         internal static int WriteBase(byte[] output, int cursor, int storage)
         {
@@ -19,20 +47,29 @@ namespace PortableCompiler
             return WriteLayout(output, cursor, storage);
         }
 
-        internal static int WriteIdentities(byte[] output, int cursor)
+        internal int WriteIdentities(byte[] output, int cursor, byte[] bodies, int type)
         {
-            // Distinct positions in a single recursive group prevent canonical
-            // equivalence when two CLI elements have the same mutable storage.
-            output[cursor++] = 0x4e;
-            output[cursor++] = MemberCount;
-            for (int element = FirstElement; element < EndElement; element++)
+            for (int heap = 0; heap < families.Length; heap++)
             {
-                int storage = ArrayTypeRefs.Storage(element);
-                if (storage == 0) continue;
-                output[cursor++] = 0x4f; // final subtype of the existing storage heap
-                output[cursor++] = 1;
-                output[cursor++] = (byte)WasmBinary.HeapType(storage);
-                cursor = WriteLayout(output, cursor, storage);
+                int count = families[heap];
+                if (count == 0) continue;
+                // A storage family has a stable recursive shape across modules.
+                // Its positions distinguish CLI types sharing packed storage.
+                if (count > 1)
+                {
+                    output[cursor++] = 0x4e;
+                    output[cursor++] = (byte)count;
+                }
+                for (int element = FirstElement; element < EndElement; element++)
+                {
+                    int storage = ArrayTypeRefs.Storage(element);
+                    if (storage == 0 || WasmBinary.HeapType(storage) != heap) continue;
+                    WasmIndexFixups.Resolve(bodies, heads[element], type++);
+                    output[cursor++] = 0x4f; // final subtype of the storage heap
+                    output[cursor++] = 1;
+                    output[cursor++] = (byte)heap;
+                    cursor = WriteLayout(output, cursor, storage);
+                }
             }
             return cursor;
         }

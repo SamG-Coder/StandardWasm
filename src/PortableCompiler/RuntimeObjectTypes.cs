@@ -26,7 +26,8 @@ namespace PortableCompiler
         internal void IncludeBox(int element) => boxedElements |= 1 << element;
         internal void IncludePrimitiveArray(int element) => primitiveArrays |= 1 << element;
 
-        internal int Write(BundleImages bundle, byte[] code, int position, int[] objects, int[] globals)
+        internal int Write(BundleImages bundle, byte[] code, int position, int[] objects, int[] globals,
+            PrimitiveArrayWasm arrayHeaps)
         {
             if (code.Length - position < 3) return -3;
             code[position++] = 0; // no locals besides the receiver
@@ -74,7 +75,7 @@ namespace PortableCompiler
                 int descriptor = RuntimeTypeTokens.BindIdentity(globals, AssemblyBundle.ObjectOwner,
                     RuntimeTypeTokens.PrimitiveVectorKey + element);
                 if (descriptor < 0) return descriptor;
-                position = HeapCase(code, position, WasmBinary.PrimitiveArrayHeap(element), descriptor);
+                position = HeapCase(code, position, element, descriptor, arrayHeaps);
                 if (position < 0) return position;
             }
             // Representations without exact runtime type identity must fail
@@ -96,13 +97,14 @@ namespace PortableCompiler
             return false;
         }
 
-        private static int HeapCase(byte[] code, int position, int heap, int descriptor)
+        private static int HeapCase(byte[] code, int position, int heap, int descriptor, PrimitiveArrayWasm arrayHeaps = null)
         {
             if (code.Length - position < 24) return -3;
             position = Local(code, position, 0x20, 0);
             code[position++] = 0xfb;
             code[position++] = 0x14; // ref.test non-null
-            position = WasmBinary.Signed(code, position, heap);
+            position = arrayHeaps == null ? WasmBinary.Signed(code, position, heap) :
+                arrayHeaps.WriteHeap(code, position, 0, heap);
             return ReturnCase(code, position, descriptor);
         }
 
