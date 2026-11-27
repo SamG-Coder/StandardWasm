@@ -10,6 +10,7 @@ namespace PortableCompiler
             int actual, bool allocated, int declared, int owner, int row, int[] symbol, bool finalizer = false, bool exactValue = false)
         {
             int receiver = actual == NullValue ? declared : actual;
+            if (receiver == String) return SelectStringBody(bundle, objects, declared, owner, row, symbol);
             if (receiver < FirstClass || receiver - FirstClass >= objects[0] ||
                 (!allocated && !IsSealed(objects, receiver)) ||
                 IsValueType(objects, receiver) != exactValue || IsInterface(objects, receiver)) return -2;
@@ -106,6 +107,52 @@ namespace PortableCompiler
                 if (symbol.Length > 2) symbol[2] = targetContext;
                 final = (flags & 0x20) != 0;
             }
+            return 0;
+        }
+
+        // System.String is sealed but uses a compiler-owned GC layout. Find its
+        // original managed method in CoreLib without registering its desktop fields.
+        private static int SelectStringBody(BundleImages bundle, int[] objects, int declared, int owner, int row,
+            int[] symbol)
+        {
+            if (declared != ObjectReference && declared != String) return -2;
+            byte[] image = bundle.Get(owner);
+            var layout = new int[4];
+            var heaps = new int[8];
+            if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+            int selected = row;
+            if (declared == ObjectReference)
+            {
+                var identity = new int[2];
+                int status = RuntimeTypeTokens.FindCoreType(bundle, "String", identity);
+                if (status < 0) return status == -6 ? -2 : status;
+                // The root declaration and the sealed override are in the same CoreLib.
+                if (identity[0] != owner) return -2;
+                int name = MethodDefinitions.ReadColumn(image, layout, row, 3);
+                int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
+                var range = new int[2];
+                status = VirtualSlotMetadata.ReadMethodRange(image, heaps, layout, identity[1], range);
+                if (status < 0) return status;
+                selected = 0;
+                for (int candidate = range[0]; candidate < range[1]; candidate++)
+                {
+                    int flags = MethodDefinitions.ReadColumn(image, layout, candidate, 2);
+                    if ((flags & 0x150) != 0x40) continue; // Instance virtual reusing a slot.
+                    int candidateName = MethodDefinitions.ReadColumn(image, layout, candidate, 3);
+                    if (!AssemblyReferences.SameString(image, heaps, name, image, heaps, candidateName)) continue;
+                    int candidateSignature = MethodDefinitions.ReadColumn(image, layout, candidate, 4);
+                    int match = BundleSignatures.Match(bundle, image, layout, heaps, owner, signature,
+                        image, layout, heaps, owner, candidateSignature, false, objects);
+                    if (match < 0) return match;
+                    if (match == 0) continue;
+                    if (selected != 0) return -5;
+                    selected = candidate;
+                }
+                if (selected == 0) return -2;
+            }
+            symbol[0] = owner;
+            symbol[1] = selected;
+            if (symbol.Length > 2) symbol[2] = 0;
             return 0;
         }
 

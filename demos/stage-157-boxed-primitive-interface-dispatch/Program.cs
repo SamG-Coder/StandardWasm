@@ -22,7 +22,8 @@ internal static class Program
             OriginalIntWrites, OriginalIntTooShort, OriginalCharWrites, OriginalCharTooShort, ReferenceWrites,
             FormatProviderDescriptor, VirtualDescriptorArguments,
             ImplicitByteView, ConstructedByteView, ReturnedByteView, NullByteView, EmptyByteView, ByteViewBounds,
-            WritableSpanReference, ClosedGenericSpanReference, DefaultSpanReference
+            WritableSpanReference, ClosedGenericSpanReference, DefaultSpanReference,
+            StringObjectSlot, StringOwnSlot, NullStringObjectSlot
         };
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
@@ -35,6 +36,18 @@ internal static class Program
                 Path.Combine(runtime, "System.Memory.dll")
             }, cases = results
         }));
+    }
+
+    public static int StringObjectSlot() => CheckObjectSlot("abc");
+    public static int StringOwnSlot() => CheckStringSlot("def");
+
+    private static int CheckObjectSlot(string value) => ReferenceEquals(((object)value).ToString(), value) ? 1 : 0;
+    private static int CheckStringSlot(string value) => ReferenceEquals(value.ToString(null), value) ? 2 : 0;
+
+    public static int NullStringObjectSlot()
+    {
+        try { return CheckObjectSlot(null!); }
+        catch (NullReferenceException) { return 3; }
     }
 
     public static int WritableSpanReference()

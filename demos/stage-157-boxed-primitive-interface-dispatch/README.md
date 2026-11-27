@@ -20,6 +20,10 @@ and bounds. Writable character span cases get references through CoreLib's
 including a generic caller. Dereferencing the default span's reference
 must raise the same typed exception as on the CLR.
 
+The sealed string receiver cases compile the original CoreLib bodies for calls
+through the Object slot and a String-declared virtual slot. They compare
+returned string identity and the typed null-receiver exception.
+
 Both `Int32` cases have CLR answers. The compiler now binds the original
 `Number.TryFormatInt32<char>` generic method. Until the formatting pipeline
 lowers, the verifier accepts only the located diagnostic at the pinned local

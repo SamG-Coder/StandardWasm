@@ -2577,6 +2577,7 @@ namespace PortableCompiler
             int declaring = ObjectLayouts.Owner(image, heaps, layout, row, false);
             if (declaring < 1) return -1;
             int receiver = closed != 0 ? closed : ObjectLayouts.IsCoreObjectType(image, heaps, layout, declaring << 2) ? ObjectReference :
+                PlatformTypeReferences.IsString(image, heaps, layout, declaring << 2) ? String :
                 BundleLayouts.Register(bundle, image, layout, heaps, owner, declaring, objects);
             if (receiver < 0) return receiver;
             if (ObjectLayouts.IsValueType(objects, receiver)) return -2;
@@ -2617,7 +2618,7 @@ namespace PortableCompiler
                 int owner = records[slot + BranchIl.Width + 1], row = records[slot + BranchIl.Width + 3];
                 bool allocated = allocatedStates[receiver] != 0;
                 int function;
-                if (allocated || ObjectLayouts.IsSealed(objects, bound))
+                if (allocated || bound == String || ObjectLayouts.IsSealed(objects, bound))
                 {
                     function = BindVirtualBody(bundle, objects, actual, allocated, declared, owner, row,
                         owners, rows, contexts, bases, indices, arities, offsets, signatures, functions);
