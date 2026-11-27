@@ -254,6 +254,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [263 · Canonical String generic constraints](stage-263-canonical-string-constraints/README.md) | `npm run demo -- stage-263-canonical-string-constraints` | Compare real String interface constraints and closed type identity with Windows |
 | [266 · Runtime Type vectors](stage-266-runtime-type-vectors/README.md) | `npm run demo -- stage-266-runtime-type-vectors` | Compare descriptor cells and authentic Type[] identity with Windows |
 | [267 · Runtime generic interface Type descriptors](stage-267-runtime-generic-interface-types/README.md) | `npm run demo -- stage-267-runtime-generic-interface-types` | Resolve linked closed interface types from canonical runtime descriptors |
+| [270 · Assignability to factory-created interfaces](stage-270-runtime-interface-assignability/README.md) | `npm run demo -- stage-270-runtime-interface-assignability` | Compare canonical interface relations and diagnose incomplete graphs |
 
 ## Adding a stage
 
