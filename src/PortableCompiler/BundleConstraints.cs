@@ -51,6 +51,8 @@ namespace PortableCompiler
 
         internal static int Implements(BundleImages bundle, int[] objects, int argument, int[] required, int depth)
         {
+            if (argument == SignatureTypes.String)
+                return ImplementsCoreReference(bundle, objects, required, "String", "System", depth);
             var noParameters = new int[0];
             if (GenericScalar.IsScalar(argument))
             {
@@ -97,8 +99,10 @@ namespace PortableCompiler
 
         // Runtime representations such as String do not have nominal layouts.
         // Walk the metadata hierarchy without reserving an unused class layout.
-        internal static int ImplementsCoreReference(BundleImages bundle, int[] objects, int[] required, string name, string space)
+        internal static int ImplementsCoreReference(BundleImages bundle, int[] objects, int[] required,
+            string name, string space, int depth = 0)
         {
+            if (depth >= ObjectLayouts.MaxTypeDepth) return -2;
             var identity = new int[2];
             int status = RuntimeTypeTokens.FindCoreType(bundle, name, identity, space);
             if (status < 0) return status;
@@ -106,11 +110,11 @@ namespace PortableCompiler
             var layout = new int[4];
             var heaps = new int[8];
             var shape = new int[5];
-            for (int depth = 0; depth < ObjectLayouts.MaxTypeDepth; depth++)
+            for (int level = 0; level < ObjectLayouts.MaxTypeDepth; level++)
             {
                 int owner = identity[0], row = identity[1];
                 if (owner == AssemblyBundle.ObjectOwner) return 0;
-                status = Search(bundle, objects, required, owner, row, arguments, 0, 0);
+                status = Search(bundle, objects, required, owner, row, arguments, 0, depth);
                 if (status != 0) return status;
                 byte[] image = bundle.Get(owner);
                 if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
