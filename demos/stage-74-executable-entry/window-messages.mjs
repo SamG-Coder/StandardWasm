@@ -53,3 +53,51 @@ function integerMessageName(name) {
     }
     return ordinal;
 }
+
+export function createThreadMessageQueue(memory, currentThread, setError) {
+    const messages = [];
+    const maximumPostedMessages = 10000;
+
+    function fail(error) {
+        setError(error);
+        return 0;
+    }
+
+    return {
+        postThreadMessageW(thread, message, wParam, lParam) {
+            if ((thread >>> 0) !== (currentThread() >>> 0)) return fail(1444); // ERROR_INVALID_THREAD_ID
+            if (messages.length === maximumPostedMessages) return fail(1816); // ERROR_NOT_ENOUGH_QUOTA
+            messages.push({ message: message >>> 0, wParam, lParam, time: performance.now() >>> 0 });
+            return 1;
+        },
+        peekMessageW(pointer, window, minimum, maximum, flags) {
+            // Thread messages belong to the guest queue and have no HWND.
+            if (window !== 0 && window !== -1) return 0;
+            const queueStatus = flags >>> 16;
+            if (queueStatus !== 0 && (queueStatus & 0x08) === 0) return 0; // QS_POSTMESSAGE
+            const first = minimum >>> 0;
+            const last = maximum >>> 0;
+            const allMessages = first === 0 && last === 0;
+            // A thread post of WM_QUIT follows the range filter like any other post.
+            // A quit produced by PostQuitMessage is a separate queue operation.
+            const index = messages.findIndex(({ message }) => allMessages || (message >= first && message <= last));
+            if (index < 0) return 0;
+
+            const at = pointer >>> 0;
+            const view = new DataView(memory.buffer);
+            if (at === 0 || at + 28 > view.byteLength) return fail(998); // ERROR_NOACCESS
+            const { message, wParam, lParam, time } = messages[index];
+            // Native x86 MSG has seven 32-bit words. The queue has no guest
+            // cursor coordinates for a thread post. Preserve adjacent bytes.
+            view.setUint32(at, 0, true);
+            view.setUint32(at + 4, message, true);
+            view.setUint32(at + 8, wParam, true);
+            view.setInt32(at + 12, lParam, true);
+            view.setUint32(at + 16, time, true);
+            view.setInt32(at + 20, 0, true);
+            view.setInt32(at + 24, 0, true);
+            if ((flags & 1) !== 0) messages.splice(index, 1); // PM_REMOVE
+            return 1;
+        }
+    };
+}

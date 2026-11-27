@@ -5,7 +5,7 @@ import { createDisplayContexts, displayContextImportNames } from "./display-cont
 import { createFullPathHost } from "./full-path-host.mjs";
 import { createLongPathHost } from "./long-path-host.mjs";
 import { createAdjustWindowRectExForDpi } from "./window-rect.mjs";
-import { createWindowMessageRegistration } from "./window-messages.mjs";
+import { createThreadMessageQueue, createWindowMessageRegistration } from "./window-messages.mjs";
 import { createThreadHandleHost } from "./thread-handle-host.mjs";
 import { createWindowStationHost } from "./window-station-host.mjs";
 import { createDefaultWindowProcedure, createWindowClassState, createWindowCreation, createInvalidateRect, createRedrawWindow, createWindowState, windowImportNames } from "./window-state.mjs";
@@ -14,13 +14,14 @@ export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
     "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom",
     "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "getLongPathNameW", "redrawWindow", "invalidateRect", "registerWindowMessageW",
-    "adjustWindowRectExForDpi", "getWindowThreadProcessId", "duplicateHandle", "getExitCodeThread", "getUserObjectInformationW"
+    "adjustWindowRectExForDpi", "getWindowThreadProcessId", "duplicateHandle", "getExitCodeThread", "getUserObjectInformationW",
+    "peekMessageW"
 ]);
 export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, ...displayContextImportNames,
     "callWindowProcW", "setClassLongW", "deactivateActCtx", "releaseActCtx",
     "getCurrentProcess", "getCurrentThread", "getCurrentThreadId", "closeHandle", "getProcessWindowStation",
-    "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError"
+    "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError", "postThreadMessageW"
 ]);
 
 const moduleNotFound = 126;
@@ -225,6 +226,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         invalidateRect: createInvalidateRect(memory, windows, setError),
         adjustWindowRectExForDpi: createAdjustWindowRectExForDpi(memory, setError),
         ...createThreadHandleHost(memory, () => windows.getCurrentThreadId(), setError),
+        ...createThreadMessageQueue(memory, () => windows.getCurrentThreadId(), setError),
         ...createWindowStationHost(memory, desktop, setError),
         registerWindowMessageW: createWindowMessageRegistration(memory, setError),
         bCryptGenRandom,

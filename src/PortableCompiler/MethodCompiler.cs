@@ -515,14 +515,20 @@ namespace PortableCompiler
                     int import = Win32ModuleBinding.FindImport(image, heaps, layout, source, implementation, bundle, owner);
                     if (import != 0)
                     {
-                        hostUse[0] = hostUse[0] | WasmImports.Win32NativeFeature(import);
-                        if (Win32ModuleBinding.UsesLastError(import)) hostUse[0] = hostUse[0] | WasmImports.Win32Errors;
+                        // New Win32 leaves use the typed import table so they do not consume fixed feature bits.
+                        bool named = import > Win32ModuleBinding.Count;
+                        int slot = named ? nativeBase + Win32MessageQueueBinding.Register(natives, import) :
+                            WasmImports.Win32NativeSlot(hostFeatures, import);
+                        bool capture = named ? Win32MessageQueueBinding.CapturesLastError(image, heaps, layout, source) :
+                            Win32ModuleBinding.UsesLastError(import);
+                        if (!named) hostUse[0] = hostUse[0] | WasmImports.Win32NativeFeature(import);
+                        if (import == Win32MessageQueueBinding.Peek) hostUse[0] = hostUse[0] | WasmImports.Memory;
+                        if (capture) hostUse[0] = hostUse[0] | WasmImports.Win32Errors;
                         if (moduleCode.Length - length < Win32ModuleWasm.BodyCapacity(import)) return -3;
                         bodyOffsets[current] = length;
                         int shape = offsets[current];
                         length = Win32ModuleWasm.WriteBody(moduleCode, length, signatures, shape, import,
-                            WasmImports.Win32NativeSlot(hostFeatures, import), hostImports, initializerPrologue,
-                            WasmImports.Win32ErrorBase(hostFeatures), projections);
+                            slot, hostImports, initializerPrologue, WasmImports.Win32ErrorBase(hostFeatures), projections, capture);
                         sizes[current] = length - bodyOffsets[current];
                         continue;
                     }

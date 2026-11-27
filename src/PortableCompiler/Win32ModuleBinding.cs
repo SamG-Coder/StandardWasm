@@ -62,6 +62,7 @@ namespace PortableCompiler
             member == BCryptGenRandom ? "BCrypt.dll" : "USER32.dll";
 
         internal static int Arity(int member) =>
+            member > Count ? Win32MessageQueueBinding.Arity(member) :
             IsWindowQueueHandle(member) ? (member == GetActiveWindow || member == GetFocus ? 0 : 1) :
             member == CreateWindow ? 12 : member == DuplicateHandle ? 7 :
             member == CallWindowProcedure || member == GetUserObjectInformation || member == AdjustWindowRectForDpi ? 5 :
@@ -94,6 +95,8 @@ namespace PortableCompiler
             if (implementation != 0x80) return 0; // PreserveSig
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return 0;
+            int queueMember = Win32MessageQueueBinding.Find(bundle, image, heaps, methods, counts, owner, row);
+            if (queueMember != 0) return queueMember;
             for (int member = 1; member <= Count; member++)
                 if (member != GetProcessAwareness && (UsesLastError(member) ? IsErrorCapturingWindowImport(image, heaps, methods, counts, row, member) :
                     NativeImports.Find(image, heaps, methods, counts, Library(member), EntryName(member), row,
@@ -241,7 +244,7 @@ namespace PortableCompiler
                 ReadAbiWord(image, cursor, end, 0x18) == handle;
         }
 
-        private static int ReadAbiWord(byte[] image, int[] cursor, int end, int scalar)
+        internal static int ReadAbiWord(byte[] image, int[] cursor, int end, int scalar)
         {
             if (SignatureReader.TakeElement(image, cursor, end, scalar)) return 0;
             if (!SignatureReader.TakeElement(image, cursor, end, 0x11)) return -1;
@@ -284,6 +287,7 @@ namespace PortableCompiler
                 return arity == 2 && IsAbiShape(bundle, objects, types[offset + 1], Native, "HANDLE") &&
                     types[offset + 2] == Int32Location && IsAbiShape(bundle, objects, result, I32, "HRESULT");
             if (arity != Arity(member)) return false;
+            if (member > Count) return Win32MessageQueueBinding.MatchesSignature(bundle, objects, member, types, offset);
             if (IsWindowQueueHandle(member))
                 return IsAbiShape(bundle, objects, result, Native, "HWND") &&
                     (arity == 0 || IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND"));
@@ -437,7 +441,7 @@ namespace PortableCompiler
         private static bool IsDisplayContext(BundleImages bundle, int[] objects, int type) =>
             IsAbiShape(bundle, objects, type, Native, "HDC", "Windows.Win32.Graphics.Gdi");
 
-        private static bool IsAbiShape(BundleImages bundle, int[] objects, int type, int field, string name,
+        internal static bool IsAbiShape(BundleImages bundle, int[] objects, int type, int field, string name,
             string space = "Windows.Win32.Foundation")
         {
             if (type == field) return true;
