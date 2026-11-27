@@ -191,8 +191,10 @@ registration and suppression when it links CoreLib's `GC.SuppressFinalize`.
 The original startup bundle advances to `Path.GetFullPath` at `IL_002a`,
 where the original method calls `String.Contains(char)` to check for embedded
 nulls. Stage 152 compares five cases through the normal entry point, including
-the null argument exception. Production collection scheduling, host roots,
-and re-registration remain open.
+the null argument exception. The launcher retries compiler workspace
+exhaustion with a larger buffer. The original application reached the
+`Path.GetFullPath` diagnostic with a 2 MiB workspace. Production
+collection scheduling, host roots, and re-registration remain open.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

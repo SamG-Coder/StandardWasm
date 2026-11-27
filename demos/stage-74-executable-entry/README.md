@@ -9,6 +9,9 @@ After building the compiler, run `node demos/stage-74-executable-entry/run.mjs -
 Open the printed local URL. Add the publish output or the original single-file
 executable and select **Run managed entry**. Edge compiles and runs in a worker.
 The existing intake page remains available without the run feature.
+The launch worker retries a compiler workspace exhaustion result with a
+larger buffer, from 1 MiB up to 8 MiB. It reuses the original uploaded
+assemblies and reports the diagnostic from the final attempt.
 
 The runner accepts parameterless managed entries with an integer exit result
 and no runtime imports. [Stage 95](../stage-95-managed-companions/README.md)
