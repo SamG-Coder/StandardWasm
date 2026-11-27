@@ -1203,9 +1203,20 @@ namespace PortableCompiler
                 }
                 else if (kind == StringAsSpan)
                 {
-                    int source = Spill(spills, maximum, spillFlags, states[state + top], top);
+                    int first = top - operand;
+                    int source = Spill(spills, maximum, spillFlags, states[state + first], first);
+                    int view = Spill(spills, maximum, spillFlags, CharacterSpan, first);
                     used = SpanWasm.FromOwner(code, used, source, CharacterSpan, true);
-                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, CharacterSpan, top));
+                    used = Local(code, used, 0x21, view);
+                    if (operand != 0)
+                    {
+                        // The ranged overloads use the same zero-length null view
+                        // and unsigned bounds as slicing a full string span.
+                        int start = Spill(spills, maximum, spillFlags, I32, first + 1);
+                        int length = operand == 2 ? Spill(spills, maximum, spillFlags, I32, top) : -1;
+                        used = SpanWasm.Slice(code, used, CharacterSpan, view, start, length, false);
+                        used = Local(code, used, 0x21, view);
+                    }
                 }
                 else if (kind == CharacterArrayAsSpan || kind == ByteArrayAsSpan)
                 {

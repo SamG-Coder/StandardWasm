@@ -60,11 +60,11 @@ namespace PortableCompiler
                 image[at + 6] == 8;
         }
 
-        // Resolve the platform MemoryExtensions.AsSpan(string) overload,
+        // Identify the platform string overload by its signature and arity,
         // including MethodDef calls from the original CoreLib.
-        internal static bool StringAsSpan(byte[] image, int[] layout, int[] heaps, int row, bool member)
+        internal static int StringAsSpanArity(byte[] image, int[] layout, int[] heaps, int row, bool member)
         {
-            if (row < 1) return false;
+            if (row < 1) return 0;
             const string space = "System";
             const string type = "MemoryExtensions";
             const string method = "AsSpan";
@@ -73,36 +73,41 @@ namespace PortableCompiler
             {
                 var reference = new int[AssemblyReferences.SymbolWidth];
                 if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference) < 0 ||
-                    !MatchesAscii(image, heaps, (uint)reference[4], method)) return false;
+                    !MatchesAscii(image, heaps, (uint)reference[4], method)) return 0;
                 var counts = new int[45];
                 if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0 ||
-                    !MatchReference(image, layout, heaps, counts, reference, space, type, includeMemory: true)) return false;
+                    !MatchReference(image, layout, heaps, counts, reference, space, type, includeMemory: true)) return 0;
                 blob = reference[5];
             }
             else
             {
                 if (!MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), method) ||
-                    (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x10) == 0) return false;
+                    (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x10) == 0) return 0;
                 var counts = new int[45];
                 int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
-                if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return false;
+                if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return 0;
                 int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
-                if (!ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, owner, space, type)) return false;
+                if (!ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, owner, space, type)) return 0;
                 blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
             }
 
-            if (blob < 1 || blob >= heaps[1]) return false;
+            if (blob < 1 || blob >= heaps[1]) return 0;
             var next = new int[1];
             int limit = heaps[0] + heaps[1];
             int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
             int start = next[0];
-            if (size < 8 || size > limit - start || image[start] != 0 || image[start + 1] != 1 ||
-                image[start + 2] != 0x15 || image[start + 3] != 0x11) return false;
+            if (size < 8 || size > limit - start || image[start] != 0 ||
+                image[start + 2] != 0x15 || image[start + 3] != 0x11) return 0;
+            int arity = image[start + 1];
+            if (arity < 1 || arity > 3) return 0;
             int end = start + size;
             int span = CompressedUnsigned(image, start + 4, end, next);
             int at = next[0];
-            return span > 0 && end - at == 3 && image[at] == 1 && image[at + 1] == 3 &&
-                image[at + 2] == 0x0e && IsDefinition(image, layout, heaps, span);
+            if (span < 1 || end - at != arity + 2 || image[at] != 1 || image[at + 1] != 3 ||
+                image[at + 2] != 0x0e || !IsDefinition(image, layout, heaps, span)) return 0;
+            for (int operand = 1; operand < arity; operand++)
+                if (image[at + 2 + operand] != SignatureReader.Int32) return 0;
+            return arity;
         }
 
         internal static int ClassifySpanCall(BundleImages bundle, byte[] image, int[] layout, int[] heaps,

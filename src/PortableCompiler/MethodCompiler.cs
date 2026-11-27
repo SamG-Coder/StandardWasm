@@ -1119,7 +1119,8 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.InvalidCast | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.CastClass)
                                 tags = ExceptionTypes.InvalidCast;
-                            else if (kind == BranchIl.NativeCharacterSpan || kind == BranchIl.SpanSlice)
+                            else if (kind == BranchIl.NativeCharacterSpan || kind == BranchIl.SpanSlice ||
+                                kind == BranchIl.StringAsSpan && operation != 0)
                                 tags = ExceptionTypes.ArgumentOutOfRange;
                             else if (kind == BranchIl.CopyCharacterSpan)
                             {
@@ -2251,11 +2252,15 @@ namespace PortableCompiler
                     }
                 }
                 if ((kind == BranchIl.Call || kind == BranchIl.MemberCall) && records[slot + 3] ==
-                    (kind == BranchIl.Call ? 0 : 0x28) && records[slot + BranchIl.Width + 1] == 0 &&
-                    SpanMetadata.StringAsSpan(image, layout, heaps, records[slot + 1], kind == BranchIl.MemberCall))
+                    (kind == BranchIl.Call ? 0 : 0x28) && records[slot + BranchIl.Width + 1] == 0)
                 {
-                    records[slot] = BranchIl.StringAsSpan;
-                    continue;
+                    int arity = SpanMetadata.StringAsSpanArity(image, layout, heaps, records[slot + 1], kind == BranchIl.MemberCall);
+                    if (arity != 0)
+                    {
+                        records[slot] = BranchIl.StringAsSpan;
+                        records[slot + 1] = arity - 1;
+                        continue;
+                    }
                 }
                 if (kind == BranchIl.MemberCall)
                 {

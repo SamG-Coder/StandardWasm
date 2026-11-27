@@ -302,7 +302,12 @@ namespace PortableCompiler
                 return depth >= 2 && stack[depth - 2] == operand && stack[depth - 1] == I32
                     ? Push(stack, allocated, depth - 2, ObjectSpan) : -2;
             if (kind == StringAsSpan)
-                return Match(stack, depth, String) ? Push(stack, allocated, depth - 1, CharacterSpan) : -2;
+            {
+                if (!Match(stack, depth - operand, String)) return -2;
+                for (int argument = 0; argument < operand; argument++)
+                    if (!Match(stack, depth - argument, I32)) return -2;
+                return Push(stack, allocated, depth - operand - 1, CharacterSpan);
+            }
             if (kind == CharacterArrayAsSpan || kind == ByteArrayAsSpan)
             {
                 bool bytes = kind == ByteArrayAsSpan;
