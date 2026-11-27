@@ -6,7 +6,7 @@ using System.Text.Json;
 using ManagedReferenceJoins;
 
 if (IntPtr.Size != 4) throw new InvalidOperationException("Expected Windows x86 CLR.");
-Func<int>[] cases = [Probe.InterfaceThenClass, Probe.ClassThenInterface, Probe.ClassAndBase,
+Func<int>[] cases = [Probe.InterfaceThenClass, Probe.ClassThenInterface, Probe.CoalescedReferences, Probe.ClassAndBase,
     Probe.NullAndLoop, Probe.SwitchAndLoop, Probe.UnrelatedDiagnostic];
 int unrelated = typeof(Probe).GetMethod("UnrelatedJoin", BindingFlags.Static | BindingFlags.NonPublic)!
     .MetadataToken & 0xffffff;

@@ -69,6 +69,22 @@ namespace ManagedReferenceJoins
                 ClassFirst(false, first, alreadyInterface);
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static int CoalesceInterface(IValue supplied, Concrete fallback) =>
+            InterfaceAfterPrefix(300, supplied ?? fallback);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static int CoalesceClass(Concrete supplied, IValue fallback) =>
+            InterfaceAfterPrefix(400, supplied ?? fallback);
+
+        public static int CoalescedReferences()
+        {
+            var direct = new Concrete(31);
+            IValue converted = AsInterface(new Concrete(37));
+            return CoalesceInterface(null, direct) + CoalesceInterface(converted, direct) * 1000 +
+                CoalesceClass(null, converted) + CoalesceClass(direct, converted) * 1000;
+        }
+
         public static int ClassAndBase()
         {
             var child = new Concrete(13);
