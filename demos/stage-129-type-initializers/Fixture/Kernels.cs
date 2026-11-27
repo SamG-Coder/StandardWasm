@@ -46,6 +46,10 @@ namespace TypeInitializerFixture
     }
 
     // Never reached at run time, but compiled into a kernel's untaken branch.
+    // The security attribute gives this image a DeclSecurity table, which CoreLib lacks. The
+    // bundle lists this image before CoreLib, so finding CoreLib's TypeInitializationException must
+    // read each image's own table counts (a regression found in Codex's #306 review).
+    [System.Security.Permissions.SecurityPermission(System.Security.Permissions.SecurityAction.Demand, UnmanagedCode = true)]
     public static class ThrowsObject
     {
         public static int Value = Fail();
