@@ -67,7 +67,8 @@ async function observeRoots(bytes) {
     });
     const { __root_probe_table: table, __root_probe_count: count, __root_probe_edge_count: edges,
         __root_probe_edge_read: read, __root_probe_mark: mark, __root_probe_contains: contains,
-        __root_probe_clear: clear, ObserveFrames, ObserveConstructor, ThrowWithRoot, BuildGraph, SetStaticRoot } = instance.exports;
+        __root_probe_clear: clear, __root_probe_register: register, __root_probe_discover: discover,
+        __root_probe_pop: pop, ObserveFrames, ObserveConstructor, ThrowWithRoot, BuildGraph, SetStaticRoot } = instance.exports;
     function assertEmpty() {
         if (count.value !== 0) throw new Error("Root scope was not restored");
         for (let i = 0; i < table.length; i++)
@@ -111,12 +112,32 @@ async function observeRoots(bytes) {
     const graph = { fields: edges(root), arrayLength: edges(array), inherited: inherited !== null,
         cycle: read(next, 1) === root, arrayAliases: read(array, 0) === next && read(array, 2) === root,
         nullEdges: Number(read(array, 1) === null) + Number(read(root, 3) === null), reachable };
-    return { values: [value, constructed], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph, staticRoot: true };
+    const discovered = [];
+    register(root);
+    SetStaticRoot(root);
+    discovered.push(discover());
+    if (pop() !== null) throw new Error("A rooted registration became pending");
+    SetStaticRoot(null);
+    discovered.push(discover());
+    register(next);
+    discovered.push(discover());
+    const pendingRoot = pop();
+    if (pendingRoot !== root || read(pendingRoot, 1) !== next || pop() !== null)
+        throw new Error("The pending receiver lost its identity or fields, or its child was selected early");
+    discovered.push(discover());
+    if (pop() !== next || pop() !== null) throw new Error("The child was not selected after its pending parent left");
+    register(next);
+    register(next);
+    discovered.push(discover());
+    if (pop() !== next || pop() !== next || pop() !== null || mark() !== 0)
+        throw new Error("Duplicate registrations were lost or a retired entry remained rooted");
+    clear();
+    return { values: [value, constructed], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph, staticRoot: true, discovered };
 }
 
 const expectedRoots = { values: oracle.rootProbeResult,
     snapshots: [{ count: 3, unique: 2 }, { count: 2, unique: 1 }, { count: 1, unique: 1 }, { count: 3, unique: 2 }, { count: 1, unique: 1 }],
-    clearedOnReturn: true, clearedOnUnwind: true, graph: oracle.graph, staticRoot: true };
+    clearedOnReturn: true, clearedOnUnwind: true, graph: oracle.graph, staticRoot: true, discovered: [0, 1, 0, 1, 2] };
 const node = await probe(assets);
 assert.deepEqual(node, oracle.result);
 const nodeRoots = await observeRoots(assets.rootProbe);

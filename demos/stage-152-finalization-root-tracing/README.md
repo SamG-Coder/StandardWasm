@@ -54,7 +54,16 @@ Byte arrays are leaves, and scalar fields do not take an edge index.
 
 The mark list retains its references until the next mark pass or explicit
 clear. Its linear identity lookup makes this a prototype for small graphs.
-Binding the queue to the original CoreLib APIs still needs host roots,
+The Wasm discovery pass uses the marks to move unreachable registrations to
+a pending queue while keeping rooted registrations. Pending receivers seed
+later marks so their children remain available. The probe verifies that a
+child is eligible only after its pending parent leaves the queue, that a
+pending receiver retains its original identity and fields, and that duplicate
+registrations produce separate entries.
+
+The diagnostic exports drive registration and dequeue in the verifier.
+Binding the queue to the original CoreLib APIs still needs automatic
+registration at allocation, suppression and callback dispatch, host roots,
 traversal of runtime wrappers such as view owners and event delegates,
 managed addresses, protected regions, indirect calls and a cleanup policy for
 raw Wasm traps. JavaScript invokes the pass at a probe observation point and

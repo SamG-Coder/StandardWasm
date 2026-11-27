@@ -15,6 +15,10 @@ namespace PortableCompiler
         private const string MarkExport = "__root_probe_mark";
         private const string ContainsExport = "__root_probe_contains";
         private const string ClearExport = "__root_probe_clear";
+        private const string RegisterExport = "__root_probe_register";
+        private const string DiscoverExport = "__root_probe_discover";
+        private const string PopExport = "__root_probe_pop";
+        internal const int ExportCount = 10;
 
         internal static byte[] MapFrame(int[] records, int[] frame, int slots)
         {
@@ -35,7 +39,8 @@ namespace PortableCompiler
         internal static int ExportSize(int count, int walker) => ExportSize(TableExport, Table) + ExportSize(CountExport, count) +
             ExportSize(EdgeCountExport, walker) + ExportSize(EdgeReadExport, walker + 1) +
             ExportSize(MarkExport, walker + ReachabilityWasm.Mark) + ExportSize(ContainsExport, walker + ReachabilityWasm.Contains) +
-            ExportSize(ClearExport, walker + ReachabilityWasm.Clear);
+            ExportSize(ClearExport, walker + ReachabilityWasm.Clear) + ExportSize(RegisterExport, walker + FinalizerQueueWasm.Register) +
+            ExportSize(DiscoverExport, walker + FinalizerQueueWasm.Discover) + ExportSize(PopExport, walker + FinalizerQueueWasm.Pop);
 
         private static int ExportSize(string name, int index) => name.Length + 2 + WasmBinary.UnsignedSize(index);
 
@@ -47,7 +52,10 @@ namespace PortableCompiler
             used = Export(code, used, EdgeReadExport, 0, walker + 1);
             used = Export(code, used, MarkExport, 0, walker + ReachabilityWasm.Mark);
             used = Export(code, used, ContainsExport, 0, walker + ReachabilityWasm.Contains);
-            return Export(code, used, ClearExport, 0, walker + ReachabilityWasm.Clear);
+            used = Export(code, used, ClearExport, 0, walker + ReachabilityWasm.Clear);
+            used = Export(code, used, RegisterExport, 0, walker + FinalizerQueueWasm.Register);
+            used = Export(code, used, DiscoverExport, 0, walker + FinalizerQueueWasm.Discover);
+            return Export(code, used, PopExport, 0, walker + FinalizerQueueWasm.Pop);
         }
 
         private static int Export(byte[] code, int used, string name, byte kind, int index)

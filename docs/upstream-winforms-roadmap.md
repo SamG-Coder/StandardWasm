@@ -82,8 +82,10 @@ The typed edge readers use the emitted Wasm layouts to enumerate inherited
 reference fields and reference-array elements. A CLR comparison verifies a
 cyclic object graph starting with a single published root. A Wasm mark pass
 consumes those edges from live frames and managed statics, and releases its
-snapshot when cleared. The remaining work includes using the mark set to
-select registered finalizer receivers and tracing compiler runtime wrappers.
+snapshot when cleared. The queue discovery pass uses the resulting mark set
+to select registered receivers and includes previously pending receivers when
+tracing. The remaining work includes registering finalizable allocations,
+dispatching their callbacks, binding suppression, and tracing runtime wrappers.
 JavaScript cleanup notifications can release independent host resources, but
 notification timing and delivery alone cannot satisfy the managed queue and
 resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)

@@ -200,7 +200,9 @@ namespace PortableCompiler
             var globals = new int[1 + output.Length / 5 * 3];
             int rootCount = rootProbe ? StaticFields.Register(globals, 0, RootStackWasm.GlobalKey, I32) : -1;
             int markedCount = rootProbe ? StaticFields.Register(globals, 0, ReachabilityWasm.GlobalKey, I32) : -1;
-            if (rootProbe && (rootCount < 0 || markedCount < 0)) return -3;
+            int registeredCount = rootProbe ? StaticFields.Register(globals, 0, FinalizerQueueWasm.RegisteredKey, I32) : -1;
+            int pendingCount = rootProbe ? StaticFields.Register(globals, 0, FinalizerQueueWasm.PendingKey, I32) : -1;
+            if (rootProbe && (rootCount < 0 || markedCount < 0 || registeredCount < 0 || pendingCount < 0)) return -3;
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
             var nativePlans = new NativeAggregatePlans();
             var pointers = new FunctionPointerPlan();
@@ -841,21 +843,25 @@ namespace PortableCompiler
             if (rootProbe)
             {
                 rootWalker = hostImports + functions;
-                for (int entry = 0; entry < ReachabilityWasm.End; entry++)
+                for (int entry = 0; entry < FinalizerQueueWasm.End; entry++)
                 {
                     bool read = entry == 1;
                     if (functions >= owners.Length) return -3;
                     int offset = NextSignature(offsets, arities, functions);
-                    int arity = read ? 2 : entry == ReachabilityWasm.Mark || entry == ReachabilityWasm.Clear ? 0 : 1;
+                    int arity = read ? 2 : entry == 0 || entry == ReachabilityWasm.Contains || entry == ReachabilityWasm.Add ||
+                        entry == FinalizerQueueWasm.Register ? 1 : 0;
                     if (arity >= signatures.Length - offset) return -3;
-                    signatures[offset] = read ? ObjectReference : entry == ReachabilityWasm.Clear || entry == ReachabilityWasm.Add ? Void : I32;
+                    signatures[offset] = read || entry == FinalizerQueueWasm.Pop ? ObjectReference :
+                        entry == ReachabilityWasm.Clear || entry == ReachabilityWasm.Add || entry == FinalizerQueueWasm.Register ? Void : I32;
                     if (arity > 0) signatures[offset + 1] = ObjectReference;
                     if (read) signatures[offset + 2] = I32;
                     arities[functions] = arity;
                     offsets[functions] = offset;
                     bodyOffsets[functions] = length;
-                    length = entry < ReachabilityWasm.Mark ? HeapEdgesWasm.Write(moduleCode, length, objects, read) :
-                        ReachabilityWasm.Write(moduleCode, length, entry, rootWalker, rootCount, markedCount, globals);
+                    if (entry < ReachabilityWasm.Mark) length = HeapEdgesWasm.Write(moduleCode, length, objects, read);
+                    else if (entry < ReachabilityWasm.End)
+                        length = ReachabilityWasm.Write(moduleCode, length, entry, rootWalker, rootCount, markedCount, pendingCount, globals);
+                    else length = FinalizerQueueWasm.Write(moduleCode, length, entry, rootWalker, registeredCount, pendingCount);
                     if (length < 0) return length;
                     sizes[functions] = length - bodyOffsets[functions];
                     functions++;
