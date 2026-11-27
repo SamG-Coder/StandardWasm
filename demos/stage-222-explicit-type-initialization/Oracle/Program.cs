@@ -6,7 +6,7 @@ using System.Text.Json;
 using ExplicitTypeInitialization;
 
 if (IntPtr.Size != 4) throw new InvalidOperationException("Expected Windows x86 CLR.");
-Func<int>[] cases = [Probe.PreciselyOnce, Probe.ForcesBeforeFieldInit, Probe.IndependentGenericInitializers,
+Func<int>[] cases = [Probe.PreciselyOnce, Probe.ForcesBeforeFieldInit, Probe.OpenTypeAndArray, Probe.IndependentGenericInitializers,
     Probe.RecursiveInitializer, Probe.CachedFailure, Probe.AbsentInitializer, Probe.UnprovedHandleDiagnostic];
 int unproved = typeof(Probe).GetMethod("TriggerUnprovedHandle", BindingFlags.Static | BindingFlags.NonPublic)!.MetadataToken & 0xffffff;
 File.WriteAllText(args[0], JsonSerializer.Serialize(new

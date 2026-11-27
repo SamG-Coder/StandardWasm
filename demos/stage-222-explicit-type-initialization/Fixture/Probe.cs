@@ -18,7 +18,7 @@ namespace ExplicitTypeInitialization
             internal static readonly int Value = Record(ref deferredRuns);
         }
 
-        private static class Generic<T>
+        private sealed class Generic<T>
         {
             static Generic() { genericRuns++; }
         }
@@ -64,6 +64,13 @@ namespace ExplicitTypeInitialization
             int repeated = genericRuns;
             RuntimeHelpers.RunClassConstructor(typeof(Generic<string>).TypeHandle);
             return 100 * first + 10 * repeated + genericRuns;
+        }
+
+        public static int OpenTypeAndArray()
+        {
+            RuntimeHelpers.RunClassConstructor(typeof(Generic<>).TypeHandle);
+            RuntimeHelpers.RunClassConstructor(typeof(Generic<long>[]).TypeHandle);
+            return genericRuns;
         }
 
         public static int RecursiveInitializer()

@@ -80,7 +80,12 @@ namespace PortableCompiler
             target[1] = type;
             // An explicit trigger applies to both precise and BeforeFieldInit
             // types, with the same guard as implicit triggers.
-            return TypeInitializers.Find(image, layout, heaps, type, new int[1]);
+            int initializer = TypeInitializers.Find(image, layout, heaps, type, new int[1]);
+            if (initializer <= 0 || target[2] != 0) return initializer;
+
+            // An open generic definition has no constructed static storage.
+            int open = GenericParameters.Check(image, heaps, layout, type, new int[0], objects, new int[0]);
+            return open == -2 ? 0 : open < 0 ? open : initializer;
         }
 
         internal static void Rewrite(int[] records, int token, int call, int initializer)

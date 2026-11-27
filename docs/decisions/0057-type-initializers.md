@@ -136,7 +136,8 @@ proven type token to the same guarded initializer. It verifies that the
 producer and call sequence has a single entry before replacing the temporary
 descriptor with a direct managed call. Explicit triggers run BeforeFieldInit
 initializers immediately and keep a separate guard for each closed generic
-type. A type with no initializer needs no call. Unproved handles produce a
+type. Open generic definitions, array types and types without an initializer
+need no call. Unproved handles produce a
 located unsupported diagnostic.
 
 ## Still diagnosed
