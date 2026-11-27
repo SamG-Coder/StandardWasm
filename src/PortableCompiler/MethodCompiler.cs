@@ -740,6 +740,7 @@ namespace PortableCompiler
                         CoreStringSpanCopy.Lower(bundle, image, layout, heaps, owner, source, records, objects, catchRegion);
                     CoreStringCreation.Lower(bundle, image, layout, heaps, owner, source, methodArguments,
                         frame, records, objects, catchRegion);
+                    CoreStringConcat.Lower(image, layout, heaps, source, frame, parameters, locals, records, catchRegion);
                     if (falseBooleans.IsClone(bases[owner] + source, current))
                     {
                         bool instance = (MethodDefinitions.ReadColumn(image, layout, source, 2) & 0x10) == 0;
@@ -1428,7 +1429,7 @@ namespace PortableCompiler
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
                             kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.StringFromSpan || kind == BranchIl.ConsoleWrite ||
                             kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine || kind == BranchIl.CopyCharacterSpan ||
-                            kind == BranchIl.FindCharacterInSpan) frameShape[5] |= 1;
+                            kind == BranchIl.FindCharacterInSpan || kind == BranchIl.CopyConstructionString) frameShape[5] |= 1;
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
                         if (kind == BranchIl.FormatEnum) frameShape[5] |= 5;
                         if (kind == BranchIl.PinScopedValue) frameShape[5] |= 2 | ScopedValuePins.FrameFlag;
