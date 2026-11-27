@@ -4,6 +4,7 @@ const cancelModeMessage = 0x001f; // WM_CANCELMODE
 
 const invalidWindow = 1400, invalidIndex = 1413, invalidParameter = 87;
 const procedureIndex = -4; // GWL_WNDPROC
+let nextOwnerId = 1;
 export const windowImportNames = [
     "isWindowEnabled", "enableWindow", "getWindowLongW", "getWindowLongPtrW", "setWindowLongW", "setWindowLongPtrW"
 ];
@@ -11,6 +12,10 @@ export const windowImportNames = [
 export function createWindowState() {
     const windows = new Map();
     let nextHandle = 1;
+    if (nextOwnerId > 0xfffffffe) throw new RangeError("Win32 window owner ID space is exhausted.");
+    // A launch currently owns one process and one GUI thread. These IDs
+    // belong to the guest, independent of the renderer's OS identities.
+    const owner = Object.freeze({ processId: nextOwnerId++, threadId: nextOwnerId++ });
     return {
         register(style, dispatch, attributes = {}) {
             if (nextHandle > 0xffffffff) throw new Error("Win32 window handle space is exhausted.");
@@ -24,6 +29,9 @@ export function createWindowState() {
         },
         hasWindow(handle) {
             return windows.has(handle >>> 0);
+        },
+        getWindowOwner(handle) {
+            return windows.has(handle >>> 0) ? owner : undefined;
         },
         getWindowTitle(handle) {
             return windows.get(handle >>> 0)?.title;

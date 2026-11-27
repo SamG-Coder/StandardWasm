@@ -18,7 +18,8 @@ namespace PortableCompiler
             (FirstNativeFeature << (Win32ModuleBinding.CreateWindow - 1)) |
             (FirstNativeFeature << (Win32ModuleBinding.GetFullPathName - 1)) |
             (FirstNativeFeature << (Win32ModuleBinding.RedrawWindow - 1)) |
-            (FirstNativeFeature << (Win32ModuleBinding.RegisterWindowMessage - 1));
+            (FirstNativeFeature << (Win32ModuleBinding.RegisterWindowMessage - 1)) |
+            (FirstNativeFeature << (Win32ModuleBinding.GetWindowThreadProcessId - 1));
 
         internal static long Win32NativeFeature(int member) => FirstNativeFeature << (member - 1);
 

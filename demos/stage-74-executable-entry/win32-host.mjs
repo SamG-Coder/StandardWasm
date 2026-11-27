@@ -8,7 +8,8 @@ import { createDefaultWindowProcedure, createWindowClassState, createWindowCreat
 export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
     "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom",
-    "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "redrawWindow", "registerWindowMessageW"
+    "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "redrawWindow", "registerWindowMessageW",
+    "getWindowThreadProcessId"
 ]);
 export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, "callWindowProcW", "deactivateActCtx", "releaseActCtx",
@@ -17,6 +18,7 @@ export const win32ImportNames = new Set([
 
 const moduleNotFound = 126;
 const noAccess = 998;
+const invalidWindowHandle = 1400;
 const invalidWin32Parameter = 87;
 const invalidParameter = 0xc000000d | 0, invalidHandle = 0xc0000008 | 0, unsuccessful = 0xc0000001 | 0;
 const executableHandle = 1;
@@ -77,6 +79,23 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
     }
 
     const setError = value => { errors.system = value; };
+    function getWindowThreadProcessId(handle, processPointer) {
+        const owner = windows.getWindowOwner(handle);
+        if (!owner) {
+            setError(invalidWindowHandle);
+            return 0;
+        }
+        const address = processPointer >>> 0;
+        if (address !== 0) {
+            const view = new DataView(memory.buffer);
+            if (address > view.byteLength - 4) {
+                setError(noAccess);
+                return 0;
+            }
+            view.setUint32(address, owner.processId, true);
+        }
+        return owner.threadId;
+    }
     const isProcedure = token => dynamicLibraries?.hasTarget(token, windowProcedureSignature);
     const classes = createWindowClassState(memory, isProcedure, setError);
     const bindProcedure = token => isProcedure(token)
@@ -180,6 +199,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         enableWindow: (handle, enable) => windows.enableWindow(handle, enable),
         getWindowLongW: getWindowLong,
         getWindowLongPtrW: getWindowLong,
+        getWindowThreadProcessId,
         setWindowLongW: setWindowLong,
         setWindowLongPtrW: setWindowLong,
         registerClassW: classes.registerClassW,
