@@ -50,6 +50,12 @@ the original typed aliases, and include a data-initialized vector. An export
 that accepts storage-typed primitive arrays from the Wasm host still leaves
 the runtime type unknown, so affected reflection calls report a diagnostic.
 
+The enum array cases check that the C# compiler emitted a field-backed array
+initializer and compare its contents with the CLR. They cover one-, two-,
+four-, and eight-byte elements, including values that need the full 64 bits.
+The Int32-backed fixture also checks that an initialized enum array keeps its
+own CLR type identity when inspected through GetType.
+
 The Type.Name cases share the runtime descriptor cache machinery. They
 verify simple names for nested generic types and arrays, typed null
 behavior, and the distinction between simple names and display names.

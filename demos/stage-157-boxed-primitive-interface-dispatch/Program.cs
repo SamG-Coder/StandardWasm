@@ -33,10 +33,16 @@ internal static class Program
             ExactRootDispatch, DynamicRootDispatch, NullRootDispatch, PrimitiveVectorRootDispatch,
             TypeSimpleNames, NullTypeSimpleName, TypeNameAndDisplayName,
             WritableSpanString, ReadOnlySpanString, EmptySpanString, NativeSpanString,
+            PackedByteEnumRva, PackedShortEnumRva, IntEnumRva, LongEnumRva,
             PrimitiveVectorTypeIdentity, PrimitiveVectorAliases, InitializedPrimitiveVectorIdentity,
             ClosedValueIsNotNull, ClosedValueIsNull, ClosedReferenceNullCheck,
             NarrowEnumFlags, WideEnumFlags, UnsetEnumFlags
         };
+        foreach (var run in cases)
+        {
+            if (run.Method.Name.EndsWith("EnumRva", StringComparison.Ordinal) && !HasArrayInitializer(run.Method))
+                throw new InvalidOperationException(run.Method.Name + " did not emit a FieldRVA array initializer.");
+        }
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
             acceptedDiagnostic = run.Method.Name.StartsWith("OriginalInt", StringComparison.Ordinal) ? intDiagnostic :
@@ -114,6 +120,56 @@ internal static class Program
         Type type = typeof(NominalNameProbe);
         return type.Name == "NominalNameProbe" && type.ToString() == "Program+NominalNameProbe" &&
             ReferenceEquals(type.Name, type.Name) ? 73 : 0;
+    }
+
+    private enum SignedByteData : sbyte { }
+    private enum UnsignedShortData : ushort { }
+    private enum SignedIntData { }
+    private enum SignedLongData : long { }
+
+    public static int PackedByteEnumRva()
+    {
+        SignedByteData[] values = [(SignedByteData)(-128), (SignedByteData)29, (SignedByteData)(-2),
+            0, (SignedByteData)127, (SignedByteData)45, (SignedByteData)15, (SignedByteData)16];
+        return (int)values[0] * 101 + (int)values[4] * 13 + (int)values[2];
+    }
+
+    public static int PackedShortEnumRva()
+    {
+        UnsignedShortData[] values = [(UnsignedShortData)65535, (UnsignedShortData)4097, 0,
+            (UnsignedShortData)32769, (UnsignedShortData)17, (UnsignedShortData)2051];
+        return (int)values[0] + (int)values[3] + (int)values[5];
+    }
+
+    public static int IntEnumRva()
+    {
+        SignedIntData[] values = [(SignedIntData)int.MinValue, 0, (SignedIntData)(-17),
+            (SignedIntData)int.MaxValue, (SignedIntData)129];
+        if (values.GetType() != typeof(SignedIntData[]) || values.GetType() == typeof(int[])) return 0;
+        return (int)values[0] == int.MinValue && (int)values[3] == int.MaxValue ? (int)values[2] + 100 : 0;
+    }
+
+    public static int LongEnumRva()
+    {
+        SignedLongData[] values = [(SignedLongData)long.MinValue, (SignedLongData)(-1099511627776L),
+            (SignedLongData)72057594037927937L, (SignedLongData)long.MaxValue, (SignedLongData)3141592653589L];
+        return (long)values[0] == long.MinValue && (long)values[2] == 72057594037927937L &&
+            (long)values[3] == long.MaxValue ? 97 : 0;
+    }
+
+    private static bool HasArrayInitializer(MethodInfo method)
+    {
+        byte[] il = method.GetMethodBody()!.GetILAsByteArray()!;
+        for (int i = 0; i + 15 < il.Length; i++)
+        {
+            // newarr <type>; dup; ldtoken <field>; call <method>
+            if (il[i] != 0x8d || il[i + 5] != 0x25 || il[i + 6] != 0xd0 ||
+                il[i + 10] != 4 || il[i + 11] != 0x28 || il[i + 15] != 0x0a) continue;
+            int token = BitConverter.ToInt32(il, i + 12);
+            return method.Module.ResolveMethod(token) is { Name: "InitializeArray", DeclaringType: var declaring } &&
+                declaring == typeof(System.Runtime.CompilerServices.RuntimeHelpers);
+        }
+        return false;
     }
 
     public static int WritableSpanString()

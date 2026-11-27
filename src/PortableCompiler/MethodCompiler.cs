@@ -663,7 +663,8 @@ namespace PortableCompiler
                         status = ExceptionFilters.ValidateLocals(records, filters, parameters, locals, location);
                         if (status < 0) return status;
                     }
-                    status = ArrayInitializers.Lower(image, heaps, layout, records, literals, literalSize, location);
+                    status = ArrayInitializers.Lower(bundle, image, heaps, layout, owner, context, methodArguments,
+                        objects, records, catchRegion, literals, literalSize, location);
                     if (status < 0)
                         return status;
                     status = StaticByteSpans.Lower(bundle, image, layout, heaps, owner, context, methodArguments,
@@ -1347,27 +1348,9 @@ namespace PortableCompiler
                 }
                 if (kind == BranchIl.NewArray)
                 {
-                    uint token = unchecked((uint)records[slot + 1]);
-                    int primitive = ArrayTypeRefs.TokenElement(image, heaps, layout, token);
-                    int type = primitive;
-                    if (primitive == -2)
-                    {
-                        uint table = token >> 24;
-                        if (table != 1 && table != 2 && table != 0x1b) return -2;
-                        int coded = (int)((token & 0xffffff) << 2) | (table == 1 ? 1 : table == 2 ? 0 : 2);
-                        int element = ArrayTokenElement(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);
-                        if (element < 0) return element;
-                        // Use the same representation as a closed T[] signature.
-                        if (GenericScalar.IsScalar(element)) primitive = GenericScalar.Element(element);
-                        else type = ObjectLayouts.RegisterArray(objects, element);
-                    }
-                    if (primitive > 0)
-                    {
-                        type = ArrayTypeRefs.Storage(primitive);
-                        records[slot + BranchIl.Width + 1] = primitive;
-                    }
-                    if (type <= 0) return type == 0 ? -2 : type;
-                    records[slot + 1] = type;
+                    int array = ArrayAllocations.Bind(bundle, image, layout, heaps, owner, context, methodArguments, objects, records, slot);
+                    if (array < 0) return array;
+                    continue;
                 }
                 if (kind == BranchIl.BoxValue || kind == BranchIl.UnboxValue || kind == BranchIl.TestClass)
                 {
@@ -1414,7 +1397,7 @@ namespace PortableCompiler
                     int coded = (token & 0xffffff) << 2 | (table == 1 ? 1 : table == 2 ? 0 : 2);
                     int primitive = table == 0x1b ? -2 : ArrayTypeRefs.PrimitiveElement(image, heaps, layout, coded);
                     int type = primitive > 0 ? GenericScalar.Key(primitive) :
-                        ArrayTokenElement(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);
+                        ArrayAllocations.TokenIdentity(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);
                     if (type < 0) return type;
                     if (GenericScalar.IsScalar(type))
                     {
@@ -1445,7 +1428,7 @@ namespace PortableCompiler
                             records[slot + 1] = Ints;
                             continue;
                         }
-                        int type = ArrayTokenElement(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);
+                        int type = ArrayAllocations.TokenIdentity(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);
                         if (ObjectLayouts.IsValueType(objects, type) && !ObjectLayouts.IsExplicitValue(objects, type))
                         {
                             int vector = ObjectLayouts.RegisterArray(objects, type);
@@ -2603,17 +2586,6 @@ namespace PortableCompiler
                 }
             }
             return functions;
-        }
-
-        private static int ArrayTokenElement(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
-            int context, int[] methodArguments, int[] objects, int coded)
-        {
-            if ((coded & 3) == 2)
-                return ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps, owner,
-                    coded >> 2, context, objects, methodArguments);
-            if (PlatformTypeReferences.IsString(image, heaps, layout, coded)) return String;
-            int type = BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
-            return type == -2 ? BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true, true) : type;
         }
 
         private static int PrimitiveArrayAccess(int element, bool load)
