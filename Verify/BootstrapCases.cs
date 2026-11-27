@@ -5,7 +5,7 @@ internal static class BootstrapCases
 {
     internal static void Add(List<object> cases)
     {
-        const int capacity = 4 << 20;
+        int capacity = 4 << 20;
         var type = typeof(CompilerExports);
         byte[] dll = File.ReadAllBytes(type.Assembly.Location);
         string[] exports = ["CompileModule", "CompileBundle", "Compile", "CreateBytes", "SetByte", "ReadByte", "FindRow",
@@ -14,8 +14,16 @@ internal static class BootstrapCases
             "CreateWarnings", "ReadWarning", "CompileBundleDeferred"];
         byte[] manifest = Manifest(exports.Select(name => (name, Row(name))));
         var image = Encode(dll);
-        var compiler = new byte[capacity];
-        int compilerSize = CompilerExports.CompileModule(dll, manifest, compiler);
+        byte[] compiler;
+        int compilerSize;
+        while (true)
+        {
+            compiler = new byte[capacity];
+            compilerSize = CompilerExports.CompileModule(dll, manifest, compiler);
+            if (compilerSize != -3 || capacity == Array.MaxLength) break;
+            // The compiler also sizes its workspace from the output buffer.
+            capacity = (int)Math.Min((long)capacity * 2, Array.MaxLength);
+        }
         if (compilerSize <= 0)
             throw new InvalidOperationException($"CLR self-compilation returned {compilerSize}");
         cases.Add(new
