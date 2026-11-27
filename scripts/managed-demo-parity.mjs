@@ -16,9 +16,12 @@ export async function verifyManagedDemo(stageName) {
     const oracle = JSON.parse(readFileSync(oraclePath, "utf8"));
     const compiler = readFileSync(process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts/StandardWasm.Compiler.wasm"));
     const assembly = readFileSync(oracle.assembly);
-    const header = Buffer.alloc(4);
-    header.writeUInt32LE(assembly.length);
-    const bundle = Buffer.concat([header, assembly]);
+    const images = [assembly, ...(oracle.dependencies ?? []).map(path => readFileSync(path))];
+    const bundle = Buffer.concat(images.flatMap(image => {
+        const header = Buffer.alloc(4);
+        header.writeUInt32LE(image.length);
+        return [header, image];
+    }));
 
     async function verify(compiler, bundle, cases) {
         const { instance: { exports: tool } } = await WebAssembly.instantiate(compiler);
