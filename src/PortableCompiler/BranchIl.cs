@@ -56,6 +56,10 @@ namespace PortableCompiler
         internal const int WidenReference = 131, ConstrainedInstance = 132;
         internal const int StringFirstCodeUnit = 133, LoadStaticByteSpan = 134;
         internal const int TakeStaticByteLocation = 135, OffsetStaticByteLocation = 136, ReadStaticUInt16 = 137;
+        // Managed function pointers (decision 0078). CallIndirect: calli, operand the
+        // StandAloneSig row, then linked to a carrier function index. FunctionAddress:
+        // ldftn into a pointer, operand the table-2 slot. [] -> [Native].
+        internal const int CallIndirect = 138, FunctionAddress = 139;
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
@@ -249,6 +253,15 @@ namespace PortableCompiler
                         kind = op == 0x73 ? NewObject : Call;
                         comparison = op == 0x6f ? 1 : 0;
                     }
+                }
+                else if (op == 0x29)
+                {
+                    if (length - pc < 4) return -1;
+                    uint token = ImageBytes.U32(image, (uint)(start + pc));
+                    pc += 4;
+                    if (token >> 24 != 0x11 || (token & 0xffffff) == 0) return -1;
+                    kind = CallIndirect;
+                    operand = (int)(token & 0xffffff);
                 }
                 else if (op == 0x74 || op == 0x75)
                 {

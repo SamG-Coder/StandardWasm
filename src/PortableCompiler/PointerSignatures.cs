@@ -18,6 +18,15 @@ namespace PortableCompiler
                 next[0] = position + 1;
                 return SignatureTypes.Native;
             }
+            // Decision 0078: a pointer to a function pointer (delegate*<...>*) addresses a
+            // native-size slot in memory 0, like a pointer to nint.
+            if (position < end && image[position] == 0x1b)
+            {
+                int after = PeLibrary.SignatureExtents.Method(image, position + 1, end);
+                if (after < 0) return -2;
+                next[0] = after;
+                return SignatureTypes.Native;
+            }
             int pointee = PointerStorage.ReadPointee(image, position, end, next);
             if (pointee < 0) return pointee;
             if (pointee > 0 && image[position] == 0x11)

@@ -249,6 +249,9 @@ namespace PeLibrary
                 byte type = ArrayTypeRefs.Storage(image[blob + 2]);
                 if (type != 0) return type;
             }
+            // Decision 0078: a function-pointer field is a native int, whatever its signature.
+            if (element == 0x1b)
+                return SignatureExtents.Method(image, blob + 2, end) == end ? NativeStorage.Scalar : -2;
             if (element == 0x15 || element == 0x13 || element == 0x1d || element == PointerStorage.Element)
             {
                 reference[0] = -blob - 1;

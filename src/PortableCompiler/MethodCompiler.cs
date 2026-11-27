@@ -184,12 +184,14 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[24];
+            var frameShape = new int[25];
             var shadowStack = new int[3]; // $sp, base, limit globals + 1
+            var pinRegistry = new int[1]; // the live-pin count global + 1 (decision 0077)
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * 3];
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
             var nativePlans = new NativeAggregatePlans();
+            var pointers = new FunctionPointerPlan();
             // Reuse local pin metadata across methods. Signature decoding resets each slot.
             var pinned = new int[frame.Length];
             var booleanLocals = new byte[frame.Length];
@@ -409,7 +411,12 @@ namespace PortableCompiler
                     functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
                         parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
-                        initializers, reflection, instantiations, methodArguments, inlineLocations, frameCells, parameters, nativePlans, nativeStatics, booleanLocals);
+                        initializers, reflection, instantiations, methodArguments, inlineLocations, frameCells, parameters,
+                        nativePlans, nativeStatics, booleanLocals, pointers);
+                    if (functions < 0)
+                        return functions;
+                    functions = LinkCallIndirect(bundle, image, heaps, layout, count, owner, context, records, owners, rows,
+                        contexts, arities, offsets, signatures, objects, functions, pointers, location);
                     if (functions < 0)
                         return functions;
 
@@ -512,7 +519,7 @@ namespace PortableCompiler
                         if (capacity > int.MaxValue - 320) return -3;
                         capacity += 320;
                     }
-                    bool allocates = false;
+                    bool allocates = false, pins = false;
                     frameShape[21] = 0;
                     frameShape[22] = nativeStatics.Pages();
                     int classBytes = objects[0] * 12;
@@ -578,6 +585,16 @@ namespace PortableCompiler
                                     if (global < 0) return global;
                                     shadowStack[g] = global + 1;
                                 }
+                            if (kind == BranchIl.PinString)
+                            {
+                                pins = true;
+                                if (pinRegistry[0] == 0)
+                                {
+                                    int global = StaticFields.Register(globals, 0, PinRegistryWasm.GlobalKey, I32);
+                                    if (global < 0) return global;
+                                    pinRegistry[0] = global + 1;
+                                }
+                            }
                             int allocationBytes = kind == BranchIl.PinString ? Utf16MemoryWasm.PinCapacity : StackAllocationWasm.Capacity;
                             if (capacity > int.MaxValue - allocationBytes) return -3;
                             capacity += allocationBytes;
@@ -708,6 +725,7 @@ namespace PortableCompiler
                     frameShape[16] = allocates ? shadowStack[0] : 0;
                     frameShape[17] = allocates ? shadowStack[1] : 0;
                     frameShape[18] = allocates ? shadowStack[2] : 0;
+                    frameShape[24] = pins ? pinRegistry[0] : 0;
                     frameShape[19] = resourceOpen ? ((hostFeatures & WasmImports.Console) != 0 ? ConsoleWasm.ImportCount + 1 : 1) : 0;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
@@ -720,7 +738,8 @@ namespace PortableCompiler
                     }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
-                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers, reflection, inlineLocations, nativePlans.Plans, filters, frameCells);
+                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers,
+                        reflection, inlineLocations, nativePlans.Plans, filters, frameCells, pointers);
                 }
 
                 if (used < 0) return used;
@@ -757,6 +776,14 @@ namespace PortableCompiler
                 sizes[functions] = length - bodyOffsets[functions];
                 functions++;
             }
+            for (int c = 0; c < pointers.CarrierCount; c++)
+            {
+                int carrier = pointers.Carriers[c];
+                if (moduleCode.Length - length < 3) return -3;
+                bodyOffsets[carrier] = length;
+                length = FunctionPointerWasm.CarrierBody(moduleCode, length);
+                sizes[carrier] = length - bodyOffsets[carrier];
+            }
             if (initializers.Epoch >= 0 || shadowStack[0] != 0)
             {
                 // Stage 129 (decision 0057): every host export enters through a wrapper
@@ -776,7 +803,7 @@ namespace PortableCompiler
                     offsets[functions] = offset;
                     bodyOffsets[functions] = length;
                     length = TypeInitializerWasm.ExportEntry(moduleCode, length, initializers.Epoch, initializers.Active,
-                        hostImports + target, arity, shadowStack[0] - 1, shadowStack[2] - 1);
+                        hostImports + target, arity, shadowStack[0] - 1, shadowStack[2] - 1, pinRegistry[0] - 1);
                     if (length < 0) return length;
                     sizes[functions] = length - bodyOffsets[functions];
                     exports[export] = functions++;
@@ -785,7 +812,7 @@ namespace PortableCompiler
             CompileLocation.Clear(location);
             if (linearMemory) hostFeatures |= WasmImports.Memory;
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0]);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0], pointers);
         }
 
         private static bool IsExported(int[] exports, int target)
@@ -799,7 +826,9 @@ namespace PortableCompiler
             int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, bool valueConstructor, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed,
             TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, MethodInstantiations instantiations, int[] methodArguments,
-            int[] inlineLocations, int[] frameCells, int parameterCount, NativeAggregatePlans nativePlans, NativeStaticFields nativeStatics, byte[] booleanLocals)
+            int[] inlineLocations, int[] frameCells, int parameterCount, NativeAggregatePlans nativePlans,
+            NativeStaticFields nativeStatics, byte[] booleanLocals,
+            FunctionPointerPlan pointers)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
@@ -1252,6 +1281,19 @@ namespace PortableCompiler
                     uint token = unchecked((uint)records[slot + 1]);
                     uint table = token >> 24;
                     int row = (int)(token & 0xffffff);
+                    if (table == 0x1b)
+                    {
+                        // Decision 0078: sizeof a pointer or function-pointer TypeSpec is the
+                        // native size. Other TypeSpecs, including generic T, stay diagnosed.
+                        int spec = AssemblyReferences.TypeSpecBlob(image, heaps, layout, row);
+                        if (spec <= 0 || spec >= heaps[1]) return -2;
+                        var after = new int[1];
+                        int length = ImageBytes.CompressedUnsigned(image, heaps[0] + spec, heaps[0] + heaps[1], after);
+                        if (length < 1 || (image[after[0]] != 0x1b && image[after[0]] != 0x0f)) return -2;
+                        records[slot] = BranchIl.Constant;
+                        records[slot + 1] = 4;
+                        continue;
+                    }
                     if (table != 1 && table != 2) return -2; // TypeSpec, including generic T
                     var identity = new int[2];
                     int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner,
@@ -1682,6 +1724,18 @@ namespace PortableCompiler
                 }
                 if (kind == BranchIl.LoadFunction)
                 {
+                    // Decision 0078: an ldftn that feeds no delegate constructor takes a
+                    // static method's address as a table-2 slot. Instance pointers stay diagnosed.
+                    // Only the delegate constructor shape counts: an ordinary constructor can take
+                    // a function pointer straight from ldftn (Codex review of c6b68c7).
+                    int following = records[slot + 2] * BranchIl.Width;
+                    if (!FeedsDelegateConstructor(bundle, image, heaps, layout, owner, records, following))
+                    {
+                        if ((MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) == 0) return -2;
+                        records[slot] = BranchIl.FunctionAddress;
+                        records[slot + 1] = pointers.Slot(index);
+                        continue;
+                    }
                     if (!hasReceiver ||
                         (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) != 0)
                         return -2;
@@ -1982,6 +2036,95 @@ namespace PortableCompiler
                 next = records[next + 2] * BranchIl.Width;
             }
             return status;
+        }
+
+        // Decides whether an adjacent newobj builds a delegate from this ldftn (decision 0078).
+        // The signature alone is not enough: an ordinary constructor may also take (object, nint)
+        // (Codex review of ee7556a). A delegate is identified by its declaring type. Only
+        // delegates have runtime-implemented methods (ECMA-335 II.14.6); an ordinary
+        // (object, nint) constructor has an IL body. The declaring type is:
+        // - a platform delegate MemberRef, as the delegate path itself recognizes them;
+        // - a local MethodDef, whose own implementation flags say Runtime;
+        // - a MemberRef to a TypeRef in another bundle assembly, resolved there and checked
+        //   for any runtime-implemented method. A generic (TypeSpec) parent with the delegate
+        //   shape keeps the delegate path and its existing diagnostic.
+        private static bool FeedsDelegateConstructor(BundleImages bundle, byte[] image, int[] heaps, int[] layout,
+            int owner, int[] records, int following)
+        {
+            if (following >= records.Length) return false;
+            int kind = records[following], row = records[following + 1];
+            if (kind == BranchIl.NewObject)
+                return (MethodDefinitions.ReadColumn(image, layout, row, 1) & 3) == 3; // CodeTypeMask: Runtime
+            if (kind != BranchIl.MemberCall || records[following + 3] != 0x73) return false;
+            if (DelegateMetadata.Member(image, heaps, layout, row) == DelegateMetadata.Construct ||
+                EventMetadata.Member(image, heaps, layout, row) == EventMetadata.ConstructHandler)
+                return true;
+            var member = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadMember(image, heaps, layout, row, member, allowClosedParent: true) < 0 ||
+                !HasDelegateConstructorShape(image, heaps, member[5]))
+                return false;
+            int parent = AssemblyReferences.MemberParent(image, heaps, layout, row);
+            if (parent < 0 || (parent & 7) != 1 || bundle.Length == 0) return true;
+            var identity = new int[2];
+            if (AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, (parent >> 3) << 2 | 1, identity) < 0 ||
+                identity[1] <= 0)
+                return true; // unresolved: keep the delegate path's diagnostic
+            byte[] target = bundle.Get(identity[0]);
+            var targetLayout = new int[4];
+            var targetHeaps = new int[8];
+            if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return true;
+            var range = new int[2];
+            if (ObjectLayouts.MethodRange(target, targetHeaps, targetLayout, identity[1], range) < 0) return true;
+            for (int method = range[0]; method < range[1]; method++)
+                if ((MethodDefinitions.ReadColumn(target, targetLayout, method, 1) & 3) == 3) return true;
+            return false;
+        }
+
+        // `instance void .ctor(object, native int)` (ECMA-335 II.14.6.1).
+        private static bool HasDelegateConstructorShape(byte[] image, int[] heaps, int blob)
+        {
+            if (blob <= 0 || blob >= heaps[1]) return false;
+            var next = new int[1];
+            int size = ImageBytes.CompressedUnsigned(image, heaps[0] + blob, heaps[0] + heaps[1], next);
+            int at = next[0];
+            return size == 5 && image[at] == 0x20 && image[at + 1] == 2 && image[at + 2] == 1 &&
+                image[at + 3] == 0x1c && image[at + 4] == 0x18;
+        }
+
+        // Decision 0078: link each calli to the carrier for its StandAloneSig. Only the
+        // default managed convention is accepted (SignatureTypes rejects other first bytes).
+        private static int LinkCallIndirect(BundleImages bundle, byte[] image, int[] heaps, int[] layout, int count,
+            int owner, int context, int[] records, int[] owners, int[] rows, int[] contexts, int[] arities,
+            int[] offsets, int[] signatures, int[] objects, int functions, FunctionPointerPlan pointers, int[] location)
+        {
+            for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
+            {
+                if (records[slot] != BranchIl.CallIndirect) continue;
+                if (location.Length != 0) location[2] = slot / BranchIl.Width;
+                int blob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, 0x11000000 | records[slot + 1]);
+                if (blob < 0) return -1;
+                var types = new int[256];
+                int arity = SignatureTypes.Read(bundle, image, heaps, blob, types, 0, 0, layout, objects, owner, context);
+                if (arity < 0) return arity;
+                int chain = pointers.FindCarrier(arities, offsets, signatures, types, 0, arity);
+                if (chain < 0)
+                {
+                    if (functions >= owners.Length) return -3;
+                    int offset = NextSignature(offsets, arities, functions);
+                    if (arity >= signatures.Length - offset) return -3;
+                    for (int i = 0; i <= arity; i++) signatures[offset + i] = types[i];
+                    owners[functions] = owner;
+                    rows[functions] = 0; // synthetic carrier, never compiled from IL
+                    contexts[functions] = context;
+                    arities[functions] = arity;
+                    offsets[functions] = offset;
+                    chain = pointers.AddCarrier(functions++);
+                }
+                records[slot + 1] = pointers.Carriers[chain];
+                records[slot + 3] = chain;
+            }
+            if (location.Length != 0) location[2] = -1;
+            return functions;
         }
 
         private static int NextSignature(int[] offsets, int[] arities, int functions) =>

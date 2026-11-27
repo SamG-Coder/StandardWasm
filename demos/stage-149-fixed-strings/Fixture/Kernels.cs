@@ -88,12 +88,60 @@ namespace FixedStringFixture
             return hash;
         }
 
-        // Each iteration pins again; every copy stays reserved until the frame returns.
+        // Each iteration pins again while the earlier pin is still registered, so it reuses that copy.
         public static int Repeated(int selection)
         {
             string s = Pick(selection);
             int total = 0;
             for (int round = 0; round < 40; round++)
+                fixed (char* p = s)
+                    total += p == null ? -1 : p[round % (s.Length + 1)];
+            return total;
+        }
+
+        // Pin identity (Codex review of f5324f4): while a pin is live, pinning the same
+        // string again gives the same address, in the same frame or a nested one.
+        public static int SameFrame(int selection)
+        {
+            string s = Pick(selection);
+            fixed (char* a = s)
+            fixed (char* b = s)
+                return a == b ? 1 : 0;
+        }
+
+        public static int Nested(int selection)
+        {
+            string s = Pick(selection);
+            fixed (char* outer = s)
+                return PinAgain(s, outer);
+        }
+
+        private static int PinAgain(string s, char* outer)
+        {
+            fixed (char* inner = s)
+                return inner == outer ? 1 : 0;
+        }
+
+        // Equal contents in distinct objects are distinct pins.
+        public static int Distinct(int selection)
+        {
+            string s = Pick(selection);
+            // new string(char[0]) is the shared empty string on the CLR, so skip it.
+            if (s == null || s.Length == 0) return -1;
+            var units = new char[s.Length];
+            for (int i = 0; i < units.Length; i++) units[i] = s[i];
+            string copy = new string(units);
+            fixed (char* a = s)
+            fixed (char* b = copy)
+                return a == b ? 1 : 0;
+        }
+
+        // A live pin is reused, so many pins of one long string need one copy.
+        public static int ManyPins(int selection)
+        {
+            string s = Pick(selection);
+            int total = 0;
+            for (int round = 0; round < 100000; round++)
                 fixed (char* p = s)
                     total += p == null ? -1 : p[round % (s.Length + 1)];
             return total;

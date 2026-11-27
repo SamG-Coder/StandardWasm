@@ -209,6 +209,15 @@ namespace PortableCompiler
                     cursor = next[0];
                     types[target] = storage;
                 }
+                else if (element == 0x1b)
+                {
+                    // ELEMENT_TYPE_FNPTR (decision 0078): a native-size code address, whatever
+                    // its signature. Only calli reads that signature, from its own token.
+                    int after = PeLibrary.SignatureExtents.Method(image, cursor, end);
+                    if (after < 0) return -2;
+                    cursor = after;
+                    types[target] = Native;
+                }
                 else if (element == 0x0c || element == 0x0d)
                     types[target] = FloatStorage.FromElement(element);
                 else if (element == 0x0e)

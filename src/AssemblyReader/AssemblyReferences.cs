@@ -12,6 +12,19 @@ namespace PeLibrary
         // Version byte offset, assembly/type/namespace/member string indexes,
         // signature blob index, then key kind and its validated byte range.
         // The type name slots identify the outer type for forwarder lookup.
+        // The raw MemberRefParent coded index of a MemberRef row (ECMA-335 II.22.25), or -1.
+        internal static int MemberParent(byte[] image, int[] streams, int[] methods, int row)
+        {
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
+            if (first < 0 || row < 1 || row > counts[10]) return -1;
+            int table = MetadataTableRows.TableStart(streams, methods, counts, 10);
+            if (table < 0) return -1;
+            int memberWidth = StandaloneSignatures.Width(counts, 10, methods[2], methods[3]);
+            int parentWidth = memberWidth - methods[2] - methods[3];
+            return (int)Index(image, (uint)(table + (row - 1) * memberWidth), parentWidth);
+        }
+
         internal static int ReadMember(byte[] image, int[] streams, int[] methods, int row, int[] reference, bool allowClosedParent = false, bool allowLocalParent = false)
         {
             var counts = new int[45];

@@ -10,7 +10,9 @@ namespace PortableCompiler
         private const int LocationSpill = 1, SpanSpill = 2;
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection, int[] inlineLocations, int[] nativePlans, int[] filters, int[] frameCells)
+            byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection,
+            int[] inlineLocations, int[] nativePlans, int[] filters, int[] frameCells,
+            FunctionPointerPlan pointers)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -28,6 +30,8 @@ namespace PortableCompiler
             int stackPointer = frameShape[16] - 1, stackBase = frameShape[17] - 1, stackLimit = frameShape[18] - 1;
             int resourceFunction = frameShape[19] - 1;
             int staticRegion = frameShape[21] - 1, staticPages = frameShape[22];
+            // Stage 149 (decision 0077): a pinning frame also saves the live-pin count.
+            int pins = frameShape[24] - 1;
             bool hasNull = outgoingNulls.Length != 0;
             int spillFlags = 0;
             // Only verified stack types need banks. Unused view types must not
@@ -53,7 +57,7 @@ namespace PortableCompiler
             int spills = arguments + locals + (hasNull ? 1 : 0);
             int fixedLocals = spills + classes + (stringScratch ? 5 : 0) +
                 (eventScratch ? 6 : 0) + (resourceFunction >= 0 ? 7 : 0) + 1 + 2 * exceptionLocals + continuations +
-                (stackPointer >= 0 ? 1 : 0) + (staticRegion >= 0 ? 1 : 0) + cellCount;
+                (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0) + (staticRegion >= 0 ? 1 : 0) + cellCount;
             if (fixedLocals > MaxLocals || maximum > (MaxLocals - fixedLocals) / spillKinds) return -2;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
@@ -69,8 +73,8 @@ namespace PortableCompiler
                 (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0) +
                 (staticRegion >= 0 ? 1 : 0) + cellCount);
             // The saved shadow-stack pointer follows every other local.
-            int stackFrame = objectBase + exceptionLocals;
-            int staticAddress = stackFrame + (stackPointer >= 0 ? 1 : 0);
+            int stackFrame = objectBase + exceptionLocals, pinFrame = stackFrame + 1;
+            int staticAddress = stackFrame + (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0);
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < arguments + locals; i++)
             {
@@ -145,7 +149,7 @@ namespace PortableCompiler
             }
             if (stackPointer >= 0)
             {
-                code[used++] = 1;
+                code[used++] = (byte)(pins >= 0 ? 2 : 1); // saved $sp, then the saved pin count
                 code[used++] = 0x7f;
             }
             if (staticRegion >= 0)
@@ -207,6 +211,7 @@ namespace PortableCompiler
             if (stackPointer >= 0)
             {
                 used = StackAllocationWasm.Begin(code, used, stackPointer, stackFrame);
+                if (pins >= 0) used = PinRegistryWasm.Begin(code, used, pins, pinFrame);
                 // An exception leaving this frame releases its allocations, then continues.
                 code[used++] = 0x02; code[used++] = ExceptionDispatchWasm.ExceptionReference; // block (result exnref)
                 code[used++] = 0x1f; code[used++] = 0x40; code[used++] = 1;                  // try_table
@@ -668,6 +673,28 @@ namespace PortableCompiler
                     if (returned != Void)
                         used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, StackType(returned), first));
                 }
+                else if (kind == FunctionAddress)
+                {
+                    used = Const(code, used, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, Native, depth));
+                }
+                else if (kind == CallIndirect)
+                {
+                    // [arguments, pointer] -> [result]. The carrier supplies the signature.
+                    int arity = arities[operand], shape = offsets[operand];
+                    int first = depth - arity - 1;
+                    for (int i = 0; i < arity; i++)
+                    {
+                        int argument = first + i;
+                        int source = states[state + argument];
+                        used = LoadOperand(code, used, Spill(spills, maximum, spillFlags, source, argument), source, signatures[shape + 1 + i]);
+                    }
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, Native, depth - 1));
+                    used = FunctionPointerWasm.CallIndirect(code, used, frameShape[7], pointers, records[slot + 3]);
+                    int returned = signatures[shape];
+                    if (returned != Void)
+                        used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, StackType(returned), first));
+                }
                 else if (kind == ConstructValue)
                 {
                     // [S, arguments] -> []. The CLR runs the constructor on the
@@ -837,7 +864,7 @@ namespace PortableCompiler
                     int source = Spill(spills, maximum, spillFlags, String, top);
                     if (records[slot + 3] != 0) used = GuardNull(code, used, source);
                     used = Utf16MemoryWasm.Pin(code, used, source, scratch, scratch + 3, scratch + 4,
-                        Spill(spills, maximum, spillFlags, Native, top), stackPointer, stackBase, stackLimit, pcLocal);
+                        Spill(spills, maximum, spillFlags, Native, top), stackPointer, stackBase, stackLimit, pcLocal, pins);
                 }
                 else if (kind == LocalAllocate)
                 {
@@ -1234,6 +1261,7 @@ namespace PortableCompiler
                         used = NormalizeSlot(code, used, result);
                     }
                     if (guard >= 0) used = TypeInitializerWasm.Complete(code, used, guard, activeInitializers);
+                    if (pins >= 0) used = PinRegistryWasm.Release(code, used, pins, pinFrame);
                     if (stackPointer >= 0) used = StackAllocationWasm.Release(code, used, stackPointer, stackLimit, stackFrame);
                     code[used++] = 0x0f;
                 }
@@ -1315,6 +1343,7 @@ namespace PortableCompiler
                 code[used++] = 0x0b; // end try_table
                 code[used++] = 0x00;
                 code[used++] = 0x0b; // end block: the caught exnref is on the stack
+                if (pins >= 0) used = PinRegistryWasm.Release(code, used, pins, pinFrame);
                 used = StackAllocationWasm.Release(code, used, stackPointer, stackLimit, stackFrame);
                 code[used++] = 0x0a; // throw_ref
             }

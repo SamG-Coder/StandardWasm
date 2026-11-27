@@ -362,6 +362,18 @@ namespace PortableCompiler
                 return Match(stack, depth, I32) && Match(stack, depth - 1, String)
                     ? Push(stack, allocated, depth - 2, I32) : -1;
             if (kind == LoadFunction) return Push(stack, allocated, depth, MethodPointer);
+            // Decision 0078: a function pointer is a native int; calli takes it last.
+            if (kind == FunctionAddress) return Push(stack, allocated, depth, Native);
+            if (kind == CallIndirect)
+            {
+                int arity = arities[operand], shape = offsets[operand];
+                if (depth < arity + 1 || !IsNativeInteger(stack[depth - 1])) return -2;
+                int start = depth - 1 - arity;
+                for (int i = 0; i < arity; i++)
+                    if (!Assignable(stack[start + i], signatures[shape + 1 + i], objects)) return -1;
+                int returned = signatures[shape];
+                return returned == Void ? start : Push(stack, allocated, start, StackType(returned));
+            }
             if (kind == NewDelegate)
             {
                 if (!Match(stack, depth, MethodPointer) || depth < 2 || stack[depth - 2] != extra) return -1;
