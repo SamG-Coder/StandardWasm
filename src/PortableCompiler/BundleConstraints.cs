@@ -51,7 +51,7 @@ namespace PortableCompiler
             // Compare the substituted nominal types before examining boxing.
             // Int32 and UInt32 therefore remain distinct despite sharing i32 storage.
             if (argument == target || SignatureTypes.Assignable(argument, target, objects)) return 1;
-            bool value = GenericScalar.IsScalar(argument) || ObjectLayouts.IsEnumKey(argument) ||
+            bool value = argument == SimdValueStorage.Vector128Word || GenericScalar.IsScalar(argument) || ObjectLayouts.IsEnumKey(argument) ||
                 ObjectLayouts.IsValueType(objects, argument);
             if (!value) return -2;
             if (target == ObjectLayouts.ObjectReference) return 1;
@@ -88,6 +88,14 @@ namespace PortableCompiler
         {
             if (argument == SignatureTypes.String)
                 return ImplementsCoreReference(bundle, objects, required, "String", "System", depth);
+            if (argument == SimdValueStorage.Vector128Word)
+            {
+                if (!Vector128Layouts.ProvesWordStorage(bundle)) return -2;
+                var vector = new int[2];
+                int status = RuntimeTypeTokens.FindCoreType(bundle, "Vector128`1", vector, "System.Runtime.Intrinsics");
+                return status < 0 ? status : Search(bundle, objects, required, vector[0], vector[1],
+                    new[] { GenericScalar.Key(7) }, 0, depth);
+            }
             var noParameters = new int[0];
             if (GenericScalar.IsScalar(argument))
             {
@@ -364,6 +372,22 @@ namespace PortableCompiler
             if (scalar != 0) return scalar;
             if (element == 0x1c) return ObjectLayouts.ObjectReference;
             if (element == 0x0e) return SignatureTypes.String;
+            if (element == 0x15)
+            {
+                // Vector128's interface edges name the vector itself, with
+                // its declaring lane substituted in the closed constraint.
+                cursor[0] = at;
+                int coded = SignatureReader.ReadSingleArgumentValue(image, cursor, end);
+                if (coded <= 0 || cursor[0] >= end || !VectorLaneCount.IsVector128(image, layout, heaps, coded)) return -2;
+                int laneElement = image[cursor[0]];
+                if (laneElement != 7 && laneElement != 0x11 && laneElement != 0x13 && laneElement != 0x1e)
+                    return -2;
+                int lane = Argument(bundle, image, layout, heaps, owner, objects, cursor, end,
+                    substitutions, context, methodArguments);
+                if (lane < 0) return lane;
+                return lane == GenericScalar.Key(7) && Vector128Layouts.ProvesWordStorage(bundle)
+                    ? SimdValueStorage.Vector128Word : -2;
+            }
             if (element != 0x11 && element != 0x12 && element != 0x13 && element != 0x1e) return -2;
             int item = CompressedUnsigned(image, at + 1, end, cursor);
             if (item < 0) return item;

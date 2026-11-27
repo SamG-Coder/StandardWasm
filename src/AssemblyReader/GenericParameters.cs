@@ -51,7 +51,7 @@ namespace PeLibrary
                 if ((flags & Reference) != 0 || requiresValue)
                 {
                     int argument = arguments[low - first];
-                    bool value = GenericScalar.IsScalar(argument) || ObjectLayouts.IsEnumKey(argument) ||
+                    bool value = argument == SimdValueStorage.Vector128Word || GenericScalar.IsScalar(argument) || ObjectLayouts.IsEnumKey(argument) ||
                         ObjectLayouts.IsValueType(objects, argument);
                     if ((flags & Reference) != 0 && value ||
                         requiresValue && (!value || ObjectLayouts.IsNullableValueType(objects, argument))) return -2;
