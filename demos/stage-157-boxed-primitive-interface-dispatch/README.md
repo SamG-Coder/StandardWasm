@@ -39,6 +39,10 @@ They also cover the null receiver. Primitive vectors share Wasm heaps across
 distinct CLI types, so the verifier accepts the located diagnostic for that
 case until those identities can be carried through dispatch.
 
+The Type.Name cases share the runtime descriptor cache machinery. They
+verify simple names for nested generic types and arrays, typed null
+behavior, and the distinction between simple names and display names.
+
 Both `Int32` cases have CLR answers. The compiler now binds the original
 `Number.TryFormatInt32<char>` generic method. Until the formatting pipeline
 lowers, the verifier accepts only the located diagnostic at the pinned local

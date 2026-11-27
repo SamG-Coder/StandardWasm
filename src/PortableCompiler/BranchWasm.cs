@@ -357,13 +357,14 @@ namespace PortableCompiler
                     used = WasmIndexFixups.Write(code, used, frameShape[7], reflection.ObjectTypes.Fixups);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, PeLibrary.RuntimeTypeMetadata.Type, top));
                 }
-                else if (kind == RuntimeTypeDisplayName)
+                else if (kind == RuntimeTypeDisplayName || kind == ReadReflection && operand == PeLibrary.ReflectionMembers.TypeName)
                 {
                     int receiver = Spill(spills, maximum, spillFlags, PeLibrary.RuntimeTypeMetadata.Type, top);
                     used = GuardNull(code, used, receiver);
                     used = Local(code, used, 0x20, receiver);
                     code[used++] = 0x10;
-                    used = WasmIndexFixups.Write(code, used, frameShape[7], reflection.TypeNameFixups);
+                    int[] fixups = kind == RuntimeTypeDisplayName ? reflection.TypeNameFixups : reflection.TypeSimpleNameFixups;
+                    used = WasmIndexFixups.Write(code, used, frameShape[7], fixups);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, String, top));
                 }
                 else if (kind == EqualRuntimeTypes)

@@ -11,6 +11,7 @@ namespace PortableCompiler
         private const string UnknownName = "<Unknown>";
 
         internal readonly int[] TypeNameFixups = new int[1];
+        internal readonly int[] TypeSimpleNameFixups = new int[1];
         internal readonly int[] HeapFixups = new int[1];
         internal readonly RuntimeObjectTypes ObjectTypes = new RuntimeObjectTypes();
         internal readonly RuntimeInterfaceTests InterfaceTests = new RuntimeInterfaceTests();

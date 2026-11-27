@@ -29,7 +29,8 @@ internal static class Program
             StringObjectSlot, StringOwnSlot, NullStringObjectSlot,
             OriginalExceptionGetType, OriginalDerivedExceptionGetType, NullExceptionGetType, OriginalObjectDisplayName,
             ClosedTypeDisplayName, OpenTypeDisplayName, ArrayTypeDisplayName, RepeatedTypeDisplayName, NamespacedTypeDisplayName, NullTypeDisplayName,
-            ExactRootDispatch, DynamicRootDispatch, NullRootDispatch, PrimitiveVectorRootDispatch
+            ExactRootDispatch, DynamicRootDispatch, NullRootDispatch, PrimitiveVectorRootDispatch,
+            TypeSimpleNames, NullTypeSimpleName, TypeNameAndDisplayName
         };
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
@@ -43,6 +44,35 @@ internal static class Program
                 Path.Combine(runtime, "System.Memory.dll")
             }, cases = results
         }));
+    }
+
+    public static int TypeSimpleNames()
+    {
+        int result = typeof(NominalNameProbe.Élément<int>).Name == "Élément`1" ? 1 : 0;
+        if (typeof(NominalNameProbe.Élément<>).Name == "Élément`1") result += 2;
+        if (typeof(NominalNameProbe[]).Name == "NominalNameProbe[]") result += 4;
+        if (typeof(byte[]).Name == "Byte[]") result += 8;
+        if (typeof(Exception).Name == "Exception") result += 16;
+        return result;
+    }
+
+    public static int NullTypeSimpleName()
+    {
+        try { return ReadTypeSimpleName(false).Length; }
+        catch (NullReferenceException) { return 71; }
+    }
+
+    private static string ReadTypeSimpleName(bool useType)
+    {
+        Type? descriptor = useType ? typeof(NominalNameProbe) : null;
+        return descriptor!.Name;
+    }
+
+    public static int TypeNameAndDisplayName()
+    {
+        Type type = typeof(NominalNameProbe);
+        return type.Name == "NominalNameProbe" && type.ToString() == "Program+NominalNameProbe" &&
+            ReferenceEquals(type.Name, type.Name) ? 73 : 0;
     }
 
     public static int ExactRootDispatch() => new object().ToString() == "System.Object" ? 67 : 0;

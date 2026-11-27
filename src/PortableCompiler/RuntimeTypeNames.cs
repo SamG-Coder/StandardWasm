@@ -10,7 +10,7 @@ namespace PortableCompiler
         private const int CacheOwner = int.MaxValue - 1;
 
         internal static int Write(BundleImages bundle, byte[] code, int used, int[] objects,
-            int[] globals, byte[] literals, int[] literalSize)
+            int[] globals, byte[] literals, int[] literalSize, bool simple)
         {
             if (code.Length - used < 3) return -3;
             code[used++] = 0; // no locals besides the descriptor parameter
@@ -21,9 +21,9 @@ namespace PortableCompiler
                 if (!RuntimeTypeTokens.IsDescriptorOwner(owner) || StaticFields.Row(globals, index) < 0) continue;
                 int start = literalSize[0];
                 int end = AppendIdentity(bundle, objects, RuntimeTypeTokens.ModuleSlot(owner) - 1,
-                    StaticFields.Row(globals, index), literals, start, 0);
+                    StaticFields.Row(globals, index), literals, start, 0, simple);
                 if (end < 0) return end;
-                int cache = StaticFields.Register(globals, CacheOwner, index, SignatureTypes.String);
+                int cache = StaticFields.Register(globals, CacheOwner, index, SignatureTypes.String, simple ? 1 : 0);
                 if (cache < 0) return cache;
                 if (code.Length - used < 76) return -3;
                 used = Local(code, used, 0x20, 0);
@@ -61,12 +61,12 @@ namespace PortableCompiler
         }
 
         private static int AppendIdentity(BundleImages bundle, int[] objects, int owner, int row,
-            byte[] data, int used, int depth)
+            byte[] data, int used, int depth, bool simple)
         {
             if (depth >= ObjectLayouts.MaxTypeDepth) return -2;
             if (row >= RuntimeTypeTokens.PrimitiveVectorKey)
             {
-                used = Primitive(row - RuntimeTypeTokens.PrimitiveVectorKey, data, used);
+                used = Primitive(row - RuntimeTypeTokens.PrimitiveVectorKey, data, used, simple);
                 return Text(data, used, "[]");
             }
             if (row >= RuntimeTypeTokens.ClosedTypeKey)
@@ -75,35 +75,36 @@ namespace PortableCompiler
                 int element = ObjectLayouts.ArrayElementKey(objects, type);
                 if (element != 0)
                 {
-                    used = AppendType(bundle, objects, element, data, used, depth + 1);
+                    used = AppendType(bundle, objects, element, data, used, depth + 1, simple);
                     return Text(data, used, "[]");
                 }
-                used = AppendDefinition(bundle, owner, ObjectLayouts.TypeDef(objects, type), data, used, false);
+                used = AppendDefinition(bundle, owner, ObjectLayouts.TypeDef(objects, type), data, used, false, simple);
+                if (simple) return used;
                 used = Text(data, used, "[");
                 for (int index = 0; used >= 0; index++)
                 {
                     int argument = ObjectLayouts.Argument(objects, type, index);
                     if (argument < 0) break;
                     if (index != 0) used = Text(data, used, ",");
-                    used = AppendType(bundle, objects, argument, data, used, depth + 1);
+                    used = AppendType(bundle, objects, argument, data, used, depth + 1, simple);
                 }
                 return Text(data, used, "]");
             }
             return owner == AssemblyBundle.ObjectOwner && row == 0
-                ? Text(data, used, "System.Object") : AppendDefinition(bundle, owner, row, data, used, true);
+                ? Text(data, used, simple ? "Object" : "System.Object") : AppendDefinition(bundle, owner, row, data, used, true, simple);
         }
 
-        private static int AppendType(BundleImages bundle, int[] objects, int type, byte[] data, int used, int depth)
+        private static int AppendType(BundleImages bundle, int[] objects, int type, byte[] data, int used, int depth, bool simple)
         {
             if (used < 0) return used;
-            if (GenericScalar.IsScalar(type)) return Primitive(GenericScalar.Element(type), data, used);
-            if (type == SignatureTypes.String) return Text(data, used, "System.String");
+            if (GenericScalar.IsScalar(type)) return Primitive(GenericScalar.Element(type), data, used, simple);
+            if (type == SignatureTypes.String) return Text(data, used, simple ? "String" : "System.String");
             var identity = new int[2];
             int status = RuntimeTypeTokens.ReadClosedIdentity(bundle, objects, type, identity);
-            return status < 0 ? status : AppendIdentity(bundle, objects, identity[0], identity[1], data, used, depth);
+            return status < 0 ? status : AppendIdentity(bundle, objects, identity[0], identity[1], data, used, depth, simple);
         }
 
-        private static int AppendDefinition(BundleImages bundle, int owner, int row, byte[] data, int used, bool open)
+        private static int AppendDefinition(BundleImages bundle, int owner, int row, byte[] data, int used, bool open, bool simple)
         {
             if (used < 0) return used;
             if (owner < 0 || owner >= bundle.Count) return -2;
@@ -113,6 +114,12 @@ namespace PortableCompiler
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0 || row < 2 || row > counts[2]) return -1;
+            if (simple)
+            {
+                var names = new int[2];
+                if (ObjectLayouts.TypeDefinitionNames(image, heaps, layout, row, names) < 0) return -1;
+                return Metadata(image, heaps, names[0], data, used);
+            }
             used = AppendNested(image, layout, heaps, counts, row, data, used, 0);
             if (used < 0 || !open) return used;
             int[] parameters = GenericParameters.TypeParameterNames(image, heaps, layout, counts, row);
@@ -171,7 +178,7 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int Primitive(int element, byte[] data, int used)
+        private static int Primitive(int element, byte[] data, int used, bool simple)
         {
             string name;
             switch (element)
@@ -192,7 +199,7 @@ namespace PortableCompiler
                 case 25: name = "UIntPtr"; break;
                 default: return -2;
             }
-            return Text(data, Text(data, used, "System."), name);
+            return Text(data, simple ? used : Text(data, used, "System."), name);
         }
 
         private static int Text(byte[] data, int used, string text)

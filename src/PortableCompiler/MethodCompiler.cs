@@ -1020,7 +1020,7 @@ namespace PortableCompiler
                                 if (fields > (int.MaxValue - capacity) / 16) return -3;
                                 capacity += fields * 16;
                             }
-                            if (kind == BranchIl.ReadReflection)
+                            if (kind == BranchIl.ReadReflection && operation != ReflectionMembers.TypeName)
                             {
                                 int bytes = reflection.BodyCapacity(int.MaxValue - capacity);
                                 if (bytes < 0) return bytes;
@@ -1179,8 +1179,10 @@ namespace PortableCompiler
                 sizes[functions] = length - bodyOffsets[functions];
                 functions++;
             }
-            if (reflection.TypeNameFixups[0] != 0)
+            for (int nameForm = 0; nameForm < 2; nameForm++)
             {
+                int[] fixups = nameForm == 0 ? reflection.TypeNameFixups : reflection.TypeSimpleNameFixups;
+                if (fixups[0] == 0) continue;
                 if (functions >= owners.Length) return -3;
                 int offset = NextSignature(offsets, arities, functions);
                 if (offset + 1 >= signatures.Length) return -3;
@@ -1189,9 +1191,9 @@ namespace PortableCompiler
                 arities[functions] = 1;
                 offsets[functions] = offset;
                 bodyOffsets[functions] = length;
-                length = RuntimeTypeNames.Write(bundle, moduleCode, length, objects, globals, literals, literalSize);
+                length = RuntimeTypeNames.Write(bundle, moduleCode, length, objects, globals, literals, literalSize, nameForm != 0);
                 if (length < 0) return length;
-                WasmIndexFixups.Resolve(moduleCode, reflection.TypeNameFixups[0], hostImports + functions);
+                WasmIndexFixups.Resolve(moduleCode, fixups[0], hostImports + functions);
                 sizes[functions] = length - bodyOffsets[functions];
                 functions++;
             }
@@ -2164,8 +2166,11 @@ namespace PortableCompiler
                     }
                     if (reflectionMember != 0)
                     {
-                        int status = reflection.Bind(bundle, globals, literals, literalSize);
-                        if (status < 0) return status;
+                        if (reflectionMember != ReflectionMembers.TypeName)
+                        {
+                            int status = reflection.Bind(bundle, globals, literals, literalSize);
+                            if (status < 0) return status;
+                        }
                         records[slot] = BranchIl.ReadReflection;
                         records[slot + 1] = reflectionMember;
                         continue;

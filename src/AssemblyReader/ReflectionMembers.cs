@@ -5,7 +5,7 @@ namespace PeLibrary
 {
     internal static class ReflectionMembers
     {
-        internal const int TypeModule = 1, TypeAssembly = 2, ModuleAssembly = 3, ModuleName = 4, ResourceStream = 5, ExecutingAssembly = 6;
+        internal const int TypeModule = 1, TypeAssembly = 2, ModuleAssembly = 3, ModuleName = 4, ResourceStream = 5, ExecutingAssembly = 6, TypeName = 7;
 
         internal static int Identify(byte[] image, int[] heaps, int[] layout, int row, bool staticCall)
         {
@@ -17,7 +17,9 @@ namespace PeLibrary
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
             if (first < 0) return 0;
             int owner = PlatformTypeReferences.Identify(image, heaps, layout, counts, first, member[AssemblyReferences.Leaf]);
-            if (owner != Type && owner != Module && owner != Assembly) return 0;
+            bool typeName = !staticCall && (owner == Type || owner == TypeBase) &&
+                MatchesAscii(image, heaps, (uint)member[4], "get_Name");
+            if (owner != Type && owner != Module && owner != Assembly && !typeName) return 0;
 
             uint heap = (uint)heaps[2], length = (uint)heaps[3], name = (uint)member[4];
             int kind = 0, result = 0;
@@ -42,6 +44,11 @@ namespace PeLibrary
             {
                 kind = owner == Type ? TypeAssembly : ModuleAssembly;
                 result = Assembly;
+            }
+            else if (typeName)
+            {
+                kind = TypeName;
+                result = String;
             }
             else if (owner == Module && Named(image, heap, length, name, 8, 0x5f746567, 0x656d614e, 0)) // get_Name
             {
