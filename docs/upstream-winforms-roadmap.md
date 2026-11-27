@@ -192,11 +192,14 @@ Stage 152 compares five cases through the normal entry point, including
 the null argument exception. The launcher retries compiler workspace
 exhaustion with a larger buffer. CoreLib's `Path.GetFullPath` now uses the
 Wasm UTF-16 string backing array for the original ordinal code-unit search
-in `String.Contains(char)`. The original startup bundle advances to the
-static reference address in `AppDomain.get_CurrentDomain` at `IL_0007`.
-CoreLib passes that address to `Interlocked.CompareExchange` to publish the
-domain. Production collection scheduling, host roots, and re-registration
-remain open.
+in `String.Contains(char)`. Addressed static reference fields now share a
+traced cell across direct reads, writes and byrefs. This clears the startup
+diagnostic on the static address in `AppDomain.get_CurrentDomain`. The desktop
+compiler replay next reports `NativeWindow.OnShutdown` while preparing the
+method, before it identifies an IL offset. An isolated compare-exchange
+fixture reaches CoreLib's native `Interlocked.CompareExchangeObject`, which
+still needs a browser binding. Production collection scheduling, host roots,
+and re-registration remain open.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

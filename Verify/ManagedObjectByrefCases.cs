@@ -8,9 +8,11 @@ internal static class ManagedObjectByrefCases
         {
             Check(nameof(Kernels.AcrossCall), [i], Kernels.AcrossCall(i));
             Check(nameof(Kernels.LocalAlias), [i], Kernels.LocalAlias(i));
+            Check(nameof(Kernels.StaticTypedAlias), [i], Kernels.StaticTypedAlias(i));
             for (int j = 0; j < 2; j++)
                 Check(nameof(Kernels.SharedElement), [i, j], Kernels.SharedElement(i, j));
         }
+        Check(nameof(Kernels.StaticInitialAddress), [], Kernels.StaticInitialAddress());
 
         foreach (int divisor in new[] { 0, 1, 10 })
             Check(nameof(Kernels.DuringUnwind), [divisor], Kernels.DuringUnwind(divisor));

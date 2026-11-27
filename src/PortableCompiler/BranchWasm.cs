@@ -1167,6 +1167,12 @@ namespace PortableCompiler
                         Spill(spills, maximum, spillFlags, records[slot + 3] == StaticInt32Wasm.Address ? Int32Location : I32,
                             records[slot + 3] == StaticInt32Wasm.Write ? top : depth));
                 }
+                else if (kind == StaticReference)
+                {
+                    used = TypeInitializerWasm.Trigger(code, used, fieldInitializers, operand, hostImports);
+                    used = StaticReferenceWasm.Emit(code, used, records, slot, objects,
+                        depth == 0 ? NullValue : states[state + top], depth, spills, maximum, spillFlags);
+                }
                 else if (kind == StaticFieldAddress || kind == LoadNativeStatic || kind == StoreNativeStatic)
                 {
                     int type = records[slot + 3];

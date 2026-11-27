@@ -5,3 +5,8 @@ Run `npm run demo -- stage-139-managed-object-byrefs`. An ordinary .NET Standard
 The CLR comparison suite tests two arguments aliasing the same element, two distinct elements, a reference local redirected to a different array, writes visible to a caller after exception unwinding, and null or invalid indices checked before the next argument is evaluated. See [decision 0067](../../docs/decisions/0067-managed-object-locations.md).
 
 The suite also covers `out` and `ref` on locals and parameters typed as a class. It checks that a write updates the addressed slot, that two aliases observe the same slot, and that replacing a parameter leaves the caller's reference unchanged.
+
+Static reference fields use a permanent traced cell when their address is
+taken. The tests verify that a call observes a direct write through its
+existing alias, can clear or replace the field through that alias, and sees
+the initialized value on the first address-taking access.

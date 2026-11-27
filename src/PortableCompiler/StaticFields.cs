@@ -14,6 +14,26 @@ namespace PortableCompiler
         internal static void UseInt32Cell(int[] globals, int index) =>
             globals[3 + index * Width] = AddressedStaticFields.Int32Cell;
 
+        internal static bool IsReferenceCell(int storage) => storage < AddressedStaticFields.Int32Cell;
+
+        internal static int CellVector(int storage) =>
+            storage == AddressedStaticFields.Int32Cell ? Ints : AddressedStaticFields.ReferenceCell - storage;
+
+        internal static int UseReferenceCell(int[] globals, int index, int type, int[] objects,
+            int[] records, int slot, int action)
+        {
+            int vector = ObjectLayouts.RegisterArray(objects, ObjectLayouts.ObjectReference);
+            if (vector < 0) return vector;
+            globals[3 + index * Width] = AddressedStaticFields.ReferenceCell - vector;
+            records[slot] = BranchIl.StaticReference;
+            records[slot + 1] = index;
+            records[slot + 3] = action;
+            // Field-token operand bytes have no IL entry, so their records can carry cell metadata.
+            records[slot + BranchIl.Width + 1] = type;
+            records[slot + BranchIl.Width + 2] = vector;
+            return 0;
+        }
+
         internal static int Register(int[] globals, int owner, int row, int storage)
         {
             int count = globals[0];

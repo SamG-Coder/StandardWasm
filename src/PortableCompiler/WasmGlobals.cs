@@ -13,11 +13,11 @@ namespace PortableCompiler
             for (int index = 0; index < count; index++)
             {
                 int storage = StaticFields.Storage(globals, index);
-                bool cell = storage == AddressedStaticFields.Int32Cell;
-                int type = cell ? Ints : ObjectLayouts.Representation(objects, storage);
+                bool cell = storage <= AddressedStaticFields.Int32Cell;
+                int type = cell ? StaticFields.CellVector(storage) : ObjectLayouts.Representation(objects, storage);
                 int width = WasmBinary.ValueWidth(type);
                 int owner = StaticFields.Owner(globals, index);
-                int init = cell ? 4 + WasmBinary.UnsignedSize(WasmBinary.HeapType(Ints)) : RuntimeTypeTokens.IsDescriptorOwner(owner)
+                int init = cell ? 4 + WasmBinary.UnsignedSize(WasmBinary.HeapType(type)) : RuntimeTypeTokens.IsDescriptorOwner(owner)
                     ? RuntimeTypeWasm.InitializerSize(descriptorHeap, RuntimeTypeTokens.ModuleSlot(owner), StaticFields.Row(globals, index))
                     : owner == StaticFields.EventOwner ? 3 :
                         type == F32 ? 5 : type == F64 ? 9 : IsScalar(type) || type == ObjectLayouts.ObjectReference || RuntimeTypeMetadata.IsStorage(type) ? 2 : width;
@@ -35,8 +35,8 @@ namespace PortableCompiler
             for (int index = 0; index < count; index++)
             {
                 int storage = StaticFields.Storage(globals, index);
-                bool cell = storage == AddressedStaticFields.Int32Cell;
-                int type = cell ? Ints : ObjectLayouts.Representation(objects, storage);
+                bool cell = storage <= AddressedStaticFields.Int32Cell;
+                int type = cell ? StaticFields.CellVector(storage) : ObjectLayouts.Representation(objects, storage);
                 int owner = StaticFields.Owner(globals, index);
                 bool eventArgs = owner == StaticFields.EventOwner;
                 bool descriptor = RuntimeTypeTokens.IsDescriptorOwner(owner);
@@ -53,7 +53,7 @@ namespace PortableCompiler
                 else if (cell)
                 {
                     cursor = BranchWasm.Const(output, cursor, 1);
-                    cursor = BranchWasm.Gc(output, cursor, 7, Ints); // array.new_default
+                    cursor = BranchWasm.Gc(output, cursor, 7, type); // array.new_default
                 }
                 else if (IsScalar(type))
                 {

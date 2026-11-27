@@ -82,6 +82,15 @@ namespace PortableCompiler
                     if (catchRegion.Length == 0) return -2;
                     next = 0; // leave clears the CIL evaluation stack.
                 }
+                else if (kind == StaticReference)
+                {
+                    int type = records[slot + Width + 1], action = records[slot + 3];
+                    if (action == StaticReferenceWasm.Write)
+                        next = depth > 0 && Assignable(stack[depth - 1], type, objects) ? depth - 1 : -2;
+                    else
+                        next = Push(stack, allocated, depth,
+                            action == StaticReferenceWasm.Address ? LocationFromIdentity(objects, type) : type);
+                }
                 else if (kind == ExchangeHandlerField)
                 {
                     if ((depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(records[slot + 3]), objects)) ||

@@ -1,10 +1,10 @@
 namespace PortableCompiler
 {
     // An addressed static keeps its backing choice across emission retries.
-    // Aggregate addresses use linear memory and Int32 byrefs use a traced cell.
+    // Aggregate addresses use linear memory. Int32 and reference byrefs use traced cells.
     internal sealed class AddressedStaticFields
     {
-        internal const int Int32Cell = -2;
+        internal const int Int32Cell = -2, ReferenceCell = -3;
         private const int PageBytes = 65536, FieldWidth = 3;
         private int[] fields = new int[12];
         internal int Count;
@@ -30,6 +30,8 @@ namespace PortableCompiler
         }
 
         internal void AddInt32Cell(int owner, int row) => Record(owner, row, Int32Cell);
+
+        internal void AddReferenceCell(int owner, int row) => Record(owner, row, ReferenceCell);
 
         private int Record(int owner, int row, int offset)
         {

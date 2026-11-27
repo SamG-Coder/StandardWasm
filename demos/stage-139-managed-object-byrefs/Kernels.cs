@@ -81,6 +81,34 @@ namespace ManagedObjectByrefs
             internal int Value;
         }
 
+        private static Marker published;
+
+        private static class Initialized
+        {
+            internal static Marker Value;
+
+            static Initialized() => Value = new Marker { Value = 83 };
+        }
+
+        private static int ReadMarker(ref Marker slot) => slot.Value;
+
+        public static int StaticInitialAddress() => ReadMarker(ref Initialized.Value);
+
+        public static int StaticTypedAlias(int keepReplacement)
+        {
+            published = new Marker { Value = 17 };
+            int observed = UpdateStaticAlias(ref published, new Marker { Value = 41 }, keepReplacement);
+            return observed * 100 + (published == null ? 0 : published.Value);
+        }
+
+        private static int UpdateStaticAlias(ref Marker alias, Marker replacement, int keepReplacement)
+        {
+            published = replacement;
+            int observed = alias.Value;
+            alias = keepReplacement == 0 ? null : new Marker { Value = 59 };
+            return observed;
+        }
+
         private static void Create(out Marker slot, int value)
         {
             slot = new Marker { Value = value };

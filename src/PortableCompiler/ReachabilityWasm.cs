@@ -11,7 +11,7 @@ namespace PortableCompiler
 
         internal static int Write(byte[] code, int used, int entry, int first, int roots, int marks, int pending, int pins, int[] globals)
         {
-            if (code.Length - used < 384 || globals[0] > (code.Length - used - 384) / 12) return -3;
+            if (code.Length - used < 384 || globals[0] > (code.Length - used - 384) / 24) return -3;
             if (entry == Mark) used = Walk(code, used, first, roots, marks, pending, pins, globals);
             else if (entry == Contains) used = Find(code, used, marks);
             else if (entry == Clear) used = Reset(code, used, marks);
@@ -30,9 +30,17 @@ namespace PortableCompiler
             {
                 // Positive rows are CLI storage. Synthetic reference globals have
                 // independent lifetime rules and need their own root provider.
+                int storage = StaticFields.Storage(globals, index);
                 if (StaticFields.Owner(globals, index) < 0 || StaticFields.Row(globals, index) <= 0 ||
-                    !IsObjectReference(StaticFields.Storage(globals, index))) continue;
+                    (!IsObjectReference(storage) && !StaticFields.IsReferenceCell(storage))) continue;
                 used = Index(code, used, 0x23, index);
+                if (StaticFields.IsReferenceCell(storage))
+                {
+                    // The immutable global keeps the cell itself alive.
+                    // Only its current payload is a CLI static root.
+                    used = Const(code, used, 0);
+                    used = Gc(code, used, 0x0b, StaticFields.CellVector(storage));
+                }
                 used = Call(code, used, first + Add);
             }
 

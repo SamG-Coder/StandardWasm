@@ -7,10 +7,12 @@ namespace ManagedFinalizationExperiment
         private static object saved;
         private static int addressedValue;
 
-        public static object SetStaticRoot(object value)
+        public static object SetStaticRoot(object value) => Swap(ref saved, value);
+
+        private static object Swap(ref object slot, object value)
         {
-            object previous = saved;
-            saved = value;
+            object previous = slot;
+            slot = value;
             return previous;
         }
 

@@ -839,7 +839,8 @@ namespace PortableCompiler
                             if (capacity > int.MaxValue - bytes) return -3;
                             capacity += bytes;
                         }
-                        if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField || kind == BranchIl.StaticInt32)
+                        if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField ||
+                            kind == BranchIl.StaticInt32 || kind == BranchIl.StaticReference)
                         {
                             if (capacity > int.MaxValue - TypeInitializerWasm.TriggerCapacity) return -3;
                             capacity += TypeInitializerWasm.TriggerCapacity;
@@ -1754,6 +1755,15 @@ namespace PortableCompiler
                         records[slot] = BranchIl.StaticInt32;
                         records[slot + 1] = symbol[0];
                         records[slot + 3] = addressOf ? StaticInt32Wasm.Address : write ? StaticInt32Wasm.Write : StaticInt32Wasm.Read;
+                        continue;
+                    }
+                    if (address == AddressedStaticFields.ReferenceCell ||
+                        addressOf && IsReferenceLocation(LocationFromIdentity(objects, symbol[1])))
+                    {
+                        if (address == -1) addressedStatics.AddReferenceCell(staticOwner, staticRow);
+                        status = StaticFields.UseReferenceCell(globals, symbol[0], symbol[1], objects, records, slot,
+                            addressOf ? StaticReferenceWasm.Address : write ? StaticReferenceWasm.Write : StaticReferenceWasm.Read);
+                        if (status < 0) return status;
                         continue;
                     }
                     if (addressOf || address >= 0)
