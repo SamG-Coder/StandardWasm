@@ -1743,7 +1743,8 @@ namespace PortableCompiler
                     used = Local(code, used, 0x20, reference);
                     code[used++] = 0xfb;
                     code[used++] = 0x0f;
-                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, Native, top));
+                    int resultType = operand == I32 ? I32 : Native;
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, resultType, top));
                 }
                 else if ((kind == ArrayGet || kind == ArraySet) && records[slot + 3] != 0)
                 {

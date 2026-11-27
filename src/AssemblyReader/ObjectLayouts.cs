@@ -12,6 +12,7 @@ namespace PeLibrary
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         private const int Arguments = 10, Arity = 11, Element = 12, ExplicitSlots = 13;
         private const int ValueShape = 0x40000000, NullableShape = 0x20000000, InlineArrayShape = 0x10000000, ByRefLikeShape = 0x08000000;
+        private const int ArrayEnumerableShape = 0x04000000;
         internal const int ExplicitSlotWidth = 8;
         private const int FieldStorageBits = 16, FieldStorageMask = (1 << FieldStorageBits) - 1;
         private const int EnumHead = 3, EnumKeyBase = 0x100000;
@@ -556,10 +557,24 @@ namespace PeLibrary
             return count;
         }
 
+        internal static void MarkArrayEnumerable(int[] registry, int type) =>
+            registry[Slot(type) + ShapeFlags] |= ArrayEnumerableShape;
+
+        internal static bool IsExactArrayEnumerable(int[] registry, int source, int target)
+        {
+            if (!IsInterface(registry, target) || (registry[Slot(target) + ShapeFlags] & ArrayEnumerableShape) == 0)
+                return false;
+            int element = ArrayElementKey(registry, source);
+            return element >= FirstClass && ArrayElementKey(registry, element) == 0 &&
+                !IsInterface(registry, element) && !IsValueType(registry, element) &&
+                element == Argument(registry, target, 0);
+        }
+
         internal static bool Implements(int[] registry, int source, int target)
         {
             if (source < FirstClass || !IsInterface(registry, target)) return false;
-            return FindInterface(registry, source, target, new byte[registry[0]]);
+            return IsExactArrayEnumerable(registry, source, target) ||
+                FindInterface(registry, source, target, new byte[registry[0]]);
         }
 
         private static bool FindInterface(int[] registry, int source, int target, byte[] seen)

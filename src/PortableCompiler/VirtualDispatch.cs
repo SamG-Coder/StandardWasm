@@ -93,7 +93,8 @@ namespace PortableCompiler
         }
 
         internal int Expand(BundleImages bundle, int[] objects, int[] owners, int[] rows, int[] contexts, int[] bases,
-            int[] indices, int[] arities, int[] offsets, int[] signatures, int functions, int[] location)
+            int[] indices, int[] arities, int[] offsets, int[] signatures, int functions, int[] location,
+            MethodInstantiations instantiations)
         {
             for (int site = 0; site < sitesUsed; site += SiteWidth)
             {
@@ -121,13 +122,14 @@ namespace PortableCompiler
                 for (int index = sites[site + Scanned]; index < allocationsCount; index++)
                 {
                     int type = allocations[index];
-                    if (receiver != ObjectReference && ArrayElementKey(objects, type) != 0) continue;
+                    if (receiver != ObjectReference && ArrayElementKey(objects, type) != 0 &&
+                        !IsExactArrayEnumerable(objects, type, sites[site + Declared])) continue;
                     if (!SignatureTypes.Assignable(type, receiver, objects)) continue;
                     CompileLocation.Set(location, sites[site + CallerOwner], sites[site + CallerRow], sites[site + CallerOffset]);
                     int shape = offsets[dispatcher];
                     int target = MethodCompiler.BindVirtualBody(bundle, objects, type, true, sites[site + Declared],
                         sites[site + Owner], sites[site + Row], owners, rows, contexts, bases, indices,
-                        arities, offsets, signatures, functions);
+                        arities, offsets, signatures, functions, instantiations);
                     if (target < 0) return target;
                     int signatureStatus = BindShape(bundle, objects, signatures, shape, arities[dispatcher], signatures, offsets,
                         owners, rows, contexts, target);
