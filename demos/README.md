@@ -248,6 +248,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [253 · Constraints on another type parameter](stage-253-dependent-type-constraints/README.md) | `npm run demo -- stage-253-dependent-type-constraints` | Check substituted bounds for closed generic methods |
 | [255 · Generic method constructor constraints](stage-255-method-default-constructors/README.md) | `npm run demo -- stage-255-method-default-constructors` | Validate real closed type constructors before specializing methods |
 | [256 · Nominal enum boxes](stage-256-nominal-enum-boxes/README.md) | `npm run demo -- stage-256-nominal-enum-boxes` | Preserve runtime identity and checked unboxing for original enum values |
+| [257 · 64-bit managed references](stage-257-wide-managed-byrefs/README.md) | `npm run demo -- stage-257-wide-managed-byrefs` | Compare aliased 64-bit locals and instance fields with the CLR |
 
 ## Adding a stage
 
