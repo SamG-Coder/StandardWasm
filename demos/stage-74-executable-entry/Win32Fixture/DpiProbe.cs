@@ -16,7 +16,9 @@ namespace Windows.Win32.UI.HiDpi
 {
     internal unsafe struct DPI_AWARENESS_CONTEXT
     {
+        internal static readonly DPI_AWARENESS_CONTEXT Unspecified = new DPI_AWARENESS_CONTEXT(0);
         internal readonly void* Value;
+        internal static readonly DPI_AWARENESS_CONTEXT Unaware = new DPI_AWARENESS_CONTEXT(-1);
 
         internal DPI_AWARENESS_CONTEXT(int value) => Value = (void*)(nint)value;
     }

@@ -5,6 +5,10 @@ namespace Windows.Win32.Foundation
 {
     internal struct BOOL
     {
+        // The Windows SDK declares static fields before its instance payload.
+        internal const int Size = 4;
+        internal static readonly BOOL True = new BOOL(1);
+        internal static readonly BOOL False = new BOOL(0);
         internal readonly int Value;
         internal BOOL(int value) => Value = value;
     }

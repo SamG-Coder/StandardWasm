@@ -80,8 +80,20 @@ namespace PortableCompiler
             if (type == field) return true;
             if (!ObjectLayouts.IsValueType(objects, type) || ObjectLayouts.IsExplicitValue(objects, type) ||
                 ObjectLayouts.IsAutoValue(objects, type) || ObjectLayouts.IsByRefLikeValue(objects, type) ||
-                ObjectLayouts.FieldCount(objects, type) != 1 || ObjectLayouts.FieldTypeAt(objects, type, 0) != field)
+                ObjectLayouts.IsInlineArray(objects, type))
                 return false;
+
+            // Layout slots track metadata field rows. Static fields leave empty
+            // slots, including the Win32 SDK's constants and singleton values.
+            bool foundField = false;
+            for (int index = 0; index < ObjectLayouts.FieldCount(objects, type); index++)
+            {
+                int storage = ObjectLayouts.FieldTypeAt(objects, type, index);
+                if (storage == 0) continue;
+                if (foundField || storage != field) return false;
+                foundField = true;
+            }
+            if (!foundField) return false;
             int owner = ObjectLayouts.AssemblyOf(objects, type);
             byte[] image = bundle.Get(owner);
             var layout = new int[4];
