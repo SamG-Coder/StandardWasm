@@ -40,7 +40,71 @@ function encodeUtf8(units) {
 
 const encoders = { "utf-8": encodeUtf8, "windows-1252": encodeWindows1252 };
 
-export function createConsoleHost({ encoding = "utf-8", newLine = "\r\n" } = {}) {
+// Stage 151 (decision 0079): standard input. Console.InputEncoding follows the same
+// configuration as the output, so redirected stdin bytes decode as the CLR decodes them.
+function decodeWindows1252(bytes) {
+    let text = "";
+    for (const byte of bytes)
+        text += String.fromCharCode(byte >= 0x80 && byte <= 0x9f ? windows1252High[byte - 0x80] || 0xfffd : byte);
+    return text;
+}
+const decoders = {
+    "utf-8": bytes => new TextDecoder("utf-8").decode(bytes),
+    "windows-1252": decodeWindows1252
+};
+
+// A line source for Console.ReadLine. push() accepts decoded text holding any number of
+// lines or part of one; close() marks EOF. Lines end at CRLF, LF or CR, as in
+// StreamReader.ReadLine, and a final unterminated line is still returned before EOF.
+export function createLineInput() {
+    let buffer = "", closed = false, waiter = null;
+    function take() {
+        const match = /\r\n|\n|\r/.exec(buffer);
+        // A trailing CR may be the first half of CRLF: wait for more unless closed.
+        if (match && !(match[0] === "\r" && match.index === buffer.length - 1 && !closed)) {
+            const line = buffer.slice(0, match.index);
+            buffer = buffer.slice(match.index + match[0].length);
+            return line;
+        }
+        if (closed) {
+            if (buffer.length === 0) return null;
+            const line = buffer;
+            buffer = "";
+            return line;
+        }
+        return undefined;
+    }
+    function wake() {
+        if (!waiter) return;
+        const line = take();
+        if (line === undefined) return;
+        const resolve = waiter;
+        waiter = null;
+        resolve(line);
+    }
+    return {
+        push(text) { if (closed) throw Error("Standard input is already closed."); buffer += text; wake(); },
+        close() { closed = true; wake(); },
+        next() {
+            const line = take();
+            if (line !== undefined) return Promise.resolve(line);
+            if (waiter) throw Error("Only one Console.ReadLine can wait at a time.");
+            return new Promise(resolve => { waiter = resolve; });
+        }
+    };
+}
+
+// The whole of a redirected stdin, decoded with the console encoding.
+export function inputFromBytes(bytes, encoding) {
+    const decode = Object.hasOwn(decoders, encoding) ? decoders[encoding] : undefined;
+    if (!decode) throw Error("Unsupported console encoding " + encoding + ".");
+    const input = createLineInput();
+    input.push(decode(bytes));
+    input.close();
+    return input;
+}
+
+export function createConsoleHost({ encoding = "utf-8", newLine = "\r\n", input = null, onWrite = null } = {}) {
     const encode = Object.hasOwn(encoders, encoding) ? encoders[encoding] : undefined;
     if (!encode) throw Error("Unsupported console encoding " + encoding + ".");
     if (newLine !== "\r\n" && newLine !== "\n") throw Error("Environment.NewLine must be CRLF or LF.");
@@ -53,12 +117,32 @@ export function createConsoleHost({ encoding = "utf-8", newLine = "\r\n" } = {})
         if (!units) throw Error("Unknown console stream " + number + ".");
         return units;
     }
-    const imports = {
-        [consoleImportModule]: {
-            write(number, unit) { stream(number).push(unit & 0xffff); },
-            newLine(number) { for (let i = 0; i < newLine.length; i++) stream(number).push(newLine.charCodeAt(i)); }
-        }
+    // onWrite sees each code unit as it is written, so an interactive page can show a
+    // prompt before the read that follows it. Writes are synchronous host calls, so their
+    // order relative to reads is the program's order.
+    function put(number, unit) {
+        stream(number).push(unit);
+        if (onWrite) onWrite(number, unit);
+    }
+    let line = "";
+    const consoleImports = {
+        write(number, unit) { put(number, unit & 0xffff); },
+        newLine(number) { for (let i = 0; i < newLine.length; i++) put(number, newLine.charCodeAt(i)); },
+        // Code unit i of the line the last readLine returned.
+        readUnit(index) { return line.charCodeAt(index); }
     };
+    if (input) {
+        if (typeof WebAssembly.Suspending !== "function")
+            throw Error("Console.ReadLine needs JS Promise Integration (WebAssembly.Suspending).");
+        // The module suspends here until a line or EOF is available (decision 0079).
+        consoleImports.readLine = new WebAssembly.Suspending(async () => {
+            const next = await input.next();
+            if (next === null) return -1;
+            line = next;
+            return line.length;
+        });
+    }
+    const imports = { [consoleImportModule]: consoleImports };
     return {
         imports,
         encoding,
