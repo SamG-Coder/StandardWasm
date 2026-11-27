@@ -662,6 +662,8 @@ namespace PortableCompiler
                         location, catchRegion.Length != 0, filterEnds: filterEnds);
                     if (status < 0)
                         return status;
+                    if (parameters == 2 && frame[0] == String && frame[1] == WritableCharacterSpan)
+                        CoreStringSpanCopy.Lower(bundle, image, layout, heaps, owner, source, records, objects, catchRegion);
                     CoreStringCreation.Lower(bundle, image, layout, heaps, owner, source, methodArguments,
                         frame, records, objects, catchRegion);
                     RuntimeTypeBranches.FoldClosedTypeBranches(bundle, image, layout, heaps, owner, context,

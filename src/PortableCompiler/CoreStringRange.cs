@@ -43,9 +43,7 @@ namespace PortableCompiler
                 !IsCharacterMethod(image, layout, heaps, counts, first, U32(image, (uint)(start + 25)),
                     "System.Runtime.CompilerServices", "Unsafe", "Add",
                     new byte[] { 0x10, 1, 2, 0x10, 0x1e, 0, 0x10, 0x1e, 0, 0x18 }) ||
-                !IsCharacterMethod(image, layout, heaps, counts, first, U32(image, (uint)(start + 31)),
-                    "System", "Buffer", "Memmove",
-                    new byte[] { 0x10, 1, 3, 1, 0x10, 0x1e, 0, 0x10, 0x1e, 0, 0x19 })) return false;
+                !IsCharacterMemmove(image, layout, heaps, counts, first, U32(image, (uint)(start + 31)))) return false;
 
             Record(records, 0, BranchIl.Load, 0, 1);
             Record(records, 1, BranchIl.Load, 1, 2);
@@ -62,6 +60,11 @@ namespace PortableCompiler
             records[slot + 1] = operand;
             records[slot + 2] = next;
         }
+
+        internal static bool IsCharacterMemmove(byte[] image, int[] layout, int[] heaps, int[] counts,
+            int first, uint token) =>
+            IsCharacterMethod(image, layout, heaps, counts, first, token, "System", "Buffer", "Memmove",
+                new byte[] { 0x10, 1, 3, 1, 0x10, 0x1e, 0, 0x10, 0x1e, 0, 0x19 });
 
         private static bool IsCharacterMethod(byte[] image, int[] layout, int[] heaps, int[] counts, int first,
             uint token, string space, string type, string name, byte[] signature)
