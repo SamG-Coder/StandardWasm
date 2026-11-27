@@ -1522,6 +1522,8 @@ namespace PortableCompiler
                     records[slot] = kind == BranchIl.BoundScopedFieldLoad ? BranchIl.GetField : BranchIl.SetField;
                     continue;
                 }
+                if ((kind == BranchIl.Call || kind == BranchIl.MemberCall) &&
+                    RuntimeTypeTokens.LowerExactHandleGetter(image, layout, heaps, records, slot, clauses)) continue;
                 if (kind == BranchIl.LoadTypeToken)
                 {
                     int global = RuntimeTypeTokens.Bind(bundle, image, layout, heaps, owner, records[slot + 1],

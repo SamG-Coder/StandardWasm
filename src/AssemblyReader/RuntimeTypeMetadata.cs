@@ -212,6 +212,47 @@ namespace PeLibrary
             return parameter > 0 && (parameter & 3) == 0 && next[0] == end &&
                 ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, parameter >> 2, "System", "RuntimeTypeHandle");
         }
+        internal static bool IsTypeHandleGetter(byte[] image, int[] heaps, int[] layout, int row, bool definition)
+        {
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0) return false;
+            int blob;
+            if (definition)
+            {
+                if (row < 1 || row > counts[6] ||
+                    (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x2050) != 0x40 ||
+                    !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "get_TypeHandle") ||
+                    !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return false;
+                int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+                if (owner < 1 || !ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, owner, "System", "Type"))
+                    return false;
+                blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
+            }
+            else
+            {
+                var member = new int[AssemblyReferences.SymbolWidth];
+                if (AssemblyReferences.ReadMember(image, heaps, layout, row, member) < 0 ||
+                    member[AssemblyReferences.Depth] != 0 ||
+                    !MatchesAscii(image, heaps, (uint)member[4], "get_TypeHandle") ||
+                    PlatformTypeReferences.Identify(image, heaps, layout, counts, first, member[AssemblyReferences.Leaf]) !=
+                        PlatformTypeReferences.Type) return false;
+                blob = member[5];
+            }
+
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, blob, 0, cursor);
+            if (end < 0 || !SignatureReader.TakeElement(image, cursor, end, 0x11)) return false;
+            int result = CompressedUnsigned(image, cursor[0], end, cursor);
+            if (result <= 0 || cursor[0] != end) return false;
+            int handle = result >> 2;
+            return definition
+                ? (result & 3) == 0 && handle <= counts[2] &&
+                    ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, handle, "System", "RuntimeTypeHandle")
+                : (result & 3) == 1 &&
+                    PlatformTypeReferences.Identify(image, heaps, layout, counts, first, handle) == PlatformTypeReferences.TypeHandle;
+        }
+
         internal const int ValueTypeProperty = 1, EnumProperty = 2;
 
         internal static int ClosedTypeProperty(byte[] image, int[] heaps, int[] layout, int row, bool definition)

@@ -417,6 +417,9 @@ namespace PortableCompiler
             if (kind == TypeFromHandle)
                 return depth > 0 && stack[depth - 1] == PeLibrary.RuntimeTypeMetadata.Handle
                     ? Push(stack, allocated, depth - 1, PeLibrary.RuntimeTypeMetadata.Type) : -1;
+            if (kind == TypeToHandle)
+                return depth > 0 && stack[depth - 1] == PeLibrary.RuntimeTypeMetadata.Type
+                    ? Push(stack, allocated, depth - 1, PeLibrary.RuntimeTypeMetadata.Handle) : -1;
             // [] -> [writer]; [writer, string-or-null] -> []; [writer] -> [] for WriteLine().
             if (kind == ConsoleWriter) return Push(stack, allocated, depth, PeLibrary.ConsoleStorage.Writer);
             if (kind == ConsoleReadLine) return Push(stack, allocated, depth, String);

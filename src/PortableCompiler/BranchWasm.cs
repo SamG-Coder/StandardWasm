@@ -414,7 +414,7 @@ namespace PortableCompiler
                     if (records[slot + 3] != 0) code[used++] = 0x45; // i32.eqz for inequality
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top - 1));
                 }
-                // TypeFromHandle changes the CLI category while retaining the reference in the same spill.
+                // TypeFromHandle and TypeToHandle change the CLI category and keep the descriptor in its shared spill.
                 else if (kind == ReadReflection)
                 {
                     int source = states[state + top];
