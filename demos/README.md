@@ -254,6 +254,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [268 · Fieldless explicit-size values](stage-268-fieldless-explicit-size/README.md) | `npm run demo -- stage-268-fieldless-explicit-size` | Preserve managed padding, nominal identity and exact declared size |
 | [269 · Boolean class-field byrefs](stage-269-boolean-class-byrefs/README.md) | `npm run demo -- stage-269-boolean-class-byrefs` | Alias writable packed Boolean fields while retaining their owners |
 | [272 · Boolean storage aliases](stage-272-boolean-storage-aliases/README.md) | `npm run demo -- stage-272-boolean-storage-aliases` | Preserve live aliases through one-field views in the original volatile write |
+| [274 · Runtime assembly equality](stage-274-runtime-assembly-equality/README.md) | `npm run demo -- stage-274-runtime-assembly-equality` | Compare canonical runtime descriptors by reference identity |
 
 ## Adding a stage
 
