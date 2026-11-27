@@ -1204,14 +1204,15 @@ namespace PortableCompiler
                             if (capacity > int.MaxValue - allocationBytes) return -3;
                             capacity += allocationBytes;
                         }
-                        if (depths[pc] != 0 && (kind == BranchIl.LoadNativeStatic || kind == BranchIl.StoreNativeStatic || kind == BranchIl.StaticFieldAddress))
+                        if (depths[pc] != 0 && (kind == BranchIl.LoadNativeStatic || kind == BranchIl.StoreNativeStatic ||
+                            kind == BranchIl.StaticFieldAddress || kind == BranchIl.LoadStaticRvaPointer))
                         {
                             linearMemory = true;
                             int region = StaticFields.Register(globals, 0, int.MinValue + 16, I32);
                             if (region < 0) return region;
                             frameShape[21] = region + 1;
                             int plan = records[slot + BranchIl.Width + 1];
-                            int bytes = plan == NativeStaticWasm.PointerWordPlan ? 160 :
+                            int bytes = kind == BranchIl.LoadStaticRvaPointer || plan == NativeStaticWasm.PointerWordPlan ? 160 :
                                 160 + 24 * (ObjectLayouts.FieldCount(objects, records[slot + 3]) + NativeAggregates.Size(nativePlans.Plans, plan));
                             if (capacity > int.MaxValue - bytes) return -3;
                             capacity += bytes;
@@ -2216,6 +2217,13 @@ namespace PortableCompiler
                         records[slot + 3], context, methodArguments, objects, symbol);
                     if (status < 0) return status;
                     int targetOwner = symbol[0], row = symbol[1], targetContext = symbol[2];
+                    if (parameterCount == 0 && result == Native)
+                    {
+                        int pointer = StaticRvaPointers.Lower(bundle, image, layout, heaps, owner, context, methodArguments,
+                            objects, records, clauses, slot, targetOwner, row, targetContext, addressedFields, globals, literals, literalSize);
+                        if (pointer < 0) return pointer;
+                        if (pointer > 0) continue;
+                    }
                     int function = Lookup(owners, rows, contexts, bases, indices, functions, targetOwner, row, targetContext);
                     if (function < 0)
                     {

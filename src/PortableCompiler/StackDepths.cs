@@ -530,7 +530,7 @@ namespace PortableCompiler
             if (kind == JoinStrings)
                 return Match(stack, depth, String) && Match(stack, depth - 1, String)
                     ? Push(stack, allocated, depth - 2, String) : -1;
-            if (kind == PinStaticBytes) return Push(stack, allocated, depth, Native);
+            if (kind == PinStaticBytes || kind == LoadStaticRvaPointer) return Push(stack, allocated, depth, Native);
             if (kind == PinScopedValue)
                 return Match(stack, depth, frame[0]) && frame[operand] == Native ? depth - 1 : -2;
             if (kind == CopyCharacterSpan)

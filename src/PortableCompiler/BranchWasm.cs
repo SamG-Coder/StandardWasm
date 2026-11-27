@@ -1543,6 +1543,12 @@ namespace PortableCompiler
                     used = StaticValueWasm.Emit(code, used, records, slot,
                         depth == 0 ? NullValue : states[state + top], depth, spills, maximum, spillFlags);
                 }
+                else if (kind == LoadStaticRvaPointer)
+                {
+                    used = NativeStaticWasm.LoadData(code, used, staticRegion, staticPages, operand,
+                        records[slot + Width + 2], records[slot + Width + 1], records[slot + 3], staticAddress);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, Native, depth));
+                }
                 else if (kind == StaticFieldAddress || kind == LoadNativeStatic || kind == StoreNativeStatic)
                 {
                     int type = records[slot + 3];

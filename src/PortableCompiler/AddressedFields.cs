@@ -66,6 +66,26 @@ namespace PortableCompiler
         // A zero plan denotes a wasm32 pointer word. Aggregate plan indices start at one.
         internal const int PointerWordPlan = 0, PointerWordBytes = 4;
 
+        internal static int LoadData(byte[] code, int used, int region, int pages, int cache,
+            int offset, int literal, int count, int address)
+        {
+            code[used++] = 0x23; // global.get cache
+            used = WasmBinary.Unsigned(code, used, cache);
+            code[used++] = 0x45; // i32.eqz
+            code[used++] = 0x04; code[used++] = 0x40;
+            used = Address(code, used, region, pages, offset, address);
+            used = BranchWasm.Local(code, used, 0x20, address);
+            used = BranchWasm.Const(code, used, literal);
+            used = BranchWasm.Const(code, used, count);
+            code[used++] = 0xfc; code[used++] = 8; code[used++] = 0; code[used++] = 0; // memory.init 0 0
+            used = BranchWasm.Local(code, used, 0x20, address);
+            code[used++] = 0x24; // global.set cache
+            used = WasmBinary.Unsigned(code, used, cache);
+            code[used++] = 0x0b;
+            code[used++] = 0x23;
+            return WasmBinary.Unsigned(code, used, cache);
+        }
+
         internal static int Address(byte[] code, int used, int region, int pages, int offset, int address)
         {
             code[used++] = 0x23; // global.get region

@@ -295,6 +295,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [299 - Read-only explicit value projections](stage-299-readonly-explicit-overlay/README.md) | `npm run demo -- stage-299-readonly-explicit-overlay` | Verify bounded scalar views of readonly nested values and diagnostic boundaries |
 | [301 · Scoped pinning of static pointers](stage-301-static-pointer-pinning/README.md) | `npm run demo -- stage-301-static-pointer-pinning` | Compare borrowed writes and direct accesses to one static field |
 | [303 · Same-assembly static interface slots](stage-303-local-static-interface/README.md) | `npm run demo -- stage-303-local-static-interface` | Compare local MethodDef dispatch and readonly reference identity |
+| [305 · Native addresses of immutable PE data](stage-305-static-rva-pointers/README.md) | `npm run demo -- stage-305-static-rva-pointers` | Verify original bytes and module-lifetime native address identity |
 
 ## Adding a stage
 
