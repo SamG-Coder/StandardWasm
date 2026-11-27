@@ -15,24 +15,9 @@ namespace PortableCompiler
             {
                 int coded = GenericParameters.ReadDeferred(image, table, i, parameter);
                 if (coded == 0) continue;
-                if (parameter[1] != 0 && ConstraintMarkers.IsValueType(image, layout, heaps, coded)) continue;
-                int end = 0;
-                if ((coded & 3) == 2)
-                {
-                    end = Signature(image, layout, heaps, coded >> 2, cursor);
-                    if (end < 0) return end;
-                }
-                if (end != 0 && image[cursor[0]] == 0x1f) // modreq
-                {
-                    int marker = CompressedUnsigned(image, cursor[0] + 1, end, cursor);
-                    if (marker < 1 || cursor[0] >= end) return -1;
-                    if (parameter[1] == 0 || image[cursor[0]] != 0x12 ||
-                        !ConstraintMarkers.IsUnmanaged(image, layout, heaps, marker)) return -2;
-                    int value = CompressedUnsigned(image, cursor[0] + 1, end, cursor);
-                    if (value < 1 || cursor[0] != end) return -1;
-                    if (!ConstraintMarkers.IsValueType(image, layout, heaps, value)) return -2;
-                    continue;
-                }
+                int marker = ValueConstraintMarker(image, layout, heaps, coded, parameter[1], cursor);
+                if (marker < 0) return marker;
+                if (marker != 0) continue;
 
                 int[] required = ReadInterface(bundle, image, layout, heaps, owner, objects, coded,
                     method ? null : arguments, context, method ? arguments : null);
@@ -43,6 +28,25 @@ namespace PortableCompiler
                 if (implemented <= 0) return implemented < 0 ? implemented : -2;
             }
             return 0;
+        }
+
+        // GenericParameters already checked the non-nullable value-type flag.
+        // Handle recognized markers before walking the nominal interface hierarchy.
+        private static int ValueConstraintMarker(byte[] image, int[] layout, int[] heaps,
+            int coded, int valueParameter, int[] cursor)
+        {
+            if ((coded & 3) != 2)
+                return valueParameter != 0 && ConstraintMarkers.IsValueType(image, layout, heaps, coded) ? 1 : 0;
+            int end = Signature(image, layout, heaps, coded >> 2, cursor);
+            if (end < 0) return end;
+            if (image[cursor[0]] != 0x1f) return 0; // modreq
+            int marker = CompressedUnsigned(image, cursor[0] + 1, end, cursor);
+            if (marker < 1 || cursor[0] >= end) return -1;
+            if (valueParameter == 0 || image[cursor[0]] != 0x12 ||
+                !ConstraintMarkers.IsUnmanaged(image, layout, heaps, marker)) return -2;
+            int value = CompressedUnsigned(image, cursor[0] + 1, end, cursor);
+            if (value < 1 || cursor[0] != end) return -1;
+            return ConstraintMarkers.IsValueType(image, layout, heaps, value) ? 1 : -2;
         }
 
         internal static int Implements(BundleImages bundle, int[] objects, int argument, int[] required, int depth)
@@ -149,10 +153,14 @@ namespace PortableCompiler
             // argument to implement this exact closed interface. Prove that
             // metadata edge directly instead of expanding the bound again.
             var parameter = new int[2];
+            var cursor = new int[1];
             for (int i = 0; i < deferred[3]; i++)
             {
                 int coded = GenericParameters.ReadDeferred(image, deferred, i, parameter);
-                if (coded == 0 || parameter[1] != 0 && ConstraintMarkers.IsValueType(image, layout, heaps, coded)) continue;
+                if (coded == 0) continue;
+                int marker = ValueConstraintMarker(image, layout, heaps, coded, parameter[1], cursor);
+                if (marker < 0) return marker;
+                if (marker != 0) continue;
                 int[] required = ReadInterface(bundle, image, layout, heaps, identity[0], objects, coded, args, 0);
                 if (required[0] < 0) return required[0];
                 if (!Same(required, identity)) return 0;

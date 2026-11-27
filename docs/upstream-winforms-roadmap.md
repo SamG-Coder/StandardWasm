@@ -100,8 +100,10 @@ exception across calls in `finally` and supported type-filtered catch handlers.
 Compilation of the unchanged sample in probe mode gets past
 `ThemingScope.CreateActivationContext` and `System.Windows.Forms.Application..cctor`.
 `ThemingScope..ctor` now compiles its activation-context out parameters through
-stable native frame slots. The same bundle reaches `ThreadContext.RunMessageLoopInner`
-and stops at the generic `PInvokeCore.GetWindowLong` call.
+stable native frame slots. The linker validates `Form`'s inherited
+`IHandle<HWND>` constraint and binds the original `PInvokeCore.GetWindowLong`
+call in `ThreadContext.RunMessageLoopInner`. Compilation then stops at its
+`PInvoke.IsWindowEnabled` call.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

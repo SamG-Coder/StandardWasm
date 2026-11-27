@@ -20,7 +20,7 @@ namespace HandleConstraintDemo
             slot.Value = handle;
             HandleSlot<Handle> saved = frame.Slot;
             Handle actual = saved.Value;
-            return actual.Marker;
+            return ShapeMethods.Request<DerivedShapeProvider>(actual.Marker);
         }
 
         public static int Read(Receiver<Handle> handle) => 42;
