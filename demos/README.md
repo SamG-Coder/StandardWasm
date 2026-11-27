@@ -175,6 +175,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [170 · Character span copying](stage-170-character-span-copy/README.md) | `npm run demo -- stage-170-character-span-copy` | Run original CoreLib span concatenation and compare overlapping and mixed-storage copies |
 | [171 · Immutable byte pins](stage-171-immutable-byte-pins/README.md) | `npm run demo -- stage-171-immutable-byte-pins` | Compare fixed literal byte pointers and their stored terminator in Node and Edge |
 | [172 · Nested private members](stage-172-nested-private-members/README.md) | `npm run demo -- stage-172-nested-private-members` | Compare closed generic private field and method binding from nested types |
+| [174 · Inline reference-array constructors](stage-174-inline-reference-array-constructors/README.md) | `npm run demo -- stage-174-inline-reference-array-constructors` | Compare initialized object slots, value copies, and closed aliases across CLR, Node, and Edge |
 
 ## Adding a stage
 
