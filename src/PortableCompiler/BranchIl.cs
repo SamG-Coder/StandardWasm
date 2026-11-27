@@ -32,7 +32,7 @@ namespace PortableCompiler
         // localloc: [size] -> [address] on the shadow stack in memory 0.
         internal const int LocalAllocate = 72;
         internal const int ReadReflection = 73, StringEquals = 74, ResourceLookup = 75;
-        internal const int TakeValueFieldAddress = 76, LoadValueLocation = 77;
+        internal const int TakeValueFieldAddress = 76;
         internal const int LoadConstructorAddress = 78, UpdateConstructorField = 79;
         internal const int BoxValue = 80, UnboxValue = 81, TestBox = 82, ConstrainedStatic = 83;
         // A traced address is different from a native linear-memory address.

@@ -22,7 +22,8 @@ if (!process.env.STANDARDWASM_COMPILER_PATH) {
 }
 const fixturePath = join(stage, "bin/Release/netstandard2.0");
 const images = [join(fixturePath, "ValueConstructionDemo.dll"), join(fixturePath, "ValueConstructionDependency.dll"),
-    ...["netstandard.dll", "System.Runtime.dll", "System.Private.CoreLib.dll"].map(file => join(runtime.directory, file))]
+    ...["netstandard.dll", "System.Runtime.dll", "System.Private.CoreLib.dll",
+        "System.Collections.Specialized.dll"].map(file => join(runtime.directory, file))]
     .map(file => readFileSync(file));
 const containment = readFileSync(join(stage, "Containment/bin/Release/netstandard2.1/ReferenceContainmentDemo.dll"));
 const pack = parts => Buffer.concat(parts.flatMap(image => {
@@ -67,6 +68,9 @@ async function verify(compiler, fixture, packed, containment, containmentPacked,
         primitiveDescriptors: await runEntry("CheckPrimitiveDescriptors"),
         closedValueTypes: await runEntry("CheckClosedValueType"),
         entryAliases: await runEntry("UpdateEntryArray"), interiorFields: await runEntry("ClearInteriorFields"),
+        mutableReceivers: await runEntry("CheckMutableReceiver"), exceptionalMutation: await runEntry("CheckExceptionalMutation"),
+        closedReceivers: await runEntry("CheckClosedReceiver"),
+        frameworkReceivers: await runEntry("CheckFrameworkReceiver"),
         entryFailures: await runEntry("CheckEntryArrayFailure"),
         bucketAliases: await runEntry("ReadManagedBuckets"), bucketFailures: await runEntry("CheckBucketFailure"),
         bucketExportRejection: compileEntry("RejectExportedBucket"), rejection: compileEntry("RejectInheritedValueHash") };
@@ -92,6 +96,10 @@ const expected = {
     referenceContainment: oracle.referenceContainment,
     entryAliases: oracle.entryAliases,
     interiorFields: oracle.interiorFields,
+    mutableReceivers: oracle.mutableReceivers,
+    exceptionalMutation: oracle.exceptionalMutation,
+    closedReceivers: oracle.closedReceivers,
+    frameworkReceivers: oracle.frameworkReceivers,
     entryFailures: oracle.entryFailures,
     bucketAliases: oracle.bucketAliases,
     bucketFailures: oracle.bucketFailures,

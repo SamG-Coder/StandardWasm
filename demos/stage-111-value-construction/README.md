@@ -71,3 +71,8 @@ The .NET Standard 2.1 companion exercises
 inside generic branches. It checks primitive and enum types, arrays and
 strings, static reference fields, and nested generic value types with and
 without instance references.
+
+The mutable receiver fixture checks ordinary local and array-backed
+receivers, a by-value argument copy, an alias passed to the receiver's
+method, and a write observed after checked overflow. It also executes
+the original `Nullable<int>.HasValue` and `BitVector32` mask setter.

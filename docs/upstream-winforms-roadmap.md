@@ -140,7 +140,9 @@ prunes the `Int32` key cleanup in `Dictionary.Remove`. The live
 value cleanup initializes a field by replacing the containing value at its
 managed location, preserving alias and copy semantics. Value constructors
 use the same field initialization against their current value. The startup
-replay proceeds to the managed receiver of `BitVector32.set_Item`.
+replay compiles through `BitVector32.set_Item` and the closed nullable
+receiver in `Control.SetStyle`. It next stops at a runtime type comparison
+in `PropertyStore.AddOrRemoveValue`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

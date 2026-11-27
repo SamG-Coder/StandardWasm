@@ -552,8 +552,6 @@ namespace PortableCompiler
                 if (depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(extra), objects)) return -1;
                 return Push(stack, allocated, depth - 1, ValueLocation(FieldAccess.Storage(extra)));
             }
-            if (kind == LoadValueLocation)
-                return Push(stack, allocated, depth, operand);
             if (kind == LoadConstructorAddress)
                 return Push(stack, allocated, depth, ConstructorAddress);
             if (kind == GetField)

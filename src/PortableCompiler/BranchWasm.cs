@@ -1192,11 +1192,6 @@ namespace PortableCompiler
                     used = Const(code, used, 0);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, ConstructorAddress, depth));
                 }
-                else if (kind == LoadValueLocation)
-                {
-                    used = ManagedValueLocationWasm.ReadLocation(code, used, 0, operand);
-                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, operand, depth));
-                }
                 else if ((kind == GetField || fieldStore || kind == FieldAddress) &&
                     records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
                     IsNativeInteger(states[state + (fieldStore ? top - 1 : top)]))

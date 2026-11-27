@@ -30,6 +30,8 @@ internal static class ValueConstructionCases
         Check(nameof(ClosedInterfaceProbe.CheckClosedInterfaceNull), ClosedInterfaceProbe.CheckClosedInterfaceNull);
         Check(nameof(EntryArrayProbe.UpdateEntryArray), EntryArrayProbe.UpdateEntryArray);
         Check(nameof(EntryArrayProbe.ClearInteriorFields), EntryArrayProbe.ClearInteriorFields);
+        Check(nameof(MutableReceiverProbe.CheckMutableReceiver), MutableReceiverProbe.CheckMutableReceiver);
+        Check(nameof(MutableReceiverProbe.CheckExceptionalMutation), MutableReceiverProbe.CheckExceptionalMutation);
         Check(nameof(EntryArrayProbe.CheckEntryArrayFailure), EntryArrayProbe.CheckEntryArrayFailure);
         Check(nameof(BucketProbe.ReadManagedBuckets), BucketProbe.ReadManagedBuckets);
         Check(nameof(BucketProbe.CheckBucketFailure), BucketProbe.CheckBucketFailure);
@@ -78,7 +80,7 @@ internal static class ValueConstructionCases
     private static MethodInfo Method(string name) =>
         typeof(Kernels).GetMethod(name) ?? typeof(BucketProbe).GetMethod(name) ??
         typeof(EntryArrayProbe).GetMethod(name) ?? typeof(ClosedInterfaceProbe).GetMethod(name) ??
-        typeof(ClosedClassProbe).GetMethod(name)!;
+        typeof(ClosedClassProbe).GetMethod(name) ?? typeof(MutableReceiverProbe).GetMethod(name)!;
     private static int Row(MethodBase method) => method.MetadataToken & 0xffffff;
 
     private static byte[] Manifest(MethodBase method)

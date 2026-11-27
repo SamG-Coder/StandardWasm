@@ -34,11 +34,9 @@ namespace PortableCompiler
                     owner, parent, objects, context, callerMethodArguments);
                 if (closed < ObjectLayouts.FirstClass) return closed < 0 ? closed : -2;
                 if (ObjectLayouts.IsInterface(objects, closed) && (opcode != 0x6f || !allowVirtual || methodArity != 0)) return -2;
-                // Closed values use the same constructor and read-only receiver
-                // ABI as other structs. LinkValueConstruction still proves the
-                // exact receiver and whether the address can be lowered.
-                if (ObjectLayouts.IsValueType(objects, closed) && opcode != 0x73 &&
-                    (opcode != 0x28 || !valueAddress)) return -2;
+                // Direct calls to closed value types can carry a managed
+                // receiver. The linked signature proves its exact stack type.
+                if (ObjectLayouts.IsValueType(objects, closed) && opcode != 0x73 && opcode != 0x28) return -2;
                 matched = ObjectLayouts.AssemblyOf(objects, closed);
                 declaring = ObjectLayouts.TypeDef(objects, closed);
                 target = bundle.Get(matched);

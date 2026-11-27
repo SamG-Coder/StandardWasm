@@ -1111,6 +1111,9 @@ namespace PortableCompiler
                 {
                     // starg.0 would replace the address itself.
                     if (kind == BranchIl.Store) return -2;
+                    // A traced receiver is already a real managed byref.
+                    // Keep it on the evaluation stack for ordinary field operations and calls.
+                    if (IsValueLocation(callerReceiver)) continue;
                     int lowered = ValueOperands.LowerReceiver(bundle, image, layout, heaps,
                         owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses, readOnlyReceiver, context, methodArguments);
                     if (lowered == -2 && valueConstructor)

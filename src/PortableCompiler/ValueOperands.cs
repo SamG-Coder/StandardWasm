@@ -25,7 +25,8 @@ namespace PortableCompiler
                 records[slot] = Load;
                 return 0;
             }
-            return LowerAddressUse(image, layout, heaps, methodCount, records, slot, local, clauses);
+            bool locationAvailable = !ObjectLayouts.IsExplicitValue(objects, type) && !ObjectLayouts.IsByRefLikeValue(objects, type);
+            return LowerAddressUse(image, layout, heaps, methodCount, records, slot, local, clauses, locationAvailable: locationAvailable);
         }
 
         // In a value-type instance constructor, ldarg.0 pushes the managed
@@ -43,18 +44,9 @@ namespace PortableCompiler
             int next = records[slot + 2] * Width;
             if (next >= records.Length || Entry(records, next / Width, clauses)) return -2;
             int kind = records[next];
-            // An address-backed receiver reloads its current snapshot at every read.
-            if (kind == GetField)
-            {
-                if (SignatureTypes.IsValueLocation(frame[0]))
-                {
-                    records[slot] = LoadValueLocation;
-                    records[slot + 1] = SignatureTypes.LocatedValue(frame[0]);
-                }
-                return 0;
-            }
+            if (kind == GetField) return 0;
             if (kind == InitializeValue)
-                return readOnly || SignatureTypes.IsValueLocation(frame[0]) ? -2 :
+                return readOnly ? -2 :
                     Clear(bundle, image, layout, heaps, owner, records, slot, next, frame[0], objects, context, methodArguments);
             return LowerAddressUse(image, layout, heaps, methodCount, records, slot, 0, clauses, readOnly);
         }
@@ -164,7 +156,7 @@ namespace PortableCompiler
         // temporary stack separately so the sequence cannot consume values
         // below the original address or pass it anywhere else.
         private static int LowerAddressUse(byte[] image, int[] layout, int[] heaps, int methodCount,
-            int[] records, int slot, int local, int[] clauses, bool readOnly = false, int fieldReceiver = 0)
+            int[] records, int slot, int local, int[] clauses, bool readOnly = false, int fieldReceiver = 0, bool locationAvailable = false)
         {
             int next = records[slot + 2] * Width;
             int depth = 0;
@@ -196,6 +188,9 @@ namespace PortableCompiler
 
                     // A static call that consumes the address uses a real managed location.
                     if (after == CallConsumesAddress || construction) return -2;
+                    // An ordinary instance method can mutate or pass on this address.
+                    // Use the frame's shared location rather than its current snapshot.
+                    if (locationAvailable && !IsConstructorCall(image, layout, heaps, kind, records[next + 1])) return -2;
                     // [&value, arguments] -> call -> []. The link step accepts only
                     // a value-type instance constructor (ConstructValue) or a
                     // read-only instance method (decision 0049) with exactly
@@ -221,6 +216,14 @@ namespace PortableCompiler
                 next = records[next + 2] * Width;
             }
             return -2;
+        }
+
+        private static bool IsConstructorCall(byte[] image, int[] layout, int[] heaps, int kind, int row)
+        {
+            if (kind == Call) return ObjectLayouts.IsConstructor(image, heaps, layout, row);
+            var reference = new int[AssemblyReferences.SymbolWidth];
+            return AssemblyReferences.ReadMember(image, heaps, layout, row, reference, allowClosedParent: true) >= 0 &&
+                ImageBytes.MatchesAscii(image, heaps, (uint)reference[4], ".ctor");
         }
 
         // Read only the stack effect. Normal call binding still validates the
