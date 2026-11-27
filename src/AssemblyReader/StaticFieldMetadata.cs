@@ -11,7 +11,7 @@ namespace PeLibrary
             if ((flags & Static) == 0 || (flags & (Literal | HasRva | HasMarshal | HasDefault)) != 0 ||
                 (write && (flags & InitOnly) != 0)) return -2;
 
-            // Nullable annotations and compiler-generated backing-field markers
+            // Source-level annotations (nullable, obsolete, and compiler-generated)
             // do not affect field storage. The current runtime executes
             // one managed thread per instance, so its private globals are also that
             // thread's static slots. A shared runtime would need separate TLS storage.
@@ -65,6 +65,7 @@ namespace PeLibrary
                 return ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row,
                     "System.Runtime.CompilerServices", "NullableAttribute") ||
                     (ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row, "System", "ThreadStaticAttribute") ||
+                     ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row, "System", "ObsoleteAttribute") ||
                      ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row,
                         "System.Runtime.CompilerServices", "CompilerGeneratedAttribute")) &&
                     PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts);
@@ -76,7 +77,9 @@ namespace PeLibrary
             bool compilerServices = MatchesAscii(image, heaps, space, "System.Runtime.CompilerServices");
             if (compilerServices && MatchesAscii(image, heaps, name, "NullableAttribute")) return true;
             return (compilerServices && MatchesAscii(image, heaps, name, "CompilerGeneratedAttribute") ||
-                    MatchesAscii(image, heaps, space, "System") && MatchesAscii(image, heaps, name, "ThreadStaticAttribute")) &&
+                    MatchesAscii(image, heaps, space, "System") &&
+                    (MatchesAscii(image, heaps, name, "ThreadStaticAttribute") ||
+                     MatchesAscii(image, heaps, name, "ObsoleteAttribute"))) &&
                 PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, layout, counts,
                     reference[AssemblyReferences.AssemblyRow], includeRuntimeExtensions: false);
         }
