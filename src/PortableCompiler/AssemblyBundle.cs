@@ -88,20 +88,27 @@ namespace PortableCompiler
                 if (access != 6 && !local)
                 {
                     if (!familyAccess) continue;
-                    // A nonvirtual call can carry the protected receiver constraint to stack analysis.
-                    // A virtual dispatch requires its own proof, and base constructors have a separate check.
+                    // A virtual call from its own closed declaring class uses the
+                    // same receiver constraint as the ordinary virtual call shape.
                     if (callerReceiver >= ObjectLayouts.FirstClass &&
-                        (opcode == 0x28 || opcode == 0x6f && (flags & 0x40) == 0) &&
                         ObjectLayouts.AssemblyOf(objects, callerReceiver) == owner &&
                         ObjectLayouts.TypeDef(objects, callerReceiver) == callerType)
                     {
-                        int declaringLayout = closed;
-                        if (declaringLayout == 0)
-                            declaringLayout = ObjectLayouts.Find(objects, matched, declaring, new int[0]);
-                        // The trusted System.Object has no nominal layout to walk.
-                        family = ObjectLayouts.Inherits(objects, callerReceiver, declaringLayout) ||
-                            declaringLayout == 0 && !ObjectLayouts.IsValueType(objects, callerReceiver) &&
-                            ObjectLayouts.IsCoreObjectType(target, targetHeaps, targetLayout, declaring << 2);
+                        if (opcode == 0x6f && (flags & 0x40) != 0)
+                        {
+                            family = allowVirtual && closed == callerReceiver &&
+                                !ObjectLayouts.IsInterface(objects, closed);
+                        }
+                        else if (opcode == 0x28 || opcode == 0x6f)
+                        {
+                            int declaringLayout = closed;
+                            if (declaringLayout == 0)
+                                declaringLayout = ObjectLayouts.Find(objects, matched, declaring, new int[0]);
+                            // The trusted System.Object has no nominal layout to walk.
+                            family = ObjectLayouts.Inherits(objects, callerReceiver, declaringLayout) ||
+                                declaringLayout == 0 && !ObjectLayouts.IsValueType(objects, callerReceiver) &&
+                                ObjectLayouts.IsCoreObjectType(target, targetHeaps, targetLayout, declaring << 2);
+                        }
                     }
                     if (!family && !(baseCall && opcode == 0x28)) continue;
                 }
