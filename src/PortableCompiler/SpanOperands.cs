@@ -32,8 +32,9 @@ namespace PortableCompiler
                     // The destination's descriptor lives in a field. Its
                     // load and Slice are lowered when that address is visited.
                     int index = Next(records, copy, clauses);
-                    copy = AfterDestinationSlice(bundle, image, layout, heaps, owner, context, methodArguments,
-                        records, index, objects, clauses, fieldCaller);
+                    int[] slice = FindSlice(bundle, image, layout, heaps, owner, context, methodArguments,
+                        records, index, SignatureTypes.WritableCharacterSpan, objects, clauses, fieldCaller);
+                    copy = slice == null ? -1 : Next(records, slice[0], clauses);
                 }
                 else if (copy >= 0 && IsDirectMemberCall(records, copy) &&
                     SpanMetadata.ClassifySpanCall(bundle, image, layout, heaps, owner, records[copy + 1],
@@ -117,23 +118,21 @@ namespace PortableCompiler
             }
             else if (indexed)
             {
-                call = AfterArgumentRead(image, layout, heaps, records, call, clauses, fieldCaller);
-                if (call < 0) return 0;
                 // Argument reads cannot replace the original span before the call.
                 // The descriptor snapshot still shares its backing storage.
-                bool explicitLength = records[call] == Load || records[call] == Constant;
-                int slice = explicitLength ? AfterArgumentRead(image, layout, heaps, records, call, clauses, fieldCaller) : call;
-                int arity = explicitLength ? 2 : 1;
-                if (slice >= 0 && IsDirectMemberCall(records, slice) &&
-                    SpanMetadata.IsSlice(bundle, image, layout, heaps, owner, records[slice + 1],
-                        context, methodArguments, spanType, objects, arity))
+                int[] slice = FindSlice(bundle, image, layout, heaps, owner, context, methodArguments,
+                    records, call, spanType, objects, clauses, fieldCaller);
+                if (slice != null)
                 {
+                    int sliceCall = slice[0];
                     records[address] = field ? GetField : Load;
-                    records[slice] = SpanSlice;
-                    records[slice + 1] = arity;
-                    records[slice + 3] = spanType;
+                    records[sliceCall] = SpanSlice;
+                    records[sliceCall + 1] = slice[1];
+                    records[sliceCall + 3] = spanType;
                     return 1;
                 }
+                call = AfterArgumentRead(image, layout, heaps, records, call, clauses, fieldCaller);
+                if (call < 0) return 0;
             }
             bool directCall = IsDirectMemberCall(records, call);
             if (!directCall && !field && indexed && lengthCall < 0 && spanType == SignatureTypes.ReadOnlyByteSpan)
@@ -190,21 +189,40 @@ namespace PortableCompiler
             return 1;
         }
 
-        private static int AfterDestinationSlice(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
-            int owner, int context, int[] methodArguments, int[] records, int first, int[] objects,
+        private static int[] FindSlice(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int context, int[] methodArguments, int[] records, int first, int spanType, int[] objects,
             int[] clauses, int caller)
         {
-            if (first < 0 || records[first] != Load && records[first] != Constant) return -1;
-            int slice = AfterArgumentRead(image, layout, heaps, records, first, clauses, caller);
-            if (slice < 0) return -1;
-            bool explicitLength = records[slice] == Load || records[slice] == Constant;
-            if (explicitLength) slice = AfterArgumentRead(image, layout, heaps, records, slice, clauses, caller);
-            if (slice < 0 || !IsDirectMemberCall(records, slice) ||
-                !SpanMetadata.IsSlice(bundle, image, layout, heaps, owner, records[slice + 1],
-                    context, methodArguments, SignatureTypes.WritableCharacterSpan, objects, explicitLength ? 2 : 1))
-                return -1;
-            return Next(records, slice, clauses);
+            // Track only the operand stack above the original span address.
+            // Stack analysis later verifies that both accumulated arguments are Int32.
+            int depth = 0, slot = first;
+            while (slot >= 0)
+            {
+                int kind = records[slot], operand = records[slot + 1];
+                if (kind == Load || kind == Constant)
+                {
+                    depth++;
+                    slot = AfterArgumentRead(image, layout, heaps, records, slot, clauses, caller);
+                }
+                else if (kind == Binary && depth >= 2 && IsIntegerBinary(operand))
+                {
+                    depth--;
+                    slot = Next(records, slot, clauses);
+                }
+                else
+                {
+                    if (depth >= 1 && depth <= 2 && IsDirectMemberCall(records, slot) &&
+                        SpanMetadata.IsSlice(bundle, image, layout, heaps, owner, operand,
+                            context, methodArguments, spanType, objects, depth))
+                        return new[] { slot, depth };
+                    return null;
+                }
+            }
+            return null;
         }
+
+        private static bool IsIntegerBinary(int operation) =>
+            operation >= 0x6a && operation <= 0x6c || operation >= 0x71 && operation <= 0x76;
 
         private static int SliceWithSpanLength(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
             int context, int[] methodArguments, int[] records, int index, int[] frame, int[] objects, int[] clauses)
