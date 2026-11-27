@@ -304,6 +304,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [315 · Windows thread message queue](stage-315-thread-message-queue/README.md) | `npm run demo -- stage-315-thread-message-queue` | Compare posted thread messages and the x86 MSG layout |
 | [316 · CoreLib array initializers](stage-316-corelib-array-initializers/README.md) | `npm run demo -- stage-316-corelib-array-initializers` | Compare original path-character arrays and ordinary C# literals |
 | [318 · Message-only windows](stage-318-message-only-windows/README.md) | `npm run demo -- stage-318-message-only-windows` | Compare the hidden WinForms parking-window contract on Windows, Node, and Edge |
+| [321 · Overlapped window creation](stage-321-overlapped-window-creation/README.md) | `npm run demo -- stage-321-overlapped-window-creation` | Compare the real WinForms top-level creation geometry and callbacks |
 
 ## Adding a stage
 
