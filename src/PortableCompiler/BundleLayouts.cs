@@ -296,21 +296,25 @@ namespace PortableCompiler
             int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, coded, symbol);
             if (status < 0) return status;
             if (symbol[0] == AssemblyBundle.ObjectOwner) return valueType ? -2 : ObjectLayouts.ObjectReference;
-            if (symbol[0] == owner)
+            if (symbol[0] != owner)
             {
-                // Stage 204 (decision 0091): a delegate TypeDef is a delegate key, not a class layout.
-                int defined = valueType ? 0 : GeneralDelegates.DefinedStorage(bundle, image, layout, heaps, owner, symbol[1], objects);
-                if (defined != 0) return defined;
-                return RegisterClosed(bundle, image, layout, heaps, owner, symbol[1], objects, new int[0], valueType, enumIdentity);
+                image = bundle.Get(symbol[0]);
+                layout = new int[4];
+                heaps = new int[8];
+                if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
             }
-            byte[] target = bundle.Get(symbol[0]);
-            var targetLayout = new int[4];
-            var targetHeaps = new int[8];
-            if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
-            int definedElsewhere = valueType ? 0 : GeneralDelegates.DefinedStorage(bundle, target, targetLayout, targetHeaps,
-                symbol[0], symbol[1], objects);
-            if (definedElsewhere != 0) return definedElsewhere;
-            return RegisterClosed(bundle, target, targetLayout, targetHeaps, symbol[0], symbol[1], objects, new int[0], valueType, enumIdentity);
+            owner = symbol[0];
+            int row = symbol[1];
+            // Nested signatures and array allocation share the same identity.
+            // A facade TypeRef is an Assembly descriptor only after it resolves
+            // to the public CoreLib Assembly TypeDef.
+            if (!valueType && (coded & 3) == 1 &&
+                RuntimeTypeMetadata.IsAssemblyDefinition(image, heaps, layout, row << 2, includeRuntimeAssembly: false))
+                return RuntimeTypeMetadata.Assembly;
+            // A delegate TypeDef is a delegate key (decision 0091).
+            int defined = valueType ? 0 : GeneralDelegates.DefinedStorage(bundle, image, layout, heaps, owner, row, objects);
+            if (defined != 0) return defined;
+            return RegisterClosed(bundle, image, layout, heaps, owner, row, objects, new int[0], valueType, enumIdentity);
         }
     }
 }
