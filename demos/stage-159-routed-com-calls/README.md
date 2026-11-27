@@ -12,6 +12,8 @@ same signature through the host. The scalar and four-byte managed result forms r
 `0` and `-2147467259` respectively, and both callbacks receive the original receiver.
 A null receiver raises `System.NullReferenceException` before any callback runs.
 An additional case clears a native slot through a `void**` returned by a helper.
+The volatile static case round-trips an unmanaged function pointer without
+invoking it, then verifies that clearing the slot is visible on the next read.
 
 The browser verification in Stage 74 separately exercises malformed signatures, unknown
 receivers and modified vtables, instance isolation, and mixed native and COM ordinal

@@ -111,10 +111,10 @@ namespace PortableCompiler
                     pc++;
                     if (pc >= length) return -1;
                     op = image[start + pc++];
-                    // This module owns its GC fields on one Wasm agent.
-                    // Keep each field operation in sequence. Shared or
-                    // address-based accesses need their own memory model.
-                    if (op != 0x7b && op != 0x7d) return -2;
+                    // GC fields and Wasm globals belong to one execution agent.
+                    // Keep these accesses in sequence. Indirect and shared
+                    // memory accesses need their own memory model.
+                    if (op != 0x7b && op != 0x7d && op != 0x7e && op != 0x80) return -2;
                 }
                 int kind, operand = 0, comparison = 0;
                 if (op >= 2 && op <= 5 || op == 0x0e)

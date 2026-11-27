@@ -17,6 +17,8 @@ namespace ComCallFixture
 
     public static unsafe class Calls
     {
+        private static volatile delegate* unmanaged[Stdcall]<int, char*, uint> cachedPointer;
+
         public static int Scalar(nint receiver)
         {
             Site* site = (Site*)receiver;
@@ -38,5 +40,13 @@ namespace ComCallFixture
         }
 
         private static void** Slot(nint receiver) => ((Site*)receiver)->VTable + 3;
+
+        public static int VolatilePointer()
+        {
+            cachedPointer = (delegate* unmanaged[Stdcall]<int, char*, uint>)(nint)17;
+            int first = (int)(nint)cachedPointer;
+            cachedPointer = null;
+            return cachedPointer == null ? first : 0;
+        }
     }
 }

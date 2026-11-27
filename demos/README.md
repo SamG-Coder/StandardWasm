@@ -93,7 +93,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [87 · Packed integer instance fields](stage-87-packed-integer-fields/README.md) | `npm run demo -- stage-87-packed-integer-fields` | Packed field loads preserve CLI width and signedness |
 | [88 · Payload memory-pressure experiment](stage-88-payload-pressure/README.md) | `npm run demo -- stage-88-payload-pressure` | Model C strategies lower peaks but none holds 32 MiB; model B's collector holds about 33 MiB |
 | [89 · Unmanaged null pointer fields](stage-89-unmanaged-pointer-fields/README.md) | `npm run demo -- stage-89-unmanaged-pointer-fields` | Linked void pointer fields preserve safe null flows |
-| [90 · Volatile instance fields](stage-90-volatile-field-signatures/README.md) | `npm run demo -- stage-90-volatile-field-signatures` | Linked volatile fields retain metadata identity and single-agent order |
+| [90 · Volatile fields](stage-90-volatile-field-signatures/README.md) | `npm run demo -- stage-90-volatile-field-signatures` | Linked volatile instance and static fields retain metadata identity and single-agent order |
 | [91 · Embedded sequential value types](stage-91-embedded-value-types/README.md) | `npm run demo -- stage-91-embedded-value-types` | Embedded values retain defaults and independent copies |
 | [92 · Nominal enum fields](stage-92-nominal-enums/README.md) | `npm run demo -- stage-92-nominal-enums` | Linked enum identity preserves backing width and flags behavior |
 | [93 � Typed null pointer fields](stage-93-typed-pointer-fields/README.md) | `npm run demo -- stage-93-typed-pointer-fields` | Pointer levels and CLR pointee identity survive linked null storage |

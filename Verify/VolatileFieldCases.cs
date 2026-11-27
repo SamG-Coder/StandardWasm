@@ -100,7 +100,26 @@ internal static class VolatileFieldCases
             BinaryPrimitives.WriteInt32LittleEndian(wrongFacade.AsSpan(nameAt), nameIndex);
         Convert.FromHexString("B03F5F7F11D50A3A").CopyTo(wrongFacade.AsSpan(token + 1));
         Reject("platform facade without marker", BundleCases.Pack(wrongFacade, dependency), read, -2);
-        Reject("static access", bundle, nameof(Kernels.ReadStatic), -2);
+        string readStatic = nameof(Kernels.ReadStatic);
+        int staticPrefix = Offset(readStatic);
+        string runStatic = nameof(Kernels.RunStatic);
+        var (staticInputs, staticHex) = Compile(bundle, runStatic);
+        foreach (int value in new[] { int.MinValue, -1, 0, 1, int.MaxValue })
+            cases.Add(new
+            {
+                module = "BootstrapLibrary", method = "CompileBundle", fixture = "volatile static read and write order",
+                inputs = staticInputs, generated = new { capacity, bundle = true, arguments = new[] { value }, hex = staticHex },
+                expected = Kernels.RunStatic(value)
+            });
+
+        byte[] volatileAddress = (byte[])image.Clone();
+        int staticRva = metadata.GetMethodDefinition(MetadataTokens.MethodDefinitionHandle(Row(readStatic))).RelativeVirtualAddress;
+        var staticSection = pe.PEHeaders.SectionHeaders[pe.PEHeaders.GetContainingSectionIndex(staticRva)];
+        int staticBody = staticSection.PointerToRawData + staticRva - staticSection.VirtualAddress;
+        int staticHeader = (image[staticBody] & 3) == 2 ? 1 : (image[staticBody + 1] >> 4) * 4;
+        // A volatile prefix applies to the read or write, not to taking a field address.
+        volatileAddress[staticBody + staticHeader + staticPrefix + 2] = 0x7f;
+        Reject("volatile static address", BundleCases.Pack(volatileAddress, dependency), readStatic, -2);
 
         void CheckNull(string label, byte[] input, Action clr)
         {

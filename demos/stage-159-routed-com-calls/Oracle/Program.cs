@@ -38,11 +38,13 @@ internal static unsafe class Program
             scalarRow = typeof(Calls).GetMethod(nameof(Calls.Scalar))!.MetadataToken & 0xffffff,
             wrappedRow = typeof(Calls).GetMethod(nameof(Calls.Wrapped))!.MetadataToken & 0xffffff,
             clearRow = typeof(Calls).GetMethod(nameof(Calls.Clear))!.MetadataToken & 0xffffff,
+            volatileRow = typeof(Calls).GetMethod(nameof(Calls.VolatilePointer))!.MetadataToken & 0xffffff,
             scalar,
             wrapped,
             calls,
             nullReceiver,
-            clear
+            clear,
+            volatilePointer = Calls.VolatilePointer()
         }));
     }
 

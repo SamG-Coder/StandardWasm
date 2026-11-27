@@ -69,12 +69,15 @@ async function exercise(compiler, assembly, caseRows, instantiate) {
         nullReceiver = "System.NullReferenceException";
     }
     const clear = instance.exports.clear(site);
-    return { scalar, wrapped, calls, nullReceiver, clear, imports };
+    const volatilePointer = instance.exports.volatilePointer();
+    return { scalar, wrapped, calls, nullReceiver, clear, volatilePointer, imports };
 }
 
-const caseRows = [[oracle.scalarRow, "scalar"], [oracle.wrappedRow, "wrapped"], [oracle.clearRow, "clear"]];
+const caseRows = [[oracle.scalarRow, "scalar"], [oracle.wrappedRow, "wrapped"], [oracle.clearRow, "clear"],
+    [oracle.volatileRow, "volatilePointer"]];
 const node = await exercise(compiler, assembly, caseRows, instantiateManagedModule);
-assert.deepEqual(node, { scalar: oracle.scalar, wrapped: oracle.wrapped, calls: oracle.calls, nullReceiver: oracle.nullReceiver, clear: oracle.clear, imports: [
+assert.deepEqual(node, { scalar: oracle.scalar, wrapped: oracle.wrapped, calls: oracle.calls, nullReceiver: oracle.nullReceiver,
+    clear: oracle.clear, volatilePointer: oracle.volatilePointer, imports: [
     ["standardwasm:resources", "memory", "memory"], ["standardwasm:com", "stdcall:i32(p32)", "function"]
 ] });
 const server = await serveLaunch(0, compilerPath);
