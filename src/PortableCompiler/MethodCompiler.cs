@@ -363,7 +363,7 @@ namespace PortableCompiler
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
             var nativePlans = new NativeAggregatePlans();
             var pointers = new FunctionPointerPlan();
-            var callbacks = new UnmanagedCallbackPlan(); // decision 0097 entries
+            var callbacks = new UnmanagedCallbackPlan(); // decision 0098 entries
             var receiverDemand = new ReceiverBodyDemand(functionCapacity);
             // Reuse local pin metadata across methods. Signature decoding resets each slot.
             var pinned = new int[frame.Length];
@@ -526,7 +526,7 @@ namespace PortableCompiler
                     int import = Win32ModuleBinding.FindImport(image, heaps, layout, source, implementation, bundle, owner);
                     if (import == Win32NamedBinding.EnumThreadWindows)
                     {
-                        // Stage 361: the callback crosses as a decision 0097 host-callable token.
+                        // Stage 361: the callback crosses as a decision 0098 host-callable token.
                         var callback = new int[EnumThreadWindowsWasm.CallbackParameters + 1];
                         if (!EnumThreadWindowsWasm.ReadCallbackTypes(bundle, image, layout, heaps, owner, source, objects, callback))
                             return -2;
@@ -4413,7 +4413,7 @@ namespace PortableCompiler
             return pointers.AddCarrier(functions);
         }
 
-        // Decision 0097: the host-callable entry for one unmanaged callback signature,
+        // Decision 0098: the host-callable entry for one unmanaged callback signature,
         // created once per carrier. emission holds [functions, code length] and is advanced.
         private static int RegisterUnmanagedCallback(UnmanagedCallbackPlan callbacks, FunctionPointerPlan pointers,
             int[] objects, int[] callback, int parameters, int owner, int context, int[] owners, int[] rows, int[] contexts,

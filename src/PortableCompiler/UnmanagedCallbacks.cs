@@ -4,7 +4,7 @@ using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
-    // Decision 0097: a static unmanaged function pointer as a host-callable token.
+    // Decision 0098: a static unmanaged function pointer as a host-callable token.
     //
     // Managed code holds an unmanaged callback as a table-2 slot (decision 0078), and the
     // callee keeps its lowered managed signature: a Foundation wrapper such as HWND is a

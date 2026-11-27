@@ -1,4 +1,4 @@
-# 0097 · Unmanaged callbacks as host-callable tokens
+# 0098 · Unmanaged callbacks as host-callable tokens
 
 Status: proposed with Stage 361 (#274). Claude wrote it on 2026-11-28, taking over
 Codex's EnumThreadWindows work. It builds on decision 0078 (function pointers in

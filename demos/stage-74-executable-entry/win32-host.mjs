@@ -249,7 +249,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
     };
 }
 
-// Stage 361: EnumThreadWindows. The callback arrives as a decision 0097 token: the
+// Stage 361: EnumThreadWindows. The callback arrives as a decision 0098 token: the
 // guest's table-2 target slot and the compiled entry for its signature. The entry is
 // called synchronously, before this import returns, so the token is never retained.
 function createThreadWindowEnumerator(windows) {

@@ -5,7 +5,7 @@ using static PortableCompiler.SignatureTypes;
 namespace PortableCompiler
 {
     // Stage 361: USER32.EnumThreadWindows(DWORD, WNDENUMPROC, LPARAM) -> BOOL.
-    // The callback crosses as a decision 0097 token; the host enumerates the launch's
+    // The callback crosses as a decision 0098 token; the host enumerates the launch's
     // windows and calls the guest's entry once per HWND with the unmodified LPARAM.
     internal static class EnumThreadWindowsWasm
     {

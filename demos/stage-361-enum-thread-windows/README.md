@@ -2,7 +2,7 @@
 
 Run `npm run demo -- stage-361-enum-thread-windows`. It uses `artifacts/StandardWasm.Compiler.wasm`, or the compiler named by `STANDARDWASM_COMPILER_PATH`.
 
-`USER32.EnumThreadWindows` binds to one memory-free import, `standardwasm:win32/enumThreadWindows(thread, target, entry, payload)`. The original stdcall callback crosses as a [decision 0097](../../docs/decisions/0097-unmanaged-callback-tokens.md) token. It consists of the callback's table-2 slot and a compiled entry for the `BOOL(HWND, LPARAM)` signature. For each live top-level HWND of the launch's current thread, the host calls `entry(target, hwnd, payload)`. The entry wraps the words in the callee's HWND and LPARAM types and makes a typed indirect call. A zero BOOL stops the enumeration. No table is exported.
+`USER32.EnumThreadWindows` binds to one memory-free import, `standardwasm:win32/enumThreadWindows(thread, target, entry, payload)`. The original stdcall callback crosses as a [decision 0098](../../docs/decisions/0098-unmanaged-callback-tokens.md) token. It consists of the callback's table-2 slot and a compiled entry for the `BOOL(HWND, LPARAM)` signature. For each live top-level HWND of the launch's current thread, the host calls `entry(target, hwnd, payload)`. The entry wraps the words in the callee's HWND and LPARAM types and makes a typed indirect call. A zero BOOL stops the enumeration. No table is exported.
 
 The .NET 10 test assembly uses a real `UnmanagedCallersOnly` method. Windows x86 CLR, Node and Edge compare these behaviors:
 - ordered callbacks
