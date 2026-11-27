@@ -205,7 +205,7 @@ namespace PortableCompiler
                         continue;
                     }
                     if (i < arguments) used = Local(code, used, 0x20, i);
-                    else if (vector == Bytes || vector == Ints || vector == NativeVector) used = Const(code, used, 0);
+                    else if (vector == Bytes || vector == Chars || vector == Ints || vector == NativeVector) used = Const(code, used, 0);
                     else
                     {
                         code[used++] = 0xd0; // ref.null eq
@@ -1199,10 +1199,11 @@ namespace PortableCompiler
                     }
                     else used = ManagedLocationWasm.TakeCell(code, used, cellLocals[operand], target, type);
                 }
-                else if (kind == LoadSingleObjectSpan)
+                else if (kind == LoadSingleFrameSpan)
                 {
-                    int target = Spill(spills, maximum, spillFlags, ObjectSpan, depth);
-                    used = SpanWasm.CreateSingleObject(code, used, cellLocals[operand], target);
+                    int type = records[slot + 3];
+                    int target = Spill(spills, maximum, spillFlags, type, depth);
+                    used = SpanWasm.CreateSingle(code, used, cellLocals[operand], target, type);
                 }
                 else if (kind == NewObjectSpan)
                 {

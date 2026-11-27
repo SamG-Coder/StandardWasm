@@ -248,19 +248,19 @@ namespace PortableCompiler
                 ? unequal ? -type : type : 0;
         }
 
-        internal static bool IsSingleObjectConstructor(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
-            int owner, int member, int context, int[] methodArguments, int[] objects)
+        internal static bool IsSingleElementConstructor(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int member, int context, int[] methodArguments, int[] objects, int spanType)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             if (AssemblyReferences.ReadMember(image, heaps, layout, member, reference, allowClosedParent: true) < 0 ||
                 reference[AssemblyReferences.GenericParent] == 0 ||
                 !MatchesAscii(image, heaps, (uint)reference[4], ".ctor")) return false;
             uint blob = (uint)reference[5], at = (uint)heaps[0] + blob;
-            // instance void .ctor(!0&). The parent is exactly the platform ReadOnlySpan<object>.
+            // instance void .ctor(!0&), on the exact platform readonly span.
             if (!Fits(blob, 7, (uint)heaps[1]) || image[at] != 6 ||
                 U32(image, at + 1) != 0x10010120 || U16(image, at + 5) != 0x0013) return false;
             return ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps, owner,
-                reference[AssemblyReferences.GenericParent], objects, context, methodArguments) == ObjectSpan;
+                reference[AssemblyReferences.GenericParent], objects, context, methodArguments) == spanType;
         }
 
         internal static bool IsBytePointerConstructor(BundleImages bundle, byte[] image, int[] layout, int[] heaps,

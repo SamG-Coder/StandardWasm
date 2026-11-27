@@ -711,7 +711,7 @@ namespace PortableCompiler
                         functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
                             parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                             bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
-                            initializers, reflection, typeCalls, instantiations, methodArguments, inlineLocations, frameCells, parameters,
+                            initializers, reflection, typeCalls, instantiations, methodArguments, inlineLocations, frameCells, parameters, signatures[signature],
                             nativePlans, addressedFields, booleanLocals, pointers, finalizers, tracksFinalizers);
                         if (functions == Reemit)
                         {
@@ -1415,12 +1415,40 @@ namespace PortableCompiler
             return false;
         }
 
+        private static bool FoldCharacterLocalStore(int[] records, int[] clauses, int address, int value, int local,
+            int[] frame)
+        {
+            if (value >= records.Length || ValueOperands.Entry(records, value / BranchIl.Width, clauses)) return false;
+            if (records[value] != BranchIl.Constant &&
+                (records[value] != BranchIl.Load || StackType(frame[records[value + 1]]) != I32)) return false;
+
+            int store = records[value + 2] * BranchIl.Width;
+            if (store >= records.Length || records[store] != BranchIl.StoreIndirect ||
+                records[store + 1] != 0x53 || ValueOperands.Entry(records, store / BranchIl.Width, clauses)) return false;
+            records[address] = BranchIl.Nop;
+            records[store] = BranchIl.Store;
+            records[store + 1] = local;
+            records[store + 3] = 0;
+            return true;
+        }
+
+        private static bool CanOwnCharacterCell(int[] frame, int parameters, int result, int[] objects)
+        {
+            // Local-backed views may be read and passed by value. A method
+            // cannot return a byref-like value or publish it via caller storage.
+            if (IsSpan(result) || IsManagedLocation(result) || IsValueLocation(result) ||
+                ObjectLayouts.IsByRefLikeValue(objects, result)) return false;
+            for (int i = 0; i < parameters; i++)
+                if (IsManagedLocation(frame[i]) || IsValueLocation(frame[i])) return false;
+            return true;
+        }
+
         private static int LinkOperands(BundleImages bundle, byte[] image, int[] layout,
             int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, bool valueConstructor, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, long[] hostUse, int[] virtualTypes, int[] virtualUsed,
             TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, RuntimeTypeCalls typeCalls,
             MethodInstantiations instantiations, int[] methodArguments,
-            int[] inlineLocations, int[] frameCells, int parameterCount, NativeAggregatePlans nativePlans,
+            int[] inlineLocations, int[] frameCells, int parameterCount, int result, NativeAggregatePlans nativePlans,
             AddressedFields addressedFields, byte[] booleanLocals,
             FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers)
         {
@@ -1639,20 +1667,29 @@ namespace PortableCompiler
                             continue;
                         }
                     }
-                    if (type == ObjectReference && next < records.Length &&
+                    int singleSpan = type == ObjectReference ? ObjectSpan :
+                        type == Character && local >= parameterCount ? CharacterSpan : 0;
+                    if (singleSpan != 0 && next < records.Length &&
                         records[next] == BranchIl.MemberCall && records[next + 3] == 0x73 &&
                         !ValueOperands.Entry(records, next / BranchIl.Width, clauses) &&
-                        SpanMetadata.IsSingleObjectConstructor(bundle, image, layout, heaps, owner,
-                            records[next + 1], context, methodArguments, objects))
+                        SpanMetadata.IsSingleElementConstructor(bundle, image, layout, heaps, owner,
+                            records[next + 1], context, methodArguments, objects, singleSpan))
                     {
-                        int vector = ObjectLayouts.RegisterArray(objects, ObjectReference);
+                        if (singleSpan == CharacterSpan &&
+                            !CanOwnCharacterCell(frame, parameterCount, result, objects)) return -2;
+                        int vector = singleSpan == CharacterSpan ? Chars : ObjectLayouts.RegisterArray(objects, ObjectReference);
                         if (vector < 0) return vector;
                         frameCells[local] = vector;
                         records[slot] = BranchIl.Nop;
-                        records[next] = BranchIl.LoadSingleObjectSpan;
+                        records[next] = BranchIl.LoadSingleFrameSpan;
                         records[next + 1] = local;
+                        records[next + 3] = singleSpan;
                         continue;
                     }
+                    // A plain indirect write through a local alias updates the
+                    // same cell as stloc. Neither the address nor an alias escapes.
+                    if (type == Character && local >= parameterCount &&
+                        FoldCharacterLocalStore(records, clauses, slot, next, local, frame)) continue;
                     bool booleanSlot = type == I32 && local >= parameterCount && booleanLocals[local - parameterCount] != 0;
                     if (booleanSlot && next < records.Length &&
                         (records[next] == BranchIl.MemberCall && records[next + 3] == 0x28 ||

@@ -302,7 +302,7 @@ namespace PortableCompiler
                 return Push(stack, allocated, depth - 1, Native);
             }
             if (kind == LoadFrameLocation) return Push(stack, allocated, depth, extra);
-            if (kind == LoadSingleObjectSpan) return Push(stack, allocated, depth, ObjectSpan);
+            if (kind == LoadSingleFrameSpan) return Push(stack, allocated, depth, extra);
             if (kind == LoadInlineStorage)
                 return Push(stack, allocated, depth, extra);
             if (kind == NewObjectSpan)

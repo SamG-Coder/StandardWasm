@@ -50,7 +50,7 @@ namespace PortableCompiler
         // copy with a NUL terminator, or 0 for null. Auxiliary 1: null raises NullReferenceException.
         // 118 matches the integration line, where 116 and 117 are runtime-type kinds.
         internal const int PinString = 118;
-        internal const int StaticFieldAddress = 121, LoadNativeStatic = 122, StoreNativeStatic = 123, Monitor = 124, FilterSkip = 125, LoadSingleObjectSpan = 126;
+        internal const int StaticFieldAddress = 121, LoadNativeStatic = 122, StoreNativeStatic = 123, Monitor = 124, FilterSkip = 125, LoadSingleFrameSpan = 126;
         internal const int LoadFrameLocation = 127;
         internal const int LoadManagedCell = 128, StoreManagedCell = 129, ClearManagedCell = 130;
         internal const int WidenReference = 131, ConstrainedInstance = 132;

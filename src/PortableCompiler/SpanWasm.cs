@@ -29,12 +29,12 @@ namespace PortableCompiler
             return Local(code, used, 0x21, target);
         }
 
-        internal static int CreateSingleObject(byte[] code, int used, int owner, int target)
+        internal static int CreateSingle(byte[] code, int used, int owner, int target, int type)
         {
             used = Local(code, used, 0x20, owner);
             used = Const(code, used, 0);
             used = Const(code, used, 1);
-            used = Gc(code, used, 0, ObjectSpan);
+            used = Gc(code, used, 0, type);
             return Local(code, used, 0x21, target);
         }
 
