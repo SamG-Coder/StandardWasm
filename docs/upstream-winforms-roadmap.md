@@ -78,6 +78,10 @@ Stage 152 also verifies compiler-emitted root publication around direct calls.
 It preserves the caller's live future uses and the surviving stack prefix,
 then clears its entries on return and managed exception unwind. The test
 table is available only in the internal probe compilation mode.
+The typed edge readers use the emitted Wasm layouts to enumerate inherited
+reference fields and reference-array elements. A CLR comparison verifies a
+cyclic object graph starting with a single published root. The queue still
+needs a runtime mark pass and explicit traversal of compiler runtime wrappers.
 JavaScript cleanup notifications can release independent host resources, but
 notification timing and delivery alone cannot satisfy the managed queue and
 resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)

@@ -44,7 +44,13 @@ the throwing call and an empty stack after each normal return or managed
 exception unwind. The normal compilation entry point keeps the diagnostic
 table private by omitting it entirely.
 
-The emitted probe validates root publication for direct references. Binding
-the queue to the original CoreLib APIs still needs static and host roots,
-managed addresses, runtime traversal, protected regions, indirect calls and
-a cleanup policy for raw Wasm traps.
+The same module emits typed reads of reference fields and reference arrays.
+The graph fixture starts with a single published root. The verifier follows
+inherited fields, array elements and a cycle, and compares aliases and null
+entries against the CLR. Both traversals find five reachable objects. Byte
+arrays are leaves, and scalar fields do not take an edge index.
+
+Binding the queue to the original CoreLib APIs still needs static and host
+roots, traversal of runtime wrappers such as view owners and event delegates,
+managed addresses, protected regions, indirect calls and a cleanup policy for
+raw Wasm traps. The current verifier drives the traversal from JavaScript.

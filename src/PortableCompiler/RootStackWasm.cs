@@ -10,6 +10,8 @@ namespace PortableCompiler
         internal const int GlobalKey = int.MinValue + 17;
         private const string TableExport = "__root_probe_table";
         private const string CountExport = "__root_probe_count";
+        private const string EdgeCountExport = "__root_probe_edge_count";
+        private const string EdgeReadExport = "__root_probe_edge_read";
 
         internal static byte[] MapFrame(int[] records, int[] frame, int slots)
         {
@@ -27,12 +29,16 @@ namespace PortableCompiler
             return map;
         }
 
-        internal static int ExportSize(int count) => TableExport.Length + CountExport.Length + 5 + WasmBinary.UnsignedSize(count);
+        internal static int ExportSize(int count, int walker) => TableExport.Length + CountExport.Length + 5 +
+            WasmBinary.UnsignedSize(count) + EdgeCountExport.Length + EdgeReadExport.Length + 4 +
+            WasmBinary.UnsignedSize(walker) + WasmBinary.UnsignedSize(walker + 1);
 
-        internal static int WriteExports(byte[] code, int used, int count)
+        internal static int WriteExports(byte[] code, int used, int count, int walker)
         {
             used = Export(code, used, TableExport, 1, Table);
-            return Export(code, used, CountExport, 3, count);
+            used = Export(code, used, CountExport, 3, count);
+            used = Export(code, used, EdgeCountExport, 0, walker);
+            return Export(code, used, EdgeReadExport, 0, walker + 1);
         }
 
         private static int Export(byte[] code, int used, string name, byte kind, int index)

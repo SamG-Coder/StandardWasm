@@ -836,10 +836,33 @@ namespace PortableCompiler
                     exports[export] = functions++;
                 }
             }
+            int rootWalker = -1;
+            if (rootProbe)
+            {
+                rootWalker = hostImports + functions;
+                for (int entry = 0; entry < 2; entry++)
+                {
+                    bool read = entry != 0;
+                    if (functions >= owners.Length) return -3;
+                    int offset = NextSignature(offsets, arities, functions);
+                    int arity = read ? 2 : 1;
+                    if (arity >= signatures.Length - offset) return -3;
+                    signatures[offset] = read ? ObjectReference : I32;
+                    signatures[offset + 1] = ObjectReference;
+                    if (read) signatures[offset + 2] = I32;
+                    arities[functions] = arity;
+                    offsets[functions] = offset;
+                    bodyOffsets[functions] = length;
+                    length = HeapEdgesWasm.Write(moduleCode, length, objects, read);
+                    if (length < 0) return length;
+                    sizes[functions] = length - bodyOffsets[functions];
+                    functions++;
+                }
+            }
             CompileLocation.Clear(location);
             if (linearMemory) hostFeatures |= WasmImports.Memory;
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0], pointers, rootCount);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0], pointers, rootCount, rootWalker);
         }
 
         private static bool IsExported(int[] exports, int target)

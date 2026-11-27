@@ -23,6 +23,31 @@ namespace ManagedFinalizationExperiment
 
         public static int ObserveConstructor(int seed) => new ConstructorReceiver(seed).Value;
 
+        public static object BuildGraph(int seed)
+        {
+            var root = new Graph { Scalar = seed, Inherited = new Receiver { Value = seed } };
+            var peer = new Graph { Next = root };
+            root.Next = peer;
+            root.Items = new Graph[] { peer, null, root };
+            root.Payload = new byte[2];
+            Notify();
+            return root;
+        }
+
+        private class GraphBase
+        {
+            internal int Scalar;
+            internal Receiver Inherited;
+        }
+
+        private sealed class Graph : GraphBase
+        {
+            internal Graph Next;
+            internal Graph[] Items;
+            internal Graph Missing = null;
+            internal byte[] Payload;
+        }
+
         private sealed class ConstructorReceiver
         {
             internal readonly int Value;
