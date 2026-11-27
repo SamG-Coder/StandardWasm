@@ -136,20 +136,20 @@ namespace PortableCompiler
         {
             // Finalization is an internal runtime feature and has no host import indices.
             var features = new int[] { hostFeatures, rootProbe ? 1 : 0 };
-            var addressedStatics = new AddressedStaticFields();
+            var addressedFields = new AddressedFields();
             var typeCalls = new RuntimeTypeCalls();
             int status = Reemit;
             while (status == Reemit)
-                status = CompileProgramPass(bundle, entries, output, location, features, addressedStatics, typeCalls, stubs, rootProbe);
+                status = CompileProgramPass(bundle, entries, output, location, features, addressedFields, typeCalls, stubs, rootProbe);
             return status;
         }
 
         private static int CompileProgramPass(BundleImages bundle, byte[] entries, byte[] output, int[] location,
-            int[] features, AddressedStaticFields addressedStatics, RuntimeTypeCalls typeCalls, MissingAssemblyStubs stubs, bool rootProbe)
+            int[] features, AddressedFields addressedFields, RuntimeTypeCalls typeCalls, MissingAssemblyStubs stubs, bool rootProbe)
         {
             int hostFeatures = features[0];
             bool tracksFinalizers = features[1] != 0;
-            int knownAddressedStatics = addressedStatics.Count;
+            int knownAddressedFields = addressedFields.Count;
             int hostImports = WasmImports.FunctionCount(hostFeatures);
             CompileLocation.Clear(location);
             byte[] image = bundle.Get(0);
@@ -582,7 +582,7 @@ namespace PortableCompiler
                             parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                             bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
                             initializers, reflection, instantiations, methodArguments, inlineLocations, frameCells, parameters,
-                            nativePlans, addressedStatics, booleanLocals, pointers, finalizers, tracksFinalizers);
+                            nativePlans, addressedFields, booleanLocals, pointers, finalizers, tracksFinalizers);
                         if (functions == Reemit)
                         {
                             // Allocation can precede the first reachable suppression call.
@@ -756,7 +756,7 @@ namespace PortableCompiler
                         capacity += 320;
                     }
                     frameShape[21] = 0;
-                    frameShape[22] = addressedStatics.Pages();
+                    frameShape[22] = addressedFields.Pages();
                     int classBytes = objects[0] * 12;
                     if (classBytes > int.MaxValue - capacity) return -3;
                     capacity += classBytes;
@@ -924,6 +924,7 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || kind == BranchIl.ClearInteriorField || nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit ||
+                                kind == BranchIl.GetReferenceField || kind == BranchIl.SetReferenceField || kind == BranchIl.TakeReferenceFieldAddress ||
                                 kind == BranchIl.StringRange || kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection || kind == BranchIl.GetObjectType ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.ReadStaticUInt16 || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
@@ -1009,9 +1010,8 @@ namespace PortableCompiler
                 bodyOffsets[current] = length;
                 length += used;
             }
-            // Earlier references to a newly discovered static need the same
-            // backing as its address-taking use.
-            if ((hostUse[0] & ~hostFeatures) != 0 || addressedStatics.Count != knownAddressedStatics)
+            // Earlier accesses need the same backing as the address-taking use.
+            if ((hostUse[0] & ~hostFeatures) != 0 || addressedFields.Count != knownAddressedFields)
             {
                 features[0] = hostFeatures | hostUse[0];
                 return Reemit;
@@ -1126,7 +1126,7 @@ namespace PortableCompiler
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed,
             TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, MethodInstantiations instantiations, int[] methodArguments,
             int[] inlineLocations, int[] frameCells, int parameterCount, NativeAggregatePlans nativePlans,
-            AddressedStaticFields addressedStatics, byte[] booleanLocals,
+            AddressedFields addressedFields, byte[] booleanLocals,
             FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
@@ -1564,6 +1564,7 @@ namespace PortableCompiler
                 if (kind == BranchIl.GetField || kind == BranchIl.SetField || kind == BranchIl.FieldAddress)
                 {
                     int field = records[slot + 1];
+                    bool readOnlyAddress = false;
                     bool linked = records[slot + 3] != 0;
                     int nextSlot = records[slot + 2] * BranchIl.Width;
                     bool initializesField = kind == BranchIl.FieldAddress && nextSlot < records.Length &&
@@ -1579,7 +1580,7 @@ namespace PortableCompiler
                     if (linked)
                     {
                         if (bundle.Length == 0) return -2;
-                        var linkedField = new int[2];
+                        var linkedField = new int[4];
                         if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
                         if (callerType < 0) return -1;
                         bool constructorReceiver = initializesConstructorField ||
@@ -1590,6 +1591,8 @@ namespace PortableCompiler
                         if (status < 0) return status;
                         records[slot + 1] = linkedField[0];
                         records[slot + 3] = linkedField[1];
+                        field = linkedField[2];
+                        readOnlyAddress = (linkedField[3] & 0x20) != 0;
                     }
                     else
                     {
@@ -1620,6 +1623,33 @@ namespace PortableCompiler
                         }
                     }
                     int descriptor = records[slot + 3];
+                    int declaring = FieldAccess.Owner(descriptor);
+                    int storage = FieldAccess.Storage(descriptor);
+                    if (!ObjectLayouts.IsValueType(objects, declaring) && IsReferenceLocation(LocationFromIdentity(objects, storage)))
+                    {
+                        int assembly = ObjectLayouts.AssemblyOf(objects, declaring);
+                        bool inCell = addressedFields.HasInstanceReference(assembly, field);
+                        if (kind == BranchIl.FieldAddress)
+                        {
+                            if (linked ? readOnlyAddress : !ValueOperands.IsWritableInteriorField(image, layout, heaps, field, false))
+                                return -2;
+                            // The existing fusion also serves standalone event fixtures
+                            // that do not supply the CoreLib method body.
+                            if (!inCell && !linked && LinkExchange(image, heaps, layout, records, slot)) continue;
+                            if (!inCell) addressedFields.AddInstanceReference(assembly, field);
+                            inCell = true;
+                        }
+                        if (inCell)
+                        {
+                            int vector = ObjectLayouts.RegisterArray(objects, ObjectReference);
+                            if (vector < 0) return vector;
+                            ObjectLayouts.SetReferenceFieldVector(objects, declaring, field, vector);
+                            records[slot + BranchIl.Width + 2] = vector;
+                            records[slot] = kind == BranchIl.GetField ? BranchIl.GetReferenceField :
+                                kind == BranchIl.SetField ? BranchIl.SetReferenceField : BranchIl.TakeReferenceFieldAddress;
+                            continue;
+                        }
+                    }
                     // Stage 143 (decision 0071): a recorded native offset means an S* receiver may reach this field.
                     bool pointerField = records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0;
                     if (kind == BranchIl.SetField)
@@ -1762,20 +1792,20 @@ namespace PortableCompiler
                     }
                     int staticOwner = StaticFields.Owner(globals, symbol[0]);
                     int staticRow = StaticFields.Row(globals, symbol[0]);
-                    int address = addressedStatics.Find(staticOwner, staticRow);
-                    if (address == AddressedStaticFields.Int32Cell || addressOf && symbol[5] == 8)
+                    int address = addressedFields.Find(staticOwner, staticRow);
+                    if (address == AddressedFields.Int32Cell || addressOf && symbol[5] == 8)
                     {
-                        if (address == -1) addressedStatics.AddInt32Cell(staticOwner, staticRow);
+                        if (address == -1) addressedFields.AddInt32Cell(staticOwner, staticRow);
                         StaticFields.UseInt32Cell(globals, symbol[0]);
                         records[slot] = BranchIl.StaticInt32;
                         records[slot + 1] = symbol[0];
                         records[slot + 3] = addressOf ? StaticInt32Wasm.Address : write ? StaticInt32Wasm.Write : StaticInt32Wasm.Read;
                         continue;
                     }
-                    if (address == AddressedStaticFields.ReferenceCell ||
+                    if (address == AddressedFields.ReferenceCell ||
                         addressOf && IsReferenceLocation(LocationFromIdentity(objects, symbol[1])))
                     {
-                        if (address == -1) addressedStatics.AddReferenceCell(staticOwner, staticRow);
+                        if (address == -1) addressedFields.AddReferenceCell(staticOwner, staticRow);
                         status = StaticFields.UseReferenceCell(globals, symbol[0], symbol[1], objects, records, slot,
                             addressOf ? StaticReferenceWasm.Address : write ? StaticReferenceWasm.Write : StaticReferenceWasm.Read);
                         if (status < 0) return status;
@@ -1785,7 +1815,7 @@ namespace PortableCompiler
                     {
                         int plan = NativeAggregates.Plan(bundle, objects, symbol[1], nativePlans);
                         if (plan < 0) return plan;
-                        if (address < 0) address = addressedStatics.Add(staticOwner, staticRow, NativeAggregates.Size(nativePlans.Plans, plan));
+                        if (address < 0) address = addressedFields.Add(staticOwner, staticRow, NativeAggregates.Size(nativePlans.Plans, plan));
                         if (address < 0) return address;
                         records[slot] = addressOf ? BranchIl.StaticFieldAddress : write ? BranchIl.StoreNativeStatic : BranchIl.LoadNativeStatic;
                         records[slot + BranchIl.Width + 1] = plan;

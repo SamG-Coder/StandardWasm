@@ -219,6 +219,8 @@ namespace PortableCompiler
             field[0] = index;
             // The receiver layout and value type come from the same owning DLL.
             field[1] = FieldAccess.Encode(type, ObjectLayouts.FieldType(objects, type, row));
+            field[2] = row;
+            field[3] = flags;
             return 0;
         }
 

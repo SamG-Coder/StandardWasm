@@ -540,7 +540,13 @@ namespace PeLibrary
             return count;
         }
 
-        internal static int LayoutFieldType(int[] registry, int type, int index)
+        internal static int LayoutFieldType(int[] registry, int type, int index) =>
+            LayoutFieldStorage(registry, type, index) & FieldStorageMask;
+
+        internal static int LayoutReferenceFieldVector(int[] registry, int type, int index) =>
+            LayoutFieldStorage(registry, type, index) >> FieldStorageBits;
+
+        private static int LayoutFieldStorage(int[] registry, int type, int index)
         {
             // The GC type stores shared bytes in one immutable i64. Its CLI
             // field metadata and bit offsets remain independently addressable.
@@ -551,7 +557,8 @@ namespace PeLibrary
             {
                 int parent = Parent(registry, current);
                 int prefix = LayoutFieldCount(registry, parent);
-                if (index >= prefix) return FieldTypeAt(registry, current, index - prefix);
+                if (index >= prefix)
+                    return registry[registry[Slot(current) + Storage] + index - prefix];
                 current = parent;
             }
         }
@@ -572,6 +579,14 @@ namespace PeLibrary
 
         internal static void SetExplicitField(int[] registry, int type, int index, int storage, int offset) =>
             SetFieldType(registry, type, index, storage | ((offset + 1) << FieldStorageBits));
+
+        // Class fields retain their CLI type in the low bits. Marked fields
+        // physically hold an array so ordinary loads and byrefs share storage.
+        internal static void SetReferenceFieldVector(int[] registry, int type, int row, int vector)
+        {
+            int entry = registry[Slot(type) + Storage] + row - FirstRow(registry, type);
+            registry[entry] = (registry[entry] & FieldStorageMask) | (vector << FieldStorageBits);
+        }
 
         internal static int FieldType(int[] registry, int type, int row) =>
             FieldTypeAt(registry, type, row - registry[Slot(type) + FirstField]);

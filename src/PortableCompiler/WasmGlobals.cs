@@ -13,7 +13,7 @@ namespace PortableCompiler
             for (int index = 0; index < count; index++)
             {
                 int storage = StaticFields.Storage(globals, index);
-                bool cell = storage <= AddressedStaticFields.Int32Cell;
+                bool cell = storage <= AddressedFields.Int32Cell;
                 int type = cell ? StaticFields.CellVector(storage) : ObjectLayouts.Representation(objects, storage);
                 int width = WasmBinary.ValueWidth(type);
                 int owner = StaticFields.Owner(globals, index);
@@ -35,7 +35,7 @@ namespace PortableCompiler
             for (int index = 0; index < count; index++)
             {
                 int storage = StaticFields.Storage(globals, index);
-                bool cell = storage <= AddressedStaticFields.Int32Cell;
+                bool cell = storage <= AddressedFields.Int32Cell;
                 int type = cell ? StaticFields.CellVector(storage) : ObjectLayouts.Representation(objects, storage);
                 int owner = StaticFields.Owner(globals, index);
                 bool eventArgs = owner == StaticFields.EventOwner;

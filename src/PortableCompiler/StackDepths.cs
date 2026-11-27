@@ -584,9 +584,14 @@ namespace PortableCompiler
                 if (depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(extra), objects)) return -1;
                 return Push(stack, allocated, depth - 1, ValueLocation(FieldAccess.Storage(extra)));
             }
+            if (kind == TakeReferenceFieldAddress)
+            {
+                if (depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(extra), objects)) return -1;
+                return Push(stack, allocated, depth - 1, LocationFromIdentity(objects, FieldAccess.Storage(extra)));
+            }
             if (kind == LoadConstructorAddress)
                 return Push(stack, allocated, depth, ConstructorAddress);
-            if (kind == GetField)
+            if (kind == GetField || kind == GetReferenceField)
             {
                 if (depth == 0) return -1;
                 int receiver = stack[depth - 1];
@@ -602,7 +607,7 @@ namespace PortableCompiler
                 return depth != 0 && (stack[depth - 1] == ValueLocation(owner) ||
                     stack[depth - 1] == ConstructorAddress && frame[0] == owner) ? depth - 1 : -2;
             }
-            if (kind == SetField)
+            if (kind == SetField || kind == SetReferenceField)
             {
                 if (depth < 2 || !Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects)) return -1;
                 int owner = FieldAccess.Owner(extra), receiver = stack[depth - 2];

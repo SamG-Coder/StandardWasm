@@ -81,7 +81,8 @@ namespace PortableCompiler
                 {
                     int type = LayoutFieldType(objects, classType, field);
                     if (type == 0) continue;
-                    int width = ManagedValueLocationWasm.UsesCell(objects, classType, type)
+                    int vector = LayoutReferenceFieldVector(objects, classType, field);
+                    int width = vector != 0 ? ValueWidth(vector) : ManagedValueLocationWasm.UsesCell(objects, classType, type)
                         ? 1 + HeapTypeSize(ValueLocationHeap) : ValueWidth(Representation(objects, type));
                     size += 1 + width;
                     stored++;
@@ -373,7 +374,10 @@ namespace PortableCompiler
                 {
                     int fieldType = LayoutFieldType(objects, classType, field);
                     if (fieldType == 0) continue;
-                    if (ManagedValueLocationWasm.UsesCell(objects, classType, fieldType))
+                    int vector = LayoutReferenceFieldVector(objects, classType, field);
+                    if (vector != 0)
+                        cursor = ValueType(output, cursor, vector);
+                    else if (ManagedValueLocationWasm.UsesCell(objects, classType, fieldType))
                         cursor = ManagedValueLocationWasm.WriteFieldType(output, cursor);
                     else if (IsNarrow(fieldType))
                         output[cursor++] = fieldType == Signed8 || fieldType == Unsigned8 ? (byte)0x78 : (byte)0x77;

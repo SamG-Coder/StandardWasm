@@ -1227,6 +1227,18 @@ namespace PortableCompiler
                     used = ManagedValueLocationWasm.Take(code, used, FieldAccess.Owner(descriptor), reference, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, ValueLocation(storage), top));
                 }
+                else if (kind == GetReferenceField || kind == SetReferenceField || kind == TakeReferenceFieldAddress)
+                {
+                    int position = kind == SetReferenceField ? top - 1 : top;
+                    int receiver = Spill(spills, maximum, spillFlags, states[state + position], position);
+                    int source = states[state + top];
+                    int value = Spill(spills, maximum, spillFlags, source, top);
+                    int descriptor = records[slot + 3], vector = records[slot + BranchIl.Width + 2];
+                    int resultType = FieldAccess.Storage(descriptor);
+                    if (kind == TakeReferenceFieldAddress) resultType = LocationFromIdentity(objects, resultType);
+                    int destination = Spill(spills, maximum, spillFlags, resultType, top);
+                    used = ReferenceFieldWasm.Emit(code, used, kind, descriptor, operand, vector, receiver, source, value, destination, resultType);
+                }
                 else if (kind == LoadConstructorAddress)
                 {
                     // The verifier owns the address. The i32 placeholder is never dereferenced.

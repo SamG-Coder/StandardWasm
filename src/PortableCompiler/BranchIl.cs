@@ -71,6 +71,7 @@ namespace PortableCompiler
         internal const int AllocateString = 148, StringConstructionSpan = 149, ThrowFrameworkArgument = 150;
         internal const int StringContainsCodeUnit = 151;
         internal const int StaticReference = 152;
+        internal const int GetReferenceField = 153, SetReferenceField = 154, TakeReferenceFieldAddress = 155;
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
@@ -376,14 +377,17 @@ namespace PortableCompiler
                         kind = LoadFunction;
                         operand = (int)(token & 0xffffff);
                     }
-                    else if (extended == 0x0a || extended == 0x0d)
+                    else if (extended >= 0x09 && extended <= 0x0e)
                     {
                         if (length - pc < 2) return -1;
                         operand = (int)ImageBytes.U16(image, (uint)(start + pc));
                         pc += 2;
-                        bool argument = extended == 0x0a;
+                        bool argument = extended <= 0x0b;
                         if (operand >= (argument ? arguments : locals)) return -1;
-                        kind = FrameAddress;
+                        // The wide forms use the same frame slots as their
+                        // short counterparts, with an unsigned 16-bit index.
+                        kind = extended == 0x09 || extended == 0x0c ? Load :
+                            extended == 0x0a || extended == 0x0d ? FrameAddress : Store;
                         if (!argument) operand += arguments;
                     }
                     else if (extended == 0x15)

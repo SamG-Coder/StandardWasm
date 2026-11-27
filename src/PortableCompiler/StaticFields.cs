@@ -12,19 +12,19 @@ namespace PortableCompiler
         internal static int Row(int[] globals, int index) => globals[2 + index * Width];
         internal static int Storage(int[] globals, int index) => globals[3 + index * Width];
         internal static void UseInt32Cell(int[] globals, int index) =>
-            globals[3 + index * Width] = AddressedStaticFields.Int32Cell;
+            globals[3 + index * Width] = AddressedFields.Int32Cell;
 
-        internal static bool IsReferenceCell(int storage) => storage < AddressedStaticFields.Int32Cell;
+        internal static bool IsReferenceCell(int storage) => storage < AddressedFields.Int32Cell;
 
         internal static int CellVector(int storage) =>
-            storage == AddressedStaticFields.Int32Cell ? Ints : AddressedStaticFields.ReferenceCell - storage;
+            storage == AddressedFields.Int32Cell ? Ints : AddressedFields.ReferenceCell - storage;
 
         internal static int UseReferenceCell(int[] globals, int index, int type, int[] objects,
             int[] records, int slot, int action)
         {
             int vector = ObjectLayouts.RegisterArray(objects, ObjectLayouts.ObjectReference);
             if (vector < 0) return vector;
-            globals[3 + index * Width] = AddressedStaticFields.ReferenceCell - vector;
+            globals[3 + index * Width] = AddressedFields.ReferenceCell - vector;
             records[slot] = BranchIl.StaticReference;
             records[slot + 1] = index;
             records[slot + 3] = action;

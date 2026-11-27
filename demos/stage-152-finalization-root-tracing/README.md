@@ -129,6 +129,9 @@ reaches an unsupported dependency in CoreLib's resource-string path.
 
 The managed reference compare-exchange fixture exercises the original
 CoreLib overloads with a static class field and with local `object` and
-`string` references. Seven cases check the previous-value result, null
+`string` references. Cases check the previous-value result, null
 comparands and replacements, and distinct objects with equal payloads.
+Instance-field cases cover inherited storage, an ordinary store through a
+separate method, two independent receivers, a typed null-receiver exception,
+and invocation of a delegate recovered from an `EventHandler` field.
 The Wasm operation runs without yielding on a location owned by one agent.
