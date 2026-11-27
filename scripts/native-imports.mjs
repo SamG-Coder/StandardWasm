@@ -5,9 +5,10 @@
 //   module "internalcall"          name = "Namespace.Type::Method"
 //   module "standardwasm:native"   present, clearLastError, saveLastError (host helpers)
 // These imports form one table in import order; entry k is the k-th of them. Before each call
-// the module asks present(k). For an entry the registry lacks, it raises CoreLib's
-// EntryPointNotFoundException with the CLR's message, as the CLR does at a call whose entry
-// point is missing. A missing entry is therefore never a silent stub and never a raw trap.
+// the module asks present(k), then library(k). As the CLR does at the call, it raises CoreLib's
+// DllNotFoundException when the registry has no entry at all for that DLL, and
+// EntryPointNotFoundException when the DLL is known but lacks the entry. A missing entry is
+// therefore never a silent stub and never a raw trap.
 //
 // registry maps "<dll>!<entry>" (P/Invoke; dll lower-case without ".dll") or "internalcall!<Namespace.Type::Method>" to a
 // JavaScript function over Wasm values: i32 as Number, i64 as BigInt, f32/f64 as Number.
@@ -39,6 +40,10 @@ export function nativeImports(module, registry, state = { system: 0, pinvoke: 0 
     const imports = {};
     const entries = nativeEntries(module);
     const implemented = entries.map(entry => entry.module === "standardwasm:native" || Object.hasOwn(registry, entry.key));
+    // A library is available when the registry implements any of its entries. InternalCalls
+    // belong to the runtime itself, which is always loaded.
+    const libraries = new Set(Object.keys(registry).map(key => key.slice(0, key.indexOf("!"))));
+    const available = entries.map(entry => !entry.module.startsWith("native:") || libraries.has(entry.key.slice(0, entry.key.indexOf("!"))));
     for (const entry of entries) {
         imports[entry.module] ??= {};
         if (entry.module === "standardwasm:native") continue;
@@ -50,6 +55,7 @@ export function nativeImports(module, registry, state = { system: 0, pinvoke: 0 
     if (entries.some(entry => entry.module === "standardwasm:native")) {
         imports["standardwasm:native"] = {
             present: k => implemented[k] ? 1 : 0,
+            library: k => available[k] ? 1 : 0,
             // The CLR's SetLastError=true stub: clear the system error, call, then save it.
             clearLastError: () => { state.system = 0; },
             saveLastError: () => { state.pinvoke = state.system; },

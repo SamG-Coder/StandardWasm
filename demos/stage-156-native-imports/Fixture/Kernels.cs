@@ -20,6 +20,8 @@ namespace NativeImportFixture
         [DllImport("kernel32", CharSet = CharSet.Unicode)] public static extern int lstrlenW(string text);
         // Not exported by kernel32: the CLR raises EntryPointNotFoundException at the call.
         [DllImport("kernel32")] public static extern int StandardWasmNoSuchEntry();
+        // No such library: the CLR raises DllNotFoundException at the call.
+        [DllImport("StandardWasmAbsentLibrary")] public static extern int Anything();
     }
 
     public static class Kernels
@@ -52,10 +54,19 @@ namespace NativeImportFixture
 
         public static int StringArgument() => Native.lstrlenW("abc");
 
+        // Each failure must reach its own handler, as on the CLR.
         public static int MissingEntry()
         {
             try { return Native.StandardWasmNoSuchEntry(); }
+            catch (DllNotFoundException) { return 8; }
             catch (EntryPointNotFoundException) { return 9; }
+        }
+
+        public static int MissingLibrary()
+        {
+            try { return Native.Anything(); }
+            catch (DllNotFoundException) { return 41; }
+            catch (EntryPointNotFoundException) { return 42; }
         }
     }
 }

@@ -19,8 +19,13 @@ whose body is synthetic, pre-linked records (`NativeThunks`):
 
 ```
 NativePresent   present(k) -> i32          does the host implement entry k?
-brtrue          continue
+brtrue          call
+NativePresent   library(k) -> i32          is entry k's library available?
+brtrue          entry-missing
+ldstr; newobj DllNotFoundException(string); throw           the CLR's message
+entry-missing:
 ldstr; newobj EntryPointNotFoundException(string); throw    the CLR's message
+call:
 ldarg 0..n-1
 [NativeHelper clearLastError]               SetLastError = true only
 CallNative      the typed import
@@ -33,18 +38,26 @@ ret
 - **One import per entry**, each with its own function type, keyed by:
   - P/Invoke and QCall: module `native:<ModuleRef name>`, name = the ImplMap entry point.
   - InternalCall: module `internalcall`, name = `Namespace.Type::Method`.
-  - Host helpers: module `standardwasm:native` (`present`, `clearLastError`, `saveLastError`).
+  - Host helpers: module `standardwasm:native` (`present`, `library`, `clearLastError`, `saveLastError`).
 - **Table placement.** The entries form one table after every fixed import group. No feature bit
   is added: #232 owns bit 16 and up, and the table's presence comes from its count. Earlier
   groups keep their function indices. Discovery adds entries during compilation, and
   `CompileProgram` then recompiles with the grown table reserved. This is the existing
   host-feature re-emit loop.
-- **Missing entries.** The CLR binds an entry point lazily and raises
-  `EntryPointNotFoundException` at the call. The host answers `present(k)` from the entries it
-  implements, so the module raises CoreLib's exception with the CLR's message ("Unable to find an
-  entry point named 'E' in DLL 'M'."), which ordinary `catch` handles. A missing entry is never a
-  silent stub or a raw trap. Without a bindable CoreLib `EntryPointNotFoundException(string)` the
-  thunk is a -2 diagnostic.
+- **Missing libraries and entries.** The CLR binds lazily and raises at the call, with two
+  different types:
+  - A library that cannot be loaded raises `DllNotFoundException`: "Unable to load DLL 'M' or one
+    of its dependencies: The specified module could not be found. (0x8007007E)".
+  - A library that loads but lacks the entry raises `EntryPointNotFoundException`: "Unable to find
+    an entry point named 'E' in DLL 'M'."
+
+  The host answers `present(k)` from the entries it implements, and `library(k)` from whether it
+  implements any entry of that DLL. InternalCalls belong to the runtime, which is always
+  available. The module then raises the same CoreLib exception with the CLR's message, so the
+  same `catch` clause runs as on the CLR (Codex's review found that the two cases had been
+  conflated). A missing entry is never a silent stub or a raw trap. Without bindable CoreLib
+  `(string)` constructors for both types, the thunk is a -2 diagnostic. The message text is the
+  CLR's on Windows; it names the Windows loader error.
 - **Last error.** `SetLastError = true` follows the CLR stub: the host clears the system error
   before the call and saves it as the P/Invoke error after it. `Marshal.GetLastPInvokeError` and
   `SetLastPInvokeError` are CoreLib InternalCalls that the host registry answers from that state,
@@ -103,7 +116,8 @@ checked against the CLR running the real DLLs, not assumed.
 
 `npm run demo -- stage-156-native-imports` runs an ordinary .NET Standard 2.0 fixture on the x86
 CLR, against the real `kernel32` and `ucrtbase`, and in Node and Edge with the registry. It covers:
-- 16 values: `MulDiv` rounding and boundaries, `abs(int.MinValue)`, `llabs`, `sqrt`, `fmaxf` with
-  NaN, `roundf(-2.5)`, `copysignf(-0)`, SetLastError plus `GetLastWin32Error`, and a missing entry
-  caught as `EntryPointNotFoundException`
+- `MulDiv` rounding and boundaries, `abs(int.MinValue)`, `llabs`, `sqrt`, `fmaxf` with NaN,
+  `roundf(-2.5)`, `copysignf(-0)`, and SetLastError plus `GetLastWin32Error`
+- a missing kernel32 entry caught as `EntryPointNotFoundException` and an absent library caught as
+  `DllNotFoundException` (17 values in all), each by its own handler in a fixture that catches both
 - one located -2 for a `string` argument

@@ -76,6 +76,10 @@ const node = await runCases(files[0], files.slice(1), oracle.cases, host);
 // The registry names an entry the CLR resolved as missing; it must not be implemented by the host.
 assert.ok(node.some(result => result.imports?.includes("kernel32!StandardWasmNoSuchEntry")));
 assert.ok(!Object.hasOwn(host.windowsScalars, "kernel32!StandardWasmNoSuchEntry"));
+// The absent library must be unknown to the registry, while kernel32 is known: the two failures
+// raise different CoreLib exceptions (DllNotFoundException, EntryPointNotFoundException).
+assert.ok(node.some(result => result.imports?.includes("standardwasmabsentlibrary!Anything")));
+assert.ok(!Object.keys(host.windowsScalars).some(key => key.startsWith("standardwasmabsentlibrary!")));
 const browser = await chromium.launch({ channel: "msedge" });
 try {
     const page = await browser.newPage();
@@ -98,6 +102,6 @@ try {
     }, null, 2) + "\n");
     const values = node.filter(result => result.value !== undefined).length;
     console.log("Node " + process.version + " and Edge " + browser.version() + " matched " + values +
-        " native-import results from the x86 CLR " + oracle.runtime + " (kernel32, ucrtbase, SetLastError and a missing" +
-        " entry point) and " + (node.length - values) + " located non-blittable diagnostic.");
+        " native-import results from the x86 CLR " + oracle.runtime + " (kernel32, ucrtbase, SetLastError, a missing" +
+        " entry point and a missing library) and " + (node.length - values) + " located non-blittable diagnostic.");
 } finally { await browser.close(); }

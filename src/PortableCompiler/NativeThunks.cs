@@ -7,17 +7,21 @@ namespace PortableCompiler
     // thunk with synthetic, pre-linked records:
     //
     //   0      NativePresent       [] -> [i32]   present(entry): does the host implement it?
-    //   1      brtrue 5            [i32] -> []
-    //   2..4   ldstr message; newobj EntryPointNotFoundException(string); throw
-    //   5..    ldarg 0 .. n-1      [] -> [args]
+    //   1      brtrue 10           [i32] -> []
+    //   2      NativePresent       [] -> [i32]   library(entry): is its library available?
+    //   3      brtrue 7            [i32] -> []
+    //   4..6   ldstr message; newobj DllNotFoundException(string); throw
+    //   7..9   ldstr message; newobj EntryPointNotFoundException(string); throw
+    //   10..   ldarg 0 .. n-1      [] -> [args]
     //          NativeHelper        clearLastError       (SetLastError = true only)
     //          CallNative          [args] -> [result]   the typed import
     //          NativeHelper        saveLastError        (SetLastError = true only)
     //          ret
     //
-    // The CLR binds a missing entry point lazily and raises EntryPointNotFoundException at the
-    // call. The host answers present(entry) from the entries it implements, so the module raises
-    // CoreLib's exception with the CLR's message, catchable as on the CLR.
+    // The CLR binds lazily and raises at the call: DllNotFoundException when the library cannot be
+    // loaded, EntryPointNotFoundException when it loads but lacks the entry. The host answers
+    // present and library from what it implements, so the module raises the same CoreLib
+    // exception with the CLR's message, and the same catch clause runs as on the CLR.
     // Only blittable scalar signatures are lowered (see Blittable); anything else is a located -2.
     internal static class NativeThunks
     {
@@ -49,9 +53,9 @@ namespace PortableCompiler
             return 0;
         }
 
-        // Records for n parameters: 5 for the presence check, then the forwarding call.
+        // Records for n parameters: 10 for the presence checks, then the forwarding call.
         internal static int RecordCount(int parameters, bool setLastError) =>
-            5 + parameters + 2 + (setLastError ? 2 : 0);
+            10 + parameters + 2 + (setLastError ? 2 : 0);
 
         // Describes the import for row: module and name (UTF-8) into module/name, the parameters'
         // Wasm value types into types, and the result type (0 for void) in shape[1]. shape[0] gets
@@ -144,6 +148,16 @@ namespace PortableCompiler
             return -1;
         }
 
+        // The CLR 10.0.10 (Windows) message of DllNotFoundException for a library that cannot be
+        // found: "Unable to load DLL '<dll>' or one of its dependencies: The specified module could
+        // not be found. (0x8007007E)", as UTF-8. Returns the byte count.
+        internal static int LibraryMessage(byte[] module, int moduleLength, int kind, byte[] message)
+        {
+            int used = Put(message, 0, "Unable to load DLL '");
+            for (int i = kind == PlatformInvoke ? 7 : 0; i < moduleLength; i++) message[used++] = module[i];
+            return Put(message, used, "' or one of its dependencies: The specified module could not be found. (0x8007007E)");
+        }
+
         // "Unable to find an entry point named '<name>' in DLL '<dll>'." as UTF-8, where dll is
         // the declared module name (without the "native:" prefix). Returns the byte count.
         internal static int Message(byte[] module, int moduleLength, int kind, byte[] name, int nameLength, byte[] message)
@@ -157,15 +171,21 @@ namespace PortableCompiler
 
         // Writes the thunk records. presentImport, clearImport and saveImport are absolute Wasm
         // function indices (clear and save are -1 without SetLastError); callImport likewise.
+        // missing[0..2] are the DllNotFoundException message start, length and constructor;
+        // missing[3..5] the same for EntryPointNotFoundException.
         internal static void Records(int[] records, int self, int parameters, int entry, int presentImport,
-            int callImport, int clearImport, int saveImport, int messageStart, int messageLength, int constructor)
+            int libraryImport, int callImport, int clearImport, int saveImport, int[] missing)
         {
             int pc = 0;
             pc = Put(records, pc, BranchIl.NativePresent, presentImport, entry);
-            int afterThrow = pc + 4;
-            pc = Put(records, pc, BranchIl.Conditional, afterThrow, 0); // brtrue
-            pc = Put(records, pc, BranchIl.LoadString, messageStart, messageLength);
-            pc = Put(records, pc, BranchIl.NewObject, constructor, 0);
+            pc = Put(records, pc, BranchIl.Conditional, 10, 0); // brtrue: callable
+            pc = Put(records, pc, BranchIl.NativePresent, libraryImport, entry);
+            pc = Put(records, pc, BranchIl.Conditional, 7, 0);  // brtrue: library loads, entry missing
+            pc = Put(records, pc, BranchIl.LoadString, missing[0], missing[1]);
+            pc = Put(records, pc, BranchIl.NewObject, missing[2], 0);
+            pc = Put(records, pc, BranchIl.ThrowNull, 0, 0);
+            pc = Put(records, pc, BranchIl.LoadString, missing[3], missing[4]);
+            pc = Put(records, pc, BranchIl.NewObject, missing[5], 0);
             pc = Put(records, pc, BranchIl.ThrowNull, 0, 0);
             for (int i = 0; i < parameters; i++) pc = Put(records, pc, BranchIl.Load, i, 0);
             if (clearImport >= 0) pc = Put(records, pc, BranchIl.NativeHelper, clearImport, 0);

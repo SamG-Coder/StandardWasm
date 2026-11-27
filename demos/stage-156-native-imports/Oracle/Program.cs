@@ -16,7 +16,7 @@ Type kernels = Assembly.LoadFrom(fixture).GetType("NativeImportFixture.Kernels",
 var cases = new List<object>();
 foreach (string name in new[] { "MulDivRounds", "MulDivNegative", "MulDivThird", "MulDivNegativeHalf", "MulDivWide",
     "MulDivOverflow", "MulDivByZero", "AbsMinimum", "LongAbs", "SquareRoot", "MaxIgnoresNaN", "MaxOfNegatives",
-    "RoundHalfAway", "SignOfNegativeZero", "LastError", "MissingEntry" })
+    "RoundHalfAway", "SignOfNegativeZero", "LastError", "MissingEntry", "MissingLibrary" })
 {
     MethodInfo method = kernels.GetMethod(name)!;
     cases.Add(new { name, row = method.MetadataToken & 0xffffff, expected = method.Invoke(null, null)!.ToString() });

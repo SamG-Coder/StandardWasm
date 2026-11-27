@@ -12,7 +12,7 @@ namespace PortableCompiler
     internal sealed class NativeImportTable
     {
         // Helper entries, keyed by negative rows of owner -1.
-        internal const int PresentHelper = 1, ClearErrorHelper = 2, SaveErrorHelper = 3;
+        internal const int PresentHelper = 1, ClearErrorHelper = 2, SaveErrorHelper = 3, LibraryHelper = 4;
 
         private int[] owners = new int[8], rows = new int[8];
         private int[] moduleStarts = new int[8], moduleLengths = new int[8], nameStarts = new int[8], nameLengths = new int[8];
@@ -57,6 +57,8 @@ namespace PortableCompiler
         }
 
         //   present(i32 entry) -> i32   1 when the host implements entry, else 0
+        //   library(i32 entry) -> i32   1 when entry's library is available (its entry may still
+        //                               be missing), else 0: DllNotFoundException on the CLR
         //   clearLastError()            the CLR's SetLastSystemError(0) before a SetLastError call
         //   saveLastError()             the CLR's SetLastPInvokeError(GetLastSystemError()) after it
         internal int Helper(int which)
@@ -64,12 +66,13 @@ namespace PortableCompiler
             int existing = Find(-1, -which);
             if (existing >= 0) return existing;
             byte[] module = Ascii("standardwasm:native");
-            string text = which == PresentHelper ? "present" : which == ClearErrorHelper ? "clearLastError" : "saveLastError";
+            string text = which == PresentHelper ? "present" : which == LibraryHelper ? "library" :
+                which == ClearErrorHelper ? "clearLastError" : "saveLastError";
             byte[] name = Ascii(text);
             var types = new byte[1];
             types[0] = 0x7f;
-            return Add(-1, -which, module, module.Length, name, name.Length, types, which == PresentHelper ? 1 : 0,
-                which == PresentHelper ? 0x7f : 0);
+            bool query = which == PresentHelper || which == LibraryHelper; // (i32) -> i32
+            return Add(-1, -which, module, module.Length, name, name.Length, types, query ? 1 : 0, query ? 0x7f : 0);
         }
 
         internal int TypeBytes()

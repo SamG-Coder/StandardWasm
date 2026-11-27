@@ -18,9 +18,10 @@ kernels cover:
 - `fmaxf` with a NaN operand, `roundf(-2.5f)` and `copysignf` with `-0`
 - `SetLastError = true` read back through `Marshal.GetLastWin32Error`. The saved error comes
   through CoreLib's `Marshal.GetLastPInvokeError` InternalCall, which the host also implements.
-- an entry point `kernel32` doesn't export. The CLR raises `EntryPointNotFoundException`; the
-  host doesn't implement it either, so the module raises the same CoreLib exception and the
-  kernel's `catch` returns 9 on both.
+- an entry point `kernel32` doesn't export, and a DLL that doesn't exist. The CLR raises
+  `EntryPointNotFoundException` for the first and `DllNotFoundException` for the second. The host
+  knows `kernel32` but not the absent DLL, so the module raises the same two CoreLib exceptions,
+  and each kernel's matching `catch` runs (9 and 41) on both.
 
 One case is a planned compile diagnostic. A `string` argument needs marshalling, which this step
 doesn't do, so it stays a -2 located at the P/Invoke method.

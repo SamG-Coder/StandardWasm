@@ -120,8 +120,8 @@ namespace PortableCompiler
 
 
         // Stage 156 (decision 0083): records the import for a native method, binds CoreLib's
-        // EntryPointNotFoundException(string) for a host that lacks the entry, writes its message
-        // literal and the thunk records (NativeThunks).
+        // DllNotFoundException(string) and EntryPointNotFoundException(string) for a host that
+        // lacks the library or the entry, writes their message literals and the thunk records.
         private static int LinkNativeThunk(BundleImages bundle, NativeImportTable natives, int nativeBase, int current,
             int owner, int source, int kind, byte[] module, byte[] name, byte[] types, int[] shape, int description,
             int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities,
@@ -131,6 +131,7 @@ namespace PortableCompiler
             if (shape[0] != arities[current]) return -1;
             int entry = natives.Add(owner, source, module, moduleLength, name, nameLength, types, shape[0], shape[1]);
             int present = natives.Helper(NativeImportTable.PresentHelper);
+            int library = natives.Helper(NativeImportTable.LibraryHelper);
             int clear = -1, save = -1;
             if (shape[2] != 0)
             {
@@ -144,25 +145,35 @@ namespace PortableCompiler
             var coreLayout = new int[4];
             var coreHeaps = new int[8];
             if (CompressedTables.FindWithHeaps(coreLib, coreLayout, coreHeaps) < 0) return -1;
-            int type = ObjectLayouts.FindTypeDefinition(coreLib, coreHeaps, coreLayout, "System", "EntryPointNotFoundException");
-            int row = type == 0 ? 0 : NativeThunks.FindMessageConstructor(coreLib, coreHeaps, coreLayout, type);
-            if (row == 0) return -2;
-            int constructor = indices[bases[found[0]] + row] - 1;
-            if (constructor < 0)
+            var missing = new int[6];
+            var message = new byte[160 + moduleLength + nameLength];
+            for (int which = 0; which < 2; which++)
             {
-                functions = Register(bundle, coreLib, coreLayout, coreHeaps, found[0], row, 0, owners, rows, contexts,
-                    bases, indices, arities, offsets, signatures, objects, functions);
-                if (functions < 0) return functions;
-                constructor = functions - 1;
+                string exceptionName = which == 0 ? "DllNotFoundException" : "EntryPointNotFoundException";
+                int type = ObjectLayouts.FindTypeDefinition(coreLib, coreHeaps, coreLayout, "System", exceptionName);
+                int row = type == 0 ? 0 : NativeThunks.FindMessageConstructor(coreLib, coreHeaps, coreLayout, type);
+                if (row == 0) return -2;
+                int constructor = indices[bases[found[0]] + row] - 1;
+                if (constructor < 0)
+                {
+                    functions = Register(bundle, coreLib, coreLayout, coreHeaps, found[0], row, 0, owners, rows, contexts,
+                        bases, indices, arities, offsets, signatures, objects, functions);
+                    if (functions < 0) return functions;
+                    constructor = functions - 1;
+                }
+                int messageBytes = which == 0
+                    ? NativeThunks.LibraryMessage(module, moduleLength, kind, message)
+                    : NativeThunks.Message(module, moduleLength, kind, name, nameLength, message);
+                int messageStart = literalSize[0];
+                int units = Utf8Scalars.CopyUtf16(message, 0, messageBytes, literals, messageStart);
+                if (units < 0) return units;
+                literalSize[0] = messageStart + units;
+                missing[3 * which] = messageStart;
+                missing[3 * which + 1] = units / 2;
+                missing[3 * which + 2] = constructor;
             }
-            var message = new byte[64 + moduleLength + nameLength];
-            int messageBytes = NativeThunks.Message(module, moduleLength, kind, name, nameLength, message);
-            int messageStart = literalSize[0];
-            int units = Utf8Scalars.CopyUtf16(message, 0, messageBytes, literals, messageStart);
-            if (units < 0) return units;
-            literalSize[0] = messageStart + units;
-            NativeThunks.Records(records, current, shape[0], entry, nativeBase + present, nativeBase + entry, clear, save,
-                messageStart, units / 2, constructor);
+            NativeThunks.Records(records, current, shape[0], entry, nativeBase + present, nativeBase + library,
+                nativeBase + entry, clear, save, missing);
             return functions;
         }
 
