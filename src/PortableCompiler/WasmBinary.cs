@@ -21,11 +21,11 @@ namespace PortableCompiler
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
             byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostFeatures, int reflectionHeapFixup,
-            FunctionPointerPlan pointers, int rootCount, int rootWalker, bool rootProbe)
+            FunctionPointerPlan pointers, int rootCount, int rootWalker, bool rootProbe, NativeImportTable natives)
         {
             // Imported functions precede defined functions in the Wasm index
             // space. Emitted bodies already include this offset in their calls.
-            int hostImports = WasmImports.FunctionCount(hostFeatures);
+            int hostImports = WasmImports.FunctionCount(hostFeatures, natives);
             int argumentArray = EntryArgumentsWasm.ArgumentArray(exports, arities, offsets, types, objects);
             if (!ValueFieldsWasm.CheckLayouts(objects)) return -2;
             int typeOffset = objects[0] + FirstClassHeap;
@@ -107,7 +107,7 @@ namespace PortableCompiler
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (tagCount != 0) prefix += 3; // () -> () exception payload
             if (objectTag) prefix += ExceptionTagsWasm.ObjectTagTypeBytes; // (eqref) -> () managed object payload
-            prefix += WasmImports.TypeBytes(hostFeatures);
+            prefix += WasmImports.TypeBytes(hostFeatures, natives);
             if (argumentArray != 0) prefix += EntryArgumentsWasm.TypeBytes(argumentArray);
             if (hasDescriptors) prefix += RuntimeTypeWasm.DescriptorBytes;
             if (classBytes > output.Length - prefix) return -3;
@@ -206,8 +206,8 @@ namespace PortableCompiler
 
             int remaining = output.Length - 8;
             remaining = Reserve(remaining, typeSize);
-            int importSize = WasmImports.Size(hostFeatures, importType);
-            if (hostFeatures != 0)
+            int importSize = WasmImports.Size(hostFeatures, importType, natives);
+            if (WasmImports.Any(hostFeatures, natives))
                 remaining = Reserve(remaining, importSize);
             remaining = Reserve(remaining, functionSize);
             if (tables)
@@ -406,13 +406,13 @@ namespace PortableCompiler
                 output[cursor++] = 0;
             }
             if (objectTag) cursor = ExceptionTagsWasm.WriteObjectTagType(output, cursor);
-            cursor = WasmImports.WriteTypes(output, cursor, hostFeatures);
+            cursor = WasmImports.WriteTypes(output, cursor, hostFeatures, natives);
             if (argumentArray != 0) cursor = EntryArgumentsWasm.WriteTypes(output, cursor, argumentArray);
             if (hasDescriptors) cursor = RuntimeTypeWasm.WriteDescriptor(output, cursor);
-            if (hostFeatures != 0)
+            if (WasmImports.Any(hostFeatures, natives))
             {
                 cursor = Section(output, cursor, 2, importSize);
-                cursor = WasmImports.WriteEntries(output, cursor, hostFeatures, importType);
+                cursor = WasmImports.WriteEntries(output, cursor, hostFeatures, importType, natives);
             }
 
             cursor = Section(output, cursor, 3, functionSize);

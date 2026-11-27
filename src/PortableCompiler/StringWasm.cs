@@ -11,6 +11,16 @@ namespace PortableCompiler
             code[used++] = 0xd1; // ref.is_null
             code[used++] = 0x04;
             code[used++] = 0x40;
+            used = AllocateLiteral(code, used, offset, length);
+            code[used++] = 0x24; // global.set
+            used = WasmBinary.Unsigned(code, used, global);
+            code[used++] = 0x0b;
+            code[used++] = 0x23; // global.get
+            return WasmBinary.Unsigned(code, used, global);
+        }
+
+        internal static int AllocateLiteral(byte[] code, int used, int offset, int length)
+        {
             if (length != 0)
             {
                 used = BranchWasm.Const(code, used, offset);
@@ -20,12 +30,7 @@ namespace PortableCompiler
             code[used++] = length == 0 ? (byte)8 : (byte)9; // fixed empty or passive data
             code[used++] = 4;
             code[used++] = 0;
-            used = Wrap(code, used);
-            code[used++] = 0x24; // global.set
-            used = WasmBinary.Unsigned(code, used, global);
-            code[used++] = 0x0b;
-            code[used++] = 0x23; // global.get
-            return WasmBinary.Unsigned(code, used, global);
+            return Wrap(code, used);
         }
 
         // Three private Char[] scratch locals followed by two lengths. The

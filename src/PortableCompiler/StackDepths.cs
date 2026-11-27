@@ -245,7 +245,7 @@ namespace PortableCompiler
                 return depth >= 2 && Match(stack, depth - 1, StaticByteLocation) && IsNativeInteger(stack[depth - 1]) ? depth - 1 : -2;
             if (kind == ReadStaticUInt16)
                 return Match(stack, depth, StaticByteLocation) ? Push(stack, allocated, depth - 1, I32) : -2;
-            if (kind == LoadString) return Push(stack, allocated, depth, String);
+            if (kind == LoadString || kind == LoadNativeMessage) return Push(stack, allocated, depth, String);
             if (kind == LoadTypeToken) return Push(stack, allocated, depth, PeLibrary.RuntimeTypeMetadata.Handle);
             // Only an unmanaged pointer (a native int, decision 0060) addresses memory 0.
             // A proven null (NativeZero) spills as Native and raises NullReferenceException
@@ -375,6 +375,12 @@ namespace PortableCompiler
             // [] -> [writer]; [writer, string-or-null] -> []; [writer] -> [] for WriteLine().
             if (kind == ConsoleWriter) return Push(stack, allocated, depth, PeLibrary.ConsoleStorage.Writer);
             if (kind == ConsoleReadLine) return Push(stack, allocated, depth, String);
+            // Stage 156 (decision 0083): [] -> [i32] for the presence check; helpers leave the
+            // stack unchanged; CallNative has the shape of the thunk's own method (operand).
+            if (kind == NativePresent) return Push(stack, allocated, depth, I32);
+            if (kind == NativeHelper) return depth;
+            if (kind == CallNative)
+                return CallShape(stack, allocated, depth, signatures, offsets[operand], arities[operand], 0, objects);
             if (kind == ConsoleWrite)
             {
                 int writer = operand == PeLibrary.ConsoleMetadata.WriteEmptyLine ? depth - 1 : depth - 2;

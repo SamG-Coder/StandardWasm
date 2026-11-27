@@ -24,7 +24,11 @@ namespace PortableCompiler
 
         internal static int InputFunction(int features) => DebuggerSlot(features) + ((features & Debugger) != 0 ? 1 : 0);
 
-        internal static int FunctionCount(int features) => InputFunction(features) + ((features & ConsoleInput) != 0 ? ConsoleInputWasm.ImportCount : 0);
+        // Dynamic native entries follow every fixed group, so established host indices stay stable.
+        internal static int FunctionCount(int features, NativeImportTable natives) =>
+            FixedFunctionCount(features) + natives.Count;
+
+        internal static int FixedFunctionCount(int features) => InputFunction(features) + ((features & ConsoleInput) != 0 ? ConsoleInputWasm.ImportCount : 0);
 
         internal static int Win32NativeSlot(int features, int member)
         {
@@ -37,7 +41,7 @@ namespace PortableCompiler
         internal static int Win32ErrorBase(int features) =>
             ConsoleFunctions(features) + ((features & Resources) != 0 ? ResourceWasm.FunctionCount : 0);
 
-        internal static int TypeBytes(int features)
+        internal static int TypeBytes(int features, NativeImportTable natives)
         {
             int size = ((features & Console) != 0 ? ConsoleWasm.TypeBytes : 0) +
                 ((features & Resources) != 0 ? ResourceWasm.TypeBytes : 0) +
@@ -47,7 +51,7 @@ namespace PortableCompiler
                 ((features & ConsoleInput) != 0 ? ConsoleInputWasm.TypeBytes : 0);
             for (int member = 1; member <= Win32ModuleBinding.Count; member++)
                 if ((features & Win32NativeFeature(member)) != 0) size += Win32ModuleWasm.TypeBytes(member);
-            return size;
+            return size + natives.TypeBytes();
         }
 
         private static int ConsoleFunctions(int features) => (features & Console) != 0 ? ConsoleWasm.ImportCount : 0;
@@ -55,11 +59,15 @@ namespace PortableCompiler
         // Resource calls and native indirection share one memory index.
         private static bool HasMemory(int features) => (features & (Resources | Memory | NativeMemoryFeatures | NativeCharacterViews)) != 0;
 
-        private static int EntryCount(int features) => FunctionCount(features) + (HasMemory(features) ? 1 : 0);
+        private static int EntryCount(int features, NativeImportTable natives) =>
+            FunctionCount(features, natives) + (HasMemory(features) ? 1 : 0);
 
-        internal static int Size(int features, int firstType)
+        // Whether the module has an import section at all.
+        internal static bool Any(int features, NativeImportTable natives) => features != 0 || natives.Count != 0;
+
+        internal static int Size(int features, int firstType, NativeImportTable natives)
         {
-            int size = WasmBinary.UnsignedSize(EntryCount(features));
+            int size = WasmBinary.UnsignedSize(EntryCount(features, natives));
             if ((features & Console) != 0) size += ConsoleWasm.ImportEntryBytes(firstType);
             if (HasMemory(features)) size += LinearMemoryWasm.ImportBytes;
             if ((features & Resources) != 0) size += ResourceWasm.ImportEntryBytes(firstType + ConsoleFunctions(features));
@@ -70,10 +78,11 @@ namespace PortableCompiler
             if ((features & Monitor) != 0) size += MonitorWasm.EntryBytes(firstType + MonitorSlot(features));
             if ((features & Debugger) != 0) size += RuntimeDebuggerWasm.EntryBytes(firstType + DebuggerSlot(features));
             if ((features & ConsoleInput) != 0) size += ConsoleInputWasm.ImportEntryBytes(firstType + InputFunction(features));
+            size += natives.ImportEntryBytes(firstType + FixedFunctionCount(features));
             return size;
         }
 
-        internal static int WriteTypes(byte[] output, int cursor, int features)
+        internal static int WriteTypes(byte[] output, int cursor, int features, NativeImportTable natives)
         {
             if ((features & Console) != 0) cursor = ConsoleWasm.WriteTypes(output, cursor);
             if ((features & Resources) != 0) cursor = ResourceWasm.WriteTypes(output, cursor);
@@ -84,12 +93,12 @@ namespace PortableCompiler
             if ((features & Monitor) != 0) cursor = MonitorWasm.WriteType(output, cursor);
             if ((features & Debugger) != 0) cursor = RuntimeDebuggerWasm.WriteType(output, cursor);
             if ((features & ConsoleInput) != 0) cursor = ConsoleInputWasm.WriteTypes(output, cursor);
-            return cursor;
+            return natives.WriteTypes(output, cursor);
         }
 
-        internal static int WriteEntries(byte[] output, int cursor, int features, int firstType)
+        internal static int WriteEntries(byte[] output, int cursor, int features, int firstType, NativeImportTable natives)
         {
-            cursor = WasmBinary.Unsigned(output, cursor, EntryCount(features));
+            cursor = WasmBinary.Unsigned(output, cursor, EntryCount(features, natives));
             if ((features & Console) != 0) cursor = ConsoleWasm.WriteEntries(output, cursor, firstType);
             if (HasMemory(features)) cursor = LinearMemoryWasm.WriteImport(output, cursor);
             if ((features & Resources) != 0) cursor = ResourceWasm.WriteEntries(output, cursor, firstType + ConsoleFunctions(features));
@@ -100,7 +109,7 @@ namespace PortableCompiler
             if ((features & Monitor) != 0) cursor = MonitorWasm.WriteEntry(output, cursor, firstType + MonitorSlot(features));
             if ((features & Debugger) != 0) cursor = RuntimeDebuggerWasm.WriteEntry(output, cursor, firstType + DebuggerSlot(features));
             if ((features & ConsoleInput) != 0) cursor = ConsoleInputWasm.WriteEntries(output, cursor, firstType + InputFunction(features));
-            return cursor;
+            return natives.WriteEntries(output, cursor, firstType + FixedFunctionCount(features));
         }
     }
 }

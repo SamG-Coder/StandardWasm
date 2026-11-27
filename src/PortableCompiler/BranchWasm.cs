@@ -422,6 +422,11 @@ namespace PortableCompiler
                     used = ManagedLocationWasm.ReadStaticUInt16(code, used, Spill(spills, maximum, spillFlags, StaticByteLocation, top));
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top));
                 }
+                else if (kind == LoadNativeMessage)
+                {
+                    used = StringWasm.AllocateLiteral(code, used, operand, records[slot + 3]);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, String, depth));
+                }
                 else if (kind == LoadString)
                 {
                     int global = records[slot + BranchIl.Width + 1];
@@ -519,6 +524,39 @@ namespace PortableCompiler
                             code[used++] = 0x0f;
                         }
                         used = Local(code, used, 0x21, spills + at);
+                    }
+                }
+                else if (kind == NativePresent)
+                {
+                    // Stage 156 (decision 0083): present(entry) -> i32, both indices absolute.
+                    used = Const(code, used, records[slot + 3]);
+                    code[used++] = 0x10;
+                    used = WasmBinary.Unsigned(code, used, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, depth));
+                }
+                else if (kind == NativeHelper)
+                {
+                    code[used++] = 0x10; // () -> () host helper, absolute index
+                    used = WasmBinary.Unsigned(code, used, operand);
+                }
+                else if (kind == CallNative)
+                {
+                    // The thunk's own arguments, in order, to the typed import. Narrow integer
+                    // results are normalized to their CLI width, as a returned managed value is.
+                    int arity = arities[operand], shape = offsets[operand];
+                    int first = depth - arity;
+                    for (int i = 0; i < arity; i++)
+                    {
+                        int source = states[state + first + i];
+                        used = LoadOperand(code, used, Spill(spills, maximum, spillFlags, source, first + i), source, signatures[shape + 1 + i]);
+                    }
+                    code[used++] = 0x10;
+                    used = WasmBinary.Unsigned(code, used, records[slot + 3]);
+                    int returned = signatures[shape];
+                    if (returned != Void)
+                    {
+                        used = NormalizeSlot(code, used, returned);
+                        used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, StackType(returned), first));
                     }
                 }
                 else if (kind == ConsoleReadLine)
