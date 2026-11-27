@@ -19,8 +19,7 @@ The verifier compares every case with the CLR in Node and Edge.
 Direct calls to a closed nonvirtual generic instance method (`Echo<U>`)
 compile on reference receivers. The verifier checks that `callvirt`
 evaluates the arguments before raising `NullReferenceException` on a null
-receiver. The virtual member `Describe` in this fixture still reports -2 at
-the calling instruction. Generic value-type declaring types and static
-fields on generic types need separate work.
+receiver. The verifier also compares the virtual member `Describe` on a
+closed generic class. Static fields on generic types still report a diagnostic.
 
 See the [closed generic method body decision](../../docs/decisions/0037-closed-generic-method-bodies.md).
