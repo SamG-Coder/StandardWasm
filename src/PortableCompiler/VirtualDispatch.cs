@@ -35,7 +35,8 @@ namespace PortableCompiler
         internal int Add(int function, int owner, int row, int receiver, int declared, int callerOwner, int callerRow, int pc)
         {
             for (int site = 0; site < sitesUsed; site += SiteWidth)
-                if (sites[site + Owner] == owner && sites[site + Row] == row && sites[site + Receiver] == receiver)
+                if (sites[site + Owner] == owner && sites[site + Row] == row &&
+                    sites[site + Receiver] == receiver && sites[site + Declared] == declared)
                     return sites[site + Function];
 
             if (sites.Length == 0)

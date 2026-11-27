@@ -24,6 +24,8 @@ internal static class ValueConstructionCases
         Check(nameof(Kernels.DisposeScoped), Kernels.DisposeScoped);
 
         Check(nameof(Kernels.BorrowExtent), Kernels.BorrowExtent);
+        Check(nameof(ClosedInterfaceProbe.CheckClosedInterface), ClosedInterfaceProbe.CheckClosedInterface);
+        Check(nameof(ClosedInterfaceProbe.CheckClosedInterfaceNull), ClosedInterfaceProbe.CheckClosedInterfaceNull);
         Check(nameof(EntryArrayProbe.UpdateEntryArray), EntryArrayProbe.UpdateEntryArray);
         Check(nameof(EntryArrayProbe.CheckEntryArrayFailure), EntryArrayProbe.CheckEntryArrayFailure);
         Check(nameof(BucketProbe.ReadManagedBuckets), BucketProbe.ReadManagedBuckets);
@@ -71,7 +73,8 @@ internal static class ValueConstructionCases
     }
 
     private static MethodInfo Method(string name) =>
-        typeof(Kernels).GetMethod(name) ?? typeof(BucketProbe).GetMethod(name) ?? typeof(EntryArrayProbe).GetMethod(name)!;
+        typeof(Kernels).GetMethod(name) ?? typeof(BucketProbe).GetMethod(name) ??
+        typeof(EntryArrayProbe).GetMethod(name) ?? typeof(ClosedInterfaceProbe).GetMethod(name)!;
     private static int Row(MethodBase method) => method.MetadataToken & 0xffffff;
 
     private static byte[] Manifest(MethodBase method)

@@ -24,13 +24,19 @@ already supplies its concrete target. For class virtual dispatch, a same-name
 MethodImpl can affect the slot only if its declaration belongs to the class
 hierarchy. Unsupported class mappings still produce a diagnostic.
 
-This stage supports local final instance-virtual MethodImpl bodies. Generic
-interface dispatch, default interface method selection, value-type receivers,
-and other explicit body forms still produce located diagnostics when they
-are required. Preserve those diagnostics until the compiler can reproduce
-their CLR semantics.
+This stage supports local final instance-virtual MethodImpl bodies. Default
+interface method selection, value-type receivers, and other explicit body forms
+produce located diagnostics when they are required.
 
 The Stage 128 fixture checks a dependency-defined slot and a same-name local
 slot, inherited mappings, explicit implementations, hidden members, remapping,
 and a typed null receiver. The original WinForms startup replay supplies the
 upstream integration check after #280.
+
+Closed generic interfaces use the same allocation analysis for nongeneric
+instance members. The interface declaration and its body each keep their own
+closed type arguments during slot matching. A dispatcher is keyed by the
+closed interface as well as its member, so two instantiations of one interface
+on a single class select separate MethodImpl bodies. An overridable body on
+a closed generic class and calls to generic interface methods still require
+separate lowering. Stage 111 checks these bindings in Node and Edge.

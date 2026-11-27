@@ -49,3 +49,7 @@ aliases, and typed failures from taking an element address.
 The primitive descriptor fixture compares closed `typeof(T)` against the
 canonical primitive types, including pairs with shared Wasm storage. It also
 checks the `IsValueType` branch on both a primitive and a reference type.
+
+The closed interface fixture checks implicit and explicit implementations,
+including different `int` and `uint` instantiations on one class, a closed
+generic implementer, polymorphic calls, and a typed null receiver failure.

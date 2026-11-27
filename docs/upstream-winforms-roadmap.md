@@ -129,8 +129,10 @@ the same traced owner and index as existing managed array locations, including
 when passed to another assembly or returned to a compiled caller. The startup
 replay decodes the generic `Entry` array element address in CoreLib's
 `Dictionary<TKey,TValue>.Remove`. Its primitive `TKey` now resolves to the
-canonical CoreLib type descriptor. The startup replay stops at the comparer
-call through `IEqualityComparer<TKey>.GetHashCode`.
+canonical CoreLib type descriptor. The linker binds the comparer call through
+`IEqualityComparer<TKey>.GetHashCode` with the closed interface signature. The
+startup replay stops at the separate constrained `Object.GetHashCode` call on
+the primitive key.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

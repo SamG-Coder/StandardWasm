@@ -9,7 +9,8 @@ namespace PortableCompiler
     {
         internal static int Find(BundleImages bundle, int[] objects, byte[] image, int[] layout,
             int[] heaps, int owner, int type, int declaredOwner, int declaredMethod,
-            byte[] declaration, int[] declarationLayout, int[] declarationHeaps, int name, int signature)
+            byte[] declaration, int[] declarationLayout, int[] declarationHeaps, int name, int signature,
+            int declaredContext, int bodyContext)
         {
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;
@@ -31,7 +32,7 @@ namespace PortableCompiler
                 if (row < 1 || row > counts[(coded & 1) == 0 ? 6 : 10]) return -1;
                 if ((coded & 1) == 0)
                 {
-                    if (owner != declaredOwner || row != declaredMethod) continue;
+                    if (declaredContext != 0 || owner != declaredOwner || row != declaredMethod) continue;
                 }
                 else
                 {
@@ -40,9 +41,9 @@ namespace PortableCompiler
                     if (!AssemblyReferences.SameString(image, heaps, reference[4], declaration, declarationHeaps, name))
                         continue;
                     status = AssemblyBundle.Resolve(bundle, image, layout, heaps, owner, row,
-                        0x6f, false, objects, symbol, 0, type, allowVirtual: true);
+                        0x6f, false, objects, symbol, bodyContext, type, allowVirtual: true);
                     if (status < 0) return status;
-                    if (symbol[0] != declaredOwner || symbol[1] != declaredMethod) continue;
+                    if (symbol[0] != declaredOwner || symbol[1] != declaredMethod || symbol[3] != declaredContext) continue;
                 }
 
                 int body = Index(image, at + (uint)classWidth, methodWidth);
@@ -54,7 +55,7 @@ namespace PortableCompiler
                 if ((flags & 0x70) != 0x60) return -2; // final instance virtual body
                 int bodySignature = MethodDefinitions.ReadColumn(image, layout, selected, 4);
                 int match = BundleSignatures.Match(bundle, declaration, declarationLayout, declarationHeaps,
-                    declaredOwner, signature, image, layout, heaps, owner, bodySignature, false, objects);
+                    declaredOwner, signature, image, layout, heaps, owner, bodySignature, false, objects, declaredContext, bodyContext);
                 if (match <= 0) return match < 0 ? match : -2;
             }
             return selected;

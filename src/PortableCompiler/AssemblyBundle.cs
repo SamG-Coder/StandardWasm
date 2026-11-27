@@ -33,7 +33,7 @@ namespace PortableCompiler
                 closed = ManagedReferenceSignatures.ReadInstantiation(bundle, caller, layout, heaps,
                     owner, parent, objects, context, callerMethodArguments);
                 if (closed < ObjectLayouts.FirstClass) return closed < 0 ? closed : -2;
-                if (ObjectLayouts.IsInterface(objects, closed)) return -2;
+                if (ObjectLayouts.IsInterface(objects, closed) && (opcode != 0x6f || !allowVirtual || methodArity != 0)) return -2;
                 // Closed values use the same constructor and read-only receiver
                 // ABI as other structs. LinkValueConstruction still proves the
                 // exact receiver and whether the address can be lowered.

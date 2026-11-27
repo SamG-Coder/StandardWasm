@@ -212,11 +212,13 @@ namespace PortableCompiler
             {
                 int coded = InterfaceImplementations.Read(image, table, index, row);
                 if (coded < 0) return coded;
-                // Generic interface instantiations need TypeSpec support.
-                // Missing optional assemblies cannot establish an assignment.
-                if (coded == 0 || (coded & 3) == 2 || (coded & 3) == 1 && bundle.Length == 0) continue;
-                int target = RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
-                if (target == -4 || target == -6) continue;
+                // Missing or unsupported closed interface metadata cannot
+                // establish an assignment. Ordinary TypeRef checks are unchanged.
+                if (coded == 0 || (coded & 3) != 0 && bundle.Length == 0) continue;
+                bool closed = (coded & 3) == 2;
+                int target = closed ? ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps,
+                    owner, coded >> 2, type, objects, null) : RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
+                if (target == -4 || target == -6 || closed && target == -2) continue;
                 if (target < 0) return target;
                 if (!ObjectLayouts.IsInterface(objects, target)) return -2;
                 if (!ObjectLayouts.AddInterface(objects, type, target)) return -3;

@@ -7,7 +7,8 @@ namespace PortableCompiler
     {
         internal static int Match(BundleImages bundle,
             byte[] caller, int[] callerLayout, int[] callerHeaps, int callerOwner, int callerSignature,
-            byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner, int targetSignature, bool field, int[] objects, int context = 0)
+            byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner, int targetSignature, bool field, int[] objects, int context = 0,
+            int implementationContext = -1)
         {
             var next = new int[1];
             int left = Start(caller, callerHeaps, callerSignature, next, field);
@@ -41,6 +42,7 @@ namespace PortableCompiler
                 if (count != candidateCount || count >= rightEnd - right) return 0;
             }
 
+            int targetContext = implementationContext >= 0 ? implementationContext : context;
             var leftClass = new int[2];
             var rightClass = new int[2];
             for (int i = 0; i <= count; i++)
@@ -48,6 +50,23 @@ namespace PortableCompiler
                 if (left >= leftEnd || right >= rightEnd) return 0;
                 int element = caller[left++];
                 int other = target[right++];
+                if (implementationContext >= 0 && (element == 0x13 || other == 0x13))
+                {
+                    if (element == 1 || other == 1) return 0;
+                    // A closed interface slot can substitute VAR differently
+                    // from the implementing class, or match a concrete type.
+                    next[0] = left - 1;
+                    int leftType = ManagedReferenceSignatures.Read(bundle, caller, callerLayout, callerHeaps,
+                        callerOwner, next, leftEnd, context, objects, 0);
+                    left = next[0];
+                    next[0] = right - 1;
+                    int rightType = ManagedReferenceSignatures.Read(bundle, target, targetLayout, targetHeaps,
+                        targetOwner, next, rightEnd, targetContext, objects, 0);
+                    right = next[0];
+                    if (leftType < 0) return leftType;
+                    if (rightType < 0 || leftType != rightType) return 0;
+                    continue;
+                }
                 if (element != other)
                 {
                     if (element == 0x12 && other == 0x1c)
@@ -118,7 +137,7 @@ namespace PortableCompiler
                         continue;
                     }
                     int match = MatchReference(bundle, caller, callerLayout, callerHeaps, callerOwner,
-                        target, targetLayout, targetHeaps, targetOwner, left - 1, leftEnd, right - 1, rightEnd, objects, next, context);
+                        target, targetLayout, targetHeaps, targetOwner, left - 1, leftEnd, right - 1, rightEnd, objects, next, context, targetContext);
                     if (match <= 0) return match;
                     left = next[0];
                     right = match;
@@ -126,7 +145,7 @@ namespace PortableCompiler
                 else if (element == 0x15 || element == 0x13 && context != 0)
                 {
                     int match = MatchReference(bundle, caller, callerLayout, callerHeaps, callerOwner,
-                        target, targetLayout, targetHeaps, targetOwner, left - 1, leftEnd, right - 1, rightEnd, objects, next, context);
+                        target, targetLayout, targetHeaps, targetOwner, left - 1, leftEnd, right - 1, rightEnd, objects, next, context, targetContext);
                     if (match <= 0) return match;
                     left = next[0];
                     right = match;
@@ -149,7 +168,7 @@ namespace PortableCompiler
                     left = next[0];
                     next[0] = right;
                     int rightType = ManagedReferenceSignatures.ReadLocation(bundle, target, targetLayout, targetHeaps,
-                        targetOwner, next, rightEnd, context, objects);
+                        targetOwner, next, rightEnd, targetContext, objects);
                     if (leftType == -1) return -1;
                     if (leftType < 0 || leftType != rightType || i == 0 && leftType != SignatureTypes.Int32Location) return 0;
                     right = next[0];
@@ -184,7 +203,7 @@ namespace PortableCompiler
 
         private static int MatchReference(BundleImages bundle, byte[] caller, int[] callerLayout,
             int[] callerHeaps, int callerOwner, byte[] target, int[] targetLayout, int[] targetHeaps, int targetOwner,
-            int left, int leftEnd, int right, int rightEnd, int[] objects, int[] next, int context)
+            int left, int leftEnd, int right, int rightEnd, int[] objects, int[] next, int context, int targetContext)
         {
             int leftStart = left, rightStart = right;
             next[0] = left;
@@ -194,7 +213,7 @@ namespace PortableCompiler
             left = next[0];
             next[0] = right;
             int rightType = ManagedReferenceSignatures.Read(bundle, target, targetLayout, targetHeaps,
-                targetOwner, next, rightEnd, context, objects, 0);
+                targetOwner, next, rightEnd, targetContext, objects, 0);
             right = next[0];
             next[0] = left;
             if (leftType != rightType) return 0;

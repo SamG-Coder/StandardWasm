@@ -1833,7 +1833,7 @@ namespace PortableCompiler
                         // Keep callvirt's null check even when dispatch cannot select another body.
                         bool finalClosedMethod = targetContext > 0 && (symbol[4] & 0x20) != 0;
                         bool deferred = opcode == 0x6f && virtualMethod && !finalClosedMethod;
-                        if (deferred && targetContext != 0) return -2;
+                        if (deferred && targetContext != 0 && !ObjectLayouts.IsInterface(objects, targetContext)) return -2;
                         if (deferred || linked < 0)
                         {
                             byte[] targetImage = bundle.Get(targetOwner);
@@ -1843,7 +1843,7 @@ namespace PortableCompiler
                             if (deferred)
                             {
                                 int staged = StageVirtualCall(bundle, targetImage, targetLayout, targetHeaps,
-                                    targetOwner, targetRow, objects, records, slot, virtualTypes, virtualUsed);
+                                    targetOwner, targetRow, objects, records, slot, virtualTypes, virtualUsed, targetContext);
                                 if (staged < 0) return staged;
                                 continue;
                             }
@@ -2176,18 +2176,18 @@ namespace PortableCompiler
 
         private static int StageVirtualCall(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int row, int[] objects, int[] records, int slot,
-            int[] types, int[] used)
+            int[] types, int[] used, int closed = 0)
         {
             int declaring = ObjectLayouts.Owner(image, heaps, layout, row, false);
             if (declaring < 1) return -1;
-            int receiver = ObjectLayouts.IsCoreObjectType(image, heaps, layout, declaring << 2) ? ObjectReference :
+            int receiver = closed != 0 ? closed : ObjectLayouts.IsCoreObjectType(image, heaps, layout, declaring << 2) ? ObjectReference :
                 BundleLayouts.Register(bundle, image, layout, heaps, owner, declaring, objects);
             if (receiver < 0) return receiver;
             if (ObjectLayouts.IsValueType(objects, receiver)) return -2;
             int shape = used[0];
             int blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
             int arity = SignatureTypes.Read(bundle, image, heaps, blob, types, shape,
-                receiver, layout, objects, owner, 0);
+                receiver, layout, objects, owner, closed);
             if (arity < 1) return arity < 0 ? arity : -1;
             if (!IsSharedBundleSignature(types, shape, arity)) return -2;
             used[0] = shape + arity + 1;
@@ -2255,19 +2255,20 @@ namespace PortableCompiler
             int declared, int owner, int row, int[] owners, int[] rows, int[] contexts, int[] bases,
             int[] indices, int[] arities, int[] offsets, int[] signatures, int functions)
         {
-            var symbol = new int[2];
+            var symbol = new int[3];
             int status = VirtualSlots.SelectVirtualBody(bundle, objects, actual, allocated, declared, owner, row, symbol);
             if (status < 0) return status;
             owner = symbol[0];
             row = symbol[1];
-            int function = indices[bases[owner] + row] - 1;
+            int context = symbol[2];
+            int function = Lookup(owners, rows, contexts, bases, indices, functions, owner, row, context);
             if (function >= 0) return function;
             byte[] image = bundle.Get(owner);
             var layout = new int[4];
             var heaps = new int[8];
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
             if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x400) != 0) return -2;
-            status = Register(bundle, image, layout, heaps, owner, row, 0, owners, rows, contexts, bases,
+            status = Register(bundle, image, layout, heaps, owner, row, context, owners, rows, contexts, bases,
                 indices, arities, offsets, signatures, objects, functions, allowVirtual: true);
             return status < 0 ? status : functions;
         }

@@ -3,7 +3,7 @@ using static PeLibrary.ObjectLayouts;
 
 namespace PortableCompiler
 {
-    // Resolve nongeneric interface slots through the receiver class hierarchy.
+    // Resolve a nominal interface slot through the receiver class hierarchy.
     internal static class InterfaceSlots
     {
         internal static int SelectBody(BundleImages bundle, int[] objects,
@@ -21,6 +21,7 @@ namespace PortableCompiler
             var layout = new int[4];
             var heaps = new int[8];
             var range = new int[2];
+            int declaredContext = HasArguments(objects, declared) ? declared : 0;
             bool hasMap = false;
             for (int type = receiver; type >= FirstClass; type = Parent(objects, type))
             {
@@ -28,13 +29,16 @@ namespace PortableCompiler
                 int targetType = TypeDef(objects, type);
                 byte[] image = bundle.Get(targetOwner);
                 if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+                int bodyContext = HasArguments(objects, type) ? type : 0;
                 int body = ExplicitInterfaceSlots.Find(bundle, objects, image, layout, heaps, targetOwner,
-                    targetType, owner, row, declaration, declarationLayout, declarationHeaps, name, signature);
+                    targetType, owner, row, declaration, declarationLayout, declarationHeaps, name, signature,
+                    declaredContext, bodyContext);
                 if (body < 0) return body;
                 if (body != 0)
                 {
                     symbol[0] = targetOwner;
                     symbol[1] = body;
+                    if (symbol.Length > 2) symbol[2] = bodyContext;
                     return 0;
                 }
 
@@ -55,7 +59,7 @@ namespace PortableCompiler
                         continue;
                     int blob = MethodDefinitions.ReadColumn(image, layout, method, 4);
                     int match = BundleSignatures.Match(bundle, declaration, declarationLayout, declarationHeaps, owner,
-                        signature, image, layout, heaps, targetOwner, blob, false, objects);
+                        signature, image, layout, heaps, targetOwner, blob, false, objects, declaredContext, bodyContext);
                     if (match < 0) return match;
                     if (match == 0) continue;
                     if (selected != 0) return -5;
@@ -67,9 +71,10 @@ namespace PortableCompiler
                 // A final virtual implementation is already a concrete slot
                 // target. Only an overridable slot needs class dispatch.
                 if ((selectedFlags & 0x60) == 0x40)
-                    return VirtualSlots.SelectVirtualBody(bundle, objects, receiver, true, type, targetOwner, selected, symbol);
+                    return bodyContext == 0 ? VirtualSlots.SelectVirtualBody(bundle, objects, receiver, true, type, targetOwner, selected, symbol) : -2;
                 symbol[0] = targetOwner;
                 symbol[1] = selected;
+                if (symbol.Length > 2) symbol[2] = bodyContext;
                 return 0;
             }
             return -2;
