@@ -19,7 +19,7 @@ namespace PortableCompiler
             GetProcessWindowStation = 39, GetUserObjectInformation = 40,
             GetLongPathName = 41, SetClassLong = 42, GetDeviceCaps = 43,
             GetDC = 44, ReleaseDC = 45, InvalidateRect = 46, AdjustWindowRectForDpi = 47, IsWindow = 48,
-            GetActiveWindow = 49, SetActiveWindow = 50, Count = SetActiveWindow;
+            GetActiveWindow = 49, SetActiveWindow = 50, GetFocus = 51, SetFocus = 52, Count = SetFocus;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -51,7 +51,8 @@ namespace PortableCompiler
             member == InvalidateRect ? "InvalidateRect" :
             member == AdjustWindowRectForDpi ? "AdjustWindowRectExForDpi" :
             member == IsWindow ? "IsWindow" : member == GetActiveWindow ? "GetActiveWindow" :
-            member == SetActiveWindow ? "SetActiveWindow" : "BCryptGenRandom";
+            member == SetActiveWindow ? "SetActiveWindow" : member == GetFocus ? "GetFocus" :
+            member == SetFocus ? "SetFocus" : "BCryptGenRandom";
 
         private static string Library(int member) => member == LoadLibrary || member == GetFullPathName ||
             member == GetLongPathName ? "kernel32.dll" :
@@ -61,7 +62,7 @@ namespace PortableCompiler
             member == BCryptGenRandom ? "BCrypt.dll" : "USER32.dll";
 
         internal static int Arity(int member) =>
-            member == GetActiveWindow ? 0 : member == SetActiveWindow ? 1 :
+            IsWindowQueueHandle(member) ? (member == GetActiveWindow || member == GetFocus ? 0 : 1) :
             member == CreateWindow ? 12 : member == DuplicateHandle ? 7 :
             member == CallWindowProcedure || member == GetUserObjectInformation || member == AdjustWindowRectForDpi ? 5 :
             member == BCryptGenRandom || member == GetFullPathName || member == RedrawWindow ? 4 :
@@ -76,7 +77,9 @@ namespace PortableCompiler
             UsesLastError(member) ? 2 : 1;
 
         internal static bool UsesLastError(int member) =>
-            member == SetActiveWindow || member == GetWindowLong || member == GetWindowLongPtr || IsWindowLongSetter(member);
+            member == SetActiveWindow || member == SetFocus || member == GetWindowLong || member == GetWindowLongPtr || IsWindowLongSetter(member);
+
+        private static bool IsWindowQueueHandle(int member) => member >= GetActiveWindow && member <= SetFocus;
 
         private static bool IsThreadImport(int member) => member >= GetCurrentProcess && member <= CloseHandle;
 
@@ -117,8 +120,8 @@ namespace PortableCompiler
                     if (member == InvalidateRect && !MatchesInvalidateRect(bundle, image, heaps, methods, owner, row)) return 0;
                     if (member == AdjustWindowRectForDpi && !MatchesAdjustWindowRect(bundle, image, heaps, methods, owner, row)) return 0;
                     if (member == IsWindow && !MatchesIsWindow(image, heaps, methods, row)) return 0;
-                    if ((member == GetActiveWindow || member == SetActiveWindow) &&
-                        !MatchesWindowActivation(image, heaps, methods, row, member == SetActiveWindow)) return 0;
+                    if (IsWindowQueueHandle(member) &&
+                        !MatchesWindowQueueHandle(image, heaps, methods, row, Arity(member))) return 0;
                     return member;
                 }
             return 0;
@@ -134,13 +137,13 @@ namespace PortableCompiler
                 ReadAbiWord(image, cursor, end, 0x18) >= 0 && cursor[0] == end;
         }
 
-        private static bool MatchesWindowActivation(byte[] image, int[] heaps, int[] methods, int row, bool setsWindow)
+        private static bool MatchesWindowQueueHandle(byte[] image, int[] heaps, int[] methods, int row, int arity)
         {
             var cursor = new int[1];
             int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4),
-                setsWindow ? 1 : 0, cursor);
+                arity, cursor);
             return end >= 0 && ReadAbiWord(image, cursor, end, 0x18) >= 0 &&
-                (!setsWindow || ReadAbiWord(image, cursor, end, 0x18) >= 0) && cursor[0] == end;
+                (arity == 0 || ReadAbiWord(image, cursor, end, 0x18) >= 0) && cursor[0] == end;
         }
 
         private static bool MatchesInvalidateRect(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int owner, int row)
@@ -281,9 +284,9 @@ namespace PortableCompiler
                 return arity == 2 && IsAbiShape(bundle, objects, types[offset + 1], Native, "HANDLE") &&
                     types[offset + 2] == Int32Location && IsAbiShape(bundle, objects, result, I32, "HRESULT");
             if (arity != Arity(member)) return false;
-            if (member == GetActiveWindow || member == SetActiveWindow)
+            if (IsWindowQueueHandle(member))
                 return IsAbiShape(bundle, objects, result, Native, "HWND") &&
-                    (member == GetActiveWindow || IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND"));
+                    (arity == 0 || IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND"));
             if (member == GetDeviceCaps)
                 return result == I32 && IsDisplayContext(bundle, objects, types[offset + 1]) && types[offset + 2] == I32;
             if (member == GetDC)

@@ -208,6 +208,8 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         isWindow: handle => windows.hasWindow(handle) ? 1 : 0,
         getActiveWindow: () => windows.getActiveWindow(),
         setActiveWindow: handle => windows.setActiveWindow(handle, setError),
+        getFocus: () => windows.getFocus(),
+        setFocus: handle => windows.setFocus(handle, setError),
         isWindowEnabled: handle => windows.isWindowEnabled(handle),
         enableWindow: (handle, enable) => windows.enableWindow(handle, enable),
         getWindowLongW: getWindowLong,

@@ -1,5 +1,7 @@
 const disabledStyle = 0x08000000; // WS_DISABLED
 const childStyle = 0x40000000; // WS_CHILD
+const setFocusMessage = 0x0007; // WM_SETFOCUS
+const killFocusMessage = 0x0008; // WM_KILLFOCUS
 const enableMessage = 0x000a; // WM_ENABLE
 const cancelModeMessage = 0x001f; // WM_CANCELMODE
 
@@ -8,17 +10,52 @@ const procedureIndex = -4; // GWL_WNDPROC
 let nextOwnerId = 1;
 export const windowImportNames = [
     "isWindow", "isWindowEnabled", "enableWindow", "getWindowLongW", "getWindowLongPtrW", "setWindowLongW", "setWindowLongPtrW",
-    "getActiveWindow", "setActiveWindow"
+    "getActiveWindow", "setActiveWindow", "getFocus", "setFocus"
 ];
 
 export function createWindowState() {
     const windows = new Map();
     let nextHandle = 1;
     let activeWindow = 0;
+    let focusedWindow = 0;
+    let focusChange = 0;
     if (nextOwnerId > 0xfffffffe) throw new RangeError("Win32 window owner ID space is exhausted.");
     // A launch currently owns one process and one GUI thread. These IDs
     // belong to the guest, independent of the renderer's OS identities.
     const owner = Object.freeze({ processId: nextOwnerId++, threadId: nextOwnerId++ });
+
+    function changeFocus(handle, notifySame = false) {
+        const previous = focusedWindow;
+        if (previous === handle && !notifySame) return previous;
+        const change = ++focusChange;
+        focusedWindow = handle;
+        // Both callbacks observe the new focus. A nested focus change or a
+        // destruction in the first callback supersedes this notification.
+        windows.get(previous)?.dispatch?.(killFocusMessage, handle, 0);
+        if (focusChange === change) windows.get(handle)?.dispatch?.(setFocusMessage, previous, 0);
+        return previous;
+    }
+
+    function activate(handle) {
+        if (activeWindow === handle) return false;
+        activeWindow = handle;
+        changeFocus(handle);
+        return true;
+    }
+
+    function topLevel(handle) {
+        // Valid HWNDs form an ancestor chain ending at a non-child window.
+        let enabled = true;
+        for (let remaining = windows.size; remaining > 0; remaining--) {
+            const window = windows.get(handle);
+            if (!window) return null;
+            enabled = enabled && (window.style & disabledStyle) === 0;
+            if ((window.style & childStyle) === 0) return { handle, enabled };
+            handle = window.attributes.parent >>> 0;
+        }
+        return null;
+    }
+
     return {
         register(style, dispatch, attributes = {}) {
             if (nextHandle > 0xffffffff) throw new Error("Win32 window handle space is exhausted.");
@@ -29,8 +66,18 @@ export function createWindowState() {
         },
         unregister(handle) {
             handle >>>= 0;
-            if (activeWindow === handle) activeWindow = 0;
-            return windows.delete(handle);
+            const window = windows.get(handle);
+            if (!window) return false;
+            if (activeWindow === handle) {
+                activeWindow = 0;
+                focusedWindow = 0;
+                focusChange++;
+            } else if (focusedWindow === handle) {
+                const parent = window.attributes.parent >>> 0;
+                changeFocus(windows.has(parent) ? parent : 0);
+            }
+            windows.delete(handle);
+            return true;
         },
         getActiveWindow() {
             return activeWindow;
@@ -43,8 +90,23 @@ export function createWindowState() {
             const previous = activeWindow;
             // The launch models one guest input queue. Only a top-level HWND
             // becomes active, independently of the browser's DOM focus.
-            if ((window.style & childStyle) === 0) activeWindow = handle;
+            if ((window.style & childStyle) === 0) activate(handle);
             return previous;
+        },
+        getFocus() {
+            return focusedWindow;
+        },
+        setFocus(handle, setError) {
+            handle >>>= 0;
+            if (handle === 0) return changeFocus(0);
+            const top = topLevel(handle);
+            if (!top) { setError(invalidWindow); return 0; }
+            if (!top.enabled) { setError(invalidParameter); return 0; }
+            const activated = activate(top.handle);
+            if (!windows.has(handle) || activeWindow !== top.handle) return 0;
+            // Windows establishes the new top-level focus during activation,
+            // then sends the caller's explicit focus change using that focus.
+            return changeFocus(handle, activated && handle === top.handle);
         },
         hasWindow(handle) {
             return windows.has(handle >>> 0);
@@ -115,7 +177,9 @@ export function createWindowState() {
             const style = enabled ? window.style & ~disabledStyle : window.style | disabledStyle;
             if (style !== window.style) {
                 window.style = style;
-                window.dispatch?.(enableMessage, enabled ? 1 : 0, 0);
+                if (!enabled && focusedWindow === key) changeFocus(0);
+                if (windows.get(key) === window && window.style === style)
+                    window.dispatch?.(enableMessage, enabled ? 1 : 0, 0);
             }
             return previouslyDisabled;
         }
