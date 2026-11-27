@@ -9,7 +9,8 @@ namespace PortableCompiler
         private const int FriendUnknown = int.MinValue;
         // symbol receives [owner, MethodDef, constructor declaring TypeDef or 0,
         // closed declaring layout or 0, dispatch flags, protected receiver,
-        // optional non-constructor instance declaring TypeDef]. context is the caller's own closed
+        // optional non-constructor instance declaring TypeDef, optional direct primitive receiver].
+        // context is the caller's own closed
         // declaring layout, which substitutes VAR in a TypeSpec parent.
         internal static int Resolve(BundleImages bundle, byte[] caller,
             int[] layout, int[] heaps, int owner, int member, int opcode, bool baseCall, int[] objects, int[] symbol, int context, int callerType,
@@ -135,6 +136,8 @@ namespace PortableCompiler
                 row = candidate;
                 symbol[2] = constructor ? declaring : 0;
                 if (symbol.Length > 6 && !isStatic && !constructor) symbol[6] = declaring;
+                if (symbol.Length > 7 && opcode == 0x28 && !valueAddress && closed == 0 && !constructor)
+                    symbol[7] = PrimitiveReceivers.DirectInt32(target, targetLayout, targetHeaps, declaring, candidate);
                 if (allowVirtual) symbol[4] = flags & 0x60; // Virtual and Final
                 if (family && !constructor) symbol[5] = callerReceiver;
             }
