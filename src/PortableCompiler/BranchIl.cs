@@ -63,6 +63,8 @@ namespace PortableCompiler
         internal const int StringRange = 140;
         internal const int SuppressFinalizer = 141; // [object] -> []
         internal const int NativeCharacterSpan = 142, BoundScopedFieldLoad = 143, BoundScopedFieldStore = 144;
+        // [managed address of the containing struct] -> []; replace one field with its CLI default.
+        internal const int ClearInteriorField = 145;
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.

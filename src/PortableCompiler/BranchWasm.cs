@@ -1230,6 +1230,10 @@ namespace PortableCompiler
                         }
                     }
                 }
+                else if (kind == ClearInteriorField)
+                    used = ValueFieldsWasm.ClearAtLocation(code, used, objects, operand, FieldAccess.Owner(records[slot + 3]),
+                        Spill(spills, maximum, spillFlags, states[state + top], top), temporaries,
+                        states[state + top] == ConstructorAddress);
                 else if (kind == GetField || kind == SetField)
                 {
                     int descriptor = records[slot + 3];

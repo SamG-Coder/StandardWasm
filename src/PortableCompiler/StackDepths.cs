@@ -566,6 +566,12 @@ namespace PortableCompiler
                 if (!Assignable(receiver, FieldAccess.Owner(extra), objects)) return -1;
                 return Push(stack, allocated, depth - 1, StackType(FieldAccess.Storage(extra)));
             }
+            if (kind == ClearInteriorField)
+            {
+                int owner = FieldAccess.Owner(extra);
+                return depth != 0 && (stack[depth - 1] == ValueLocation(owner) ||
+                    stack[depth - 1] == ConstructorAddress && frame[0] == owner) ? depth - 1 : -2;
+            }
             if (kind == SetField)
             {
                 if (depth < 2 || !Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects)) return -1;

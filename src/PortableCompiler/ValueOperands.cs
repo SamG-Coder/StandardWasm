@@ -105,11 +105,33 @@ namespace PortableCompiler
             int[] records, int slot, int storage, int[] clauses) =>
             LowerAddressUse(image, layout, heaps, methodCount, records, slot, 0, clauses, fieldReceiver: storage);
 
+        internal static bool IsWritableInteriorField(byte[] image, int[] layout, int[] heaps, int row, bool constructorReceiver)
+        {
+            int table = AssemblyReferences.FieldTable(image, heaps, layout);
+            if (table < 0) return false;
+            var definition = new int[3];
+            AssemblyReferences.ReadField(image, layout, table, row, definition);
+            return (definition[0] & 0x20) == 0 || constructorReceiver;
+        }
+
         // A frame address followed by initobj of the same type clears the location.
         private static int Clear(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int[] records, int slot, int next, int type, int[] objects, int context, int[] methodArguments)
         {
-            uint token = unchecked((uint)records[next + 1]);
+            int status = CheckInitialization(bundle, image, layout, heaps, owner, objects,
+                context, methodArguments, records[next + 1], type);
+            if (status < 0) return status;
+            // The operand stays the original frame index.
+            records[slot] = ClearValue;
+            records[slot + 2] = records[next + 2];
+            records[next] = 0;
+            return 0;
+        }
+
+        internal static int CheckInitialization(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
+            int[] objects, int context, int[] methodArguments, int operand, int type)
+        {
+            uint token = unchecked((uint)operand);
             uint table = token >> 24;
             int row = (int)(token & 0xffffff);
             int initialized;
@@ -134,12 +156,7 @@ namespace PortableCompiler
                         initialized = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true);
                 }
             }
-            if (initialized < 0 || initialized != type) return -2;
-            // The operand stays the original frame index.
-            records[slot] = ClearValue;
-            records[slot + 2] = records[next + 2];
-            records[next] = 0;
-            return 0;
+            return initialized == type ? 0 : -2;
         }
 
         // A writable address can survive only a straight-line calculation

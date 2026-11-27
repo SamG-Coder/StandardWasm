@@ -738,7 +738,7 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - unwindBytes) return -3;
                                 capacity += unwindBytes;
                             }
-                            if (kind == BranchIl.UpdateValue || kind == BranchIl.UpdateConstructorField ||
+                            if (kind == BranchIl.UpdateValue || kind == BranchIl.UpdateConstructorField || kind == BranchIl.ClearInteriorField ||
                                 kind == BranchIl.SetField && IsValueLocation(states[pc * maximum + depths[pc] - 3]))
                             {
                                 int fields = ObjectLayouts.FieldCount(objects, FieldAccess.Owner(records[slot + 3]));
@@ -778,7 +778,7 @@ namespace PortableCompiler
                                 kind == BranchIl.ObjectElementAddress)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
-                                kind == BranchIl.SetField || nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit ||
+                                kind == BranchIl.SetField || kind == BranchIl.ClearInteriorField || nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit ||
                                 kind == BranchIl.StringRange || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection || kind == BranchIl.GetObjectType ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.ReadStaticUInt16 || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
@@ -1397,6 +1397,12 @@ namespace PortableCompiler
                 {
                     int field = records[slot + 1];
                     bool linked = records[slot + 3] != 0;
+                    int nextSlot = records[slot + 2] * BranchIl.Width;
+                    bool initializesField = kind == BranchIl.FieldAddress && nextSlot < records.Length &&
+                        records[nextSlot] == BranchIl.InitializeValue && !ValueOperands.Entry(records, nextSlot / BranchIl.Width, clauses);
+                    bool initializesConstructorField = initializesField && valueConstructor && slot >= BranchIl.Width &&
+                        records[slot - BranchIl.Width] == BranchIl.LoadConstructorAddress &&
+                        !ValueOperands.Entry(records, slot / BranchIl.Width, clauses);
                     if (!linked && kind == BranchIl.GetField && StringMetadata.IsFirstCodeUnitDefinition(image, heaps, layout, field))
                     {
                         records[slot] = BranchIl.StringFirstCodeUnit;
@@ -1408,10 +1414,10 @@ namespace PortableCompiler
                         var linkedField = new int[2];
                         if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
                         if (callerType < 0) return -1;
-                        bool constructorReceiver = valueConstructor && kind == BranchIl.SetField &&
-                            records[slot + BranchIl.Width + 1] == 1;
+                        bool constructorReceiver = initializesConstructorField ||
+                            valueConstructor && kind == BranchIl.SetField && records[slot + BranchIl.Width + 1] == 1;
                         int status = AssemblyBundle.ResolveField(bundle, image, layout, heaps, owner,
-                            field, kind == BranchIl.SetField, false, objects, globals, linkedField, context, callerType,
+                            field, kind == BranchIl.SetField || initializesField, false, objects, globals, linkedField, context, callerType,
                             methodArguments, constructorReceiver);
                         if (status < 0) return status;
                         records[slot + 1] = linkedField[0];
@@ -1430,6 +1436,8 @@ namespace PortableCompiler
                         if (type < 0) return type;
                         int fieldIndex = ObjectLayouts.FieldOrdinal(objects, type, field);
                         if (fieldIndex < 0) return -1;
+                        if (initializesField && !ValueOperands.IsWritableInteriorField(image, layout, heaps, field,
+                            initializesConstructorField && frame[0] == type)) return -2;
                         records[slot + 1] = fieldIndex;
                         records[slot + 3] = FieldAccess.Encode(type, ObjectLayouts.FieldType(objects, type, field));
                         if (ObjectLayouts.IsValueType(objects, type) && records.Length > slot + 2 * BranchIl.Width + 3)
@@ -1475,6 +1483,20 @@ namespace PortableCompiler
                     if (kind == BranchIl.FieldAddress)
                     {
                         int next = records[slot + 2];
+                        int fieldOwner = FieldAccess.Owner(descriptor), fieldStorage = FieldAccess.Storage(descriptor);
+                        if (initializesField && ObjectLayouts.IsValueType(objects, fieldOwner) &&
+                            !ObjectLayouts.IsExplicitValue(objects, fieldOwner) &&
+                            (IsScalar(fieldStorage) || IsObjectReference(fieldStorage)) &&
+                            ValueOperands.CheckInitialization(bundle, image, layout, heaps, owner, objects, context,
+                                methodArguments, records[nextSlot + 1], fieldStorage) == 0)
+                        {
+                            // Keep the parent address live. The child address is consumed
+                            // immediately and has no independent lifetime.
+                            records[slot] = BranchIl.ClearInteriorField;
+                            records[slot + 2] = records[nextSlot + 2];
+                            records[nextSlot] = 0;
+                            continue;
+                        }
                         if (ObjectLayouts.IsByRefLikeValue(objects, FieldAccess.Owner(descriptor)) &&
                             FieldAccess.Storage(descriptor) == I32 && ValueOperands.LowerScopedIntField(records, slot, clauses))
                             continue;

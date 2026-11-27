@@ -10,6 +10,10 @@ if (il[0] != 0x02 || il[1] != 0xfe || il[2] != 0x16)
 var bucketProbe = typeof(BucketProbe).GetMethod(nameof(BucketProbe.ReadManagedBuckets))!;
 if (!bucketProbe.GetMethodBody()!.LocalVariables.Any(local => local.LocalType == typeof(int).MakeByRefType()))
     throw new InvalidOperationException("The fixture must keep an Int32 reference in a managed local.");
+var clearKey = typeof(EntryArrayProbe).GetMethod("ClearKey", BindingFlags.Static | BindingFlags.NonPublic)!;
+byte[] clearIl = clearKey.GetMethodBody()!.GetILAsByteArray()!;
+if (clearIl[1] != 0x7c || clearIl[6] != 0xfe || clearIl[7] != 0x15)
+    throw new InvalidOperationException("The generic fixture must initialize the field through its managed address.");
 File.WriteAllText(args[0], JsonSerializer.Serialize(new
 {
     inputs,
@@ -25,6 +29,7 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     closedValueTypes = inputs.Select(PrimitiveTypeProbe.CheckClosedValueType).ToArray(),
     referenceContainment = inputs.Select(ReferenceContainmentProbe.CheckReferenceContainment).ToArray(),
     entryAliases = inputs.Select(EntryArrayProbe.UpdateEntryArray).ToArray(),
+    interiorFields = inputs.Select(EntryArrayProbe.ClearInteriorFields).ToArray(),
     entryFailures = inputs.Select(EntryArrayProbe.CheckEntryArrayFailure).ToArray(),
     bucketAliases = inputs.Select(BucketProbe.ReadManagedBuckets).ToArray(),
     bucketFailures = inputs.Select(BucketProbe.CheckBucketFailure).ToArray(),

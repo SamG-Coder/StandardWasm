@@ -45,6 +45,10 @@ also checks the diagnostic for an exported managed address.
 The struct-array fixture takes two references to one closed generic element.
 It checks default slots, value copies, direct array stores, writes through
 aliases, and typed failures from taking an element address.
+The interior field test initializes reference, aggregate and Int64 fields
+through their managed addresses. Both aliases observe the replacement,
+while the earlier value snapshot and neighbouring array slot keep their
+contents. A value constructor also initializes a readonly aggregate field.
 
 The primitive descriptor fixture compares closed `typeof(T)` against the
 canonical primitive types, including pairs with shared Wasm storage. It also

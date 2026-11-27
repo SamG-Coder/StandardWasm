@@ -29,6 +29,7 @@ internal static class ValueConstructionCases
         Check(nameof(ClosedInterfaceProbe.CheckClosedInterface), ClosedInterfaceProbe.CheckClosedInterface);
         Check(nameof(ClosedInterfaceProbe.CheckClosedInterfaceNull), ClosedInterfaceProbe.CheckClosedInterfaceNull);
         Check(nameof(EntryArrayProbe.UpdateEntryArray), EntryArrayProbe.UpdateEntryArray);
+        Check(nameof(EntryArrayProbe.ClearInteriorFields), EntryArrayProbe.ClearInteriorFields);
         Check(nameof(EntryArrayProbe.CheckEntryArrayFailure), EntryArrayProbe.CheckEntryArrayFailure);
         Check(nameof(BucketProbe.ReadManagedBuckets), BucketProbe.ReadManagedBuckets);
         Check(nameof(BucketProbe.CheckBucketFailure), BucketProbe.CheckBucketFailure);

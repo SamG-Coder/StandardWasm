@@ -66,7 +66,8 @@ async function verify(compiler, fixture, packed, containment, containmentPacked,
         primitiveHashes: await runEntry("CheckPrimitiveHash"),
         primitiveDescriptors: await runEntry("CheckPrimitiveDescriptors"),
         closedValueTypes: await runEntry("CheckClosedValueType"),
-        entryAliases: await runEntry("UpdateEntryArray"), entryFailures: await runEntry("CheckEntryArrayFailure"),
+        entryAliases: await runEntry("UpdateEntryArray"), interiorFields: await runEntry("ClearInteriorFields"),
+        entryFailures: await runEntry("CheckEntryArrayFailure"),
         bucketAliases: await runEntry("ReadManagedBuckets"), bucketFailures: await runEntry("CheckBucketFailure"),
         bucketExportRejection: compileEntry("RejectExportedBucket"), rejection: compileEntry("RejectInheritedValueHash") };
     image = upload(containment);
@@ -90,6 +91,7 @@ const expected = {
     closedValueTypes: oracle.closedValueTypes,
     referenceContainment: oracle.referenceContainment,
     entryAliases: oracle.entryAliases,
+    interiorFields: oracle.interiorFields,
     entryFailures: oracle.entryFailures,
     bucketAliases: oracle.bucketAliases,
     bucketFailures: oracle.bucketFailures,

@@ -1,5 +1,6 @@
 using static PeLibrary.ObjectLayouts;
 using static PortableCompiler.BranchWasm;
+using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
@@ -67,7 +68,8 @@ namespace PortableCompiler
                 int storage = FieldTypeAt(objects, type, i);
                 if (storage == 0) continue;
                 if (ordinal == field)
-                    used = LoadOperand(code, used, replacement, replacementType, storage);
+                    used = replacement < 0 ? FieldDefault(code, used, storage) :
+                        LoadOperand(code, used, replacement, replacementType, storage);
                 else
                 {
                     used = Local(code, used, 0x20, temporary);
@@ -80,6 +82,37 @@ namespace PortableCompiler
             // Existing copies keep the original value.
             used = Gc(code, used, 0, type);
             return location ? ManagedValueLocationWasm.WriteSnapshot(code, used) : Local(code, used, 0x21, local);
+        }
+
+        internal static int ClearAtLocation(byte[] code, int used, int[] objects, int field, int type, int reference,
+            int temporaries, bool constructorReceiver)
+        {
+            // A value constructor carries its current snapshot in parameter zero.
+            // Other managed receivers carry a cell shared by all aliases.
+            if (!constructorReceiver) used = GuardNull(code, used, reference);
+            return Update(code, used, objects, type, constructorReceiver ? 0 : reference,
+                temporaries + type - FirstClass, field, -1, 0, !constructorReceiver);
+        }
+
+        private static int FieldDefault(byte[] code, int used, int storage)
+        {
+            if (IsObjectReference(storage))
+            {
+                code[used++] = 0xd0; // ref.null none, valid for any managed field type.
+                code[used++] = NullSpillWasm.NullRef;
+            }
+            else if (storage == F32 || storage == F64)
+            {
+                code[used++] = storage == F32 ? (byte)0x43 : (byte)0x44;
+                int length = storage == F32 ? 4 : 8;
+                for (int i = 0; i < length; i++) code[used++] = 0;
+            }
+            else
+            {
+                code[used++] = storage == I64 ? (byte)0x42 : (byte)0x41;
+                code[used++] = 0;
+            }
+            return used;
         }
     }
 }

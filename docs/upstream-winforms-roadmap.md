@@ -136,9 +136,11 @@ CoreLib's method body returns the receiver bits unchanged. Closed generic
 class slots bind `EqualityComparer<TKey>.Equals`. The compiler uses each
 closed type's instance layout to evaluate
 `RuntimeHelpers.IsReferenceOrContainsReferences<T>()`. The startup replay
-prunes the `Int32` key cleanup in `Dictionary.Remove` and now reaches the
-live value cleanup, which requires initializing a field through an
-interior address.
+prunes the `Int32` key cleanup in `Dictionary.Remove`. The live
+value cleanup initializes a field by replacing the containing value at its
+managed location, preserving alias and copy semantics. Value constructors
+use the same field initialization against their current value. The startup
+replay proceeds to the managed receiver of `BitVector32.set_Item`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.
