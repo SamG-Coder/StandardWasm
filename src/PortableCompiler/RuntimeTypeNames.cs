@@ -188,7 +188,7 @@ namespace PortableCompiler
             return Text(data, used, "]");
         }
 
-        private static int AppendNested(byte[] image, int[] layout, int[] heaps, int[] counts,
+        internal static int AppendNested(byte[] image, int[] layout, int[] heaps, int[] counts,
             int row, byte[] data, int used, int depth)
         {
             if (depth >= ObjectLayouts.MaxTypeDepth) return -2;

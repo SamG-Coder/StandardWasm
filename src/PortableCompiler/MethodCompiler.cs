@@ -853,6 +853,12 @@ namespace PortableCompiler
                     typeCalls.ApplyDescriptorSignatures(bases, indices, offsets, signatures);
                     typeCalls.ApplyClosedSignatures(bundle, owners, rows, contexts, instantiations, offsets, signatures, objects, closedSignaturesThrough, functions);
                     closedSignaturesThrough = functions;
+                    if (result != RuntimeTypeMetadata.Type &&
+                        RuntimeTypeLocals.IsLinkedSystemType(bundle, objects, result) &&
+                        !falseBooleans.IsClone(bases[owner] + source, current) &&
+                        reflection.AssemblyTypes.ReturnsLookupResult(records, catchRegion) &&
+                        typeCalls.RequireResult(bundle, owner, source, result, objects,
+                            contexts[current] != 0 || methodArguments != null)) return Reemit;
                     RuntimeTypeLocals.Specialize(bundle, records, frame, parameters, locals, objects, catchRegion, signatures, offsets, virtualTypes);
                     status = RuntimeTypeArrays.Specialize(bundle, records, frame, parameters, locals, objects, catchRegion);
                     if (status < 0) return status;
@@ -1565,6 +1571,13 @@ namespace PortableCompiler
             length = reflection.TypeRelations.WriteAssignableTo(bundle, moduleCode, length, objects, globals,
                 reflection.GenericTypes, bodyOffsets, sizes);
             if (length < 0) return length;
+            if (reflection.AssemblyTypes.Function >= 0)
+            {
+                exceptionTags |= ExceptionTypes.NullReference | ExceptionTypes.ArgumentNull | ExceptionTypes.Argument;
+                length = AssemblyTypeLookupWasm.Write(moduleCode, length, reflection.AssemblyTypes,
+                    reflection, bodyOffsets, sizes, hostImports);
+                if (length < 0) return length;
+            }
             length = reflection.AssemblyMetadata.Write(moduleCode, length, bodyOffsets, sizes, hostImports, reflection);
             if (length < 0) return length;
             var projectionHelpers = new int[ValueFieldProjectionWasm.HelperCount];
@@ -2929,6 +2942,13 @@ namespace PortableCompiler
                         records[slot + 3] = RuntimeTypeMetadata.Assembly;
                         continue;
                     }
+                    if (reflectionMember == ReflectionMembers.AssemblyGetType)
+                    {
+                        functions = reflection.AssemblyTypes.Lower(bundle, reflection, records, slot, clauses, globals,
+                            literals, literalSize, arities, offsets, signatures, functions);
+                        if (functions < 0) return functions;
+                        continue;
+                    }
                     if (reflectionMember == ReflectionMembers.ResourceStream)
                     {
                         int status = reflection.BindResource(bundle);
@@ -3303,6 +3323,13 @@ namespace PortableCompiler
                         if (status < 0) return status;
                         records[slot] = BranchIl.ReadReflection;
                         records[slot + 1] = ReflectionMembers.TypeAssembly;
+                        continue;
+                    }
+                    if (records[slot + 3] != 0 && ReflectionMembers.IsCoreAssemblyGetType(image, heaps, layout, target))
+                    {
+                        functions = reflection.AssemblyTypes.Lower(bundle, reflection, records, slot, clauses, globals,
+                            literals, literalSize, arities, offsets, signatures, functions);
+                        if (functions < 0) return functions;
                         continue;
                     }
                     int coreTypeText = records[slot + 3] != 0 ? ReflectionMembers.CoreTypeTextGetter(image, heaps, layout, target) : 0;

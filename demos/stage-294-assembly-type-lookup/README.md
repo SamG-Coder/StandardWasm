@@ -1,0 +1,5 @@
+# Stage 294 · Assembly type definitions by name
+
+An authenticated `Assembly.GetType(name, false, false)` with a canonical Assembly receiver looks up ordinal definition names in that assembly. Linked metadata supplies each escaped full definition name and its canonical Type descriptor, including private nested definitions and open generics. The shared UTF-16 catalog never loads class layouts or creates a type initializer. The input name can come from ordinary managed code.
+
+Run `npm run demo -- stage-294-assembly-type-lookup` with a frozen `STANDARDWASM_COMPILER_PATH` and optional `STANDARDWASM_MONO_CORELIB`. The Windows x86 CLR, Node and Edge compare dynamic names, assembly-scoped duplicate names, leading ASCII whitespace, case-sensitive absence, canonical primitive identity and typed invalid-name guard failures. Fixed exception tags model the invalid-name classes in this profile. Parameter metadata on those failures, composite types, exported assemblies and additional GetType flags require separate support.

@@ -6,7 +6,7 @@ namespace PeLibrary
     internal static class ReflectionMembers
     {
         internal const int TypeModule = 1, TypeAssembly = 2, ModuleAssembly = 3, ModuleName = 4,
-            ResourceStream = 5, ExecutingAssembly = 6, TypeName = 7, TypeNamespace = 8;
+            ResourceStream = 5, ExecutingAssembly = 6, TypeName = 7, TypeNamespace = 8, AssemblyGetType = 9;
 
         internal const int EntryGetter = 1, EntrySetter = 2, MonoEntryLeaf = 3;
 
@@ -56,6 +56,25 @@ namespace PeLibrary
             return cursor[0] == end && (type & 3) == 0 && type >> 2 == ObjectLayouts.Owner(image, heaps, layout, row, false)
                 ? kind : 0;
         }
+
+        internal static bool IsCoreAssemblyGetType(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x57) != 0x46 ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "GetType"))
+                return false;
+            var counts = new int[45];
+            int first = CoreGetter(image, heaps, layout, row, counts, "System.Reflection", "Assembly");
+            if (first < 0) return false;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), 3, cursor);
+            int type = end < 0 ? -1 : SignatureReader.ReadClass(image, cursor, end);
+            return type > 0 && (type & 3) == 0 &&
+                ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, type >> 2, "System", "Type") &&
+                TypeLookupFlags(image, cursor[0], end);
+        }
+
+        private static bool TypeLookupFlags(byte[] image, int start, int end) =>
+            end - start == 3 && image[start] == 0x0e && image[start + 1] == 2 && image[start + 2] == 2;
 
         internal static bool IsTypeText(int member) => member == TypeName || member == TypeNamespace;
 
@@ -125,9 +144,17 @@ namespace PeLibrary
             }
             else if (owner == Assembly)
             {
-                if (!MatchesAscii(image, heaps, name, "GetManifestResourceStream")) return 0;
-                kind = ResourceStream;
-                result = Stream;
+                if (MatchesAscii(image, heaps, name, "GetManifestResourceStream"))
+                {
+                    kind = ResourceStream;
+                    result = Stream;
+                }
+                else if (MatchesAscii(image, heaps, name, "GetType"))
+                {
+                    kind = AssemblyGetType;
+                    result = Type;
+                }
+                else return 0;
             }
             else if (owner == Type && Named(image, heap, length, name, 10, 0x5f746567, 0x75646f4d, 0x656c)) // get_Module
             {
@@ -161,7 +188,7 @@ namespace PeLibrary
             var next = new int[1];
             int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
             int start = next[0];
-            int parameters = kind == ResourceStream ? 1 : 0;
+            int parameters = kind == AssemblyGetType ? 3 : kind == ResourceStream ? 1 : 0;
             int convention = staticCall ? 0 : 0x20;
             if (size < 3 || size > limit - start || image[start] != convention || image[start + 1] != parameters) return 0;
             if (result == String) return size == 3 && image[start + 2] == 0x0e ? kind : 0;
@@ -169,7 +196,8 @@ namespace PeLibrary
             int end = start + size;
             int type = CompressedUnsigned(image, start + 3, end, next);
             int tail = next[0];
-            if (end - tail != parameters || (parameters == 1 && image[tail] != 0x0e)) return 0;
+            if (kind == AssemblyGetType ? !TypeLookupFlags(image, tail, end) :
+                end - tail != parameters || (parameters == 1 && image[tail] != 0x0e)) return 0;
             return type > 0 && (type & 3) == 1 &&
                 PlatformTypeReferences.Identify(image, heaps, layout, counts, first, type >> 2) == result ? kind : 0;
         }
