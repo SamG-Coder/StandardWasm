@@ -112,7 +112,7 @@ namespace PortableCompiler
 
             var body = new int[6];
             uint rva = unchecked((uint)MethodDefinitions.ReadColumn(image, layout, row, 0));
-            if (MethodBodies.Read(image, rva, body) != 0 || body[1] != 8 || body[3] != 0 || body[5] != 0)
+            if (MethodBodies.Read(image, rva, body) != 0 || body[1] != 8 || body[2] < 2 || body[3] != 0 || body[5] != 0)
                 return -2;
             uint start = (uint)body[0];
             // ldarg.0; ldarg.1; stfld field; ret, with no other effects.

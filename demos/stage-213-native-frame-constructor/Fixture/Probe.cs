@@ -36,6 +36,19 @@ public readonly unsafe ref struct ObservableScope
         (void**)Unsafe.AsPointer(ref Unsafe.AsRef(in owner.Item));
 }
 
+public readonly unsafe ref struct InitializedScope
+{
+    public static readonly int Marker;
+    public readonly nint Item;
+
+    static InitializedScope() => Marker = 17;
+
+    public InitializedScope(nint value) => Item = value;
+
+    public static void** Borrow(in InitializedScope owner) =>
+        (void**)Unsafe.AsPointer(ref Unsafe.AsRef(in owner.Item));
+}
+
 public static unsafe class Probe
 {
     private static int observed;
@@ -92,6 +105,12 @@ public static unsafe class Probe
         observed = 0;
         ObservableScope owner = new((void*)32);
         return *ObservableScope.Borrow(in owner) == (void*)32 && observed == 1 ? 877 : 0;
+    }
+
+    public static int TypeInitializerDiagnostic()
+    {
+        InitializedScope owner = new(47);
+        return *InitializedScope.Borrow(in owner) == (void*)47 && InitializedScope.Marker == 17 ? 881 : 0;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

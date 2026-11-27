@@ -15,5 +15,5 @@ npm run demo -- stage-213-native-frame-constructor
 The fixture compares pointer constants, null, a native-word argument and
 separate owners against the original x86 CLR assembly. It also checks that
 a borrowed pointer sees the same local reinitialized in place. A constructor with
-an additional observable operation is diagnosed by the compiler. Results
+an additional observable operation or a declaring type initializer produces a compiler diagnostic. Results
 are written to `artifacts/stage-213-native-frame-constructor/results.json`.

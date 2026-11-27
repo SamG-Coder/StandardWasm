@@ -77,7 +77,7 @@ namespace PortableCompiler
 
             var body = new int[6];
             uint rva = unchecked((uint)MethodDefinitions.ReadColumn(image, layout, row, 0));
-            if (MethodBodies.Read(image, rva, body) != 0 || body[1] != 17 || body[3] != 0 || body[5] != 0) return -2;
+            if (MethodBodies.Read(image, rva, body) != 0 || body[1] != 17 || body[2] < 1 || body[3] != 0 || body[5] != 0) return -2;
             uint start = (uint)body[0];
             // ldarg.0; ldflda field; call AsRef<nint>; call AsPointer<nint>; ret.
             if (U16(image, start) != 0x7c02 || image[start + 6] != 0x28 ||
