@@ -7,8 +7,6 @@ namespace PortableCompiler
 {
     internal static class CurrentThreadBinding
     {
-        private const int RuntimeThreadRoot = int.MinValue + 25;
-
         internal static int Lower(byte[] image, int[] heaps, int[] layout, int owner,
             int caller, int[] records, int[] clauses, int[] frame, int parameters, int locals, int maximum,
             int[] objects, int[] globals)
