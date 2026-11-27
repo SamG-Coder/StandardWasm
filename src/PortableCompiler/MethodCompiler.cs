@@ -509,11 +509,11 @@ namespace PortableCompiler
                         wrapsFailure = failure[TypeInitializerWasm.FailureCache] != 0;
                         if (wrapsFailure)
                         {
-                            failure[TypeInitializerWasm.FailureCache]--; // stored as index + 1
-                            failure[TypeInitializerWasm.FailureConstructor] += hostImports;
+                            failure[TypeInitializerWasm.FailureCache] = failure[TypeInitializerWasm.FailureCache] - 1; // stored as index + 1
+                            failure[TypeInitializerWasm.FailureConstructor] = failure[TypeInitializerWasm.FailureConstructor] + hostImports;
                             for (int i = 0; i < TypeInitializerWasm.FixedFailureCount; i++)
                                 if (failure[TypeInitializerWasm.FailureFixed + 2 * i] >= 0)
-                                    failure[TypeInitializerWasm.FailureFixed + 2 * i] += hostImports;
+                                    failure[TypeInitializerWasm.FailureFixed + 2 * i] = failure[TypeInitializerWasm.FailureFixed + 2 * i] + hostImports;
                             // Every tag the guard catches must be declared by the module.
                             exceptionTags |= ExceptionTypes.Object | ExceptionTypes.Supported;
                             if (capacity > int.MaxValue - 192) return -3;
