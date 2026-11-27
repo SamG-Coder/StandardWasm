@@ -16,7 +16,8 @@ namespace PortableCompiler
             GetFullPathName = 29, RedrawWindow = 30, RegisterWindowMessage = 31,
             GetWindowThreadProcessId = 32, GetCurrentProcess = 33, GetCurrentThread = 34, GetCurrentThreadId = 35,
             DuplicateHandle = 36, GetExitCodeThread = 37, CloseHandle = 38,
-            GetProcessWindowStation = 39, GetUserObjectInformation = 40, Count = GetUserObjectInformation;
+            GetProcessWindowStation = 39, GetUserObjectInformation = 40,
+            GetLongPathName = 41, Count = GetLongPathName;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -41,9 +42,11 @@ namespace PortableCompiler
             member == GetCurrentThreadId ? "GetCurrentThreadId" : member == DuplicateHandle ? "DuplicateHandle" :
             member == GetExitCodeThread ? "GetExitCodeThread" : member == CloseHandle ? "CloseHandle" :
             member == GetProcessWindowStation ? "GetProcessWindowStation" :
-            member == GetUserObjectInformation ? "GetUserObjectInformationW" : "BCryptGenRandom";
+            member == GetUserObjectInformation ? "GetUserObjectInformationW" :
+            member == GetLongPathName ? "GetLongPathNameW" : "BCryptGenRandom";
 
-        private static string Library(int member) => member == LoadLibrary || member == GetFullPathName ? "kernel32.dll" :
+        private static string Library(int member) => member == LoadLibrary || member == GetFullPathName ||
+            member == GetLongPathName ? "kernel32.dll" :
             member <= ReleaseContext || member == GetProcedure || IsThreadImport(member) ? "KERNEL32.dll" :
             member == SetProcessAwareness ? "api-ms-win-shcore-scaling-l1-1-1.dll" :
             member == BCryptGenRandom ? "BCrypt.dll" : "USER32.dll";
@@ -52,7 +55,7 @@ namespace PortableCompiler
             member == CreateWindow ? 12 : member == DuplicateHandle ? 7 :
             member == CallWindowProcedure || member == GetUserObjectInformation ? 5 :
             member == BCryptGenRandom || member == GetFullPathName || member == RedrawWindow ? 4 :
-            member == LoadLibrary || member == GetClassInfo || IsWindowLongSetter(member) ? 3 :
+            member == LoadLibrary || member == GetClassInfo || member == GetLongPathName || IsWindowLongSetter(member) ? 3 :
             member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ||
             member == GetCurrentProcess || member == GetCurrentThread || member == GetCurrentThreadId ||
             member == GetProcessWindowStation ? 0 :
@@ -83,6 +86,8 @@ namespace PortableCompiler
                 {
                     if (member == GetWindowThreadProcessId && !IsWindowOwnerSignature(image, heaps, methods, row)) return 0;
                     if (member == GetUserObjectInformation && !IsUserObjectInformationSignature(image, heaps, methods, row)) return 0;
+                    if (member == GetLongPathName && !ScopedPathBinding.MatchesSignature(image, methods, heaps, row, 0x0f, false))
+                        return 0;
                     if ((member == DuplicateHandle || member == GetExitCodeThread) &&
                         !MatchesThreadOutputPointer(image, heaps, methods, row, member)) return 0;
                     return member;
@@ -204,6 +209,8 @@ namespace PortableCompiler
             if (member == GetFullPathName)
                 return result == I32 && types[offset + 1] == Native && types[offset + 2] == I32 &&
                     types[offset + 3] == Native && types[offset + 4] == Native;
+            if (member == GetLongPathName)
+                return result == I32 && types[offset + 1] == Native && types[offset + 2] == Native && types[offset + 3] == I32;
             if (member == RegisterWindowMessage)
                 return result == I32 && IsAbiShape(bundle, objects, types[offset + 1], Native, "PCWSTR");
             if (member == GetWindowThreadProcessId)

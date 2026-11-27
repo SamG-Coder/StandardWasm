@@ -17,6 +17,7 @@ namespace PortableCompiler
             (FirstNativeFeature << (Win32ModuleBinding.GetClassInfo - 1)) |
             (FirstNativeFeature << (Win32ModuleBinding.CreateWindow - 1)) |
             (FirstNativeFeature << (Win32ModuleBinding.GetFullPathName - 1)) |
+            (FirstNativeFeature << (Win32ModuleBinding.GetLongPathName - 1)) |
             (FirstNativeFeature << (Win32ModuleBinding.RedrawWindow - 1)) |
             (FirstNativeFeature << (Win32ModuleBinding.RegisterWindowMessage - 1)) |
             (FirstNativeFeature << (Win32ModuleBinding.GetWindowThreadProcessId - 1)) |

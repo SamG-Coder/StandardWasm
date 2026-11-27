@@ -523,16 +523,17 @@ namespace PortableCompiler
                         continue;
                     }
                 }
-                if (stub < 0 && FullPathBinding.IsWrapper(image, layout, heaps, source))
+                int scopedPath = stub < 0 ? ScopedPathBinding.FindWrapper(image, layout, heaps, source) : 0;
+                if (scopedPath != 0)
                 {
-                    int member = Win32ModuleBinding.GetFullPathName;
-                    hostUse[0] = hostUse[0] | WasmImports.Win32NativeFeature(member) | WasmImports.Win32Errors;
+                    hostUse[0] = hostUse[0] | WasmImports.Win32NativeFeature(scopedPath) | WasmImports.Win32Errors;
                     int stackStatus = StackAllocationWasm.Register(globals, shadowStack);
                     if (stackStatus < 0) return stackStatus;
-                    if (moduleCode.Length - length < FullPathWasm.Capacity) return -3;
+                    if (moduleCode.Length - length < ScopedPathWasm.Capacity) return -3;
                     bodyOffsets[current] = length;
-                    length = FullPathWasm.WriteBody(moduleCode, length, WasmImports.Win32NativeSlot(hostFeatures, member),
-                        WasmImports.Win32ErrorBase(hostFeatures), initializerPrologue, hostImports, shadowStack);
+                    length = ScopedPathWasm.WriteBody(moduleCode, length, WasmImports.Win32NativeSlot(hostFeatures, scopedPath),
+                        WasmImports.Win32ErrorBase(hostFeatures), initializerPrologue, hostImports, shadowStack,
+                        scopedPath == Win32ModuleBinding.GetFullPathName);
                     sizes[current] = length - bodyOffsets[current];
                     continue;
                 }
@@ -3860,7 +3861,7 @@ namespace PortableCompiler
                 !ObjectLayouts.IsConstructor(image, heaps, layout, row)) return -2;
             int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
             int arity = SignatureTypes.Read(bundle, image, heaps, signature, types, offset, receiver, layout, objects, assembly, context, methodArguments);
-            if (arity == 4 && FullPathBinding.IsWrapper(image, layout, heaps, row))
+            if ((arity == 3 || arity == 4) && ScopedPathBinding.FindWrapper(image, layout, heaps, row) != 0)
                 types[offset + 1] = ReadOnlyCharacterLocation;
             if ((debuggerQuery || nativeImport != 0) && arity >= 0 && (debuggerQuery ? arity != 0 || types[offset] != I32 :
                 !Win32ModuleBinding.MatchesSignature(bundle, objects, nativeImport, types, offset, arity))) return -2;

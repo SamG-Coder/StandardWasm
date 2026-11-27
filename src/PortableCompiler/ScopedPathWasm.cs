@@ -4,22 +4,25 @@ using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
-    internal static class FullPathWasm
+    internal static class ScopedPathWasm
     {
         internal const int Capacity = 1380;
-        private const int Input = 0, OutputCapacity = 1, Output = 2, FilePart = 3;
-        private const int InputArray = 4, OutputArray = 5, InputAddress = 6, OutputAddress = 7,
-            InputStart = 8, OutputStart = 9, InputUnits = 10, OutputUnits = 11,
-            Index = 12, Size = 13, Scratch = 14, Saved = 15, Result = 16, SystemError = 17;
 
         internal static int WriteBody(byte[] code, int used, int import, int errorBase,
-            int initializer, int hostImports, int[] stack)
+            int initializer, int hostImports, int[] stack, bool withFilePart)
         {
+            const int Input = 0, FilePart = 3;
+            int OutputCapacity = withFilePart ? 1 : 2, Output = withFilePart ? 2 : 1;
+            int InputArray = withFilePart ? 4 : 3, OutputArray = InputArray + 1,
+                InputAddress = InputArray + 2, OutputAddress = InputArray + 3,
+                InputStart = InputArray + 4, OutputStart = InputArray + 5, InputUnits = InputArray + 6,
+                OutputUnits = InputArray + 7, Index = InputArray + 8, Size = InputArray + 9,
+                Scratch = InputArray + 10, Saved = InputArray + 11, Result = InputArray + 12, SystemError = InputArray + 13;
             code[used++] = 2; // nullable packed char arrays, then i32 locals
             code[used++] = 2;
             code[used++] = 0x63;
             used = WasmBinary.Signed(code, used, WasmBinary.HeapType(Chars));
-            code[used++] = SystemError - InputAddress + 1;
+            code[used++] = (byte)(SystemError - InputAddress + 1);
             code[used++] = 0x7f;
             if (initializer >= 0) used = Call(code, used, hostImports + initializer);
 
@@ -32,12 +35,15 @@ namespace PortableCompiler
             used = FailIf(code, used, 998, errorBase);
             // A native file-part pointer may outlive this call. Only a real
             // linear output can publish one. A sizing query writes no output.
-            used = Local(code, used, 0x20, FilePart);
-            used = NonZero(code, used);
-            used = Local(code, used, 0x20, OutputCapacity);
-            used = NonZero(code, used);
-            code[used++] = 0x71;
-            used = FailIf(code, used, 50, errorBase);
+            if (withFilePart)
+            {
+                used = Local(code, used, 0x20, FilePart);
+                used = NonZero(code, used);
+                used = Local(code, used, 0x20, OutputCapacity);
+                used = NonZero(code, used);
+                code[used++] = 0x71;
+                used = FailIf(code, used, 50, errorBase);
+            }
             used = Local(code, used, 0x20, OutputCapacity);
             used = Const(code, used, 32768);
             code[used++] = 0x4b;
@@ -59,13 +65,13 @@ namespace PortableCompiler
             used = Local(code, used, 0x22, InputUnits);
             used = Const(code, used, 1);
             code[used++] = 0x6a;
-            used = ToByteSize(code, used);
+            used = ToByteSize(code, used, Size);
             used = StackAllocationWasm.Allocate(code, used, sp, stackBase, limit, Size, InputAddress, Scratch);
             used = ScopedCharacterPinWasm.Copy(code, used, InputArray, InputStart, InputUnits, InputAddress, Index, false);
             code[used++] = 0x0b;
             used = IfArray(code, used, OutputArray);
             used = Local(code, used, 0x20, OutputCapacity);
-            used = ToByteSize(code, used);
+            used = ToByteSize(code, used, Size);
             used = StackAllocationWasm.Allocate(code, used, sp, stackBase, limit, Size, OutputAddress, Scratch);
             // Keep original bytes when a native error leaves the buffer unchanged.
             used = ScopedCharacterPinWasm.Copy(code, used, OutputArray, OutputStart, OutputCapacity, OutputAddress, Index, false);
@@ -74,9 +80,9 @@ namespace PortableCompiler
             used = Const(code, used, 0);
             used = Call(code, used, errorBase + MarshalErrorMetadata.SetSystem - 1);
             used = Local(code, used, 0x20, InputAddress);
-            used = Local(code, used, 0x20, OutputCapacity);
-            used = Local(code, used, 0x20, OutputAddress);
-            used = Local(code, used, 0x20, FilePart);
+            used = Local(code, used, 0x20, withFilePart ? OutputCapacity : OutputAddress);
+            used = Local(code, used, 0x20, withFilePart ? OutputAddress : OutputCapacity);
+            if (withFilePart) used = Local(code, used, 0x20, FilePart);
             used = Call(code, used, import);
             used = Local(code, used, 0x21, Result);
             used = Call(code, used, errorBase + MarshalErrorMetadata.GetSystem - 1);
@@ -121,11 +127,11 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int ToByteSize(byte[] code, int used)
+        private static int ToByteSize(byte[] code, int used, int size)
         {
             used = Const(code, used, 1);
             code[used++] = 0x74;
-            return Local(code, used, 0x21, Size);
+            return Local(code, used, 0x21, size);
         }
 
         private static int FailIf(byte[] code, int used, int error, int errorBase)
