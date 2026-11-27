@@ -9,10 +9,11 @@ namespace PortableCompiler
         internal const int GlobalKey = int.MinValue + 18;
         internal const int Mark = 2, Contains = 3, Clear = 4, Add = 5, End = 6;
 
-        internal static int Write(byte[] code, int used, int entry, int first, int roots, int marks, int pending, int pins, int[] globals)
+        internal static int Write(byte[] code, int used, int entry, int first, int roots, int marks, int pending, int pins,
+            int handles, int[] globals)
         {
             if (code.Length - used < 384 || globals[0] > (code.Length - used - 384) / 24) return -3;
-            if (entry == Mark) used = Walk(code, used, first, roots, marks, pending, pins, globals);
+            if (entry == Mark) used = Walk(code, used, first, roots, marks, pending, pins, handles, globals);
             else if (entry == Contains) used = Find(code, used, marks);
             else if (entry == Clear) used = Reset(code, used, marks);
             else used = Append(code, used, marks, first + Contains);
@@ -20,7 +21,8 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int Walk(byte[] code, int used, int first, int roots, int marks, int pending, int pins, int[] globals)
+        private static int Walk(byte[] code, int used, int first, int roots, int marks, int pending, int pins,
+            int handles, int[] globals)
         {
             // Locals cursor, edge and limit are i32; the current receiver is eqref.
             code[used++] = 2; code[used++] = 3; code[used++] = 0x7f;
@@ -48,6 +50,8 @@ namespace PortableCompiler
             used = Seed(code, used, FinalizerQueueWasm.PendingTable, pending, first + Add, 1);
             // Live pins are [managed owner, encoded native address] pairs.
             if (pins >= 0) used = Seed(code, used, PinRegistryWasm.Table, pins, first + Add, 2);
+            // Strong handles contribute their target, not their occupancy marker.
+            if (handles >= 0) used = Seed(code, used, GcHandleWasm.Table, handles, first + Add, 2);
 
             used = Const(code, used, 0);
             used = Local(code, used, 0x21, 0);

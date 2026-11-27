@@ -334,6 +334,7 @@ namespace PortableCompiler
             var frameShape = new int[ExceptionDispatchWasm.FrameSlot + ExceptionDispatchWasm.FrameWidth];
             var shadowStack = new int[3]; // $sp, base, limit globals + 1
             var pinRegistry = new int[1]; // the live-pin count global + 1 (decision 0077)
+            int handleSlots = -1;
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * StaticFields.Width];
             int rootCount = tracksFinalizers ? StaticFields.Register(globals, 0, RootStackWasm.GlobalKey, I32) : -1;
@@ -465,6 +466,33 @@ namespace PortableCompiler
                         exceptionTags |= ExceptionTypes.NullReference;
                         continue;
                     }
+                }
+                int handleOperation = stub < 0 && initializerPrologue < 0 ? GcHandleBinding.Identify(image, layout, heaps, source) : 0;
+                if (handleOperation != 0)
+                {
+                    if (!GcHandleWasm.Matches(handleOperation, signatures, offsets[current], arities[current])) return -2;
+                    if (handleSlots < 0)
+                    {
+                        handleSlots = StaticFields.Register(globals, 0, GcHandleWasm.GlobalKey, I32);
+                        if (handleSlots < 0) return handleSlots;
+                    }
+                    bool allocatesHandle = handleOperation == GcHandleBinding.Allocate;
+                    string name = allocatesHandle ? "ThrowNotSupportedException" : "ThrowInvalidOperationException_HandleIsNotInitialized";
+                    int method = GcHandleBinding.FindFailure(image, layout, heaps, name);
+                    if (method == 0) return -2;
+                    int index = indices[bases[owner] + method] - 1;
+                    if (index < 0)
+                    {
+                        functions = Register(bundle, image, layout, heaps, owner, method, 0, owners, rows, contexts,
+                            bases, indices, arities, offsets, signatures, objects, functions);
+                        if (functions < 0) return functions;
+                        index = functions - 1;
+                    }
+                    bodyOffsets[current] = length;
+                    length = GcHandleWasm.WriteBody(moduleCode, length, handleOperation, handleSlots, hostImports + index);
+                    if (length < 0) return length;
+                    sizes[current] = length - bodyOffsets[current];
+                    continue;
                 }
                 if (stub < 0 && (MethodDefinitions.ReadColumn(image, layout, source, 2) & 0x2000) != 0)
                 {
@@ -688,6 +716,8 @@ namespace PortableCompiler
                         location, catchRegion.Length != 0, filterEnds: filterEnds);
                     if (status < 0)
                         return status;
+                    status = GcHandleBinding.RestrictPinned(image, layout, heaps, source, body, records, catchRegion);
+                    if (status < 0) return status;
                     if (parameters == 2 && frame[0] == String && frame[1] == WritableCharacterSpan)
                         CoreStringSpanCopy.Lower(bundle, image, layout, heaps, owner, source, records, objects, catchRegion);
                     CoreStringCreation.Lower(bundle, image, layout, heaps, owner, source, methodArguments,
@@ -1486,7 +1516,7 @@ namespace PortableCompiler
                     if (entry < ReachabilityWasm.Mark) length = HeapEdgesWasm.Write(moduleCode, length, objects, read);
                     else if (entry < ReachabilityWasm.End)
                         length = ReachabilityWasm.Write(moduleCode, length, entry, rootWalker, rootCount, markedCount, pendingCount,
-                            pinRegistry[0] - 1, globals);
+                            pinRegistry[0] - 1, handleSlots, globals);
                     else if (entry == FinalizerQueueWasm.RunNext)
                         length = FinalizerDispatchWasm.Write(moduleCode, length, objects, finalizers, rootWalker, hostImports, rootCount);
                     else if (entry < FinalizerQueueWasm.End)

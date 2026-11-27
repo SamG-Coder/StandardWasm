@@ -188,12 +188,15 @@ namespace PortableCompiler
             // Tables: 0 delegate thunks, 1 the pin registry (decision 0077), 2 function-pointer
             // targets (decision 0078). A lower table is emitted, possibly empty, when a higher
             // one exists, so the indices stay fixed.
-            bool pointerTable = pointers.TargetCount != 0 || pointers.CarrierCount != 0 || rootCount >= 0;
+            int lastReferenceTable = GcHandleWasm.Present(globals) ? GcHandleWasm.Table :
+                rootCount >= 0 ? FinalizerSuppressionWasm.Table : RootStackWasm.Table - 1;
+            bool pointerTable = pointers.TargetCount != 0 || pointers.CarrierCount != 0 ||
+                lastReferenceTable >= RootStackWasm.Table;
             bool pinTable = PinRegistryWasm.Present(globals) || pointerTable;
             bool tables = thunks[0] != 0 || pinTable;
             int tableSize = 3 + UnsignedSize(thunks[0]) + (pinTable ? 3 : 0) +
                 (pointerTable ? 2 + UnsignedSize(pointers.TargetCount + 1) : 0) +
-                (rootCount >= 0 ? (FinalizerSuppressionWasm.Table - RootStackWasm.Table + 1) * 3 : 0);
+                (lastReferenceTable - RootStackWasm.Table + 1) * 3;
             bool elements = thunks[0] != 0 || pointers.TargetCount != 0;
             int elementSize = 5 + UnsignedSize(thunks[0]);
             for (int i = 0; i < thunks[0]; i++)
@@ -439,7 +442,7 @@ namespace PortableCompiler
                 // Table 0 holds delegate thunks (possibly none); table 1 is the
                 // live-pin registry of decision 0077, which starts empty and grows.
                 cursor = Section(output, cursor, 4, tableSize);
-                output[cursor++] = (byte)(rootCount >= 0 ? FinalizerSuppressionWasm.Table + 1 : pointerTable ? 3 : pinTable ? 2 : 1);
+                output[cursor++] = (byte)(pointerTable ? lastReferenceTable + 1 : pinTable ? 2 : 1);
                 output[cursor++] = 0x70;
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, thunks[0]);
@@ -455,15 +458,12 @@ namespace PortableCompiler
                     output[cursor++] = 0;
                     cursor = Unsigned(output, cursor, pointers.TargetCount + 1);
                 }
-                if (rootCount >= 0)
+                for (int table = RootStackWasm.Table; table <= lastReferenceTable; table++)
                 {
-                    // Frame roots, mark worklist, registered receivers, pending receivers and suppression markers.
-                    for (int table = RootStackWasm.Table; table <= FinalizerSuppressionWasm.Table; table++)
-                    {
-                        output[cursor++] = 0x6d;
-                        output[cursor++] = 0;
-                        output[cursor++] = 0;
-                    }
+                    // Frame roots, mark worklist, finalization queues and strong handles.
+                    output[cursor++] = 0x6d;
+                    output[cursor++] = 0;
+                    output[cursor++] = 0;
                 }
             }
             if (tagCount != 0)
