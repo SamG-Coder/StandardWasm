@@ -205,13 +205,20 @@ namespace PeLibrary
         internal static int RegisterArray(int[] registry, int element)
         {
             if (IsByRefLikeValue(registry, element)) return -2;
-            for (int i = 0; i < registry[0]; i++)
-                if (registry[Slot(FirstClass + i) + Element] == element) return FirstClass + i;
+            int existing = FindArray(registry, element);
+            if (existing != 0) return existing;
             if (registry[0] >= MaxClasses) return -2;
             int type = FirstClass + registry[0];
             registry[0] = registry[0] + 1;
             registry[Slot(type) + Element] = element;
             return type;
+        }
+
+        internal static int FindArray(int[] registry, int element)
+        {
+            for (int i = 0; i < registry[0]; i++)
+                if (registry[Slot(FirstClass + i) + Element] == element) return FirstClass + i;
+            return 0;
         }
 
         // Key the vector by the enum's defining identity and lower its cells

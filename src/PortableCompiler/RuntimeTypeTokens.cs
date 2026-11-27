@@ -119,6 +119,17 @@ namespace PortableCompiler
             int element = ObjectLayouts.ArrayElementKey(objects, type);
             if (element != 0)
             {
+                if (element == RuntimeTypeMetadata.Type)
+                {
+                    int linked = FindCoreType(bundle, "Type", identity);
+                    if (linked < 0) return linked;
+                    int nominal = ObjectLayouts.Find(objects, identity[0], identity[1], new int[0]);
+                    int declared = nominal == 0 ? 0 : ObjectLayouts.FindArray(objects, nominal);
+                    if (declared == 0) return -2;
+                    // Both physical representations describe the exact CLR Type[].
+                    identity[1] = ClosedTypeKey + declared;
+                    return 0;
+                }
                 // The array is nominally distinct from its element but has
                 // the element's defining module, including for nested vectors.
                 int status = ReadClosedIdentity(bundle, objects, element, identity, depth + 1);

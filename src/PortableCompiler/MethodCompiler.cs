@@ -833,6 +833,8 @@ namespace PortableCompiler
                     typeCalls.ApplyClosedSignatures(bundle, owners, rows, contexts, instantiations, offsets, signatures, objects, closedSignaturesThrough, functions);
                     closedSignaturesThrough = functions;
                     RuntimeTypeLocals.Specialize(bundle, records, frame, parameters, locals, objects, catchRegion, signatures, offsets, virtualTypes);
+                    status = RuntimeTypeArrays.Specialize(bundle, records, frame, parameters, locals, objects, catchRegion);
+                    if (status < 0) return status;
                     if (location.Length != 0) location[2] = -1;
                     int maximum = body[2];
                     if (maximum > 0 && body[1] > int.MaxValue / maximum)
