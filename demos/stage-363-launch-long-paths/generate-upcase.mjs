@@ -1,11 +1,11 @@
 // Regenerates demos/stage-74-executable-entry/win32-upcase.mjs from the Windows
 // RtlUpcaseUnicodeChar table that this stage's oracle records. Run the stage
-// verifier first, then: node demos/stage-360-launch-long-paths/generate-upcase.mjs
+// verifier first, then: node demos/stage-363-launch-long-paths/generate-upcase.mjs
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { root } from "../../scripts/toolchain.mjs";
 
-const { upcase } = JSON.parse(readFileSync(join(root, "artifacts/stage-360-launch-long-paths/oracle.json"), "utf8"));
+const { upcase } = JSON.parse(readFileSync(join(root, "artifacts/stage-363-launch-long-paths/oracle.json"), "utf8"));
 if (!Array.isArray(upcase) || upcase.length !== 65536) throw Error("The oracle has no complete upcase table.");
 
 // Runs of [first unit, count, delta, stride] with stride 1 (consecutive units) or
@@ -27,7 +27,7 @@ for (let index = 0; index < runs.length; index += 6)
     lines.push("    " + runs.slice(index, index + 6).map(run => "[" + run.join(", ") + "]").join(", ") + ",");
 
 writeFileSync(join(root, "demos/stage-74-executable-entry/win32-upcase.mjs"), `// Generated from Windows RtlUpcaseUnicodeChar for every UTF-16 code unit, by
-// demos/stage-360-launch-long-paths/generate-upcase.mjs; the Stage 360 verifier compares it.
+// demos/stage-363-launch-long-paths/generate-upcase.mjs; the Stage 363 verifier compares it.
 // Each run is [first unit, count, delta, stride]: units first + k * stride map to
 // themselves plus delta. Units outside every run map to themselves. NTFS compares
 // names through the same simple, single-unit table (its $UpCase file), so

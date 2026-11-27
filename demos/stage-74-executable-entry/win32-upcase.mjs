@@ -1,5 +1,5 @@
 // Generated from Windows RtlUpcaseUnicodeChar for every UTF-16 code unit, by
-// demos/stage-360-launch-long-paths/generate-upcase.mjs; the Stage 360 verifier compares it.
+// demos/stage-363-launch-long-paths/generate-upcase.mjs; the Stage 363 verifier compares it.
 // Each run is [first unit, count, delta, stride]: units first + k * stride map to
 // themselves plus delta. Units outside every run map to themselves. NTFS compares
 // names through the same simple, single-unit table (its $UpCase file), so

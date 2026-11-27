@@ -1,6 +1,6 @@
 # 0097 · The launch directory is a long-path mount
 
-Status: proposed (issue #275, Stage 360)
+Status: proposed (issue #275, Stage 363)
 
 ## Context
 
@@ -21,7 +21,7 @@ The mount is a per-instance snapshot. It is the launch's declared file inventory
 
 ## Host semantics changed with it
 
-The changes are measured on Windows x86 in Stage 360:
+The changes are measured on Windows x86 in Stage 363:
 - Names match through the Windows single-unit upcase table (`win32-upcase.mjs`).
 - Short-shaped components are respelled.
 - Short buffers receive Windows' piecewise prefix writes.

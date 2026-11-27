@@ -13,8 +13,8 @@ import { createFilePathHost } from "../stage-74-executable-entry/long-path-host.
 import { instantiateManagedModule } from "../stage-74-executable-entry/resource-host.mjs";
 import { win32Upcase } from "../stage-74-executable-entry/win32-upcase.mjs";
 
-const stage = join(root, "demos/stage-360-launch-long-paths");
-const evidence = join(root, "artifacts/stage-360-launch-long-paths");
+const stage = join(root, "demos/stage-363-launch-long-paths");
+const evidence = join(root, "artifacts/stage-363-launch-long-paths");
 const publish = join(evidence, "publish");
 const exe = "LaunchLongPaths.exe", dll = "LaunchLongPaths.dll";
 const compilerPath = process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts/StandardWasm.Compiler.wasm");

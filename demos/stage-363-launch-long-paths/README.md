@@ -1,6 +1,6 @@
-# Stage 360 · Launch-directory long paths
+# Stage 363 · Launch-directory long paths
 
-Run `npm run demo -- stage-360-launch-long-paths` on Windows with the .NET 10 SDK, the x86 runtime and Microsoft Edge. Use `STANDARDWASM_COMPILER_PATH` to test a specific self-hosted compiler.
+Run `npm run demo -- stage-363-launch-long-paths` on Windows with the .NET 10 SDK, the x86 runtime and Microsoft Edge. Use `STANDARDWASM_COMPILER_PATH` to test a specific self-hosted compiler.
 
 Issue #275 found that the production launcher configured no long-path mount, so every `GetLongPathNameW` call returned ERROR_NOT_SUPPORTED. Each launch now mounts the Stage 198 virtual executable directory, `C:\StandardWasm\App`, holding exactly the files that were dropped (see [decision 0097](../../docs/decisions/0097-launch-directory-mount.md)).
 

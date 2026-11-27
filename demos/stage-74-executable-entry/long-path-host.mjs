@@ -9,7 +9,7 @@ const dosName = /^[A-Z0-9!#$%&'()@^_`{}~\-]{1,8}(?:\.[A-Z0-9!#$%&'()@^_`{}~\-]{1
 
 // Names compare through the Windows single-unit upcase table (win32-upcase.mjs).
 
-// Windows x86 measurement (Stage 360): GetLongPathNameW looks up and rewrites only
+// Windows x86 measurement (Stage 363): GetLongPathNameW looks up and rewrites only
 // components whose input could be an 8.3 name by shape: no leading dot, at most
 // one dot, at most 8 units before it and 3 after. Any characters qualify, including
 // spaces, '+' and non-ASCII. Such a component takes its stored spelling (or the
@@ -131,7 +131,7 @@ function resolvePath(path, mount) {
         if (/[\\/]$/u.test(rest) && !found.children) return { error: notDirectory };
         const text = extended + drive + segments.join("");
         if (text.length > maximumUnits) return { error: filenameTooLong };
-        // Windows x86 (Stage 360) writes the output as it meets each short-shaped
+        // Windows x86 (Stage 363) writes the output as it meets each short-shaped
         // component: first everything since the previous write, as one piece, then
         // the respelled component. Text after the last short-shaped component, and a
         // path without one, is written only with the complete result.
@@ -175,7 +175,7 @@ export function createFilePathHost(memory, filesystem, errors) {
         if (path.error) return fail(path.error);
         if (capacity <= path.text.length) {
             // A short buffer keeps the whole leading pieces that fit in capacity - 1
-            // units. It is never terminated. Measured on Windows x86 (Stage 360).
+            // units. It is never terminated. Measured on Windows x86 (Stage 363).
             let written = 0;
             for (const end of path.pieces) {
                 if (end > capacity - 1) break;
