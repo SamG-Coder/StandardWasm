@@ -40,6 +40,7 @@ namespace PortableCompiler
             used = IfNull(code, used, right);
             used = Local(code, used, 0x20, left);
             code[used++] = 0x05;
+            used = RejectMismatch(code, used, left, right);
             used = Length(code, used, left);
             used = Local(code, used, 0x22, leftLength);
             used = Length(code, used, right);
@@ -223,6 +224,16 @@ namespace PortableCompiler
             return used;
         }
 
+        // Decision 0092: Combine of two nonnull delegates of different nominal types raises
+        // ArgumentException, as on the CLR. Every entry of a list shares its nominal type.
+        private static int RejectMismatch(byte[] code, int used, int left, int right)
+        {
+            used = EntryField(code, used, left, -1, EntryDelegateType);
+            used = EntryField(code, used, right, -1, EntryDelegateType);
+            code[used++] = 0x47; // i32.ne
+            return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.ArgumentTag);
+        }
+
         private static int IfNull(byte[] code, int used, int reference)
         {
             used = Local(code, used, 0x20, reference);
@@ -267,7 +278,7 @@ namespace PortableCompiler
         private static int EntryField(byte[] code, int used, int list, int index, byte field)
         {
             used = Local(code, used, 0x20, list);
-            used = Local(code, used, 0x20, index);
+            used = index < 0 ? Const(code, used, 0) : Local(code, used, 0x20, index); // negative: entry 0
             used = Instruction(code, used, 11, EventHandlerHeap); // array.get
             used = Instruction(code, used, 2, EventEntryHeap); // struct.get
             code[used++] = field;

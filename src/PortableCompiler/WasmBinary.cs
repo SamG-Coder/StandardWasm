@@ -648,9 +648,9 @@ namespace PortableCompiler
         }
 
         internal static int HeapType(int type) =>
-            IsValueLocation(type) ? ValueLocationHeap : (type == Delegate || type == CharacterSpanCallback || DelegateShapes.IsKey(type)) ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
+            IsValueLocation(type) ? ValueLocationHeap : (type == Delegate || type == CharacterSpanCallback) ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
                 type == EventArgsReference ? EventArgsHeap :
-                type == EventHandlerReference || type == DelegateReference ? EventHandlerHeap :
+                type == EventHandlerReference || type == DelegateReference || DelegateShapes.IsKey(type) ? EventHandlerHeap :
                 type == Singles ? SingleArrayHeap : type == Doubles ? DoubleArrayHeap :
                 type == NativeVector ? NativeArrayHeap : IsManagedLocation(type) ? ObjectLocationHeap : IsSpan(type) ? ReadOnlySpanHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;

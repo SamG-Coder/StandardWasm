@@ -430,14 +430,26 @@ namespace PortableCompiler
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, allocated, depth, EventArgsReference);
             if (kind == NewRootObject) return Push(stack, allocated, depth, ObjectReference, true);
             if (kind == CombineHandler || kind == RemoveHandler)
-                return depth >= 2 && Assignable(stack[depth - 1], DelegateReference, objects) &&
-                    Assignable(stack[depth - 2], DelegateReference, objects)
-                    ? Push(stack, allocated, depth - 2, EventHandlerReference) : -2;
+            {
+                if (depth < 2 || !Assignable(stack[depth - 1], DelegateReference, objects) ||
+                    !Assignable(stack[depth - 2], DelegateReference, objects)) return -2;
+                // Decision 0092: the result keeps a nominal type only when both operands prove it
+                // (the same EventHandler or general key, or a null literal). Otherwise it is a
+                // System.Delegate, and a later cast checks the nominal type at run time.
+                int left = stack[depth - 2], right = stack[depth - 1];
+                int combined = left == right ? left : left == NullValue ? right : right == NullValue ? left : DelegateReference;
+                return Push(stack, allocated, depth - 2, combined == NullValue ? DelegateReference : combined);
+            }
             if (kind == CastHandler)
             {
-                if (depth == 0 || !Assignable(stack[depth - 1], DelegateReference, objects)) return -2;
-                // The CLR types differ, but every supported Delegate uses the EventHandler heap.
-                if (stack[depth - 1] != NullValue) stack[depth - 1] = EventHandlerReference;
+                // castclass/isinst EventHandler or a general delegate key (operand). A Delegate,
+                // object or other invocation-list value is checked at run time; heap-3 delegates
+                // (Func<int>, SpanAction) are a different family and stay diagnosed.
+                if (depth == 0) return -2;
+                int source = stack[depth - 1];
+                if (source == NullValue || source == operand) return depth;
+                if (source != ObjectReference && !Assignable(source, DelegateReference, objects)) return -2;
+                stack[depth - 1] = operand;
                 return depth;
             }
             if (kind == BoxAggregate || kind == UnboxAggregate || kind == UnboxAggregateAddress || kind == TestAggregateBox)

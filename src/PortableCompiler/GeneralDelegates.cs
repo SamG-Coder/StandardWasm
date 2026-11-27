@@ -291,20 +291,61 @@ namespace PortableCompiler
         // non-null: read the target and method, cast the method to the key's thunk type and call it.
         // The thunk type index is a fixup chain per key (typeFixups[key - KeyBase]), resolved by
         // WasmBinary once the appended types have indices.
+        // Stage 221 (decision 0092): the helper (list, p1..pn) -> r calls every entry in order and
+        // returns the last result, as the CLR does for a multicast delegate. An exception from one
+        // entry propagates and skips the rest. The caller's callvirt null check already ran, and a
+        // list is never empty (removing every entry yields null).
+        //
+        //   len = array.len list; i = 0
+        //   loop: if i >= len break
+        //         entry = list[i]; [r =] call_ref (ref.cast thunk entry.method) (entry.target, p1..pn)
+        //         i++
+        //   [r]
         internal static int WriteInvokeHelper(byte[] code, int used, int[] objects, int key, int[] typeFixups)
         {
             int count = DelegateShapes.InvokeParameterCount(objects, key);
-            if (code.Length - used < 32 + 2 * count) return -3;
-            code[used++] = 0; // no additional locals
+            int result = DelegateShapes.InvokeResult(objects, key);
+            if (code.Length - used < 96 + 2 * count) return -3;
+            int index = 1 + count, length = 2 + count, entry = 3 + count, last = 4 + count;
+            code[used++] = (byte)(result == Void ? 2 : 3); // local groups
+            code[used++] = 2; code[used++] = 0x7f; // index, length
+            code[used++] = 1; code[used++] = 0x63; code[used++] = WasmBinary.EventEntryHeap; // entry
+            if (result != Void)
+            {
+                code[used++] = 1;
+                used = WasmBinary.ValueType(code, used, result);
+            }
             used = BranchWasm.Local(code, used, 0x20, 0);
-            code[used++] = 0xfb; code[used++] = 2; code[used++] = 3; code[used++] = 0; // struct.get closure.target
+            code[used++] = 0xfb; code[used++] = 15; // array.len
+            used = BranchWasm.Local(code, used, 0x21, length);
+            code[used++] = 0x02; code[used++] = 0x40; // block
+            code[used++] = 0x03; code[used++] = 0x40; // loop
+            used = BranchWasm.Local(code, used, 0x20, index);
+            used = BranchWasm.Local(code, used, 0x20, length);
+            code[used++] = 0x4f; // i32.ge_u
+            code[used++] = 0x0d; code[used++] = 1; // br_if block
+            used = BranchWasm.Local(code, used, 0x20, 0);
+            used = BranchWasm.Local(code, used, 0x20, index);
+            code[used++] = 0xfb; code[used++] = 0x0b; code[used++] = WasmBinary.EventHandlerHeap; // array.get
+            used = BranchWasm.Local(code, used, 0x21, entry);
+            used = BranchWasm.Local(code, used, 0x20, entry);
+            code[used++] = 0xfb; code[used++] = 0x02; code[used++] = WasmBinary.EventEntryHeap; code[used++] = EventWasm.EntryTarget;
             for (int i = 0; i < count; i++) used = BranchWasm.Local(code, used, 0x20, 1 + i);
-            used = BranchWasm.Local(code, used, 0x20, 0);
-            code[used++] = 0xfb; code[used++] = 2; code[used++] = 3; code[used++] = 1; // struct.get closure.method
+            used = BranchWasm.Local(code, used, 0x20, entry);
+            code[used++] = 0xfb; code[used++] = 0x02; code[used++] = WasmBinary.EventEntryHeap; code[used++] = EventWasm.EntryMethod;
             code[used++] = 0xfb; code[used++] = 0x16; // ref.cast (ref thunk)
             used = WasmIndexFixups.WriteAt(code, used, 0, typeFixups, key - DelegateShapes.KeyBase);
             code[used++] = 0x14; // call_ref thunk
             used = WasmIndexFixups.WriteAt(code, used, 0, typeFixups, key - DelegateShapes.KeyBase);
+            if (result != Void) used = BranchWasm.Local(code, used, 0x21, last);
+            used = BranchWasm.Local(code, used, 0x20, index);
+            used = BranchWasm.Const(code, used, 1);
+            code[used++] = 0x6a;
+            used = BranchWasm.Local(code, used, 0x21, index);
+            code[used++] = 0x0c; code[used++] = 0; // br loop
+            code[used++] = 0x0b;
+            code[used++] = 0x0b;
+            if (result != Void) used = BranchWasm.Local(code, used, 0x20, last);
             code[used++] = 0x0b;
             return used;
         }

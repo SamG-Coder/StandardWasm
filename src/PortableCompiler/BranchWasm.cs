@@ -651,6 +651,11 @@ namespace PortableCompiler
                         used = CastThunk(code, used, WasmBinary.EventThunkType);
                         used = EventWasm.NewList(code, used, pointer, destination, 0);
                     }
+                    else if (PeLibrary.DelegateShapes.IsKey(closureType))
+                    {
+                        code[used++] = 0xd4; // ref.as_non_null: the entry holds (ref func)
+                        used = EventWasm.NewList(code, used, pointer, destination, DelegateCastWasm.Nominal(closureType));
+                    }
                     else used = Gc(code, used, 0, closureType); // struct.new scalar closure
                     used = Local(code, used, 0x21, destination);
                 }
@@ -753,6 +758,14 @@ namespace PortableCompiler
                     else used = PrimitiveBoxing.Test(code, used, local, operand, type);
                     int resultType = kind == UnboxValue ? StackType(PrimitiveBoxing.Storage(operand)) : ObjectReference;
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, resultType, top));
+                }
+                else if (kind == CastHandler)
+                {
+                    int source = states[state + top];
+                    if (source != operand && source != NullValue)
+                        used = DelegateCastWasm.Emit(code, used, Spill(spills, maximum, spillFlags, source, top),
+                            Spill(spills, maximum, spillFlags, operand, top), DelegateCastWasm.Nominal(operand),
+                            records[slot + 3] == 0);
                 }
                 else if (kind == CastClass || kind == TestClass)
                 {
@@ -1935,8 +1948,9 @@ namespace PortableCompiler
             PeLibrary.RuntimeTypeMetadata.IsStorage(type) || IsValueLocation(type) ? ObjectReference - 1 :
             // A base Delegate slot currently accepts EventHandler lists only.
             // Both types have the same physical storage but distinct CLI stack identities.
-            type == DelegateReference ? EventHandlerReference - 1 :
-            type == CharacterSpanCallback || PeLibrary.DelegateShapes.IsKey(type) ? Delegate - 1 :
+            // Stage 221: general delegate keys share the invocation-list bank (decision 0092).
+            type == DelegateReference || PeLibrary.DelegateShapes.IsKey(type) ? EventHandlerReference - 1 :
+            type == CharacterSpanCallback ? Delegate - 1 :
             // ReinterpretPacked16Location is verifier-only. Both nominal
             // views keep the same reference in the shared location bank.
             IsManagedLocation(type) ? LastScalarBank :

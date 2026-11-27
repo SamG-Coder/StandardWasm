@@ -1135,8 +1135,10 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.Argument;
                             else if (kind == BranchIl.UnboxValue || kind == BranchIl.UnboxAggregate || kind == BranchIl.UnboxAggregateAddress)
                                 tags = ExceptionTypes.InvalidCast | ExceptionTypes.NullReference;
-                            else if (kind == BranchIl.CastClass)
+                            else if (kind == BranchIl.CastClass || kind == BranchIl.CastHandler)
                                 tags = ExceptionTypes.InvalidCast;
+                            else if (kind == BranchIl.CombineHandler)
+                                tags = ExceptionTypes.Argument; // decision 0092: mismatched nominal types
                             else if (kind == BranchIl.NativeCharacterSpan || kind == BranchIl.SpanSlice ||
                                 kind == BranchIl.StringAsSpan && operation != 0)
                                 tags = ExceptionTypes.ArgumentOutOfRange;
@@ -1631,8 +1633,13 @@ namespace PortableCompiler
                             BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
                     if (type < 0) return type;
                     if (ObjectLayouts.IsValueType(objects, type)) return -2;
-                    if (kind == BranchIl.CastClass && type == EventHandlerReference)
+                    if (type == EventHandlerReference || DelegateShapes.IsKey(type))
+                    {
                         records[slot] = BranchIl.CastHandler;
+                        records[slot + 1] = type;
+                        records[slot + 3] = kind == BranchIl.TestClass ? 1 : 0;
+                        continue;
+                    }
                     else if (ObjectLayouts.IsInterface(objects, type))
                     {
                         int bound = reflection.InterfaceTests.Bind(bundle, objects, type);
