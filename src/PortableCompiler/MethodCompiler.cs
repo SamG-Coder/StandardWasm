@@ -1213,6 +1213,12 @@ namespace PortableCompiler
                     records[slot + 3] = records[pointer + 3];
                     continue;
                 }
+                if (kind != BranchIl.Call && kind != BranchIl.NewObject && kind != BranchIl.LoadFunction)
+                    continue;
+                // Validate the direct MethodDef row before any recognizer reads its metadata.
+                int target = records[slot + 1];
+                if (target < 1 || target > bases[owner + 1] - bases[owner])
+                    return -1;
                 // Issue #304: ldstr "key"; call SR.GetResourceString(string) in CoreLib folds to the
                 // neutral resource string, so SR properties compile without ResourceManager.
                 if (kind == BranchIl.Call && records[slot + 3] == 0)
@@ -1221,11 +1227,6 @@ namespace PortableCompiler
                     if (folded < 0) return folded;
                     if (folded > 0) continue;
                 }
-                if (kind != BranchIl.Call && kind != BranchIl.NewObject && kind != BranchIl.LoadFunction)
-                    continue;
-                int target = records[slot + 1];
-                if (target < 1 || target > bases[owner + 1] - bases[owner])
-                    return -1;
                 if ((kind == BranchIl.NewObject || kind == BranchIl.Call && records[slot + 3] == 0) &&
                     ObjectLayouts.IsCoreObjectConstructor(image, heaps, layout, target))
                 {
