@@ -27,7 +27,10 @@ namespace PeLibrary
         internal static bool MatchesToken(byte[] token, int start, byte[] key, int offset, int length) =>
             MatchesTokenWords(key, offset, length, U32(token, (uint)start), U32(token, (uint)start + 4));
 
-        internal static bool MatchesTokenWords(byte[] key, int offset, int length, uint low, uint high)
+        internal static bool MatchesTokenWords(byte[] key, int offset, int length, uint low, uint high) =>
+            TokenWords(key, offset, length) == ((long)high << 32 | low);
+
+        internal static long TokenWords(byte[] key, int offset, int length)
         {
             uint h0 = 0x67452301, h1 = 0xefcdab89, h2 = 0x98badcfe, h3 = 0x10325476, h4 = 0xc3d2e1f0;
             var words = new int[16];
@@ -77,7 +80,7 @@ namespace PeLibrary
                 h4 = unchecked(h4 + e);
             }
 
-            return low == h4 && high == h3;
+            return (long)h3 << 32 | h4;
         }
 
         private static uint Rotate(uint value, int count) => (value << count) | (value >> (32 - count));

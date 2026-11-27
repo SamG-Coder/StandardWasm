@@ -293,6 +293,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [296 � Win32 window handle lifetime](stage-296-is-window/README.md) | `npm run demo -- stage-296-is-window` | Compare live, null, invalid and destroyed HWNDs against Windows |
 | [297 · Canonical Mono assembly identity boundary](stage-297-mono-assembly-identity/README.md) | `npm run demo -- stage-297-mono-assembly-identity` | Verify original GetName virtual dispatch and the native assembly identity boundary |
 | [300 · Native CLR fixed-buffer layout](stage-300-native-fixed-buffer-layout/README.md) | `npm run demo -- stage-300-native-fixed-buffer-layout` | Measure authentic native fixed buffers with exact element and width proofs |
+| [302 · Native UTF-8 decoding](stage-302-native-utf8-decoding/README.md) | `npm run demo -- stage-302-native-utf8-decoding` | Match CLR UTF-8 code units, replacement and first-NUL handling |
 
 ## Adding a stage
 

@@ -27,6 +27,7 @@ namespace PortableCompiler
         internal readonly RuntimeTypeRelations TypeRelations = new RuntimeTypeRelations();
         internal int[] MonoAssemblyNameBodies { get; private set; }
         internal int MonoAssemblyHandle { get; private set; } = -1;
+        internal readonly MonoAssemblyIdentityData MonoAssemblyIdentity = new MonoAssemblyIdentityData();
 
         internal int BindMonoAssemblyHandle(int[] arities, int[] offsets, int[] signatures, int functions)
         {

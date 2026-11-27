@@ -67,6 +67,41 @@ namespace PeLibrary
                 IdentifySlot(image, layout, heaps, (int)(target & 0xffffff)) == 2;
         }
 
+        internal static int NativeRecord(byte[] image, int[] layout, int[] heaps, int caller, int leaf)
+        {
+            if (!IsAssemblyNameCreation(image, layout, heaps, caller) ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, leaf, 3), "GetNativeName") ||
+                MethodDefinitions.ReadColumn(image, layout, leaf, 0) != 0 ||
+                MethodDefinitions.ReadColumn(image, layout, leaf, 1) != 0x1000 ||
+                ObjectLayouts.Owner(image, heaps, layout, caller, false) !=
+                    ObjectLayouts.Owner(image, heaps, layout, leaf, false)) return -2;
+            var body = new int[6];
+            uint rva = unchecked((uint)MethodDefinitions.ReadColumn(image, layout, caller, 0));
+            if (MethodBodies.Read(image, rva, body) != 0 || body[1] != 24 || body[5] != 0) return -2;
+            int at = body[0];
+            uint target = U32(image, (uint)at + 7);
+            uint fill = U32(image, (uint)at + 19);
+            int fillRow = (int)(fill & 0xffffff);
+            if (image[at] != 0x73 || image[at + 5] != 0x02 || image[at + 6] != 0x28 ||
+                target != (0x06000000u | (uint)leaf) || image[at + 11] != 0x0a || image[at + 12] != 0x25 ||
+                image[at + 13] != 0x06 || image[at + 14] != 0x03 || image[at + 15] != 0x17 ||
+                image[at + 16] != 0x17 || image[at + 17] != 0x17 || image[at + 18] != 0x6f ||
+                image[at + 23] != 0x2a || fill >> 24 != 6 ||
+                ObjectLayouts.Owner(image, heaps, layout, fillRow, false) != ObjectLayouts.Owner(image, heaps, layout, caller, false) ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, fillRow, 3), "FillName"))
+                return -2;
+
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, layout, leaf, 4), 1, cursor);
+            if (end < 0 || !SignatureReader.TakeElement(image, cursor, end, 0x0f) ||
+                !SignatureReader.TakeElement(image, cursor, end, 0x11)) return -2;
+            int type = CompressedUnsigned(image, cursor[0], end, cursor);
+            if (type <= 0 || (type & 3) != 0 || !SignatureReader.TakeElement(image, cursor, end, 0x18) || cursor[0] != end)
+                return -2;
+            int found = ObjectLayouts.FindTypeDefinition(image, heaps, layout, "Mono", "MonoAssemblyName");
+            return found == type >> 2 ? found : -2;
+        }
+
         internal static bool IsRuntimeBody(byte[] image, int[] layout, int[] heaps, int row)
         {
             var counts = new int[45];

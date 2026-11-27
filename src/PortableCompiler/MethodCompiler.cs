@@ -295,6 +295,7 @@ namespace PortableCompiler
             var remainderFixup = new int[1];
             var primitiveArrays = new PrimitiveArrayWasm();
             var reflection = new RuntimeReflectionPlan();
+            var nativeUtf8 = new NativeUtf8Plan();
             var hostUse = new long[1];
             int functions = 0, length = 0, closedSignaturesThrough = 0;
             bool externalObjects = false, externalVectors = false;
@@ -824,7 +825,9 @@ namespace PortableCompiler
                             parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                             bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
                             initializers, reflection, typeCalls, instantiations, methodArguments, inlineLocations, frameCells, parameters, signatures[signature],
-                            nativePlans, addressedFields, localElements, pointers, finalizers, tracksFinalizers, scopedReceiver, falseBooleans);
+                            nativePlans, addressedFields, localElements, pointers, finalizers, tracksFinalizers, scopedReceiver, falseBooleans,
+                            reflection.MonoAssemblyNameBodies != null &&
+                            reflection.MonoAssemblyNameBodies[bases[owner] + source] == current + 1, nativeUtf8);
                         if (functions == Reemit)
                         {
                             // Allocation can precede the first reachable suppression call.
@@ -1581,6 +1584,16 @@ namespace PortableCompiler
                 moduleCode[length++] = 0x0b;
                 sizes[handle] = length - bodyOffsets[handle];
             }
+            if (nativeUtf8.Measure >= 0)
+            {
+                exceptionTags |= ExceptionTypes.NullReference | ExceptionTypes.Argument;
+                length = NativeUtf8Wasm.WriteLength(moduleCode, length, nativeUtf8.Measure, bodyOffsets, sizes);
+                if (length < 0) return length;
+            }
+            length = NativeUtf8Wasm.Write(moduleCode, length, nativeUtf8, bodyOffsets, sizes);
+            if (length < 0) return length;
+            length = MonoAssemblyIdentityWasm.Write(moduleCode, length, reflection.MonoAssemblyIdentity, bodyOffsets, sizes);
+            if (length < 0) return length;
             if (reflection.AssemblyTypes.Function >= 0)
             {
                 exceptionTags |= ExceptionTypes.NullReference | ExceptionTypes.ArgumentNull | ExceptionTypes.Argument;
@@ -1743,7 +1756,7 @@ namespace PortableCompiler
             MethodInstantiations instantiations, int[] methodArguments,
             int[] inlineLocations, int[] frameCells, int parameterCount, int result, NativeAggregatePlans nativePlans,
             AddressedFields addressedFields, byte[] localElements,
-            FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers, int scopedReceiver, FalseBooleanSpecializations falseBooleans)
+            FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers, int scopedReceiver, FalseBooleanSpecializations falseBooleans, bool canonicalMonoNameBody, NativeUtf8Plan nativeUtf8)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             bool monoAssemblyName = callerReceiver == RuntimeTypeMetadata.Assembly &&
@@ -1759,6 +1772,25 @@ namespace PortableCompiler
                 int kind = records[slot];
                 if (kind == 0) continue;
                 if (location.Length != 0) location[2] = slot / BranchIl.Width;
+                if (kind == BranchIl.Call && NativeUtf8Plan.IsLengthCall(image, layout, heaps, callerRow, records, slot, clauses))
+                {
+                    functions = nativeUtf8.BindLength(arities, offsets, signatures, functions);
+                    if (functions < 0) return functions;
+                    hostUse[0] = hostUse[0] | WasmImports.Memory;
+                    records[slot + 1] = nativeUtf8.Measure;
+                    continue;
+                }
+                if (kind == BranchIl.Call && NativeUtf8Plan.IsDecodePair(image, layout, heaps, callerRow, records, slot, clauses))
+                {
+                    functions = nativeUtf8.Bind(globals, arities, offsets, signatures, functions);
+                    if (functions < 0) return functions;
+                    hostUse[0] = hostUse[0] | WasmImports.Memory;
+                    records[slot] = BranchIl.Nop;
+                    int decode = records[slot + 2] * BranchIl.Width;
+                    records[decode + 1] = nativeUtf8.Decoder;
+                    slot = decode;
+                    continue;
+                }
                 if (monoAssemblyName && slot == BranchIl.Width)
                 {
                     // The verified original wrapper uses this only as the
@@ -1769,6 +1801,32 @@ namespace PortableCompiler
                     records[slot] = BranchIl.Call;
                     records[slot + 1] = reflection.MonoAssemblyHandle;
                     records[slot + 3] = 0;
+                    continue;
+                }
+                if (canonicalMonoNameBody && slot == 6 * BranchIl.Width && kind == BranchIl.Call)
+                {
+                    int type = MonoAssemblyNameMetadata.NativeRecord(image, layout, heaps, callerRow, records[slot + 1]);
+                    if (type < 0) return type;
+                    functions = reflection.MonoAssemblyIdentity.Bind(bundle, owner, type, globals, literals, literalSize,
+                        arities, offsets, signatures, functions);
+                    if (functions < 0) return functions;
+                    hostUse[0] = hostUse[0] | WasmImports.Memory;
+                    records[slot + 1] = reflection.MonoAssemblyIdentity.Function;
+                    continue;
+                }
+                if (monoAssemblyName && slot == 13 * BranchIl.Width && kind == BranchIl.Call)
+                {
+                    int row = records[slot + 1];
+                    int[] canonicalIndices = reflection.MonoAssemblyNameIndices(indices.Length);
+                    int function = Lookup(owners, rows, contexts, bases, canonicalIndices, functions, owner, row, 0);
+                    if (function < 0)
+                    {
+                        function = functions;
+                        functions = Register(bundle, image, layout, heaps, owner, row, 0, owners, rows, contexts, bases,
+                            canonicalIndices, arities, offsets, signatures, objects, functions);
+                        if (functions < 0) return functions;
+                    }
+                    records[slot + 1] = function;
                     continue;
                 }
                 if (monoAssemblyName && slot == 8 * BranchIl.Width)
@@ -2510,6 +2568,7 @@ namespace PortableCompiler
                         records[slot] = BranchIl.StringFirstCodeUnit;
                         continue;
                     }
+                    if (NativePointerFields.Bind(bundle, image, layout, heaps, owner, callerRow, parameterCount, records, slot, clauses)) continue;
                     if (linked)
                     {
                         if (bundle.Length == 0) return -2;
