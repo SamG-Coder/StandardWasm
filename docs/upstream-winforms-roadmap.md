@@ -124,9 +124,11 @@ stack, including the linked padding setters. In `PropertyStore.AddValue`, a
 closed type selects the matching branch of the original `typeof` checks. The
 immediate same-type managed read preserves the value copy used by the original
 `ldobj`. The original `Debugger.IsAttached` getter calls the browser's managed
-runtime host for attachment state. The startup replay now stops while reading
-CoreLib's `Dictionary<TKey,TValue>.Remove` local signature, which includes a
-managed `Int32` reference.
+runtime host for attachment state. Array-backed `Int32` references now use
+the same traced owner and index as existing managed array locations, including
+when passed to another assembly or returned to a compiled caller. The startup
+replay gets past the local signature in CoreLib's `Dictionary<TKey,TValue>.Remove`
+and stops at the address of a generic `Entry` array element.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

@@ -24,6 +24,10 @@ internal static class ValueConstructionCases
         Check(nameof(Kernels.DisposeScoped), Kernels.DisposeScoped);
 
         Check(nameof(Kernels.BorrowExtent), Kernels.BorrowExtent);
+        Check(nameof(BucketProbe.ReadManagedBuckets), BucketProbe.ReadManagedBuckets);
+        Check(nameof(BucketProbe.CheckBucketFailure), BucketProbe.CheckBucketFailure);
+        MethodInfo exportedBucket = Method(nameof(BucketProbe.RejectExportedBucket));
+        Reject(exportedBucket, [0, Row(exportedBucket), -1]);
 
         // A call using the read-only receiver ABI still diagnoses a write
         // through this at the callee's stfld (decision 0049).
@@ -64,7 +68,8 @@ internal static class ValueConstructionCases
         }
     }
 
-    private static MethodInfo Method(string name) => typeof(Kernels).GetMethod(name)!;
+    private static MethodInfo Method(string name) =>
+        typeof(Kernels).GetMethod(name) ?? typeof(BucketProbe).GetMethod(name)!;
     private static int Row(MethodBase method) => method.MetadataToken & 0xffffff;
 
     private static byte[] Manifest(MethodBase method)

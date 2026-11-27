@@ -36,3 +36,8 @@ override updates the original location and preserves an earlier value copy.
 The check also covers the boxing diagnostic and equality and inequality
 branches on two closed generic instantiations. It also compiles the original
 CoreLib debugger getter and compares the detached result with the CLR.
+
+The bucket fixture saves a returned `ref int` in a managed local, rebinds an
+alias, and writes through it from another .NET Standard assembly. It compares
+array values, full-width arithmetic and typed null and bounds failures. It
+also checks the diagnostic for an exported managed address.

@@ -1058,7 +1058,7 @@ namespace PortableCompiler
                 {
                     int array = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);
                     int index = Spill(spills, maximum, spillFlags, states[state + top], top);
-                    int resultSpill = Spill(spills, maximum, spillFlags, ObjectLocation, top - 1);
+                    int resultSpill = Spill(spills, maximum, spillFlags, operand == Ints ? Int32Location : ObjectLocation, top - 1);
                     used = ManagedLocationWasm.TakeElement(code, used, array, index, resultSpill);
                 }
                 else if (kind == LoadObjectIndirect)
@@ -1084,11 +1084,11 @@ namespace PortableCompiler
                     int address = Spill(spills, maximum, spillFlags, type, top);
                     if (frameShape[25] != 0 && type == CharacterLocation)
                         used = NativeCharacterViewWasm.ReadLocation(code, used, address);
-                    else if (type == CharacterLocation || type == BooleanLocation || type == StaticByteLocation)
+                    else if (type == CharacterLocation || type == BooleanLocation || type == StaticByteLocation || type == Int32Location)
                     {
-                        int vector = type == CharacterLocation ? Chars : Bytes;
+                        int vector = type == Int32Location ? Ints : type == CharacterLocation ? Chars : Bytes;
                         used = ManagedLocationWasm.AccessElement(code, used, address, vector);
-                        used = Gc(code, used, 0x0d, vector); // array.get_u
+                        used = Gc(code, used, vector == Ints ? 0x0b : 0x0d, vector); // array.get or array.get_u
                     }
                     else
                     {
@@ -1107,9 +1107,9 @@ namespace PortableCompiler
                     int source = Spill(spills, maximum, spillFlags, value, top);
                     if (frameShape[25] != 0 && type == CharacterLocation)
                         used = NativeCharacterViewWasm.WriteLocation(code, used, address, source);
-                    else if (type == CharacterLocation || type == BooleanLocation)
+                    else if (type == CharacterLocation || type == BooleanLocation || type == Int32Location)
                     {
-                        int vector = type == CharacterLocation ? Chars : Bytes;
+                        int vector = type == Int32Location ? Ints : type == CharacterLocation ? Chars : Bytes;
                         used = ManagedLocationWasm.AccessElement(code, used, address, vector);
                         used = Local(code, used, 0x20, source);
                         used = Gc(code, used, 0x0e, vector); // truncate to the packed element width

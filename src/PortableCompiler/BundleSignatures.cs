@@ -131,7 +131,7 @@ namespace PortableCompiler
                     left = next[0];
                     right = match;
                 }
-                else if (element == 0x10 && !field && i > 0)
+                else if (element == 0x10 && !field)
                 {
                     if (left >= leftEnd || right >= rightEnd || caller[left] != target[right]) return 0;
                     int byRefElement = caller[left];
@@ -151,7 +151,7 @@ namespace PortableCompiler
                     int rightType = ManagedReferenceSignatures.ReadLocation(bundle, target, targetLayout, targetHeaps,
                         targetOwner, next, rightEnd, context, objects);
                     if (leftType == -1) return -1;
-                    if (leftType < 0 || leftType != rightType) return 0;
+                    if (leftType < 0 || leftType != rightType || i == 0 && leftType != SignatureTypes.Int32Location) return 0;
                     right = next[0];
                 }
                 else if (element == 0x1b)

@@ -13,12 +13,13 @@ namespace PortableCompiler
         // the ordinary Object/reference conversion lattice.
         internal const int ObjectLocation = 0x80, ObjectSpan = 0x81, CharacterSpan = 0x82;
         internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84, BooleanLocation = 0x86, StringLocation = 0x87;
-        internal const int ReadOnlyByteSpan = 0x88, StaticByteLocation = 0x89, CharacterSpanCallback = 0x8a;
+        internal const int ReadOnlyByteSpan = 0x88, StaticByteLocation = 0x89, CharacterSpanCallback = 0x8a, Int32Location = 0x8b;
         // Reference locations retain their nominal element type in the verifier,
         // even when their Wasm representation is the shared object cell.
         private const int ReferenceLocationBase = 32768;
         internal static bool IsManagedLocation(int type) =>
-            IsReferenceLocation(type) || type == CharacterLocation || type == BooleanLocation || type == StaticByteLocation;
+            IsReferenceLocation(type) || type == CharacterLocation || type == BooleanLocation ||
+            type == StaticByteLocation || type == Int32Location;
 
         internal static bool IsReferenceLocation(int type) =>
             type == ObjectLocation || type == StringLocation ||
@@ -28,12 +29,12 @@ namespace PortableCompiler
         internal static int LocationFromIdentity(int[] objects, int type) =>
             type == ObjectLayouts.ObjectReference ? ObjectLocation : type == String ? StringLocation :
             type == GenericScalar.Key(3) ? CharacterLocation : type == GenericScalar.Key(2) ? BooleanLocation :
-            type == GenericScalar.Key(5) ? StaticByteLocation :
+            type == GenericScalar.Key(5) ? StaticByteLocation : type == GenericScalar.Key(8) ? Int32Location :
             ObjectLayouts.IsValueType(objects, type) ? ValueLocation(type) :
             type >= ObjectLayouts.FirstClass && type - ObjectLayouts.FirstClass < objects[0] ? ReferenceLocationBase + type : 0;
         internal static int CellValue(int location) =>
             IsValueLocation(location) ? LocatedValue(location) :
-            location == BooleanLocation ? I32 : location == StringLocation ? String :
+            location == BooleanLocation || location == Int32Location ? I32 : location == StringLocation ? String :
             location == ObjectLocation ? ObjectLayouts.ObjectReference : location - ReferenceLocationBase;
 
         internal static bool IsSpan(int type) => type == ObjectSpan || type == CharacterSpan || type == WritableCharacterSpan || type == ReadOnlyByteSpan;
@@ -233,12 +234,14 @@ namespace PortableCompiler
                     types[target] = String;
                 else if (element == 0x1c)
                     types[target] = ObjectLayouts.ObjectReference;
-                else if (element == 0x10 && (locals || i > 0))
+                else if (element == 0x10)
                 {
                     next[0] = cursor;
                     int location = ManagedReferenceSignatures.ReadLocation(bundle, image, methods, heap,
                         assembly, next, end, context, objects, methodArguments);
                     if (location < 0) return location;
+                    // Only array-backed Int32 references currently return through this ABI.
+                    if (!locals && i == 0 && location != Int32Location) return -2;
                     cursor = next[0];
                     types[target] = location;
                 }

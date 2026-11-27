@@ -60,11 +60,20 @@ async function verify(compiler, fixture, packed, inputs) {
     const debuggerImports = { "standardwasm:runtime": { isDebuggerAttached: () => 0 } };
     const [debuggerStatus] = await runEntry("ReadManagedDebuggerStatus", debuggerImports, [undefined]);
     return { values: await runEntry("InvokeValueOverride"), typeBranches: await runEntry("CheckTypeBranches"), debuggerStatus,
-        rejection: compileEntry("RejectInheritedValueHash") };
+        bucketAliases: await runEntry("ReadManagedBuckets"), bucketFailures: await runEntry("CheckBucketFailure"),
+        bucketExportRejection: compileEntry("RejectExportedBucket"), rejection: compileEntry("RejectInheritedValueHash") };
 }
 
 const assets = { "/compiler": readFileSync(compiler), "/fixture": images[0], "/bundle": bundle };
-const expected = { values: oracle.values, typeBranches: oracle.typeBranches, debuggerStatus: oracle.debuggerStatus, rejection: { status: -2, diagnostic: oracle.boxingDiagnostic } };
+const expected = {
+    values: oracle.values,
+    typeBranches: oracle.typeBranches,
+    debuggerStatus: oracle.debuggerStatus,
+    bucketAliases: oracle.bucketAliases,
+    bucketFailures: oracle.bucketFailures,
+    bucketExportRejection: { status: -2, diagnostic: oracle.bucketExportDiagnostic },
+    rejection: { status: -2, diagnostic: oracle.boxingDiagnostic }
+};
 const node = await verify(...Object.values(assets), oracle.inputs);
 assert.deepEqual(node, expected);
 const browser = await chromium.launch({ channel: "msedge" });

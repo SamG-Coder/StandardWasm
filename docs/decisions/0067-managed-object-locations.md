@@ -7,3 +7,9 @@ Validate the receiver and the index at `ldelema`. This preserves the order of ex
 The first producer is `ldelema System.Object` on a statically known `object[]` vector. The consumers are `ldind.ref` and `stind.ref`. Intra-assembly `ref object` parameters and locals can hold the same locations. Managed addresses remain inside compiled code. Nested fields, covariant arrays and other array element types require their own validation and lowering. The traced owner follows [decision 0025](0025-pinnable-memory-model.md).
 
 An addressed reference local or parameter has a one-element cell for the lifetime of the frame. Ordinary loads and stores use that cell, so changes made through `out` or `ref` are immediately visible. The verifier keeps the exact CLI element type of each address and requires it to match across calls. A shared Wasm heap stores the cells. Loads restore the reference representation for the verified element type.
+
+An `Int32` array element uses the same owner and index with a distinct
+location type. `ldelema` checks null and bounds, and `ldind.i4` and `stind.i4`
+read and write the full-width element. Compiled callers can pass, store and
+return this location across assembly boundaries. Exports reject managed
+location signatures at the Wasm host boundary.

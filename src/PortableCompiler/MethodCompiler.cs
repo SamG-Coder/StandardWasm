@@ -189,7 +189,8 @@ namespace PortableCompiler
                 // A foreign Wasm caller can mutate an escaped class or array
                 // that still has an alias inside the linked application.
                 if (CanExchangeClass(objects, result)) externalObjects = true;
-                if (result == NullPointer || IsValueLocation(result) || IsSpan(result) || RuntimeTypeMetadata.IsStorage(result) || ObjectLayouts.IsValueType(objects, result)) return -2;
+                if (result == NullPointer || IsManagedLocation(result) || IsValueLocation(result) || IsSpan(result) ||
+                    RuntimeTypeMetadata.IsStorage(result) || ObjectLayouts.IsValueType(objects, result)) return -2;
                 exports[export] = index;
             }
             var body = new int[6];
@@ -1055,9 +1056,18 @@ namespace PortableCompiler
                 {
                     if (kind == BranchIl.ObjectElementAddress && records[slot + 3] == BranchIl.BoundObjectElement)
                         continue;
-                    if (kind == BranchIl.ObjectElementAddress &&
-                        BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, records[slot + 1], objects) != ObjectReference)
-                        return -2;
+                    if (kind == BranchIl.ObjectElementAddress)
+                    {
+                        int coded = records[slot + 1];
+                        int primitive = ArrayTypeRefs.PrimitiveElement(image, heaps, layout, coded);
+                        if (primitive == 8)
+                        {
+                            records[slot + 1] = Ints;
+                            continue;
+                        }
+                        if (BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, coded, objects) != ObjectReference)
+                            return -2;
+                    }
                     int array = ObjectLayouts.RegisterArray(objects, ObjectReference);
                     if (array < 0) return array;
                     records[slot + 1] = array;
