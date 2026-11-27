@@ -32,9 +32,12 @@ namespace PortableCompiler
                 closed = ManagedReferenceSignatures.ReadInstantiation(bundle, caller, layout, heaps,
                     owner, parent, objects, context, callerMethodArguments);
                 if (closed < ObjectLayouts.FirstClass) return closed < 0 ? closed : -2;
-                // Value receivers are managed pointers, and interface members
-                // need dispatch. Both are outside direct specialization.
-                if (ObjectLayouts.IsValueType(objects, closed) || ObjectLayouts.IsInterface(objects, closed)) return -2;
+                if (ObjectLayouts.IsInterface(objects, closed)) return -2;
+                // Closed values use the same constructor and read-only receiver
+                // ABI as other structs. LinkValueConstruction still proves the
+                // exact receiver and whether the address can be lowered.
+                if (ObjectLayouts.IsValueType(objects, closed) && opcode != 0x73 &&
+                    (opcode != 0x28 || !valueAddress)) return -2;
                 matched = ObjectLayouts.AssemblyOf(objects, closed);
                 declaring = ObjectLayouts.TypeDef(objects, closed);
                 target = bundle.Get(matched);
@@ -135,7 +138,7 @@ namespace PortableCompiler
         }
 
         internal static int ResolveField(BundleImages bundle, byte[] caller,
-            int[] layout, int[] heaps, int owner, int member, bool write, bool staticField, int[] objects, int[] globals, int[] field, int context, int callerType, int[] methodArguments = null)
+            int[] layout, int[] heaps, int owner, int member, bool write, bool staticField, int[] objects, int[] globals, int[] field, int context, int callerType, int[] methodArguments = null, bool valueConstructorReceiver = false)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedParent: true);
@@ -189,8 +192,10 @@ namespace PortableCompiler
                 int access = flags & 7;
                 bool local = parent != 0 && matched == owner &&
                     (access == 3 || access == 5 || access == 1 && callerType == declaringType);
+                bool initializesReceiver = valueConstructorReceiver && type == context &&
+                    matched == owner && declaringType == callerType;
                 if (((flags & 0x10) != 0) != staticField || (access != 6 && !local) ||
-                    (write && (flags & 0x20) != 0)) return -2;
+                    (write && (flags & 0x20) != 0 && !initializesReceiver)) return -2;
                 if (row != 0) return -5;
                 row = candidate;
             }

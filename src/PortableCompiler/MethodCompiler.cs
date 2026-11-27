@@ -1086,8 +1086,11 @@ namespace PortableCompiler
                         var linkedField = new int[2];
                         if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
                         if (callerType < 0) return -1;
+                        bool constructorReceiver = valueConstructor && kind == BranchIl.SetField &&
+                            records[slot + BranchIl.Width + 1] == 1;
                         int status = AssemblyBundle.ResolveField(bundle, image, layout, heaps, owner,
-                            field, kind == BranchIl.SetField, false, objects, globals, linkedField, context, callerType, methodArguments);
+                            field, kind == BranchIl.SetField, false, objects, globals, linkedField, context, callerType,
+                            methodArguments, constructorReceiver);
                         if (status < 0) return status;
                         records[slot + 1] = linkedField[0];
                         records[slot + 3] = linkedField[1];

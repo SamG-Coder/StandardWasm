@@ -197,9 +197,10 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
         .concat([0, 1].map(exports.BooleanWithMonitor));
     const genericLocations = [0, 1, 2].map(exports.GenericBooleanLocations)
         .concat([0, 1, 2].map(exports.GenericStringLocations));
-    const finalWriterModule = await compile(["InvokeFinalWriter"], true);
+    const finalWriterModule = await compile(["InvokeFinalWriter", "ReadGenericValue"], true);
     const { exports: finalWriterExports } = await instantiate(finalWriterModule, compiler, []);
     const finalWriter = [0, 1].map(finalWriterExports.InvokeFinalWriter);
+    const genericValues = [-1, 0, 1].map(finalWriterExports.ReadGenericValue);
     const dpi = [];
     // Each Windows oracle invocation starts a fresh process.
     for (const scenario of dpiScenarios) {
@@ -211,7 +212,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, dpi };
 }
 
 function readOracle(...args) {
@@ -223,7 +224,7 @@ const oracle = readOracle();
 const dpiScenarios = [[0, -4, -2, 98], [98, -4], [99, 102, 101, 103], [-5, -4]];
 const compilerPath = process.argv[2];
 const framework = { name: basename(oracle.framework), bytes: readFileSync(oracle.framework) };
-const expectedCompiler = { legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle, pointers: oracle.compiledPointers, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor, filter: oracle.compiledFilter, objectSpans: oracle.compiledObjectSpans, booleanLocations: oracle.compiledBooleanLocations, genericLocations: oracle.compiledGenericLocations, finalWriter: oracle.compiledFinalWriter };
+const expectedCompiler = { legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle, pointers: oracle.compiledPointers, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor, filter: oracle.compiledFilter, objectSpans: oracle.compiledObjectSpans, booleanLocations: oracle.compiledBooleanLocations, genericLocations: oracle.compiledGenericLocations, finalWriter: oracle.compiledFinalWriter, genericValues: oracle.compiledGenericValues };
 let compilerBytes, fixtureBytes;
 if (compilerPath) {
     execFileSync("dotnet", ["build", fileURLToPath(new URL("./Win32Fixture", import.meta.url)), "-c", "Release"],
@@ -276,6 +277,7 @@ try {
         }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes],
             name: framework.name, dpiScenarios });
         assert.deepEqual(compiled, expectedCompiler);
+        console.log("Three generic value construction and default cases matched the CLR in Node and Edge.");
         console.log("Calls to a final generic method matched the CLR for live and null receivers.");
         console.log("Six generic Boolean and string location cases matched the CLR in Node and Edge.");
         console.log("Five managed Boolean alias cases matched the CLR in Node and Edge.");

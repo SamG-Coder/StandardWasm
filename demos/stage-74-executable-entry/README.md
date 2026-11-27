@@ -72,7 +72,9 @@ including when the slot also serves as `Monitor.Enter`'s lock flag. The
 probe also exercises a Boolean cell and a single-object span in one frame. The generic
 fixture specializes `ref T` and `out T` with Boolean and string. Its checks
 cover loads through the location, copies between locations, and overwriting
-a live slot with `default(T)`.
+a live slot with `default(T)`. A bundled probe also constructs a closed
+generic value, initializes its own readonly fields, and invokes its
+original read-only getters on populated and default values.
 
 The monitor probe checks the CLR's reentrant lock behavior on the launch
 worker's single managed execution agent. It verifies lockTaken and typed
