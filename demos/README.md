@@ -222,6 +222,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [223 · Win32 process window station](stage-223-window-station/README.md) | `npm run demo -- stage-223-window-station` | Compare the borrowed station handle and user-object flags with x86 Windows |
 | [225 · Guarded string-to-span copies](stage-225-proven-string-span-moves/README.md) | `npm run demo -- stage-225-proven-string-span-moves` | Verify original CoreLib copy guards, return values and alias-visible writes |
 | [227 · Defaulting inline span fields](stage-227-inline-span-field-defaults/README.md) | `npm run demo -- stage-227-inline-span-field-defaults` | Verify exact field defaults through a shared managed owner and through earlier copies |
+| [228 · Readonly aggregate arguments](stage-228-readonly-aggregate-call/README.md) | `npm run demo -- stage-228-readonly-aggregate-call` | Verify nonescaping readonly field arguments, exception identity and null checks |
 
 ## Adding a stage
 
