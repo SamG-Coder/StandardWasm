@@ -88,7 +88,9 @@ a managed override, and the null-receiver exception. This probe uses the
 matching installed win-x86 .NET 10 runtime pack (decision 0044). The
 generic member probe invokes original generic methods on a struct location,
 including writes that remain visible to the caller, and checks that a generic
-reference local initializes to null.
+reference local initializes to null. A CoreLib-backed fixture also verifies
+that a direct method can return a canonical type descriptor or null to a
+caller that compares the result as a `System.Type`.
 
 The monitor probe checks the CLR's reentrant lock behavior on the launch
 worker's single managed execution agent. It verifies lockTaken and typed

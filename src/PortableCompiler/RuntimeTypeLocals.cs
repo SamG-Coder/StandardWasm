@@ -8,12 +8,12 @@ namespace PortableCompiler
     internal static class RuntimeTypeLocals
     {
         internal static void Specialize(BundleImages bundle, int[] records, int[] frame, int parameters, int locals,
-            int[] objects, int[] clauses)
+            int[] objects, int[] clauses, int[] signatures, int[] offsets)
         {
             if (locals == 0 || bundle.Length == 0) return;
             bool hasDescriptor = false;
             for (int slot = 0; slot < records.Length && !hasDescriptor; slot += Width)
-                hasDescriptor = records[slot] == TypeFromHandle || records[slot] == GetObjectType;
+                hasDescriptor = ProducesDescriptor(records, slot, signatures, offsets);
             if (!hasDescriptor) return;
 
             int[] writes = null;
@@ -32,7 +32,7 @@ namespace PortableCompiler
                             !ValueOperands.Entry(records, slot / Width, clauses);
                         int producer = fallthrough ? records[previous] : 0;
                         if (writes == null) writes = new int[locals];
-                        if (producer == TypeFromHandle || producer == GetObjectType) writes[local] = writes[local] | 1;
+                        if (fallthrough && ProducesDescriptor(records, previous, signatures, offsets)) writes[local] = writes[local] | 1;
                         else if (producer != NullLiteral) writes[local] = writes[local] | 2;
                     }
                 }
@@ -48,9 +48,18 @@ namespace PortableCompiler
             }
         }
 
+        private static bool ProducesDescriptor(int[] records, int slot, int[] signatures, int[] offsets)
+        {
+            int kind = records[slot];
+            return kind == TypeFromHandle || kind == GetObjectType ||
+                kind == Call && signatures[offsets[records[slot + 1]]] == RuntimeTypeMetadata.Type;
+        }
+
         internal static bool IsLinkedSystemType(BundleImages bundle, int[] objects, int type)
         {
+            if (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0]) return false;
             int owner = ObjectLayouts.AssemblyOf(objects, type);
+            if (owner < 0 || owner >= bundle.Count) return false;
             byte[] image = bundle.Get(owner);
             var layout = new int[4];
             var heaps = new int[8];

@@ -329,6 +329,7 @@ namespace PortableCompiler
                     exceptionTags |= ExceptionTypes.Supported | ExceptionTypes.Object;
                 }
 
+                typeCalls.ApplyDescriptorSignatures(bases, indices, offsets, signatures);
                 int parameters = arities[current];
                 int signature = offsets[current];
                 int result = signatures[signature];
@@ -411,8 +412,8 @@ namespace PortableCompiler
 
                     for (int local = 0; local < frameCells.Length; local++)
                         if (frameCells[local] != 0 && inlineLocations[local] != 0) return -2;
-                    typeCalls.Apply(bases, indices, offsets, signatures);
-                    RuntimeTypeLocals.Specialize(bundle, records, frame, parameters, locals, objects, catchRegion);
+                    typeCalls.ApplyDescriptorSignatures(bases, indices, offsets, signatures);
+                    RuntimeTypeLocals.Specialize(bundle, records, frame, parameters, locals, objects, catchRegion, signatures, offsets);
                     if (location.Length != 0) location[2] = -1;
                     int maximum = body[2];
                     if (maximum > 0 && body[1] > int.MaxValue / maximum)
@@ -431,12 +432,20 @@ namespace PortableCompiler
                         exceptionLocals = ExceptionClauses.Validate(records, catchRegion, location);
                         if (exceptionLocals < 0) return exceptionLocals;
                     }
-                    var descriptorMismatch = new int[2];
+                    var descriptorMismatch = new int[3];
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
                         result, signatures, offsets, arities, location, catchRegion, outgoingNulls, objects, virtualTypes, allocatedStates,
                         descriptorMismatch);
                     if (status < 0)
                     {
+                        int resultSource = descriptorMismatch[2] - 1;
+                        if (resultSource >= 0 && !IsExported(exports, resultSource) &&
+                            contexts[resultSource] == 0 && instantiations.Arguments(resultSource) == null &&
+                            typeCalls.RequireResult(bundle, owners[resultSource], rows[resultSource], signatures[offsets[resultSource]], objects))
+                        {
+                            features[0] = hostFeatures | hostUse[0];
+                            return Reemit;
+                        }
                         int target = descriptorMismatch[0] - 1;
                         if (target >= 0 && contexts[target] == 0 && instantiations.Arguments(target) == null &&
                             !IsExported(exports, target))

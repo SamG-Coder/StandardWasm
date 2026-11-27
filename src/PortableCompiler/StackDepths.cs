@@ -117,6 +117,18 @@ namespace PortableCompiler
                     signatures, offsets, arities, objects);
                 if (next < 0)
                 {
+                    if (kind == EqualRuntimeTypes && depth >= 2)
+                    {
+                        for (int index = depth - 1; index >= depth - 2; index--)
+                        {
+                            if (stack[index] < FirstClass) continue;
+                            int source = RuntimeTypeReturnDemand.Find(records, pc, index, depths, arities, frame,
+                                catchRegion, stack[index], signatures, offsets);
+                            if (source < 0) continue;
+                            descriptorMismatch[2] = source + 1;
+                            break;
+                        }
+                    }
                     if (kind == Call || kind == NewObject)
                     {
                         int first = kind == NewObject ? 1 : 0;
