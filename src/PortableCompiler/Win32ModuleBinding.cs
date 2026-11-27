@@ -17,7 +17,7 @@ namespace PortableCompiler
             GetWindowThreadProcessId = 32, GetCurrentProcess = 33, GetCurrentThread = 34, GetCurrentThreadId = 35,
             DuplicateHandle = 36, GetExitCodeThread = 37, CloseHandle = 38,
             GetProcessWindowStation = 39, GetUserObjectInformation = 40,
-            GetLongPathName = 41, Count = GetLongPathName;
+            GetLongPathName = 41, SetClassLong = 42, Count = SetClassLong;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -43,10 +43,12 @@ namespace PortableCompiler
             member == GetExitCodeThread ? "GetExitCodeThread" : member == CloseHandle ? "CloseHandle" :
             member == GetProcessWindowStation ? "GetProcessWindowStation" :
             member == GetUserObjectInformation ? "GetUserObjectInformationW" :
-            member == GetLongPathName ? "GetLongPathNameW" : "BCryptGenRandom";
+            member == GetLongPathName ? "GetLongPathNameW" :
+            member == SetClassLong ? "SetClassLongW" : "BCryptGenRandom";
 
         private static string Library(int member) => member == LoadLibrary || member == GetFullPathName ||
             member == GetLongPathName ? "kernel32.dll" :
+            member == SetClassLong ? "user32.dll" :
             member <= ReleaseContext || member == GetProcedure || IsThreadImport(member) ? "KERNEL32.dll" :
             member == SetProcessAwareness ? "api-ms-win-shcore-scaling-l1-1-1.dll" :
             member == BCryptGenRandom ? "BCrypt.dll" : "USER32.dll";
@@ -55,7 +57,8 @@ namespace PortableCompiler
             member == CreateWindow ? 12 : member == DuplicateHandle ? 7 :
             member == CallWindowProcedure || member == GetUserObjectInformation ? 5 :
             member == BCryptGenRandom || member == GetFullPathName || member == RedrawWindow ? 4 :
-            member == LoadLibrary || member == GetClassInfo || member == GetLongPathName || IsWindowLongSetter(member) ? 3 :
+            member == LoadLibrary || member == GetClassInfo || member == GetLongPathName ||
+            member == SetClassLong || IsWindowLongSetter(member) ? 3 :
             member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ||
             member == GetCurrentProcess || member == GetCurrentThread || member == GetCurrentThreadId ||
             member == GetProcessWindowStation ? 0 :
@@ -80,7 +83,12 @@ namespace PortableCompiler
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return 0;
             for (int member = 1; member <= Count; member++)
                 if (member != GetProcessAwareness && (UsesLastError(member) ? IsWindowLongImport(image, heaps, methods, counts, row, member) :
-                    NativeImports.Find(image, heaps, methods, counts, Library(member), EntryName(member), row, 0x101) == row ||
+                    NativeImports.Find(image, heaps, methods, counts, Library(member), EntryName(member), row,
+                        member == SetClassLong ? 0x100 : 0x101) == row ||
+                    // The original wrapper contains both architecture branches.
+                    // wasm32 uses one procedure-word ABI for both raw names.
+                    member == SetClassLong &&
+                    NativeImports.Find(image, heaps, methods, counts, "user32.dll", "SetClassLongPtrW", row, 0x100) == row ||
                     IsWindowStationImport(member) &&
                     NativeImports.Find(image, heaps, methods, counts, "user32.dll", EntryName(member), row, 0x101) == row))
                 {
@@ -222,7 +230,9 @@ namespace PortableCompiler
                     types[offset + 2] == Native &&
                     IsAbiShape(bundle, objects, types[offset + 3], Native, "HRGN", "Windows.Win32.Graphics.Gdi") &&
                     types[offset + 4] == I32;
-            if (IsWindowLongSetter(member))
+            // The window and class setters share the x86 procedure-word shape.
+            // Only the window declarations request automatic error capture.
+            if (IsWindowLongSetter(member) || member == SetClassLong)
                 return IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
                     types[offset + 2] == I32 && types[offset + 3] == Native && result == Native;
             if (member == BCryptGenRandom)

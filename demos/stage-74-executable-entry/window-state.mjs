@@ -36,6 +36,9 @@ export function createWindowState() {
         getWindowOwner(handle) {
             return windows.has(handle >>> 0) ? owner : undefined;
         },
+        getWindowClass(handle) {
+            return windows.get(handle >>> 0)?.attributes.classRecord;
+        },
         getWindowTitle(handle) {
             return windows.get(handle >>> 0)?.title;
         },
@@ -102,6 +105,7 @@ export function createWindowState() {
 
 const classBytes = 40; // WNDCLASSW, x86
 const nameOffset = 36, menuOffset = 32, moduleOffset = 16, procedureOffset = 4;
+const classProcedureIndex = -24; // GCL_WNDPROC
 const classAlreadyExists = 1410, classNotFound = 1411, noAccess = 998;
 const notSupported = 50, notEnoughMemory = 8, cannotFindWindowClass = 1407;
 const globalClass = 0x4000; // CS_GLOBALCLASS
@@ -127,6 +131,7 @@ function readClassName(view, address, fail) {
 export function createWindowClassState(memory, isProcedure, setError) {
     const atomsByName = new Map();
     const atomsByValue = new Map();
+    const classFields = new WeakMap();
     let nextAtom = 0xc000; // string atoms use the upper quarter of the 16-bit atom space
     const fail = error => { setError(error); return 0; };
     function findClass(view, instance, identifier, missingError) {
@@ -139,16 +144,31 @@ export function createWindowClassState(memory, isProcedure, setError) {
             if (!name) return null;
             entry = atomsByName.get(classKey(name));
         }
-        const fields = entry?.modules.get(instance >>> 0);
+        const record = entry?.modules.get(instance >>> 0);
+        const fields = classFields.get(record);
         if (!fields) { fail(missingError); return null; }
-        return { atom: entry.atom, name, fields };
+        return { atom: entry.atom, name, fields, record };
     }
 
     return {
         findClass(instance, identifier) {
             const found = findClass(new DataView(memory.buffer), instance, identifier >>> 0, cannotFindWindowClass);
             if (!found) return null;
-            return { name: found.name, procedure: found.fields[procedureOffset / 4], extraBytes: found.fields[3] };
+            return { name: found.name, procedure: found.fields[procedureOffset / 4],
+                extraBytes: found.fields[3], record: found.record };
+        },
+        setClassProcedure(record, index, procedure) {
+            const fields = classFields.get(record);
+            if (!fields) return fail(invalidWindow);
+            if ((index | 0) !== classProcedureIndex) return fail(invalidIndex);
+            if (!isProcedure(procedure)) return fail(invalidParameter);
+            // Windows snapshots its starting WNDPROC at creation. Update the
+            // class record for future HWNDs and GetClassInfo, leaving live
+            // dispatch functions attached to their individual windows.
+            const slot = procedureOffset / 4;
+            const previous = fields[slot];
+            fields[slot] = procedure;
+            return previous;
         },
         registerClassW(pointer) {
             const view = new DataView(memory.buffer);
@@ -176,7 +196,9 @@ export function createWindowClassState(memory, isProcedure, setError) {
             const fields = new Int32Array(nameOffset / 4);
             for (let index = 0; index < fields.length; index++)
                 fields[index] = view.getInt32(address + 4 * index, true);
-            entry.modules.set(module, fields);
+            const record = {};
+            classFields.set(record, fields);
+            entry.modules.set(module, record);
             return entry.atom;
         },
         getClassInfoW(instance, className, output) {
@@ -325,7 +347,8 @@ export function createWindowCreation(memory, windows, classes, bindProcedure, se
             const liveExStyle = popup ? exStyle : exStyle | windowEdgeStyle;
             try {
                 handle = windows.register(liveStyle, (message, wparam, lparam) => dispatch(handle, message, wparam, lparam), {
-                    procedure: windowClass.procedure, instance, extendedStyle: liveExStyle, extraBytes: windowClass.extraBytes
+                    procedure: windowClass.procedure, instance, extendedStyle: liveExStyle,
+                    extraBytes: windowClass.extraBytes, classRecord: windowClass.record
                 });
             } catch (error) {
                 if (!(error instanceof RangeError)) throw error;

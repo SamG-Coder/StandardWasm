@@ -14,7 +14,7 @@ export const win32MemoryImports = new Set([
     "getWindowThreadProcessId", "duplicateHandle", "getExitCodeThread", "getUserObjectInformationW"
 ]);
 export const win32ImportNames = new Set([
-    ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, "callWindowProcW", "deactivateActCtx", "releaseActCtx",
+    ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, "callWindowProcW", "setClassLongW", "deactivateActCtx", "releaseActCtx",
     "getCurrentProcess", "getCurrentThread", "getCurrentThreadId", "closeHandle", "getProcessWindowStation",
     "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError"
 ]);
@@ -205,6 +205,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         getWindowThreadProcessId,
         setWindowLongW: setWindowLong,
         setWindowLongPtrW: setWindowLong,
+        setClassLongW: (hwnd, index, procedure) => classes.setClassProcedure(windows.getWindowClass(hwnd), index, procedure),
         registerClassW: classes.registerClassW,
         getClassInfoW: classes.getClassInfoW,
         createWindowExW: createWindowCreation(memory, windows, classes, bindProcedure, setError, windowCreationMetrics),

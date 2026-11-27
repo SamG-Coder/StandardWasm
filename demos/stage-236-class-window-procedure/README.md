@@ -1,0 +1,7 @@
+# Stage 236 · Window class procedure replacement
+
+The original WinForms shutdown delegate resets the procedure of an existing window, resets the registered class procedure, and queues `WM_CLOSE`. This stage binds the original class setter. Both leaves of the upstream architecture wrapper use `standardwasm:win32/setClassLongW` on wasm32. The import takes an HWND, class index, and procedure token, and returns the prior procedure token. The imported function has three i32 arguments and one i32 result.
+
+The host supports `GCL_WNDPROC` (-24) for live windows with an owned class. The registered procedure must have the WNDPROC signature. An update is visible through `GetClassInfoW` and to future windows of that class. Each live window keeps its own procedure, which `SetWindowLongW` can update separately. Failures return zero and set the system error. The original class P/Invoke declarations leave the saved P/Invoke error slot alone.
+
+Run `npm run demo -- stage-236-class-window-procedure` with the generated compiler from `npm test`, or set `STANDARDWASM_COMPILER_PATH` to a frozen compiler. The runner compares the same ordinary .NET 10 DLL on Windows x86, Node, and Edge through the production browser host. It also checks rejected tokens, stale windows, and class ownership when two launches share an externally supplied window registry. Engine versions and binary hashes go to `artifacts/stage-236-class-window-procedure/results.json`.
