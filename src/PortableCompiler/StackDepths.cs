@@ -129,10 +129,12 @@ namespace PortableCompiler
                 {
                     int arity = records[slot + 3];
                     int operation = records[slot + Width + 2];
-                    if ((operation == RuntimeTypeIsGeneric || operation == RuntimeTypeGenericDefinition) && depth >= 1 &&
+                    if ((operation == RuntimeTypeIsGeneric || operation == RuntimeTypeGenericDefinition ||
+                        operation == RuntimeTypeGenericArguments) && depth >= 1 &&
                         RuntimeTypeGenericKind.IsDescriptorReceiver(stack[depth - 1]))
                         next = Push(stack, allocated, depth - 1,
-                            operation == RuntimeTypeIsGeneric ? I32 : PeLibrary.RuntimeTypeMetadata.Type);
+                            operation == RuntimeTypeIsGeneric ? I32 : operation == RuntimeTypeGenericDefinition ? PeLibrary.RuntimeTypeMetadata.Type :
+                                records[slot + 2 * Width + 1]);
                     else next = CallShape(stack, allocated, depth, virtualTypes, operand, arity, 0, objects);
                     // An unlowered reflection member is valid IL, but a
                     // compiler descriptor cannot be sent to an upstream body.

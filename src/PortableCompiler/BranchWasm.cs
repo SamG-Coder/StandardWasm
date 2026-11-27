@@ -388,15 +388,17 @@ namespace PortableCompiler
                     used = WasmIndexFixups.Write(code, used, frameShape[7], fixups);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, String, top));
                 }
-                else if (kind == RuntimeTypeIsGeneric || kind == RuntimeTypeGenericDefinition)
+                else if (kind == RuntimeTypeIsGeneric || kind == RuntimeTypeGenericDefinition || kind == RuntimeTypeGenericArguments)
                 {
                     int receiver = Spill(spills, maximum, spillFlags, states[state + top], top);
                     used = GuardNull(code, used, receiver);
                     used = Local(code, used, 0x20, receiver);
                     code[used++] = 0x10;
-                    int[] fixups = kind == RuntimeTypeIsGeneric ? reflection.TypeGenericKindFixups : reflection.GenericDefinitions.Fixups;
+                    int[] fixups = kind == RuntimeTypeIsGeneric ? reflection.TypeGenericKindFixups :
+                        kind == RuntimeTypeGenericDefinition ? reflection.GenericDefinitions.Fixups : reflection.GenericArguments.Fixups;
                     used = WasmIndexFixups.Write(code, used, frameShape[7], fixups);
-                    int resultType = kind == RuntimeTypeIsGeneric ? I32 : PeLibrary.RuntimeTypeMetadata.Type;
+                    int resultType = kind == RuntimeTypeIsGeneric ? I32 :
+                        kind == RuntimeTypeGenericDefinition ? PeLibrary.RuntimeTypeMetadata.Type : operand;
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, resultType, top));
                 }
                 else if (kind == EnumHasFlag)

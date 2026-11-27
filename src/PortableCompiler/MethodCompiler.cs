@@ -1292,7 +1292,7 @@ namespace PortableCompiler
                                 kind == BranchIl.ObjectElementAddress)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.RuntimeTypeDisplayName || kind == BranchIl.RuntimeTypeIsGeneric ||
-                                kind == BranchIl.RuntimeTypeGenericDefinition || kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
+                                kind == BranchIl.RuntimeTypeGenericDefinition || kind == BranchIl.RuntimeTypeGenericArguments || kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || kind == BranchIl.ClearInteriorField || kind == BranchIl.TakeProjectedFieldAddress ||
                                 nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit ||
                                 kind == BranchIl.GetReferenceField || kind == BranchIl.SetReferenceField || kind == BranchIl.TakeReferenceFieldAddress ||
@@ -1442,6 +1442,22 @@ namespace PortableCompiler
                 length = reflection.GenericDefinitions.Write(bundle, moduleCode, length, objects, globals, hostImports);
                 if (length < 0) return length;
                 WasmIndexFixups.Resolve(moduleCode, reflection.GenericDefinitions.Fixups[0], hostImports + functions);
+                sizes[functions] = length - bodyOffsets[functions];
+                functions++;
+            }
+            if (reflection.GenericArguments.Fixups[0] != 0)
+            {
+                if (functions >= owners.Length) return -3;
+                int offset = NextSignature(offsets, arities, functions);
+                if (offset + 1 >= signatures.Length) return -3;
+                signatures[offset] = reflection.GenericArguments.Vector;
+                signatures[offset + 1] = RuntimeTypeMetadata.Type;
+                arities[functions] = 1;
+                offsets[functions] = offset;
+                bodyOffsets[functions] = length;
+                length = reflection.GenericArguments.Write(bundle, moduleCode, length, objects, globals);
+                if (length < 0) return length;
+                WasmIndexFixups.Resolve(moduleCode, reflection.GenericArguments.Fixups[0], hostImports + functions);
                 sizes[functions] = length - bodyOffsets[functions];
                 functions++;
             }
@@ -3488,6 +3504,14 @@ namespace PortableCompiler
                 records[slot + BranchIl.Width + 2] = BranchIl.RuntimeTypeIsGeneric;
             if (operation == RuntimeTypeMetadata.GenericDefinition)
                 records[slot + BranchIl.Width + 2] = BranchIl.RuntimeTypeGenericDefinition;
+            if (operation == RuntimeTypeMetadata.GenericArguments)
+            {
+                int vector = RegisterArray(objects, RuntimeTypeMetadata.Type);
+                if (vector < 0) return vector;
+                records[slot + BranchIl.Width + 2] = BranchIl.RuntimeTypeGenericArguments;
+                records[slot + 2 * BranchIl.Width + 1] = vector;
+                records[slot + 2 * BranchIl.Width + 2] = types[shape];
+            }
             records[slot + BranchIl.Width + 3] = row;
             return 0;
         }
@@ -3509,7 +3533,8 @@ namespace PortableCompiler
                 int bound = actual == NullValue ? declared : actual;
                 int owner = records[slot + BranchIl.Width + 1], row = records[slot + BranchIl.Width + 3];
                 int operation = records[slot + BranchIl.Width + 2];
-                if ((operation == BranchIl.RuntimeTypeIsGeneric || operation == BranchIl.RuntimeTypeGenericDefinition) &&
+                if ((operation == BranchIl.RuntimeTypeIsGeneric || operation == BranchIl.RuntimeTypeGenericDefinition ||
+                    operation == BranchIl.RuntimeTypeGenericArguments) &&
                     RuntimeTypeGenericKind.IsDescriptorReceiver(actual))
                 {
                     // Select the descriptor path only after dataflow has seen
@@ -3520,6 +3545,13 @@ namespace PortableCompiler
                             bases, indices, arities, offsets, signatures, objects, functions);
                         if (functions < 0) return functions;
                         dispatch.AddAllocation(reflection.GenericDefinitions.ExceptionType);
+                    }
+                    if (operation == BranchIl.RuntimeTypeGenericArguments)
+                    {
+                        int vector = records[slot + 2 * BranchIl.Width + 1];
+                        int result = reflection.GenericArguments.Bind(owner, vector);
+                        if (result < 0) return result;
+                        records[slot + 1] = vector;
                     }
                     records[slot] = operation;
                     continue;

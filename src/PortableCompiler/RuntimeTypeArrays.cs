@@ -11,6 +11,19 @@ namespace PortableCompiler
         {
             for (int allocation = 0; allocation < records.Length; allocation += Width)
             {
+                if (records[allocation] == VirtualCall &&
+                    records[allocation + Width + 2] == RuntimeTypeGenericArguments)
+                {
+                    int receiver = ReflectionReceiver(records, allocation, clauses);
+                    if (receiver >= 0 && IsDescriptorProducer(records, receiver, frame, parameters + locals))
+                    {
+                        int store = Next(records, clauses, allocation);
+                        if (store >= 0)
+                            SpecializeLocal(records, frame, parameters, locals, records[allocation + 2 * Width + 2],
+                                records[allocation + 2 * Width + 1], store);
+                    }
+                    continue;
+                }
                 if (records[allocation] != NewArray) continue;
                 int declared = records[allocation + 1];
                 if (!RuntimeTypeLocals.IsLinkedSystemType(bundle, objects, ArrayElementKey(objects, declared))) continue;
@@ -22,6 +35,30 @@ namespace PortableCompiler
                 SpecializeLocal(records, frame, parameters, locals, declared, type, after);
             }
             return 0;
+        }
+
+        private static int ReflectionReceiver(int[] records, int call, int[] clauses)
+        {
+            int previous = RuntimeTypeRelations.Previous(records, call, clauses);
+            if (previous < 0) return -1;
+            if (records[previous] == Store)
+            {
+                // Roslyn can duplicate the Type once, call, store the array,
+                // then reuse the lower Type for a second reflection call.
+                int firstCall = RuntimeTypeRelations.Previous(records, previous, clauses);
+                if (firstCall < 0 || records[firstCall] != VirtualCall ||
+                    records[firstCall + Width + 2] != RuntimeTypeGenericArguments) return -1;
+                previous = RuntimeTypeRelations.Previous(records, firstCall, clauses);
+                if (previous < 0 || records[previous] != Dup) return -1;
+            }
+            return records[previous] == Dup ? RuntimeTypeRelations.Previous(records, previous, clauses) : previous;
+        }
+
+        private static bool IsDescriptorProducer(int[] records, int slot, int[] frame, int count)
+        {
+            int kind = records[slot], local = records[slot + 1];
+            return kind == TypeFromHandle || kind == GetObjectType ||
+                kind == Load && local >= 0 && local < count && frame[local] == RuntimeTypeMetadata.Type;
         }
 
         private static int ScanInitializer(int[] records, int allocation, int[] frame, int frameSize, int[] clauses)

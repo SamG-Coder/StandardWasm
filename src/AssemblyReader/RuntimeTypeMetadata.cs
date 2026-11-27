@@ -54,7 +54,7 @@ namespace PeLibrary
                 ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2, "System", "RuntimeType");
         }
 
-        internal const int GenericKind = 1, GenericDefinition = 2;
+        internal const int GenericKind = 1, GenericDefinition = 2, GenericArguments = 3;
 
         internal static int CoreGenericTypeOperation(byte[] image, int[] heaps, int[] layout, int row)
         {
@@ -62,7 +62,8 @@ namespace PeLibrary
             if ((flags & 0x2057) != 0x0046) return 0;
             uint name = (uint)MethodDefinitions.ReadColumn(image, layout, row, 3);
             int operation = (flags & 0x0800) != 0 && MatchesAscii(image, heaps, name, "get_IsGenericType") ? GenericKind :
-                (flags & 0x0800) == 0 && MatchesAscii(image, heaps, name, "GetGenericTypeDefinition") ? GenericDefinition : 0;
+                (flags & 0x0800) == 0 && MatchesAscii(image, heaps, name, "GetGenericTypeDefinition") ? GenericDefinition :
+                (flags & 0x0800) == 0 && MatchesAscii(image, heaps, name, "GetGenericArguments") ? GenericArguments : 0;
             if (operation == 0) return 0;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
@@ -72,6 +73,7 @@ namespace PeLibrary
             var cursor = new int[1];
             int end = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), 0, cursor);
             if (end < 0) return 0;
+            if (operation == GenericArguments && !SignatureReader.TakeElement(image, cursor, end, 0x1d)) return 0;
             bool result = operation == GenericKind ? SignatureReader.TakeElement(image, cursor, end, SignatureReader.Boolean) :
                 SignatureReader.ReadClass(image, cursor, end) == declaring << 2;
             return result && cursor[0] == end ? operation : 0;
