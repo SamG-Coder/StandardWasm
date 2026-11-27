@@ -123,8 +123,10 @@ Ordinary struct calls retain the managed receiver when the IL leaves it on the
 stack, including the linked padding setters. In `PropertyStore.AddValue`, a
 closed type selects the matching branch of the original `typeof` checks. The
 immediate same-type managed read preserves the value copy used by the original
-`ldobj`. The startup replay now reaches CoreLib's `Debugger.IsAttached` getter
-and stops at the internal debugger query.
+`ldobj`. The original `Debugger.IsAttached` getter calls the browser's managed
+runtime host for attachment state. The startup replay now stops while reading
+CoreLib's `Dictionary<TKey,TValue>.Remove` local signature, which includes a
+managed `Int32` reference.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

@@ -263,6 +263,22 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
     const characterCallbacks = [-1, 0, 1, 2, 17].map(rootExports.CheckCharacterCallback);
     const staticEventCallbacks = [0, 1, 2].map(rootExports.CheckStaticEventCallback);
     const exactValueReads = [-2147483648, -5, 0, 5, 2147483647].map(rootExports.ExactValueRead);
+    // Keeping a monitor import in the same module verifies the runtime import
+    // index when both groups are present.
+    const debuggerModule = await compile(["ReadManagedDebuggerStatus", "LockRoundTrip"], runtimeAssets);
+    const debuggerImports = WebAssembly.Module.imports(debuggerModule);
+    if (!debuggerImports.some(entry => entry.module === "standardwasm:runtime" && entry.name === "isDebuggerAttached") ||
+        !debuggerImports.some(entry => entry.module === "standardwasm:threading" && entry.name === "changeMonitorDepth"))
+        throw Error("The debugger fixture must use both host imports.");
+    const { exports: debuggerDefault } = await instantiate(debuggerModule, compiler, []);
+    const debuggerHost = { attached: false, isDebuggerAttached() { return this.attached; } };
+    const { exports: debuggerCustom } = await instantiate(debuggerModule, compiler, [], {
+        "standardwasm:runtime": debuggerHost
+    });
+    const debuggerStatus = { default: debuggerDefault.ReadManagedDebuggerStatus(), transitions: [false, true, false].map(value => {
+        debuggerHost.attached = value;
+        return debuggerCustom.ReadManagedDebuggerStatus();
+    }) };
     const whitespace = [0, 32, 133, 160, 5760, 8192, 8203, 8232, 12288, 65535].map(rootExports.CheckCoreWhitespace);
     const dpi = [];
     // Each Windows oracle invocation starts a fresh process.
@@ -275,7 +291,7 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, enumVectors, windowEnabled, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringTrim, scopedWritableSpan, stackBackedSpan, scopedReference, characterCallbacks, staticEventCallbacks, exactValueReads, byteSpan, byteLocations, whitespace, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, enumVectors, windowEnabled, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringTrim, scopedWritableSpan, stackBackedSpan, scopedReference, characterCallbacks, staticEventCallbacks, debuggerStatus, exactValueReads, byteSpan, byteLocations, whitespace, dpi };
 }
 
 function readOracle(...args) {
@@ -301,6 +317,7 @@ const expectedCompiler = {
     typeReturn: oracle.compiledTypeReturn, stringField: oracle.compiledStringField, byteSpan: oracle.compiledByteSpan,
     stringTrim: oracle.compiledStringTrim, scopedWritableSpan: oracle.scopedWritableSpan, stackBackedSpan: oracle.stackBackedSpan, scopedReference: oracle.scopedReference,
     characterCallbacks: oracle.characterCallbacks, staticEventCallbacks: oracle.staticEventCallbacks,
+    debuggerStatus: { default: oracle.debuggerStatus, transitions: [0, 1, 0] },
     exactValueReads: oracle.exactValueReads,
     byteLocations: oracle.compiledByteLocations,
     whitespace: oracle.compiledWhitespace,
@@ -365,6 +382,7 @@ try {
         }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes],
             name: framework.name, dpiScenarios, runtimePaths });
         assert.deepEqual(compiled, expectedCompiler);
+        console.log("Managed debugger status and host transitions passed in Node and Edge.");
         console.log("Five closed generic value reads matched the CLR in Node and Edge.");
         console.log("Five enum vector cases matched the CLR in Node and Edge, including typed failures.");
         console.log("Six generic value method and reference default cases matched the CLR in Node and Edge.");

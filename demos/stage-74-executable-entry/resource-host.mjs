@@ -83,6 +83,7 @@ export function createResourceHost(compiler, images) {
 }
 
 const threadingModule = "standardwasm:threading";
+const runtimeModule = "standardwasm:runtime";
 
 export function createMonitorHost() {
     // Compiled managed execution is synchronous on one Wasm agent. Identity
@@ -108,6 +109,7 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     const requestedResources = new Set();
     const requestedWin32 = new Set();
     let wantsMonitor = false;
+    let wantsDebugger = false;
     for (const { module: owner, name, kind } of WebAssembly.Module.imports(module)) {
         if (owner === resourceImportModule) {
             if (resourceImportKinds.get(name) !== kind || requestedResources.has(name))
@@ -119,6 +121,12 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
             if (kind !== "function" || name !== "changeMonitorDepth" || wantsMonitor)
                 throw Error("The generated module requests an invalid monitor import.");
             wantsMonitor = true;
+            continue;
+        }
+        if (owner === runtimeModule) {
+            if (kind !== "function" || name !== "isDebuggerAttached" || wantsDebugger)
+                throw Error("The generated module requests an invalid managed runtime import.");
+            wantsDebugger = true;
             continue;
         }
         if (owner === win32ImportModule) {
@@ -152,5 +160,12 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : [], windows);
     }
     if (wantsMonitor) imports[threadingModule] = createMonitorHost();
+    if (wantsDebugger) {
+        const debuggerHost = Object.hasOwn(runtimeImports, runtimeModule) ? runtimeImports[runtimeModule] : undefined;
+        // A host without a managed debugger reports the ordinary detached state.
+        imports[runtimeModule] = {
+            isDebuggerAttached: () => typeof debuggerHost?.isDebuggerAttached === "function" && debuggerHost.isDebuggerAttached() ? 1 : 0
+        };
+    }
     return WebAssembly.instantiate(module, imports);
 }

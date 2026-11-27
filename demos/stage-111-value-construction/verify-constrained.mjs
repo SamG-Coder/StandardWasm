@@ -51,18 +51,20 @@ async function verify(compiler, fixture, packed, inputs) {
         if (status <= 0) return { status, diagnostic: [0, 1, 2].map(i => tool.ReadDiagnostic(location, i)) };
         return { bytes: Uint8Array.from({ length: status }, (_, i) => tool.ReadByte(output, i)) };
     }
-    async function runEntry(name) {
+    async function runEntry(name, imports = {}, invocations = inputs) {
         const supported = compileEntry(name);
         if (!supported.bytes) throw Error(JSON.stringify({ name, ...supported }));
-        const { instance } = await WebAssembly.instantiate(supported.bytes);
-        return inputs.map(instance.exports.run);
+        const { instance } = await WebAssembly.instantiate(supported.bytes, imports);
+        return invocations.map(instance.exports.run);
     }
-    return { values: await runEntry("InvokeValueOverride"), typeBranches: await runEntry("CheckTypeBranches"),
+    const debuggerImports = { "standardwasm:runtime": { isDebuggerAttached: () => 0 } };
+    const [debuggerStatus] = await runEntry("ReadManagedDebuggerStatus", debuggerImports, [undefined]);
+    return { values: await runEntry("InvokeValueOverride"), typeBranches: await runEntry("CheckTypeBranches"), debuggerStatus,
         rejection: compileEntry("RejectInheritedValueHash") };
 }
 
 const assets = { "/compiler": readFileSync(compiler), "/fixture": images[0], "/bundle": bundle };
-const expected = { values: oracle.values, typeBranches: oracle.typeBranches, rejection: { status: -2, diagnostic: oracle.boxingDiagnostic } };
+const expected = { values: oracle.values, typeBranches: oracle.typeBranches, debuggerStatus: oracle.debuggerStatus, rejection: { status: -2, diagnostic: oracle.boxingDiagnostic } };
 const node = await verify(...Object.values(assets), oracle.inputs);
 assert.deepEqual(node, expected);
 const browser = await chromium.launch({ channel: "msedge" });

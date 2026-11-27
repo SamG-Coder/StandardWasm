@@ -284,8 +284,17 @@ namespace PortableCompiler
                 {
                     // MethodShape proved the named native leaf and both sides
                     // of the ABI. Keep the SDK's managed caller and error logic.
-                    int import = Win32ModuleBinding.FindImport(image, heaps, layout, source,
-                        MethodDefinitions.ReadColumn(image, layout, source, 1));
+                    int implementation = MethodDefinitions.ReadColumn(image, layout, source, 1);
+                    if (DebuggerNativeMetadata.IsAttachmentQuery(image, heaps, layout, source, implementation))
+                    {
+                        hostUse[0] = hostUse[0] | WasmImports.Debugger;
+                        if (moduleCode.Length - length < RuntimeDebuggerWasm.BodyCapacity) return -3;
+                        bodyOffsets[current] = length;
+                        length = RuntimeDebuggerWasm.WriteBody(moduleCode, length, WasmImports.DebuggerSlot(hostFeatures), hostImports, initializerPrologue);
+                        sizes[current] = length - bodyOffsets[current];
+                        continue;
+                    }
+                    int import = Win32ModuleBinding.FindImport(image, heaps, layout, source, implementation);
                     if (import == 0) return -2;
                     hostUse[0] = hostUse[0] | WasmImports.Win32NativeFeature(import);
                     if (moduleCode.Length - length < Win32ModuleWasm.BodyCapacity) return -3;
@@ -2446,8 +2455,9 @@ namespace PortableCompiler
             bool imported = (attributes & 0x2000) != 0;
             if ((attributes & 0x400) != 0 || (!allowVirtual && (attributes & 0x40) != 0) || (implementation & 7) != 0)
                 return -2;
-            int nativeImport = imported ? Win32ModuleBinding.FindImport(image, heaps, layout, row, implementation) : 0;
-            if (imported && nativeImport == 0) return -2;
+            bool debuggerQuery = imported && DebuggerNativeMetadata.IsAttachmentQuery(image, heaps, layout, row, implementation);
+            int nativeImport = imported && !debuggerQuery ? Win32ModuleBinding.FindImport(image, heaps, layout, row, implementation) : 0;
+            if (imported && !debuggerQuery && nativeImport == 0) return -2;
             int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
             if (owner < 0) return -1;
             bool isStatic = (attributes & 0x10) != 0;
@@ -2499,8 +2509,8 @@ namespace PortableCompiler
             }
             int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
             int arity = SignatureTypes.Read(bundle, image, heaps, signature, types, offset, receiver, layout, objects, assembly, context, methodArguments);
-            if (imported && arity >= 0 && !Win32ModuleBinding.MatchesSignature(bundle, objects, nativeImport, types, offset, arity))
-                return -2;
+            if (imported && arity >= 0 && (debuggerQuery ? arity != 0 || types[offset] != I32 :
+                !Win32ModuleBinding.MatchesSignature(bundle, objects, nativeImport, types, offset, arity))) return -2;
             if (arity > 0 && !isStatic && ObjectLayouts.IsValueType(objects, receiver) &&
                 ObjectLayouts.IsConstructor(image, heaps, layout, row))
             {

@@ -136,3 +136,8 @@ managed threads require separate support.
 The span probe verifies a single-object read-only span over an argument or
 local. The span reads a traced cell shared with the original frame slot. Both
 views of an argument observe later writes, and indexing still checks bounds.
+
+The debugger fixture links the original .NET 10 `Debugger.IsAttached` getter.
+The browser host reports detached by default and can supply a managed
+debugger state through `standardwasm:runtime`. The test checks detached and
+attached transitions in one instance and runs alongside the monitor import.

@@ -34,4 +34,5 @@ constrained override check. It uses matching .NET 10 runtimes including win-x86
 and compares the same .NET Standard DLL on the CLR, Node and Edge. The
 override updates the original location and preserves an earlier value copy.
 The check also covers the boxing diagnostic and equality and inequality
-branches on two closed generic instantiations.
+branches on two closed generic instantiations. It also compiles the original
+CoreLib debugger getter and compares the detached result with the CLR.
