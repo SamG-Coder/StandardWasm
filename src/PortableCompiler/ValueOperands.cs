@@ -86,7 +86,7 @@ namespace PortableCompiler
             return LowerAddressUse(image, layout, heaps, methodCount, records, slot, 0, clauses, readOnly);
         }
 
-        private static bool PrimitiveLoadMatches(int storage, int opcode)
+        internal static bool PrimitiveLoadMatches(int storage, int opcode)
         {
             if (storage == I32) return opcode == 0x4a || opcode == 0x4b;
             if (storage == I64) return opcode == 0x4c;

@@ -753,6 +753,8 @@ namespace PortableCompiler
                     EnumFlagTests.Lower(bundle, image, layout, heaps, owner, objects, records, catchRegion);
                     ExactManagedReads.FoldExactManagedReads(bundle, image, layout, heaps, owner, context,
                         methodArguments, objects, frame, records, catchRegion);
+                    ExactManagedReads.FoldExplicitFieldReads(bundle, image, layout, heaps, owner, source,
+                        context, methodArguments, objects, globals, records, catchRegion);
                     status = CurrentThreadBinding.Lower(image, heaps, layout, owner, source,
                         records, catchRegion, frame, parameters, locals, body[2], objects, globals);
                     if (status < 0) return status;
