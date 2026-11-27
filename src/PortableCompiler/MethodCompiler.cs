@@ -576,6 +576,18 @@ namespace PortableCompiler
                     sizes[current] = length - bodyOffsets[current];
                     continue;
                 }
+                if (stub < 0 && CoreExceptionTextMetadata.IsLookup(image, heaps, layout, source))
+                {
+                    if (moduleCode.Length - length < CoreExceptionTextWasm.BodyCapacity) return -3;
+                    int empty = StringLiterals.Empty(globals);
+                    if (empty < 0) return empty;
+                    int initialize = initializerPrologue < 0 ? -1 : hostImports + initializerPrologue;
+                    bodyOffsets[current] = length;
+                    length = CoreExceptionTextWasm.WriteBody(moduleCode, length, literals, literalSize, empty, initialize);
+                    if (length < 0) return length;
+                    sizes[current] = length - bodyOffsets[current];
+                    continue;
+                }
                 uint rva = 0;
                 int nativeKind = stub >= 0 ? NativeThunks.None : NativeThunks.Kind(image, heaps, layout, source);
                 int nativeDescription = 0;
