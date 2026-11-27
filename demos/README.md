@@ -304,6 +304,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [320 · Closed Vector128 lane counts](stage-320-vector128-count/README.md) | `npm run demo -- stage-320-vector128-count` | Compare exact platform lane counts and preserve assembly identity |
 | [323 · Managed Vector128 words](stage-323-vector128-word-abi/README.md) | `npm run demo -- stage-323-vector128-word-abi` | Verify authentic CLR layout and SIMD values through managed calls |
 | [330 · Closed Vector128 generic constraints](stage-330-vector128-generic-constraints/README.md) | `npm run demo -- stage-330-vector128-generic-constraints` | Prove closed Vector128 value and interface constraints |
+| [333 · Readonly generic character calls](stage-333-readonly-generic-character-calls/README.md) | `npm run demo -- stage-333-readonly-generic-character-calls` | Preserve readonly loans through exact generic specializations |
 
 ## Adding a stage
 

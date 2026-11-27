@@ -401,7 +401,7 @@ namespace PortableCompiler
                     else functions = expanded;
                 }
                 if (rows[current] == 0 || sizes[current] != 0 || !receiverDemand.Needed(current, contexts)) continue;
-                readOnlyCharacters.Apply(bases, indices, offsets, signatures);
+                readOnlyCharacters.Apply(bases, indices, owners, rows, contexts, offsets, signatures, instantiations, functions);
                 int owner = owners[current], source = rows[current], context = contexts[current];
                 context = NativeReceiverCalls.DeclaringContext(context);
                 int[] methodArguments = instantiations.Arguments(current);
@@ -871,7 +871,7 @@ namespace PortableCompiler
                     }
                     for (int local = 0; local < frameCells.Length; local++)
                         if (frameCells[local] != 0 && inlineLocations[local] != 0) return -2;
-                    readOnlyCharacters.Apply(bases, indices, offsets, signatures);
+                    readOnlyCharacters.Apply(bases, indices, owners, rows, contexts, offsets, signatures, instantiations, functions);
                     typeCalls.ApplyDescriptorSignatures(bases, indices, offsets, signatures);
                     typeCalls.ApplyClosedSignatures(bundle, owners, rows, contexts, instantiations, offsets, signatures, objects, closedSignaturesThrough, functions);
                     closedSignaturesThrough = functions;
@@ -941,11 +941,12 @@ namespace PortableCompiler
                     if (status < 0)
                     {
                         int borrowedCall = descriptorMismatch[ReadOnlyCharacterCalls.Target] - 1;
+                        int[] borrowedArguments = borrowedCall < 0 ? null : instantiations.Arguments(borrowedCall);
                         if (borrowedCall >= 0 && rows[borrowedCall] > 0 && contexts[borrowedCall] == 0 &&
-                            instantiations.Arguments(borrowedCall) == null && !IsExported(exports, borrowedCall) &&
-                            indices[bases[owners[borrowedCall]] + rows[borrowedCall]] == borrowedCall + 1 &&
+                            !IsExported(exports, borrowedCall) && (borrowedArguments != null ||
+                            indices[bases[owners[borrowedCall]] + rows[borrowedCall]] == borrowedCall + 1) &&
                             readOnlyCharacters.Require(bundle, owners[borrowedCall], rows[borrowedCall],
-                                descriptorMismatch[ReadOnlyCharacterCalls.Argument]))
+                                descriptorMismatch[ReadOnlyCharacterCalls.Argument], borrowedArguments))
                         {
                             features[0] = hostFeatures | hostUse[0];
                             return Reemit;
