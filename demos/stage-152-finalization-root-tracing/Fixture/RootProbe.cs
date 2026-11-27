@@ -5,6 +5,7 @@ namespace ManagedFinalizationExperiment
     public static class RootProbe
     {
         private static object saved;
+        private static int addressedValue;
 
         public static object SetStaticRoot(object value)
         {
@@ -32,6 +33,51 @@ namespace ManagedFinalizationExperiment
 
         public static int ObserveConstructor(int seed) => new ConstructorReceiver(seed).Value;
         public static int ConstructValue(int seed) => new ValueBox(seed).Value;
+
+        public static int ObserveAddressedFrame(int seed)
+        {
+            AddressedScope scope = default;
+            try
+            {
+                scope = new AddressedScope(seed);
+                Notify();
+            }
+            finally { scope.Observe(); }
+            return addressedValue;
+        }
+
+        public static int ObserveReferenceCell(int seed)
+        {
+            object slot = null;
+            try
+            {
+                Replace(ref slot, new Receiver { Value = seed });
+                Notify();
+            }
+            finally { ObserveCell(ref slot); }
+            return addressedValue;
+        }
+
+        private static void Replace(ref object slot, object value) => slot = value;
+
+        private static void ObserveCell(ref object slot)
+        {
+            Notify();
+            addressedValue = ((Receiver)slot).Value;
+            slot = null;
+        }
+
+        private struct AddressedScope
+        {
+            internal Receiver Target;
+            internal AddressedScope(int value) => Target = new Receiver { Value = value };
+
+            internal void Observe()
+            {
+                Notify();
+                addressedValue = Target.Value;
+            }
+        }
 
         private struct ValueBox
         {

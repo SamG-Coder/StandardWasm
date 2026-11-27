@@ -10,14 +10,19 @@ namespace PortableCompiler
     {
         internal static int Write(byte[] code, int used, int[] objects, bool read)
         {
-            if (code.Length - used < 4) return -3;
+            if (code.Length - used < 196) return -3;
             code[used++] = 0;
+            // These compiler-owned wrappers all carry their traced owner or
+            // value snapshot in field zero, independent of the nominal heap.
+            used = Wrapper(code, used, ValueLocation(FirstClass), read);
+            used = Wrapper(code, used, ObjectLocation, read);
+            used = Wrapper(code, used, ObjectSpan, read);
             for (int index = objects[0] - 1; index >= 0; index--)
             {
                 int type = FirstClass + index;
                 if (IsInterface(objects, type) || PrimitiveBoxing.IsLayout(objects, type)) continue;
                 int element = ArrayElement(objects, type);
-                if (element != 0 && !IsEdge(element)) continue;
+                if (element != 0 && !RootStackWasm.IsTraced(element)) continue;
                 int edges = element == 0 ? CountFields(objects, type) : 0;
                 if (code.Length - used < 64 || edges > (code.Length - used - 64) / 28) return -3;
 
@@ -40,12 +45,32 @@ namespace PortableCompiler
         {
             int count = 0, fields = LayoutFieldCount(objects, type);
             for (int i = 0; i < fields; i++)
-                if (IsEdge(LayoutFieldType(objects, type, i))) count++;
+                if (RootStackWasm.IsTraced(LayoutFieldType(objects, type, i))) count++;
             return count;
         }
 
-        private static bool IsEdge(int type) => IsObjectReference(type) || IsManagedLocation(type) ||
-            IsValueLocation(type) || IsSpan(type);
+        private static int Wrapper(byte[] code, int used, int type, bool read)
+        {
+            used = Local(code, used, 0x20, 0);
+            used = RefType(code, used, 0x14, type);
+            code[used++] = 0x04; code[used++] = 0x40;
+            if (read)
+            {
+                used = Local(code, used, 0x20, 1);
+                code[used++] = 0x45;
+                code[used++] = 0x04; code[used++] = 0x40;
+                used = Receiver(code, used, type);
+                used = Gc(code, used, 2, type);
+                code[used++] = 0;
+                code[used++] = 0x0f;
+                code[used++] = 0x0b;
+                used = Null(code, used);
+            }
+            else used = Const(code, used, 1);
+            code[used++] = 0x0f;
+            code[used++] = 0x0b;
+            return used;
+        }
 
         private static int Fields(byte[] code, int used, int[] objects, int type)
         {
@@ -54,7 +79,7 @@ namespace PortableCompiler
             {
                 int field = LayoutFieldType(objects, type, i);
                 if (field == 0) continue;
-                if (IsEdge(field))
+                if (RootStackWasm.IsTraced(field))
                 {
                     used = Local(code, used, 0x20, 1);
                     used = Const(code, used, edge++);

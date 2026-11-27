@@ -51,6 +51,9 @@ async function probe({ compiler, fixture, row, count }) {
 
 async function observeRoots(bytes) {
     const snapshots = [];
+    const addressedSnapshots = [];
+    let inspectAddress = false;
+    let inspectCell = false;
     let published;
     let inspectGraph = false;
     let reachable;
@@ -63,6 +66,15 @@ async function observeRoots(bytes) {
                 if (roots.some(value => value === null)) throw new Error("Expected a live object in every snapshot slot");
                 published = roots;
                 if (inspectGraph) reachable = instance.exports.__root_probe_mark();
+                if (inspectAddress || inspectCell) {
+                    const { __root_probe_mark: mark, __root_probe_edge_read: read, __root_probe_contains: contains } = instance.exports;
+                    mark();
+                    const target = read(roots[0], 0);
+                    if (target === null || contains(target) !== 1) throw new Error("The reference reachable through the addressed frame was lost");
+                    if (inspectCell && roots.length === 2 && read(roots[1], 0) !== roots[0])
+                        throw new Error("The managed address did not retain its backing cell");
+                    addressedSnapshots.push(target);
+                }
                 snapshots.push({ count: roots.length, unique: new Set(roots).size });
             }
         }
@@ -70,7 +82,8 @@ async function observeRoots(bytes) {
     const { __root_probe_table: table, __root_probe_count: count, __root_probe_edge_count: edges,
         __root_probe_edge_read: read, __root_probe_mark: mark, __root_probe_contains: contains,
         __root_probe_clear: clear, __root_probe_register: register, __root_probe_discover: discover,
-        __root_probe_pop: pop, ObserveFrames, ObserveConstructor, ConstructValue, ThrowWithRoot, BuildGraph, SetStaticRoot,
+        __root_probe_pop: pop, ObserveFrames, ObserveConstructor, ConstructValue, ObserveAddressedFrame, ObserveReferenceCell,
+        ThrowWithRoot, BuildGraph, SetStaticRoot,
         __root_probe_run_next: runNext, Allocate, ValueOf, Suppress, get_Finalized, get_Total, get_OverridesRan,
         TakeResurrected } = instance.exports;
     function assertEmpty() {
@@ -84,6 +97,21 @@ async function observeRoots(bytes) {
     assertEmpty();
     const constructedValue = ConstructValue(11);
     if (discover() !== 0) throw new Error("Value construction must not register a finalizer");
+    inspectAddress = true;
+    const addressedValue = ObserveAddressedFrame(23);
+    inspectAddress = false;
+    assertEmpty();
+    if (addressedSnapshots.length !== 2 || addressedSnapshots[0] !== addressedSnapshots[1] || mark() !== 0)
+        throw new Error("The addressed reference changed during finally or remained rooted after the frame returned");
+    clear();
+    addressedSnapshots.length = 0;
+    inspectCell = true;
+    const cellValue = ObserveReferenceCell(31);
+    inspectCell = false;
+    assertEmpty();
+    if (addressedSnapshots.length !== 2 || addressedSnapshots[0] !== addressedSnapshots[1] || mark() !== 0)
+        throw new Error("The frame cell lost the updated reference or remained rooted after return");
+    clear();
     let exception;
     try { ThrowWithRoot(11); }
     catch (error) { exception = error; }
@@ -202,12 +230,13 @@ async function observeRoots(bytes) {
     if (duplicate !== 1 || runNext() !== 1 || runNext() !== 0 || mark() !== 0)
         throw new Error("Suppression should consume one registration and leave no root afterward");
     const suppression = { nullException, registered, pending, duplicate, total: get_Total() - allocationFinalizers.total };
-    return { values: [value, constructed, constructedValue], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph, staticRoot: true,
+    return { values: [value, constructed, constructedValue, addressedValue, cellValue], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph, staticRoot: true,
         discovered, allocationReceivers, allocationFinalizers, suppression };
 }
 
 const expectedRoots = { values: oracle.rootProbeResult,
-    snapshots: [{ count: 3, unique: 2 }, { count: 2, unique: 1 }, { count: 1, unique: 1 }, { count: 3, unique: 2 }, { count: 1, unique: 1 }],
+    snapshots: [{ count: 3, unique: 2 }, { count: 2, unique: 1 }, { count: 1, unique: 1 }, { count: 2, unique: 1 },
+        { count: 1, unique: 1 }, { count: 2, unique: 2 }, { count: 1, unique: 1 }, { count: 3, unique: 2 }, { count: 1, unique: 1 }],
     clearedOnReturn: true, clearedOnUnwind: true, graph: oracle.graph, staticRoot: true, discovered: [0, 1, 0, 1, 2],
     allocationReceivers: { count: oracle.allocationFinalizers.count, total: oracle.allocationFinalizers.total },
     allocationFinalizers: oracle.allocationFinalizers, suppression: oracle.suppression };

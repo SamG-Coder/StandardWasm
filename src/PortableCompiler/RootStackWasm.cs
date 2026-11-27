@@ -21,6 +21,9 @@ namespace PortableCompiler
         private const string RunNextExport = "__root_probe_run_next";
         internal const int ExportCount = 11;
 
+        internal static bool IsTraced(int type) => IsObjectReference(type) || IsManagedLocation(type) ||
+            IsValueLocation(type) || IsSpan(type);
+
         internal static byte[] MapFrame(int[] records, int[] frame, int slots, bool protectedRegion)
         {
             int length = records.Length / BranchIl.Width;
@@ -29,16 +32,17 @@ namespace PortableCompiler
             var live = new byte[length];
             for (int slot = 0; slot < slots; slot++)
             {
-                if (IsManagedLocation(frame[slot]) || IsValueLocation(frame[slot]) || IsSpan(frame[slot])) return null;
-                if (!IsObjectReference(frame[slot])) continue;
-                if (!protectedRegion && FrameRootLiveness.Analyze(records, slot, false, live) != 0) return null;
-                for (int pc = 0; pc < length; pc++)
+                if (!IsTraced(frame[slot])) continue;
+                bool conservative = protectedRegion;
+                for (int pc = 0; pc < length && !conservative; pc++)
                 {
-                    // Until exception-edge liveness is available, keep reference slots for the entire protected frame.
-                    if (protectedRegion && records[pc * BranchIl.Width] == BranchIl.FrameAddress && records[pc * BranchIl.Width + 1] == slot)
-                        return null;
-                    map[pc * slots + slot] = protectedRegion ? (byte)1 : live[pc];
+                    int at = pc * BranchIl.Width;
+                    conservative = records[at] == BranchIl.FrameAddress && records[at + 1] == slot;
                 }
+                // An address can survive independently of the slot's last direct use.
+                // Protected frames also keep the slot through exceptional continuations.
+                if (!conservative && FrameRootLiveness.Analyze(records, slot, false, live) != 0) return null;
+                for (int pc = 0; pc < length; pc++) map[pc * slots + slot] = conservative ? (byte)1 : live[pc];
             }
             return map;
         }

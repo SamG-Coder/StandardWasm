@@ -89,8 +89,11 @@ allocated type overrides the trusted `Object.Finalize` slot. The remaining
 queue work includes re-registration and scheduling collection. The probe
 already dispatches the managed destructor, executes its base call chain,
 and binds the trusted suppression method for registered and pending receivers.
-Runtime wrappers still need explicit tracing before integrating this mode with
-the full WinForms application path.
+Addressed value slots and reference cells are now traced through `finally`.
+The unchanged sample's experimental compile proceeds beyond `Control.Dock`
+to the `Windows.Win32.PInvoke.GetModuleHandle` wrapper, which has a pinned
+managed char reference. Pinned frame handling remains part of runtime
+integration.
 JavaScript cleanup notifications can release independent host resources, but
 notification timing and delivery alone cannot satisfy the managed queue and
 resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)

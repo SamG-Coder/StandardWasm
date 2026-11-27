@@ -159,7 +159,6 @@ namespace PortableCompiler
                 code[used++] = 1;
                 code[used++] = 0x7f;
             }
-            int[] cellLocals = null;
             if (cellCount != 0)
             {
                 for (int i = 0; i < frameCells.Length; i++)
@@ -168,6 +167,16 @@ namespace PortableCompiler
                     code[used++] = 1;
                     used = WasmBinary.ValueType(code, used, frameCells[i]);
                 }
+            }
+            if (tracksRoots)
+            {
+                if (stackPointer >= 0 || guard >= 0) return -2;
+                code[used++] = 1;
+                code[used++] = 0x7f;
+            }
+            int[] cellLocals = null;
+            if (cellCount != 0)
+            {
                 cellLocals = new int[frameCells.Length];
                 int cell = staticAddress + (staticRegion >= 0 ? 1 : 0);
                 for (int i = 0; i < frameCells.Length; i++)
@@ -194,10 +203,6 @@ namespace PortableCompiler
             }
             if (tracksRoots)
             {
-                // Runtime probe only supports direct GC references in ordinary frames.
-                if (cellCount != 0 || stackPointer >= 0 || guard >= 0) return -2;
-                code[used++] = 1;
-                code[used++] = 0x7f;
                 used = RootStackWasm.SaveBase(code, used, rootCount, rootFrame);
                 code[used++] = 0x02; code[used++] = ExceptionDispatchWasm.ExceptionReference;
                 code[used++] = 0x1f; code[used++] = 0x40; code[used++] = 1;
@@ -247,6 +252,36 @@ namespace PortableCompiler
                 code[used++] = 0x46;
                 code[used++] = 0x04;
                 code[used++] = 0x40;
+
+                int tracked = 0;
+                if (tracksRoots && (kind == Call || kind == NewObject || kind == ConstructValue))
+                {
+                    int first = depth - arities[operand] + (kind == NewObject ? 1 : 0);
+                    int frameStart = pc * (arguments + locals);
+                    for (int local = 0; local < arguments + locals; local++) tracked += frameRoots[frameStart + local];
+                    for (int index = 0; index < first; index++)
+                        if (RootStackWasm.IsTraced(states[state + index])) tracked++;
+                    if (kind == NewObject && !IsValueType(objects, signatures[offsets[operand] + 1])) tracked++;
+                    if (tracked != 0)
+                    {
+                        used = RootStackWasm.Enter(code, used, rootCount, rootFrame, tracked);
+                        int root = 0;
+                        for (int local = 0; local < arguments + locals; local++)
+                        {
+                            if (frameRoots[frameStart + local] == 0) continue;
+                            // An addressed local is updated through its stable cell, not the original Wasm local.
+                            int backing = frameCells[local] == 0 ? local : cellLocals[local];
+                            used = RootStackWasm.Store(code, used, rootFrame, root++, backing);
+                        }
+                        // The callee owns consumed arguments. This frame holds the surviving prefix.
+                        for (int index = 0; index < first; index++)
+                        {
+                            int type = states[state + index];
+                            if (RootStackWasm.IsTraced(type))
+                                used = RootStackWasm.Store(code, used, rootFrame, root++, Spill(spills, maximum, spillFlags, type, index));
+                        }
+                    }
+                }
 
                 if (kind == Load || kind == Constant || kind == WideConstant || (kind == Dup && states[state + top] != NullValue) ||
                     kind == SingleConstant || kind == DoubleConstant)
@@ -652,33 +687,6 @@ namespace PortableCompiler
                     int first = depth - arity + receiver;
                     int temp = 0;
                     bool valueObject = kind == NewObject && IsValueType(objects, signatures[shape + 1]);
-                    int tracked = 0;
-                    if (tracksRoots)
-                    {
-                        int frameStart = pc * (arguments + locals);
-                        for (int local = 0; local < arguments + locals; local++) tracked += frameRoots[frameStart + local];
-                        for (int index = 0; index < first; index++)
-                        {
-                            int type = states[state + index];
-                            if (IsManagedLocation(type) || IsValueLocation(type) || IsSpan(type)) return -2;
-                            if (IsObjectReference(type)) tracked++;
-                        }
-                        if (kind == NewObject && !valueObject) tracked++;
-                        if (tracked != 0)
-                        {
-                            used = RootStackWasm.Enter(code, used, rootCount, rootFrame, tracked);
-                            int root = 0;
-                            for (int local = 0; local < arguments + locals; local++)
-                                if (frameRoots[frameStart + local] != 0) used = RootStackWasm.Store(code, used, rootFrame, root++, local);
-                            // The callee owns its consumed arguments. Only the surviving prefix stays in this frame.
-                            for (int index = 0; index < first; index++)
-                            {
-                                int type = states[state + index];
-                                if (IsObjectReference(type))
-                                    used = RootStackWasm.Store(code, used, rootFrame, root++, Spill(spills, maximum, spillFlags, type, index));
-                            }
-                        }
-                    }
                     if (valueObject)
                     {
                         // CLI newobj on a value type constructs a fresh zeroed
@@ -736,7 +744,6 @@ namespace PortableCompiler
                     }
                     if (returned != Void)
                         used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, StackType(returned), first));
-                    if (tracked != 0) used = RootStackWasm.Leave(code, used, rootCount, rootFrame);
                 }
                 else if (kind == FunctionAddress)
                 {
@@ -1313,6 +1320,8 @@ namespace PortableCompiler
                     used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
                     used = Gc(code, used, 0x0e, array);
                 }
+
+                if (tracked != 0) used = RootStackWasm.Leave(code, used, rootCount, rootFrame);
 
                 if (kind == Return)
                 {
