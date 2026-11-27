@@ -423,6 +423,25 @@ namespace PeLibrary
             return 0;
         }
 
+        // Raw TypeDef.Extends retains the exact base token for reflection.
+        // ReadShape discards the ValueType/Enum edge after choosing storage.
+        internal static int TypeDefinitionBase(byte[] image, int[] streams, int[] methods, int row)
+        {
+            var counts = new int[45];
+            int start = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
+            if (start < 0 || row < 2 || row > counts[2]) return -1;
+            int strings = methods[2];
+            int refs = TypeRefStart(image, streams, counts, start, strings);
+            int defs = refs + counts[1] * (ResolutionWidth(counts) + 2 * strings);
+            int extends = CodedWidth(counts[2], counts[1], counts[27]);
+            int column = 4 + 2 * strings;
+            int width = column + extends + IndexWidth(counts[4]) + IndexWidth(counts[6]);
+            uint value = ReadIndex(image, (uint)(defs + (row - 1) * width + column), extends);
+            if (value == 0) return 0;
+            int target = (int)(value >> 2), tag = (int)(value & 3);
+            return target > 0 && tag < 3 && target <= counts[tag == 0 ? 2 : tag == 1 ? 1 : 27] ? (int)value : -1;
+        }
+
         // The TypeDef row of a top-level type named ns.name in this image, or 0 (issue #299 uses it
         // to bind CoreLib's System.IO.FileNotFoundException). Nested types are not searched.
         internal static int FindTypeDefinition(byte[] image, int[] streams, int[] methods, string ns, string name)

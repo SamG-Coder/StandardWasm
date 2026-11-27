@@ -92,6 +92,7 @@ namespace PortableCompiler
         internal const int RuntimeTypeIsGeneric = 227; // [canonical Type] -> [Boolean]
         internal const int RuntimeTypeGenericDefinition = 228; // [canonical Type] -> [canonical Type]
         internal const int RuntimeTypeGenericArguments = 229; // [canonical Type] -> [descriptor Type[]]
+        internal const int RuntimeTypeIsEnum = 230; // [canonical Type] -> [Boolean]
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

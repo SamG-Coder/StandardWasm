@@ -1291,7 +1291,7 @@ namespace PortableCompiler
                             else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet || kind == BranchIl.StringCharacter ||
                                 kind == BranchIl.ObjectElementAddress)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
-                            else if (kind == BranchIl.RuntimeTypeDisplayName || kind == BranchIl.RuntimeTypeIsGeneric ||
+                            else if (kind == BranchIl.RuntimeTypeDisplayName || kind == BranchIl.RuntimeTypeIsGeneric || kind == BranchIl.RuntimeTypeIsEnum ||
                                 kind == BranchIl.RuntimeTypeGenericDefinition || kind == BranchIl.RuntimeTypeGenericArguments || kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || kind == BranchIl.ClearInteriorField || kind == BranchIl.TakeProjectedFieldAddress ||
                                 nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit ||
@@ -1479,8 +1479,11 @@ namespace PortableCompiler
                 sizes[functions] = length - bodyOffsets[functions];
                 functions++;
             }
-            if (reflection.TypeGenericKindFixups[0] != 0)
+            for (int predicate = 0; predicate < 2; predicate++)
             {
+                bool enumeration = predicate != 0;
+                int[] fixups = enumeration ? reflection.TypeEnumKindFixups : reflection.TypeGenericKindFixups;
+                if (fixups[0] == 0) continue;
                 if (functions >= owners.Length) return -3;
                 int offset = NextSignature(offsets, arities, functions);
                 if (offset + 1 >= signatures.Length) return -3;
@@ -1489,9 +1492,9 @@ namespace PortableCompiler
                 arities[functions] = 1;
                 offsets[functions] = offset;
                 bodyOffsets[functions] = length;
-                length = RuntimeTypeGenericKind.Write(bundle, moduleCode, length, objects, globals);
+                length = RuntimeTypePredicates.Write(bundle, moduleCode, length, objects, globals, enumeration);
                 if (length < 0) return length;
-                WasmIndexFixups.Resolve(moduleCode, reflection.TypeGenericKindFixups[0], hostImports + functions);
+                WasmIndexFixups.Resolve(moduleCode, fixups[0], hostImports + functions);
                 sizes[functions] = length - bodyOffsets[functions];
                 functions++;
             }
@@ -3488,7 +3491,7 @@ namespace PortableCompiler
             int arity = SignatureTypes.Read(bundle, image, heaps, blob, types, shape,
                 receiver, layout, objects, owner, closed);
             if (arity < 1) return arity < 0 ? arity : -1;
-            int operation = arity == 1 ? RuntimeTypeMetadata.CoreGenericTypeOperation(image, heaps, layout, row) : 0;
+            int operation = arity == 1 ? RuntimeTypeMetadata.CoreTypeDescriptorOperation(image, heaps, layout, row) : 0;
             if (operation != RuntimeTypeMetadata.GenericDefinition && RuntimeTypeLocals.IsLinkedSystemType(bundle, objects, types[shape]))
                 types[shape] = RuntimeTypeMetadata.Type;
             typeCalls.ApplyVirtualArguments(bundle, owner, row, types, shape, objects);
@@ -3504,6 +3507,8 @@ namespace PortableCompiler
                 records[slot + BranchIl.Width + 2] = BranchIl.RuntimeTypeIsGeneric;
             if (operation == RuntimeTypeMetadata.GenericDefinition)
                 records[slot + BranchIl.Width + 2] = BranchIl.RuntimeTypeGenericDefinition;
+            if (operation == RuntimeTypeMetadata.EnumKind)
+                records[slot + BranchIl.Width + 2] = BranchIl.RuntimeTypeIsEnum;
             if (operation == RuntimeTypeMetadata.GenericArguments)
             {
                 int vector = RegisterArray(objects, RuntimeTypeMetadata.Type);
@@ -3534,7 +3539,7 @@ namespace PortableCompiler
                 int owner = records[slot + BranchIl.Width + 1], row = records[slot + BranchIl.Width + 3];
                 int operation = records[slot + BranchIl.Width + 2];
                 if ((operation == BranchIl.RuntimeTypeIsGeneric || operation == BranchIl.RuntimeTypeGenericDefinition ||
-                    operation == BranchIl.RuntimeTypeGenericArguments) &&
+                    operation == BranchIl.RuntimeTypeGenericArguments || operation == BranchIl.RuntimeTypeIsEnum) &&
                     RuntimeTypeGenericKind.IsDescriptorReceiver(actual))
                 {
                     // Select the descriptor path only after dataflow has seen

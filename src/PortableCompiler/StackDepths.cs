@@ -130,10 +130,10 @@ namespace PortableCompiler
                     int arity = records[slot + 3];
                     int operation = records[slot + Width + 2];
                     if ((operation == RuntimeTypeIsGeneric || operation == RuntimeTypeGenericDefinition ||
-                        operation == RuntimeTypeGenericArguments) && depth >= 1 &&
+                        operation == RuntimeTypeGenericArguments || operation == RuntimeTypeIsEnum) && depth >= 1 &&
                         RuntimeTypeGenericKind.IsDescriptorReceiver(stack[depth - 1]))
                         next = Push(stack, allocated, depth - 1,
-                            operation == RuntimeTypeIsGeneric ? I32 : operation == RuntimeTypeGenericDefinition ? PeLibrary.RuntimeTypeMetadata.Type :
+                            operation == RuntimeTypeIsGeneric || operation == RuntimeTypeIsEnum ? I32 : operation == RuntimeTypeGenericDefinition ? PeLibrary.RuntimeTypeMetadata.Type :
                                 records[slot + 2 * Width + 1]);
                     else next = CallShape(stack, allocated, depth, virtualTypes, operand, arity, 0, objects);
                     // An unlowered reflection member is valid IL, but a

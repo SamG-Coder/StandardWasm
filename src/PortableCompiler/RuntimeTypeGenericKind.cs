@@ -1,6 +1,5 @@
 using PeLibrary;
 using static PeLibrary.ObjectLayouts;
-using static PortableCompiler.BranchWasm;
 using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
@@ -8,36 +7,6 @@ namespace PortableCompiler
     internal static class RuntimeTypeGenericKind
     {
         internal static bool IsDescriptorReceiver(int type) => type == RuntimeTypeMetadata.Type || type == NullValue;
-
-        internal static int Write(BundleImages bundle, byte[] code, int used, int[] objects, int[] globals)
-        {
-            if (code.Length - used < 3) return -3;
-            code[used++] = 0; // no local declarations
-            var layout = new int[4];
-            var heaps = new int[8];
-            for (int index = 0; index < globals[0]; index++)
-            {
-                int owner = StaticFields.Owner(globals, index), row = StaticFields.Row(globals, index);
-                if (!RuntimeTypeTokens.IsDescriptorOwner(owner) || row < 0) continue;
-                int module = RuntimeTypeTokens.ModuleSlot(owner) - 1;
-                int definition = Definition(bundle, objects, module, row, layout, heaps);
-                if (definition == -1) return -1;
-                if (definition < 0) continue;
-                if (code.Length - used < 18) return -3;
-                used = Local(code, used, 0x20, 0);
-                code[used++] = 0x23; // global.get
-                used = WasmBinary.Unsigned(code, used, index);
-                code[used++] = 0xd3; // ref.eq
-                code[used++] = 0x04;
-                code[used++] = 0x40;
-                used = Const(code, used, definition > 0 ? 1 : 0);
-                code[used++] = 0x0f;
-                code[used++] = 0x0b;
-            }
-            code[used++] = 0x00; // An unrepresented descriptor cannot establish a result.
-            code[used++] = 0x0b;
-            return used;
-        }
 
         internal static int Definition(BundleImages bundle, int[] objects, int owner, int row, int[] layout, int[] heaps)
         {
