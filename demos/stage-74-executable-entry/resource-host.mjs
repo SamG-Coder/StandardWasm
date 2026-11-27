@@ -123,6 +123,6 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         imports = { ...imports, ...resource.imports };
     }
     if (requestedWin32.size)
-        imports[win32ImportModule] = createWin32Host(memory, executablePath);
+        imports[win32ImportModule] = createWin32Host(memory, executablePath, requestedWin32.has("getModuleHandleW") ? assets : []);
     return WebAssembly.instantiate(module, imports);
 }

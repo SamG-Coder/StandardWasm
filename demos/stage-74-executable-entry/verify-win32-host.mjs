@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { basename } from "node:path";
 import { chromium } from "playwright-core";
 import { instantiateManagedModule } from "./resource-host.mjs";
 
@@ -42,13 +43,14 @@ function probeModule() {
     ]);
 }
 
-async function exercise(instantiate, bytes, executable) {
+async function exercise(instantiate, bytes, executable, framework) {
     const module = await WebAssembly.compile(new Uint8Array(bytes));
-    const make = () => instantiate(module, {}, [], {}, "apps/" + executable);
-    const { exports: host } = await make();
+    const asset = { path: "framework/" + framework.name, bytes: new Uint8Array(framework.bytes) };
+    const make = assets => instantiate(module, {}, assets, {}, "apps/" + executable);
+    const { exports: host } = await make([asset]);
 
-    function writeName(address, text) {
-        const view = new DataView(host.memory.buffer);
+    function writeName(address, text, memory = host.memory) {
+        const view = new DataView(memory.buffer);
         for (let i = 0; i < text.length; i++) view.setUint16(address + i * 2, text.charCodeAt(i), true);
         view.setUint16(address + text.length * 2, 0, true);
         return address;
@@ -65,7 +67,7 @@ async function exercise(instantiate, bytes, executable) {
     host.setLastPInvokeError(73);
     host.setLastSystemError(19);
     const errors = [host.getLastSystemError(), host.getLastPInvokeError()];
-    const second = (await make()).exports;
+    const second = (await make([{ ...asset, loadedFromBytes: true }])).exports;
     const isolated = [second.getLastSystemError(), second.getLastPInvokeError(), second.memory !== host.memory];
 
     const addr = host.memory.grow(1) * 65536;
@@ -73,8 +75,16 @@ async function exercise(instantiate, bytes, executable) {
     const otherPath = host.getModuleHandleW(writeName(32, "other/" + executable));
     const pathError = host.getLastSystemError();
     const invalidAddress = host.getModuleHandleW(host.memory.buffer.byteLength - 1);
+    const pointerError = host.getLastSystemError();
+    host.setLastSystemError(0);
+    const winForms = host.getModuleHandleW(writeName(32, framework.name.toUpperCase()));
+    const frameworkLookup = [winForms === 0 ? 0 : 1, host.getLastSystemError()];
+    const explicitHandle = host.getModuleHandleW(writeName(32, asset.path));
+    const embedded = second.getModuleHandleW(writeName(32, framework.name, second.memory));
     return { results, errors, isolated, pathMatches: afterGrowth === processHandle,
-        otherPath, pathError, invalidAddress, pointerError: host.getLastSystemError(), nonzeroProcessHandle: processHandle !== 0 };
+        otherPath, pathError, invalidAddress, pointerError, nonzeroProcessHandle: processHandle !== 0, frameworkLookup,
+        stableFrameworkHandle: winForms !== 0 && winForms === explicitHandle && winForms !== processHandle,
+        embeddedFramework: [embedded, second.getLastSystemError()] };
 }
 
 async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes) {
@@ -123,10 +133,12 @@ if (compilerPath) {
     assert.deepEqual(await exerciseCompiler(instantiateManagedModule, compilerBytes, fixtureBytes), oracle.compiledFixture);
 }
 const bytes = probeModule();
-const node = await exercise(instantiateManagedModule, bytes, oracle.executable);
+const framework = { name: basename(oracle.framework), bytes: readFileSync(oracle.framework) };
+const node = await exercise(instantiateManagedModule, bytes, oracle.executable, framework);
 assert.deepEqual(node, { results: oracle.results, errors: oracle.errors,
     isolated: [0, 0, true], pathMatches: true, otherPath: 0, pathError: 126,
-    invalidAddress: 0, pointerError: 998, nonzeroProcessHandle: true });
+    invalidAddress: 0, pointerError: 998, nonzeroProcessHandle: true, frameworkLookup: oracle.frameworkLookup,
+    stableFrameworkHandle: true, embeddedFramework: [0,126] });
 
 const browser = await chromium.launch({ channel: "msedge" });
 try {
@@ -135,15 +147,22 @@ try {
     await page.route(base + "/**", route => {
         const path = new URL(route.request().url()).pathname;
         if (path === "/") return route.fulfill({ contentType: "text/html", body: "<!doctype html>" });
+        if (path === "/test-framework")
+            return route.fulfill({ contentType: "application/octet-stream", body: framework.bytes });
+        if (path === "/stage-73-executable-intake/loader/pe.mjs")
+            return route.fulfill({ contentType: "text/javascript",
+                body: readFileSync(new URL("../stage-73-executable-intake/loader/pe.mjs", import.meta.url)) });
         if (path === "/resource-host.mjs" || path === "/win32-host.mjs")
             return route.fulfill({ contentType: "text/javascript", body: readFileSync(new URL("." + path, import.meta.url)) });
         return route.abort();
     });
     await page.goto(base);
-    const edge = await page.evaluate(async ({ source, bytes, executable }) => {
+    const edge = await page.evaluate(async ({ source, bytes, executable, frameworkName }) => {
         const { instantiateManagedModule } = await import("/resource-host.mjs");
-        return (0, eval)("(" + source + ")")(instantiateManagedModule, bytes, executable);
-    }, { source: exercise.toString(), bytes: [...bytes], executable: oracle.executable });
+        const frameworkBytes = await (await fetch("/test-framework")).arrayBuffer();
+        return (0, eval)("(" + source + ")")(instantiateManagedModule, bytes, executable,
+            { name: frameworkName, bytes: frameworkBytes });
+    }, { source: exercise.toString(), bytes: [...bytes], executable: oracle.executable, frameworkName: framework.name });
     assert.deepEqual(edge, node);
     if (compilerBytes) {
         const compiled = await page.evaluate(async ({ source, compilerBytes, fixtureBytes }) => {
@@ -153,7 +172,7 @@ try {
         assert.deepEqual(compiled, oracle.compiledFixture);
         console.log("The self-hosted compiler matched CLR module lookups and Marshal error exchange in Node and Edge.");
     }
-    console.log("Node and Edge matched 5 CLR module lookups and both last-error slots. Memory growth and host isolation passed.");
+    console.log("Node and Edge matched 6 CLR module lookups and both last-error slots. Memory growth and host isolation passed.");
 } finally {
     await browser.close();
 }

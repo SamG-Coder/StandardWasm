@@ -1,3 +1,5 @@
+import { readPeResource } from "../stage-73-executable-intake/loader/pe.mjs";
+
 export const win32ImportModule = "standardwasm:win32";
 export const win32ImportNames = new Set([
     "getModuleHandleW", "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError"
@@ -9,9 +11,26 @@ const executableHandle = 1;
 const decoder = new TextDecoder("utf-16le", { ignoreBOM: true });
 const normalize = name => name.replaceAll("\\", "/").toLowerCase();
 
-export function createWin32Host(memory, executablePath) {
-    const executable = executablePath ? normalize(executablePath) : "";
-    const baseName = executable.slice(executable.lastIndexOf("/") + 1);
+export function createWin32Host(memory, executablePath, assets = []) {
+    const byPath = new Map();
+    const byBaseName = new Map();
+    const baseName = name => name.slice(name.lastIndexOf("/") + 1);
+    function register(path, handle) {
+        const name = normalize(path);
+        if (!name || byPath.has(name)) return;
+        byPath.set(name, handle);
+        const leaf = baseName(name);
+        if (!byBaseName.has(leaf)) byBaseName.set(leaf, handle);
+    }
+    if (executablePath) register(executablePath, executableHandle);
+    let nextHandle = executableHandle + 1;
+    // File-backed manifested DLLs can provide Win32 activation-context
+    // resources. Images unpacked from a bundle keep the managed fallback.
+    for (const asset of assets) {
+        if (!asset.loadedFromBytes && readPeResource(asset.bytes, 24, 2, 0))
+            register(asset.path, nextHandle++);
+    }
+
     let systemError = 0;
     let pinvokeError = 0;
 
@@ -32,14 +51,12 @@ export function createWin32Host(memory, executablePath) {
 
         let name = normalize(decoder.decode(new Uint8Array(bytes, address, end - address)));
         if (name) {
-            const leaf = name.slice(name.lastIndexOf("/") + 1);
+            const leaf = baseName(name);
             if (!leaf.includes(".")) name += ".dll";
             else if (leaf.endsWith(".")) name = name.slice(0, -1);
-            if (executable && (name.includes("/") ? name === executable : name === baseName))
-                return executableHandle;
+            const handle = (name.includes("/") ? byPath : byBaseName).get(name);
+            if (handle !== undefined) return handle;
         }
-        // This process has its own executable handle. Managed companion
-        // assemblies are resolved by the managed loader, not as native DLLs.
         systemError = moduleNotFound;
         return 0;
     }

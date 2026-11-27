@@ -22,9 +22,12 @@ status does not include an IL offset. Evidence is under
 
 The browser loader accepts the Win32 module lookup and last-error host imports
 for a single managed execution instance. Module lookup uses the original
-selected executable's virtual path and a stable process-local handle. Unknown
-modules return a failed lookup. The system error and cached P/Invoke error
-occupy separate slots, and lookup uses the same linear memory as other imports.
+selected executable's virtual path and a stable process-local handle. A
+file-backed companion with neutral PE manifest resource 2 also receives a
+handle. Bundled companions keep the managed manifest fallback. Unknown modules
+return a failed lookup. The system error and cached P/Invoke error occupy
+separate slots, and lookup uses the same linear memory as other imports.
+Native activation-context creation still needs a browser implementation.
 
 Run `node demos/stage-74-executable-entry/verify-win32-host.mjs` on Windows to
 compare the host import contract in Node and Edge against native .NET calls.
