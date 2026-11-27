@@ -1989,10 +1989,10 @@ namespace PortableCompiler
                         continue;
                     }
                     var overrideSymbol = new int[3];
-                    int type = ConstrainedValueCalls.Resolve(bundle, image, layout, heaps, owner,
+                    int receiver = ConstrainedValueCalls.Resolve(bundle, image, layout, heaps, owner,
                         records[slot + 1], records[slot + 3], context, methodArguments, objects, overrideSymbol);
-                    if (type < 0) return type;
-                    int targetOwner = overrideSymbol[0], row = overrideSymbol[1], overrideContext = ~overrideSymbol[2];
+                    if (receiver < 0) return receiver;
+                    int targetOwner = overrideSymbol[0], row = overrideSymbol[1], overrideContext = overrideSymbol[2];
                     int function = Lookup(owners, rows, contexts, bases, indices, functions, targetOwner, row, overrideContext);
                     if (function < 0)
                     {
@@ -2001,11 +2001,12 @@ namespace PortableCompiler
                         var targetHeaps = new int[8];
                         if (CompressedTables.FindWithHeaps(implementation, targetLayout, targetHeaps) < 0) return -1;
                         functions = Register(bundle, implementation, targetLayout, targetHeaps, targetOwner, row, overrideContext,
-                            owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions, allowVirtual: true, receiverOverride: type);
+                            owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions,
+                            allowVirtual: true, receiverOverride: IsValueLocation(receiver) ? LocatedValue(receiver) : receiver);
                         if (functions < 0) return functions;
                         function = functions - 1;
                     }
-                    if (signatures[offsets[function] + 1] != ValueLocation(type)) return -2;
+                    if (signatures[offsets[function] + 1] != receiver) return -2;
                     records[slot] = BranchIl.Call;
                     records[slot + 1] = function;
                     records[slot + 3] = 0;

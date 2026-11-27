@@ -1,5 +1,6 @@
 using PeLibrary;
 using static PeLibrary.ObjectLayouts;
+using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
@@ -12,22 +13,33 @@ namespace PortableCompiler
             int owner, int typeToken, int methodToken, int context, int[] methodArguments, int[] objects, int[] target)
         {
             int table = typeToken >> 24, row = typeToken & 0xffffff;
-            int type;
+            int type, element = 0;
             if (table == 0x1b)
                 type = ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps,
                     owner, row, context, objects, methodArguments);
             else if (table == 1 || table == 2)
-                type = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner,
-                    row << 2 | (table == 1 ? 1 : 0), objects, true);
+            {
+                int coded = row << 2 | (table == 1 ? 1 : 0);
+                element = ArrayTypeRefs.PrimitiveElement(image, heaps, layout, coded);
+                type = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true);
+            }
             else return -2;
             if (type < 0) return type;
-            if (!IsValueType(objects, type) || IsExplicitValue(objects, type)) return -2;
+            bool int32Receiver = type == GenericScalar.Key(SignatureReader.Int32) || element == SignatureReader.Int32;
+            bool valueReceiver = IsValueType(objects, type) && !IsExplicitValue(objects, type);
+            if (!int32Receiver && !valueReceiver) return -2;
 
             var declaration = new int[3];
             int status = ResolveDeclaration(bundle, image, layout, heaps, owner, methodToken,
                 context, methodArguments, objects, declaration, allowInterface: true);
             if (status < 0) return status;
             int declarationOwner = declaration[0], declarationRow = declaration[1], declared = declaration[2];
+            if (int32Receiver && declared == ObjectReference)
+            {
+                int primitive = PrimitiveReceivers.ResolveConstrainedInt32Equals(bundle, objects, declarationOwner, declarationRow, target);
+                if (primitive != -2) return primitive;
+            }
+            if (!valueReceiver) return -2;
             if (declared != ObjectReference && !Implements(objects, type, declared))
             {
                 // Value layouts do not eagerly load interfaces. Bind the map only
@@ -45,8 +57,8 @@ namespace PortableCompiler
                 declarationOwner, declarationRow, target, exactValue: true);
             if (selected < 0) return selected;
             if (target[0] == declarationOwner && target[1] == declarationRow) return -2;
-            target[2] = HasArguments(objects, type) ? type : 0;
-            return type;
+            target[2] = HasArguments(objects, type) ? ~type : -1;
+            return ValueLocation(type);
         }
 
         internal static int ResolveObjectDeclaration(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
