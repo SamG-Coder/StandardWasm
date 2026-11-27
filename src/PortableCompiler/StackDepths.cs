@@ -523,9 +523,9 @@ namespace PortableCompiler
                 if (depth < 1) return -1;
                 int source = stack[depth - 1];
                 if (source != NullValue && (!IsReference(source) || IsValueType(objects, source))) return -1;
-                // The closed interface has no dynamic cast helper. Every
-                // input must already have the exact CLI interface type or be null.
-                if (extra == ReferenceCastWasm.ProvenInterface && source != NullValue && source != operand) return -2;
+                // Closed interface casts without a runtime test require
+                // existing nominal assignability in the CLI stack state.
+                if (extra == ReferenceCastWasm.ProvenInterface && !Assignable(source, operand, objects)) return -2;
                 return Push(stack, allocated, depth - 1, operand);
             }
             if (kind == StringEquals)

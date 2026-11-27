@@ -296,6 +296,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [302 · Native UTF-8 decoding](stage-302-native-utf8-decoding/README.md) | `npm run demo -- stage-302-native-utf8-decoding` | Match CLR UTF-8 code units, replacement and first-NUL handling |
 | [304 · TextInfo ASCII case normalization](stage-304-textinfo-ascii-case/README.md) | `npm run demo -- stage-304-textinfo-ascii-case` | Compare the original Mono helper's string identity and UTF-16 results |
 | [306 · Native byte span transfer](stage-306-native-byte-transfer/README.md) | `npm run demo -- stage-306-native-byte-transfer` | Verify bounded bytes and managed aliasing against the CLR |
+| [308 · Proven closed interface casts](stage-308-proven-closed-interface-cast/README.md) | `npm run demo -- stage-308-proven-closed-interface-cast` | Preserve CLR references when exact class membership proves the cast |
 
 ## Adding a stage
 
