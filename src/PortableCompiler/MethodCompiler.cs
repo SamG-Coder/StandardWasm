@@ -1617,6 +1617,18 @@ namespace PortableCompiler
                     if (array < 0) return array;
                     continue;
                 }
+                if (kind == BranchIl.TestClass &&
+                    RuntimeTypeMetadata.IsAssemblyDefinition(image, heaps, layout, records[slot + 1]))
+                {
+                    int entryMember = ReflectionMembers.CoreEntryAssemblyMember(image, heaps, layout, callerRow);
+                    if (entryMember == ReflectionMembers.EntryGetter || entryMember == ReflectionMembers.EntrySetter)
+                    {
+                        int status = reflection.Bind(bundle, globals, literals, literalSize);
+                        if (status < 0) return status;
+                        records[slot + 1] = RuntimeTypeMetadata.Assembly;
+                        continue;
+                    }
+                }
                 if (kind == BranchIl.BoxValue || kind == BranchIl.UnboxValue || kind == BranchIl.UnboxAggregateAddress || kind == BranchIl.TestClass)
                 {
                     int operand = records[slot + 1];
@@ -2881,6 +2893,22 @@ namespace PortableCompiler
                     {
                         if (!tracksFinalizers) return Reemit;
                         records[slot] = BranchIl.SuppressFinalizer;
+                        continue;
+                    }
+                    if (records[slot + 3] == 0 && ReflectionMembers.CoreEntryAssemblyMember(image, heaps, layout, target) ==
+                        ReflectionMembers.MonoEntryLeaf)
+                    {
+                        int token = PeLocator.ReadManagedEntryToken(bundle.Get(0));
+                        if (token < 0 || (token & 0xffffff) > bases[1])
+                        {
+                            records[slot] = BranchIl.NullLiteral;
+                            continue;
+                        }
+                        int status = reflection.Bind(bundle, globals, literals, literalSize);
+                        if (status < 0) return status;
+                        records[slot] = BranchIl.LoadStaticField;
+                        records[slot + 1] = reflection.Slots[RuntimeReflectionPlan.Width + RuntimeReflectionPlan.Assembly];
+                        records[slot + 3] = RuntimeTypeMetadata.Assembly;
                         continue;
                     }
                     if (records[slot + 3] == 0 && RuntimeTypeMetadata.IsCoreGetTypeFromHandle(image, heaps, layout, target))

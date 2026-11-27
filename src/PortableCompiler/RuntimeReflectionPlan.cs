@@ -7,7 +7,8 @@ namespace PortableCompiler
     internal sealed class RuntimeReflectionPlan
     {
         internal const int Module = 0, Assembly = 1, NameOffset = 2, NameLength = 3, Width = 4;
-        private const int ModuleRow = -1, AssemblyRow = -2;
+        private const int ModuleRow = -1;
+        internal const int AssemblyRow = -2;
         private const string UnknownName = "<Unknown>";
 
         internal readonly int[] TypeNameFixups = new int[1];

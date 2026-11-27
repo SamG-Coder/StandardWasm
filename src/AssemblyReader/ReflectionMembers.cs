@@ -8,6 +8,33 @@ namespace PeLibrary
         internal const int TypeModule = 1, TypeAssembly = 2, ModuleAssembly = 3, ModuleName = 4,
             ResourceStream = 5, ExecutingAssembly = 6, TypeName = 7, TypeNamespace = 8;
 
+        internal const int EntryGetter = 1, EntrySetter = 2, MonoEntryLeaf = 3;
+
+        internal static int CoreEntryAssemblyMember(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            int flags = MethodDefinitions.ReadColumn(image, layout, row, 2);
+            if ((flags & 0x2050) != 0x10) return 0;
+            uint name = (uint)MethodDefinitions.ReadColumn(image, layout, row, 3);
+            int kind = MatchesAscii(image, heaps, name, "GetEntryAssembly") ? EntryGetter :
+                MatchesAscii(image, heaps, name, "SetEntryAssembly") ? EntrySetter :
+                MatchesAscii(image, heaps, name, "GetEntryAssemblyNative") ? MonoEntryLeaf : 0;
+            if (kind == 0) return 0;
+            int impl = MethodDefinitions.ReadColumn(image, layout, row, 1);
+            int rva = MethodDefinitions.ReadColumn(image, layout, row, 0);
+            if (kind == MonoEntryLeaf ? impl != 0x1000 || rva != 0 : impl != 0 || rva == 0) return 0;
+            var counts = new int[45];
+            int first = CoreGetter(image, heaps, layout, row, counts, "System.Reflection", "Assembly");
+            if (first < 0) return 0;
+            var cursor = new int[1];
+            bool setter = kind == EntrySetter;
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4),
+                setter ? 1 : 0, cursor);
+            if (end < 0 || setter && !SignatureReader.TakeElement(image, cursor, end, 1)) return 0;
+            int type = SignatureReader.ReadClass(image, cursor, end);
+            return cursor[0] == end && (type & 3) == 0 && type >> 2 == ObjectLayouts.Owner(image, heaps, layout, row, false)
+                ? kind : 0;
+        }
+
         internal static bool IsTypeText(int member) => member == TypeName || member == TypeNamespace;
 
         internal static bool IsCoreTypeAssemblyGetter(byte[] image, int[] heaps, int[] layout, int row)

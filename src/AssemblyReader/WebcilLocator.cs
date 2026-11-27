@@ -25,18 +25,8 @@ namespace PeLibrary
             return 0;
         }
 
-        internal static int ReadEntryToken(byte[] image)
-        {
-            int cli = LocateCli(image);
-            if (cli < 0)
-                return -1;
-            uint flags = U32(image, (uint)cli + 16);
-            uint token = U32(image, (uint)cli + 20);
-            if ((flags & 0x10) != 0 || token <= 0x06000000 || token > 0x06ffffff)
-                return -1;
-
-            return (int)token;
-        }
+        internal static int ReadEntryToken(byte[] image) =>
+            PeLocator.ReadCliEntryToken(image, LocateCli(image));
 
         internal static int MapImageRange(byte[] image, uint rva, uint size)
         {
