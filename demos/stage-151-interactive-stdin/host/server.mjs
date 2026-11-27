@@ -10,6 +10,7 @@ export function serveInteractiveConsole(port, compiler) {
     return serveIntake(port, new Map([
         ["/", ["text/html", join(demos, "stage-151-interactive-stdin/web/index.html")]],
         ["/StandardWasm.Compiler.wasm", ["application/wasm", compiler]],
+        ["/scripts/native-imports.mjs", ["text/javascript", join(root, "scripts/native-imports.mjs")]],
         script("stage-151-interactive-stdin/web/stdin-ui.mjs"),
         script("stage-151-interactive-stdin/host/stdin-worker.mjs"),
         ...["console-launch", "console-host"].map(name => script("stage-110-console-arguments/host/" + name + ".mjs")),

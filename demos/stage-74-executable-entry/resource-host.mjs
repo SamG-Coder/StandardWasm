@@ -1,3 +1,4 @@
+import { isNativeImportModule, nativeImports, windowsScalars } from "../../scripts/native-imports.mjs";
 import { createWin32Host, win32ImportModule, win32ImportNames, win32MemoryImports } from "./win32-host.mjs";
 
 export const resourceImportModule = "standardwasm:resources";
@@ -110,6 +111,7 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     const requestedWin32 = new Set();
     let wantsMonitor = false;
     let wantsDebugger = false;
+    let wantsNative = false;
     for (const { module: owner, name, kind } of WebAssembly.Module.imports(module)) {
         if (owner === resourceImportModule) {
             if (resourceImportKinds.get(name) !== kind || requestedResources.has(name))
@@ -135,6 +137,10 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
             requestedWin32.add(name);
             continue;
         }
+        if (isNativeImportModule(owner)) {
+            wantsNative = true;
+            continue;
+        }
         const group = Object.hasOwn(runtimeImports, owner) ? runtimeImports[owner] : undefined;
         // A WebAssembly.Suspending import (Stage 151, decision 0079) is a function import too.
         const value = group && Object.hasOwn(group, name) ? group[name] : undefined;
@@ -147,7 +153,11 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         throw Error("The requested Win32 functions require the StandardWasm memory import.");
 
     let memory;
+    // Both import families run on the same emulated CLR thread. Keep the
+    // system and saved error slots shared within one instance and isolated across instances.
+    const errors = { system: 0, pinvoke: 0 };
     let imports = { ...runtimeImports };
+    if (wantsNative) Object.assign(imports, nativeImports(module, windowsScalars, errors));
     if (requestedResources.size === 1 && requestedResources.has("memory")) {
         memory = createMemory();
         imports[resourceImportModule] = { memory };
@@ -161,7 +171,7 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     }
     if (requestedWin32.size) {
         const usesModules = requestedWin32.has("getModuleHandleW") || requestedWin32.has("createActCtxW");
-        imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : [], windows);
+        imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : [], windows, errors);
     }
     if (wantsMonitor) imports[threadingModule] = createMonitorHost();
     if (wantsDebugger) {

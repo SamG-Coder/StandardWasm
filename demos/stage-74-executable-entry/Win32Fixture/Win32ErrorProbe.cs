@@ -26,5 +26,18 @@ public static class Win32ErrorProbe
         return found ? 1 : Marshal.GetLastPInvokeError();
     }
 
+    [DllImport("KERNEL32.dll", EntryPoint = "SetLastError", ExactSpelling = true, SetLastError = true)]
+    private static extern void SetNativeError(int error);
+
+    public static int MixedNativeErrors(int error)
+    {
+        Marshal.SetLastSystemError(19);
+        Marshal.SetLastPInvokeError(73);
+        SetNativeError(error);
+        return Marshal.GetLastPInvokeError();
+    }
+
     public static int Read() => Marshal.GetLastPInvokeError();
+
+    public static int ReadSystemError() => Marshal.GetLastSystemError();
 }

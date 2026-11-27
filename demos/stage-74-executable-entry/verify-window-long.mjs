@@ -69,6 +69,8 @@ try {
     await page.route("http://127.0.0.1/**", route => {
         const path = new URL(route.request().url()).pathname;
         if (path === "/") return route.fulfill({ contentType: "text/html", body: "<!doctype html>" });
+        if (path === "/scripts/native-imports.mjs")
+            return route.fulfill({ contentType: "text/javascript", body: readFileSync(join(root, path)) });
         if (path !== "/stage-73-executable-intake/loader/pe.mjs" &&
             !["resource-host", "win32-host", "window-state", "activation-context", "dpi-awareness"]
                 .some(name => path === "/stage-74-executable-entry/" + name + ".mjs")) return route.abort();

@@ -6,6 +6,7 @@ export function serveLaunch(port, compiler) {
     const stage = join(root, "demos/stage-74-executable-entry");
     return serveIntake(port, new Map([
         ["/StandardWasm.Compiler.wasm", ["application/wasm", compiler]],
+        ["/scripts/native-imports.mjs", ["text/javascript", join(root, "scripts/native-imports.mjs")]],
         ["/stage-73-executable-intake/loader/pe.mjs", ["text/javascript",
             join(root, "demos/stage-73-executable-intake/loader/pe.mjs")]],
         ...["launch", "launch-worker", "companions", "resource-host", "frameworks", "win32-host", "activation-context", "dpi-awareness", "window-state"].map(name => [

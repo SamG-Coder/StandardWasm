@@ -28,8 +28,11 @@ for a single managed execution instance. Module lookup uses the original
 selected executable's virtual path and a stable process-local handle. A
 file-backed companion with neutral PE manifest resource 2 also receives a
 handle. Bundled companions keep the managed manifest fallback. Unknown modules
-return a failed lookup. The system error and cached P/Invoke error occupy
-separate slots, and lookup uses the same linear memory as other imports.
+return a failed lookup. Lookup uses the same linear memory as other imports.
+The fixed Win32 adapters and [typed native calls](../stage-156-native-imports/README.md)
+share the system error and saved P/Invoke error slots within each WebAssembly
+instance. A fresh instance starts with both slots cleared. Typed native calls
+resolve through the browser host registry.
 The browser host can create an activation-context handle from a file-backed
 module's numeric, language-neutral manifest resource and maintain the active
 contexts in stack order. The current contract retains the original manifest

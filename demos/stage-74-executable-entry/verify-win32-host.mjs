@@ -30,10 +30,11 @@ const nameBytes = name => {
 };
 const section = (id, payload) => [id, ...unsigned(payload.length), ...payload];
 
-function probeModule() {
+function probeModule(extraImports = []) {
     const imports = [
         ...nameBytes("standardwasm:resources"), ...nameBytes("memory"), 2, 0, 1,
-        ...methods.flatMap(([name, type]) => [...nameBytes("standardwasm:win32"), ...nameBytes(name), 0, type])
+        ...methods.flatMap(([name, type]) => [...nameBytes("standardwasm:win32"), ...nameBytes(name), 0, type]),
+        ...extraImports.flatMap(([module, name]) => [...nameBytes(module), ...nameBytes(name), 0, 1])
     ];
     const exports = [
         ...nameBytes("memory"), 2, 0,
@@ -42,16 +43,22 @@ function probeModule() {
     return Uint8Array.from([
         0, 97, 115, 109, 1, 0, 0, 0,
         ...section(1, [4, 0x60, 1, 0x7f, 1, 0x7f, 0x60, 0, 1, 0x7f, 0x60, 1, 0x7f, 0, 0x60, 2, 0x7f, 0x7f, 1, 0x7f]),
-        ...section(2, [methods.length + 1, ...imports]),
+        ...section(2, [methods.length + 1 + extraImports.length, ...imports]),
         ...section(7, [methods.length + 1, ...exports])
     ]);
 }
 
-async function exercise(instantiate, bytes, executable, framework) {
+async function exercise(instantiate, bytes, executable, framework, invalidNativeImports) {
     const module = await WebAssembly.compile(new Uint8Array(bytes));
     const asset = { path: "framework/" + framework.name, bytes: new Uint8Array(framework.bytes) };
     const make = assets => instantiate(module, {}, assets, {}, "apps/" + executable);
     const { exports: host } = await make([asset]);
+    const nativeValidation = [];
+    for (const invalid of invalidNativeImports) {
+        const invalidModule = await WebAssembly.compile(new Uint8Array(invalid));
+        try { await instantiate(invalidModule, {}, []); }
+        catch (error) { nativeValidation.push(error.message); }
+    }
 
     function writeName(address, text, memory = host.memory) {
         const view = new DataView(memory.buffer);
@@ -127,7 +134,7 @@ async function exercise(instantiate, bytes, executable, framework) {
     const activationContext = { createError, activated, currentMatches, restored, missing, invalidFlags,
         contextIsolated, nestedMatches, invalidRequest, validHandle: context > 0 };
 
-    return { results, errors, isolated, activationContext, pathMatches: afterGrowth === processHandle,
+    return { results, errors, isolated, activationContext, nativeValidation, pathMatches: afterGrowth === processHandle,
         otherPath, pathError, invalidAddress, pointerError, nonzeroProcessHandle: processHandle !== 0, frameworkLookup,
         stableFrameworkHandle: winForms !== 0 && winForms === explicitHandle && winForms !== processHandle,
         embeddedFramework: [embedded, second.getLastSystemError()] };
@@ -197,6 +204,16 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
         return [handle === -1 ? -1 : handle > 0 ? 1 : 0, exports.Read()];
     });
     const pointers = [0, -1, 123].flatMap(value => [exports.PointerRoundTrip(value, 0), exports.PointerRoundTrip(value, 1)]);
+    const mixedModule = await compile(["MixedNativeErrors", "Read", "ReadSystemError"], runtimeAssets);
+    const mixedImports = WebAssembly.Module.imports(mixedModule);
+    if (!mixedImports.some(entry => entry.module === "standardwasm:win32" && entry.name === "getLastPInvokeError") ||
+        !mixedImports.some(entry => entry.module === "native:KERNEL32.dll" && entry.name === "SetLastError"))
+        throw Error("The generated fixture must use both Win32 import families.");
+    const { exports: mixed } = await instantiate(mixedModule, compiler, []);
+    const { exports: secondMixed } = await instantiate(mixedModule, compiler, []);
+    const mixedErrors = [mixed.MixedNativeErrors(1234), mixed.Read(), mixed.ReadSystemError(),
+        secondMixed.Read(), secondMixed.ReadSystemError()];
+
     const enumModule = await compile(["EnumVectors"], []);
     const { exports: enumExports } = await instantiate(enumModule, compiler, []);
     const enumVectors = [0, 1, 2, 3, 4].map(enumExports.EnumVectors);
@@ -314,7 +331,7 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, enumVectors, windowEnabled, systemRandom, randomStatuses, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringContains, stringTrim, scopedWritableSpan, scopedReceiverReset, scopedNestedValue, spanFromEnd, spanSlices, stringsFromSpan, stackBackedSpan, scopedReference, characterCallbacks, stringCreation, staticEventCallbacks, debuggerStatus, exactValueReads, byteSpan, byteLocations, whitespace, dpi };
+    return { legacy, mixedErrors, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, enumVectors, windowEnabled, systemRandom, randomStatuses, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringContains, stringTrim, scopedWritableSpan, scopedReceiverReset, scopedNestedValue, spanFromEnd, spanSlices, stringsFromSpan, stackBackedSpan, scopedReference, characterCallbacks, stringCreation, staticEventCallbacks, debuggerStatus, exactValueReads, byteSpan, byteLocations, whitespace, dpi };
 }
 
 function readOracle(...args) {
@@ -331,7 +348,7 @@ const runtimeAssets = runtime ? ["System.Private.CoreLib.dll", "System.Runtime.d
     .map(name => readFileSync(join(runtime.directory, name))) : [];
 const runtimePaths = runtimeAssets.map((_, index) => "/test-runtime-" + index);
 const expectedCompiler = {
-    legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle,
+    legacy: oracle.compiledFixture, mixedErrors: oracle.mixedErrors, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle,
     pointers: oracle.compiledPointers, nativeLocal: oracle.nativeLocal, nativeAggregate: oracle.nativeAggregate, enumVectors: oracle.enumVectors, windowEnabled: oracle.windowEnabled, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor,
     filter: oracle.compiledFilter, objectSpans: oracle.compiledObjectSpans, booleanLocations: oracle.compiledBooleanLocations,
     genericLocations: oracle.compiledGenericLocations, finalWriter: oracle.compiledFinalWriter,
@@ -361,12 +378,20 @@ if (compilerPath) {
     assert.deepEqual(await exerciseCompiler(instantiateManagedModule, createWindowState, compilerBytes, fixtureBytes, framework, dpiScenarios, runtimeAssets), expectedCompiler);
 }
 const bytes = probeModule();
-const node = await exercise(instantiateManagedModule, bytes, oracle.executable, framework);
+const invalidNativeImports = [
+    probeModule([["standardwasm:native", "unknownHelper"]]),
+    probeModule([["internalcall", "InvalidDeclaration"]]),
+    probeModule([["native:kernel32.dll", "MulDiv"]])
+].map(bytes => [...bytes]);
+const node = await exercise(instantiateManagedModule, bytes, oracle.executable, framework, invalidNativeImports);
 const { createError, activated, currentMatches, restored, missing, invalidFlags } = oracle.activationContext;
 assert.deepEqual(node, { activationContext: {
     createError, activated, currentMatches, restored, missing: [-1, missing], invalidFlags: [-1, invalidFlags],
     contextIsolated: true, nestedMatches: true, invalidRequest: [-1, 998], validHandle: true
 }, results: oracle.results, errors: oracle.errors,
+    nativeValidation: ["The generated module requests an invalid native runtime helper.",
+        "The generated module requests an invalid typed native import.",
+        "The generated module requires the complete typed native import contract."],
     isolated: [0, 0, true], pathMatches: true, otherPath: 0, pathError: 126,
     invalidAddress: 0, pointerError: 998, nonzeroProcessHandle: true, frameworkLookup: oracle.frameworkLookup,
     stableFrameworkHandle: true, embeddedFramework: [0,126] });
@@ -383,6 +408,9 @@ try {
             return route.fulfill({ contentType: "application/octet-stream", body: runtimeAssets[runtimeIndex] });
         if (path === "/test-framework")
             return route.fulfill({ contentType: "application/octet-stream", body: framework.bytes });
+        if (path === "/scripts/native-imports.mjs")
+            return route.fulfill({ contentType: "text/javascript",
+                body: readFileSync(new URL("../../scripts/native-imports.mjs", import.meta.url)) });
         if (path === "/stage-73-executable-intake/loader/pe.mjs")
             return route.fulfill({ contentType: "text/javascript",
                 body: readFileSync(new URL("../stage-73-executable-intake/loader/pe.mjs", import.meta.url)) });
@@ -391,12 +419,12 @@ try {
         return route.abort();
     });
     await page.goto(base);
-    const edge = await page.evaluate(async ({ source, bytes, executable, frameworkName }) => {
+    const edge = await page.evaluate(async ({ source, bytes, executable, frameworkName, invalidNativeImports }) => {
         const { instantiateManagedModule } = await import("/resource-host.mjs");
         const frameworkBytes = await (await fetch("/test-framework")).arrayBuffer();
         return (0, eval)("(" + source + ")")(instantiateManagedModule, bytes, executable,
-            { name: frameworkName, bytes: frameworkBytes });
-    }, { source: exercise.toString(), bytes: [...bytes], executable: oracle.executable, frameworkName: framework.name });
+            { name: frameworkName, bytes: frameworkBytes }, invalidNativeImports);
+    }, { source: exercise.toString(), bytes: [...bytes], executable: oracle.executable, frameworkName: framework.name, invalidNativeImports });
     assert.deepEqual(edge, node);
     if (compilerBytes) {
         const compiled = await page.evaluate(async ({ source, compilerBytes, fixtureBytes, name, dpiScenarios, runtimePaths }) => {
@@ -410,6 +438,7 @@ try {
         }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes],
             name: framework.name, dpiScenarios, runtimePaths });
         assert.deepEqual(compiled, expectedCompiler);
+        console.log("Fixed and typed Win32 imports share isolated CLR error slots in Node and Edge.");
         console.log("Managed debugger status and host transitions passed in Node and Edge.");
         console.log("Five closed generic value reads matched the CLR in Node and Edge.");
         console.log("Five enum vector cases matched the CLR in Node and Edge, including typed failures.");
@@ -446,6 +475,7 @@ try {
         console.log("Window queries, five enable transitions, and synchronous message order matched Windows in Node and Edge.");
         console.log("The Wasm compiler matched CLR module lookups, the activation-context lifecycle, and Marshal error exchange in Node and Edge.");
     }
+    console.log("Node and Edge rejected invalid native helpers and incomplete native import tables.");
     console.log("Node and Edge matched 6 CLR module lookups and both last-error slots. Memory growth and host isolation passed.");
     console.log("Node and Edge matched the WinForms manifest activation lifecycle and Windows error results.");
     console.log("Nested activation, browser instance isolation, and Wasm32 request bounds passed.");

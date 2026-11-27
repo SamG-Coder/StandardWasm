@@ -43,11 +43,13 @@ Marshal.SetLastPInvokeError(0);
 int[] compiledFixture = [Win32ErrorProbe.Exchange(19), Win32ErrorProbe.Exchange(-13), Win32ErrorProbe.Read(),
     Win32ErrorProbe.LookupModule(0), Win32ErrorProbe.LookupModule(1),
     Win32ErrorProbe.LookupModule(2), Win32ErrorProbe.LookupModule(3)];
+var errorsHandled = Win32ErrorProbe.MixedNativeErrors(1234);
+int[] mixedErrors = [errorsHandled, Win32ErrorProbe.Read(), Win32ErrorProbe.ReadSystemError(), 0, 0];
 var forms = typeof(System.Windows.Forms.Application).Module;
 nint moduleHandle = Lookup(forms.Name.ToUpperInvariant());
 int moduleError = Marshal.GetLastPInvokeError();
 Console.WriteLine(JsonSerializer.Serialize(new { executable, results, errors = new[] { system, pinvoke },
-    compiledFixture, compiledObjectSpans = new[] { ObjectCellSpanProbe.ObjectSpanAliases(0), ObjectCellSpanProbe.ObjectSpanAliases(1),
+    compiledFixture, mixedErrors, compiledObjectSpans = new[] { ObjectCellSpanProbe.ObjectSpanAliases(0), ObjectCellSpanProbe.ObjectSpanAliases(1),
         ObjectCellSpanProbe.ObjectSpanBounds(-1), ObjectCellSpanProbe.ObjectSpanBounds(0), ObjectCellSpanProbe.ObjectSpanBounds(1) },
     compiledBooleanLocations = Enumerable.Range(0, 3).Select(BooleanLocationProbe.BooleanAliases)
         .Concat(Enumerable.Range(0, 2).Select(BooleanLocationProbe.BooleanWithMonitor)).ToArray(),

@@ -19,7 +19,8 @@ const executableHandle = 1;
 const decoder = new TextDecoder("utf-16le", { ignoreBOM: true });
 const normalize = name => name.replaceAll("\\", "/").toLowerCase();
 
-export function createWin32Host(memory, executablePath, assets = [], windows = createWindowState()) {
+export function createWin32Host(memory, executablePath, assets = [], windows = createWindowState(),
+    errors = { system: 0, pinvoke: 0 }) {
     const byPath = new Map();
     const byBaseName = new Map();
     const moduleImages = new Map();
@@ -41,9 +42,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
             register(asset.path, nextHandle)) moduleImages.set(nextHandle++, asset.bytes);
     }
 
-    let systemError = 0;
-    let pinvokeError = 0;
-    const getWindowLong = (handle, index) => windows.getWindowLong(handle, index, value => { systemError = value; });
+    const getWindowLong = (handle, index) => windows.getWindowLong(handle, index, value => { errors.system = value; });
 
     function getModuleHandleW(pointer) {
         const address = pointer >>> 0;
@@ -56,7 +55,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         let end = address;
         while (end + 1 < view.byteLength && view.getUint16(end, true) !== 0) end += 2;
         if (end + 1 >= view.byteLength) {
-            systemError = noAccess;
+            errors.system = noAccess;
             return 0;
         }
 
@@ -68,7 +67,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
             const handle = (name.includes("/") ? byPath : byBaseName).get(name);
             if (handle !== undefined) return handle;
         }
-        systemError = moduleNotFound;
+        errors.system = moduleNotFound;
         return 0;
     }
 
@@ -95,16 +94,16 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
 
     return {
         getModuleHandleW,
-        ...createActivationContexts(memory, findManifest, value => { systemError = value; }),
-        ...createDpiAwareness(value => { systemError = value; }),
+        ...createActivationContexts(memory, findManifest, value => { errors.system = value; }),
+        ...createDpiAwareness(value => { errors.system = value; }),
         isWindowEnabled: handle => windows.isWindowEnabled(handle),
         enableWindow: (handle, enable) => windows.enableWindow(handle, enable),
         getWindowLongW: getWindowLong,
         getWindowLongPtrW: getWindowLong,
         bCryptGenRandom,
-        getLastSystemError: () => systemError,
-        setLastSystemError: value => { systemError = value | 0; },
-        getLastPInvokeError: () => pinvokeError,
-        setLastPInvokeError: value => { pinvokeError = value | 0; }
+        getLastSystemError: () => errors.system,
+        setLastSystemError: value => { errors.system = value | 0; },
+        getLastPInvokeError: () => errors.pinvoke,
+        setLastPInvokeError: value => { errors.pinvoke = value | 0; }
     };
 }
