@@ -1420,6 +1420,13 @@ namespace PortableCompiler
                 sizes[functions] = length - bodyOffsets[functions];
                 functions++;
             }
+            // GetType can publish additional argument descriptors before the factories are written.
+            if (reflection.GenericTypes.HasFactories)
+            {
+                exceptionTags |= ExceptionTypes.ArgumentNull;
+                length = reflection.GenericTypes.Write(bundle, moduleCode, length, objects, globals, bodyOffsets, sizes);
+                if (length < 0) return length;
+            }
             for (int nameForm = RuntimeTypeNames.Display; nameForm <= RuntimeTypeNames.Namespace; nameForm++)
             {
                 int[] fixups = reflection.TypeTextFixups(nameForm);
@@ -1617,6 +1624,21 @@ namespace PortableCompiler
                 if (kind == BranchIl.Call && records[slot + 3] == 1 ||
                     kind == BranchIl.MemberCall && records[slot + 3] == 0x6f)
                 {
+                    if (RuntimeTypeMetadata.IsMakeGenericType(image, heaps, layout, records[slot + 1], kind == BranchIl.Call))
+                    {
+                        int open = RuntimeGenericTypes.OpenDefinition(bundle, objects, records, slot, clauses);
+                        if (open >= 0)
+                        {
+                            var helper = new int[1];
+                            functions = reflection.GenericTypes.Bind(bundle, objects, globals, open, owners, arities,
+                                offsets, signatures, functions, helper);
+                            if (functions < 0) return functions;
+                            records[slot] = BranchIl.Call;
+                            records[slot + 1] = helper[0];
+                            records[slot + 3] = 0;
+                            continue;
+                        }
+                    }
                     if (RuntimeTypeMetadata.IsTypeAssignableFrom(image, heaps, layout, records[slot + 1], kind == BranchIl.Call))
                     {
                         var argument = new[] { -1 };

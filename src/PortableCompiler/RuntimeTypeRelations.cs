@@ -33,7 +33,7 @@ namespace PortableCompiler
             return receiver >= 0 && records[receiver] == LoadTypeToken ? records[receiver + 1] : -1;
         }
 
-        private static int Previous(int[] records, int slot, int[] clauses)
+        internal static int Previous(int[] records, int slot, int[] clauses)
         {
             if (ValueOperands.Entry(records, slot / Width, clauses)) return -1;
             int previous = slot - Width;

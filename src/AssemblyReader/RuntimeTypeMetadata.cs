@@ -221,6 +221,46 @@ namespace PeLibrary
             return parameter > 0 && (parameter & 3) == 0 && next[0] == end &&
                 ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, parameter >> 2, "System", "RuntimeTypeHandle");
         }
+        internal static bool IsMakeGenericType(byte[] image, int[] heaps, int[] layout, int row, bool definition)
+        {
+            int signature, declaring;
+            if (definition)
+            {
+                if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x2050) != 0x40 ||
+                    !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "MakeGenericType"))
+                    return false;
+                declaring = ObjectLayouts.Owner(image, heaps, layout, row, false);
+                signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
+            }
+            else
+            {
+                var member = new int[AssemblyReferences.SymbolWidth];
+                if (AssemblyReferences.ReadMember(image, heaps, layout, row, member) < 0 ||
+                    member[AssemblyReferences.Depth] != 0 ||
+                    !MatchesAscii(image, heaps, (uint)member[4], "MakeGenericType")) return false;
+                declaring = member[AssemblyReferences.Leaf];
+                signature = member[5];
+            }
+
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, signature, 1, cursor);
+            int result = end < 0 ? -1 : SignatureReader.ReadClass(image, cursor, end);
+            if (declaring < 1 || result < 1 ||
+                !SignatureReader.TakeElement(image, cursor, end, 0x1d)) return false;
+            int element = SignatureReader.ReadClass(image, cursor, end);
+            int tag = definition ? 0 : 1;
+            int declaringToken = declaring << 2 | tag;
+            if (result != declaringToken || element != declaringToken || cursor[0] != end) return false;
+
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0) return false;
+            return definition
+                ? PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts) &&
+                    ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, declaring, "System", "Type")
+                : PlatformTypeReferences.Identify(image, heaps, layout, counts, first, declaring) == PlatformTypeReferences.Type;
+        }
+
         internal static bool IsTypeAssignableFrom(byte[] image, int[] heaps, int[] layout, int row, bool definition)
         {
             int signature, declaring;

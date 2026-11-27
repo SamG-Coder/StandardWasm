@@ -24,11 +24,8 @@ namespace PeLibrary
         // and the enum identity list head. Field and auxiliary data grow inward.
         internal static int RegisterEnum(int[] registry, int assembly, int row, int storage)
         {
-            for (int entry = registry[EnumHead]; entry != 0; entry = registry[entry + 3])
-            {
-                if (registry[entry] != assembly || registry[entry + 1] != row) continue;
-                return entry + EnumKeyBase;
-            }
+            int known = FindEnum(registry, assembly, row);
+            if (known != 0) return known;
 
             int start = registry.Length - registry[2] - 4;
             if (start < FieldMapStart + registry[1]) return -3;
@@ -39,6 +36,14 @@ namespace PeLibrary
             registry[EnumHead] = start;
             registry[2] = registry[2] + 4;
             return start + EnumKeyBase;
+        }
+
+        internal static int FindEnum(int[] registry, int assembly, int row)
+        {
+            for (int entry = registry[EnumHead]; entry != 0; entry = registry[entry + 3])
+                if (registry[entry] == assembly && registry[entry + 1] == row)
+                    return entry + EnumKeyBase;
+            return 0;
         }
 
         // Enum keys never become heap types or evaluation-stack tags. Their
