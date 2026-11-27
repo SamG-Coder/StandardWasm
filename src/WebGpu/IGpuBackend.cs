@@ -21,7 +21,8 @@ namespace StandardWasm.WebGpu
 
         IntPtr CreateBuffer(IntPtr device, GpuBufferDescriptor descriptor);
         IntPtr CreateTexture(IntPtr device, GpuTextureDescriptor descriptor);
-        IntPtr CreateTextureView(IntPtr texture);
+        /// <summary>descriptor null: a view of the whole texture.</summary>
+        IntPtr CreateTextureView(IntPtr texture, GpuTextureViewDescriptor descriptor);
         IntPtr CreateSampler(IntPtr device, GpuSamplerDescriptor descriptor);
         IntPtr CreateShaderModule(IntPtr device, GpuShaderModuleDescriptor descriptor);
         IntPtr CreateBindGroupLayout(IntPtr device, GpuBindGroupLayoutDescriptor descriptor);

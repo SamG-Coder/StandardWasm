@@ -25,6 +25,26 @@ namespace StandardWasm.WebGpu
         public GpuTextureUsage Usage;
     }
 
+    /// <summary>
+    /// A view of part of a texture: one array layer or mip level to render into, or the whole
+    /// array to sample. Null fields and zero counts mean "as the texture" (WebGPU defaults).
+    /// </summary>
+    public sealed class GpuTextureViewDescriptor
+    {
+        public string Label;
+        /// <summary>Null: the texture's format.</summary>
+        public GpuTextureFormat? Format;
+        /// <summary>Null: the texture's own dimension (2D, or 2D array when it has layers).</summary>
+        public GpuTextureViewDimension? Dimension;
+        public GpuTextureAspect Aspect = GpuTextureAspect.All;
+        public uint BaseMipLevel;
+        /// <summary>0: every level from BaseMipLevel.</summary>
+        public uint MipLevelCount;
+        public uint BaseArrayLayer;
+        /// <summary>0: every layer from BaseArrayLayer.</summary>
+        public uint ArrayLayerCount;
+    }
+
     public sealed class GpuSamplerDescriptor
     {
         public string Label;
@@ -56,6 +76,7 @@ namespace StandardWasm.WebGpu
         public GpuBufferBindingLayout Buffer;
         public GpuSamplerBindingLayout Sampler;
         public GpuTextureBindingLayout Texture;
+        public GpuStorageTextureBindingLayout StorageTexture;
     }
 
     public sealed class GpuBufferBindingLayout
@@ -67,13 +88,21 @@ namespace StandardWasm.WebGpu
 
     public sealed class GpuSamplerBindingLayout
     {
-        public bool Comparison;
+        public GpuSamplerBindingType Type = GpuSamplerBindingType.Filtering;
     }
 
     public sealed class GpuTextureBindingLayout
     {
+        public GpuTextureSampleType SampleType = GpuTextureSampleType.Float;
+        public GpuTextureViewDimension ViewDimension = GpuTextureViewDimension.D2;
         public bool Multisampled;
-        public bool Depth;
+    }
+
+    public sealed class GpuStorageTextureBindingLayout
+    {
+        public GpuStorageTextureAccess Access = GpuStorageTextureAccess.WriteOnly;
+        public GpuTextureFormat Format;
+        public GpuTextureViewDimension ViewDimension = GpuTextureViewDimension.D2;
     }
 
     public sealed class GpuBindGroupLayoutDescriptor

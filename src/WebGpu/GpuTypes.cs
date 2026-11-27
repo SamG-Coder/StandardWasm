@@ -75,6 +75,16 @@ namespace StandardWasm.WebGpu
 
     public enum GpuTextureDimension { D1, D2, D3 }
 
+    public enum GpuTextureViewDimension { D1, D2, D2Array, Cube, CubeArray, D3 }
+
+    public enum GpuTextureAspect { All, StencilOnly, DepthOnly }
+
+    public enum GpuTextureSampleType { Float, UnfilterableFloat, Depth, Sint, Uint }
+
+    public enum GpuSamplerBindingType { Filtering, NonFiltering, Comparison }
+
+    public enum GpuStorageTextureAccess { WriteOnly, ReadOnly, ReadWrite }
+
     public enum GpuVertexFormat
     {
         Float32,

@@ -25,7 +25,8 @@ namespace StandardWasm.WebGpu.Native
 
         public IntPtr CreateBuffer(IntPtr d, GpuBufferDescriptor x) => throw Waits("wgpuDeviceCreateBuffer", Structs);
         public IntPtr CreateTexture(IntPtr d, GpuTextureDescriptor x) => throw Waits("wgpuDeviceCreateTexture", Structs);
-        public IntPtr CreateTextureView(IntPtr texture) => WebGpuNative.wgpuTextureCreateView(texture, IntPtr.Zero);
+        public IntPtr CreateTextureView(IntPtr texture, GpuTextureViewDescriptor d) =>
+            d == null ? WebGpuNative.wgpuTextureCreateView(texture, IntPtr.Zero) : throw Waits("wgpuTextureCreateView with a descriptor", Structs);
         public IntPtr CreateSampler(IntPtr d, GpuSamplerDescriptor x) => throw Waits("wgpuDeviceCreateSampler", Structs);
         public IntPtr CreateShaderModule(IntPtr d, GpuShaderModuleDescriptor x) => throw Waits("wgpuDeviceCreateShaderModule", Structs);
         public IntPtr CreateBindGroupLayout(IntPtr d, GpuBindGroupLayoutDescriptor x) => throw Waits("wgpuDeviceCreateBindGroupLayout", Structs);

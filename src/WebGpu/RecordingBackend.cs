@@ -63,7 +63,8 @@ namespace StandardWasm.WebGpu
         public IntPtr CreateTexture(IntPtr device, GpuTextureDescriptor d) =>
             New(GpuObjectKind.Texture, "createTexture(" + H(device) + ", '" + d.Label + "', " + d.Width + "x" + d.Height + ", " + d.Format + ", " + d.Usage + ")");
 
-        public IntPtr CreateTextureView(IntPtr texture) => New(GpuObjectKind.TextureView, "createView(" + H(texture) + ")");
+        public IntPtr CreateTextureView(IntPtr texture, GpuTextureViewDescriptor d) => New(GpuObjectKind.TextureView, "createView(" + H(texture) +
+            (d == null ? "" : ", " + (d.Dimension?.ToString() ?? "default") + " mip " + d.BaseMipLevel + "+" + d.MipLevelCount + " layer " + d.BaseArrayLayer + "+" + d.ArrayLayerCount) + ")");
         public IntPtr CreateSampler(IntPtr device, GpuSamplerDescriptor d) => New(GpuObjectKind.Sampler, "createSampler(" + H(device) + ", " + d.MinFilter + ")");
 
         public IntPtr CreateShaderModule(IntPtr device, GpuShaderModuleDescriptor d)

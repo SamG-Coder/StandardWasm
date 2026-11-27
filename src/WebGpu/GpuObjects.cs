@@ -122,13 +122,27 @@ namespace StandardWasm.WebGpu
         {
             Width = d.Width;
             Height = d.Height;
+            Layers = d.DepthOrArrayLayers;
+            MipLevels = d.MipLevelCount;
             Format = d.Format;
         }
 
         public uint Width { get; }
         public uint Height { get; }
+        public uint Layers { get; }
+        public uint MipLevels { get; }
         public GpuTextureFormat Format { get; }
-        public GpuTextureView CreateView() => new GpuTextureView(Backend, Backend.CreateTextureView(Handle));
+        public GpuTextureView CreateView(GpuTextureViewDescriptor descriptor = null) => new GpuTextureView(Backend, Backend.CreateTextureView(Handle, descriptor));
+
+        /// <summary>A view of one mip level of one array layer: a render target for baking.</summary>
+        public GpuTextureView CreateLayerView(uint layer, uint mip = 0) => CreateView(new GpuTextureViewDescriptor
+        {
+            Dimension = GpuTextureViewDimension.D2,
+            BaseArrayLayer = layer,
+            ArrayLayerCount = 1,
+            BaseMipLevel = mip,
+            MipLevelCount = 1,
+        });
         public void Destroy() => Backend.Destroy(GpuObjectKind.Texture, Handle);
     }
 
