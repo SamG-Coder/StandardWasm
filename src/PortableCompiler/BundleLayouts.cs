@@ -147,12 +147,12 @@ namespace PortableCompiler
                 int storage = ReadFieldStorage(bundle, image, layout, heaps, owner,
                     table, first + offset, type, objects, reference, false);
                 if (storage < 0) return storage;
-                // Scoped aggregates may carry plain scalars and traced references.
-                // Reject pointers, managed locations and nested values until their
-                // lifetimes can be represented and checked transitively.
+                // A supported span carries its owner in the span descriptor.
+                // Other locations and nested scoped values require separate lifetime analysis.
                 if (byRefLike && storage != 0 &&
                     (ObjectLayouts.IsValueType(objects, storage) ||
-                        (!SignatureTypes.IsScalar(storage) && !SignatureTypes.IsReference(storage)))) return -2;
+                        (!SignatureTypes.IsScalar(storage) && !SignatureTypes.IsReference(storage) &&
+                         !SignatureTypes.IsSpan(storage)))) return -2;
                 if (overlay && storage != 0)
                 {
                     int width = ExplicitValueLayouts.ViewWidth(objects, storage);
@@ -196,7 +196,9 @@ namespace PortableCompiler
             else if (reference[0] != 0)
                 storage = RegisterType(bundle, image, layout, heaps, owner,
                     reference[0], objects, reference[1] == 1);
-            return SignatureTypes.IsSpan(storage) || ObjectLayouts.IsByRefLikeValue(objects, storage) ? -2 : storage;
+            if (SignatureTypes.IsSpan(storage))
+                return !staticField && ObjectLayouts.IsByRefLikeValue(objects, receiver) ? storage : -2;
+            return ObjectLayouts.IsByRefLikeValue(objects, storage) ? -2 : storage;
         }
 
         private static int RegisterInterfaces(BundleImages bundle, byte[] image,

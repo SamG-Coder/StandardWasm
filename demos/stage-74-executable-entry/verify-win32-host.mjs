@@ -248,12 +248,13 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
     const byteSpan = [-1, 0, 1, 2, 3, 4].map(bundledExports.ReadStaticByteSpan);
     const byteLocations = [0, 1, 2].map(bundledExports.ReadStaticByteLocation);
     const rootModule = await compile(["CompareThroughRoot", "CompareReturnedType", "CheckCoreStringFirstCharacter",
-        "CheckCoreWhitespace", "CheckCoreStringTrim"], runtimeAssets);
+        "CheckCoreWhitespace", "CheckCoreStringTrim", "ScopedWritableSpan"], runtimeAssets);
     const { exports: rootExports } = await instantiate(rootModule, compiler, []);
     const rootDispatch = [0, 1, 2, 3].map(rootExports.CompareThroughRoot);
     const typeReturn = [0, 1].map(rootExports.CompareReturnedType);
     const stringField = [0, 1, 2, 3, 4].map(rootExports.CheckCoreStringFirstCharacter);
     const stringTrim = [0, 1, 2, 3, 4, 5, 6, 7].map(rootExports.CheckCoreStringTrim);
+    const scopedWritableSpan = [0, 65, 0x2000, 0xffff].map(rootExports.ScopedWritableSpan);
     const whitespace = [0, 32, 133, 160, 5760, 8192, 8203, 8232, 12288, 65535].map(rootExports.CheckCoreWhitespace);
     const dpi = [];
     // Each Windows oracle invocation starts a fresh process.
@@ -266,7 +267,7 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, windowEnabled, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringTrim, byteSpan, byteLocations, whitespace, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, windowEnabled, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringTrim, scopedWritableSpan, byteSpan, byteLocations, whitespace, dpi };
 }
 
 function readOracle(...args) {
@@ -290,7 +291,7 @@ const expectedCompiler = {
     genericValues: oracle.compiledGenericValues, constrainedReferences: oracle.compiledConstrainedReferences,
     genericDescriptors: oracle.compiledGenericDescriptors, valueAliases: oracle.compiledValueAliases, rootDispatch: oracle.compiledRootDispatch,
     typeReturn: oracle.compiledTypeReturn, stringField: oracle.compiledStringField, byteSpan: oracle.compiledByteSpan,
-    stringTrim: oracle.compiledStringTrim,
+    stringTrim: oracle.compiledStringTrim, scopedWritableSpan: oracle.scopedWritableSpan,
     byteLocations: oracle.compiledByteLocations,
     whitespace: oracle.compiledWhitespace,
     genericValueMethods: oracle.compiledGenericValueMethods
@@ -358,6 +359,7 @@ try {
         console.log("Six readonly static byte span reads and bounds cases matched the CLR in Node and Edge.");
         console.log("Static byte references, unaligned reads, and CoreLib whitespace classification matched the CLR in Node and Edge.");
         console.log("Eight original CoreLib trim cases matched CLR UTF-16 content and reference identity in Node and Edge.");
+        console.log("Four scoped span cases matched CLR aliasing, default length, and UTF-16 wraparound in Node and Edge.");
         console.log("Five original CoreLib String.StartsWith(char) cases matched the CLR in Node and Edge.");
         console.log("Both returned runtime type cases matched the CLR in Node and Edge.");
         console.log("Four original CoreLib virtual dispatch cases matched the CLR in Node and Edge.");

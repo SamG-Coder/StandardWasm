@@ -74,6 +74,11 @@ notifications. The browser host keeps this state per application instance.
 [IsWindowEnabled](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-iswindowenabled)
 [EnableWindow](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enablewindow)
 
+The scoped-span fixture stores an array-backed `Span<char>` in a `ref struct`
+and copies the struct. Writes through the copy still reach the original array.
+The CLR, Node, and Edge compare the alias, the length of a default span, and
+UTF-16 values at the wraparound boundary.
+
 The managed probe also checks pinned addresses of blittable static structs.
 A direct managed store and a pointer store use the same stable linear-memory
 storage, including after a static initializer and across separate exports.

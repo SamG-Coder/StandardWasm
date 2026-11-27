@@ -104,7 +104,10 @@ stable native frame slots. The linker validates `Form`'s inherited
 `IHandle<HWND>` constraint and binds the original `PInvokeCore.GetWindowLong`
 call in `ThreadContext.RunMessageLoopInner`. The original window-state calls
 now bind to the browser host's per-instance HWND table. The unchanged bundle
-gets past both calls and stops at CoreLib's `System.IO.Path.GetTempPath`.
+gets past both calls and reaches CoreLib's `System.IO.Path.GetTempPath`.
+The compiler resolves its `ValueStringBuilder` local, whose `Span<char>` field
+uses the existing owner-carrying Wasm representation. Compilation then stops
+at `Span<char>(void*, int)`, which needs a view over the Wasm shadow stack.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.
