@@ -128,7 +128,10 @@ namespace PortableCompiler
                 else if (kind == VirtualCall)
                 {
                     int arity = records[slot + 3];
-                    next = CallShape(stack, allocated, depth, virtualTypes, operand, arity, 0, objects);
+                    if (records[slot + Width + 2] == RuntimeTypeIsGeneric && depth >= 1 &&
+                        RuntimeTypeGenericKind.IsDescriptorReceiver(stack[depth - 1]))
+                        next = Push(stack, allocated, depth - 1, I32);
+                    else next = CallShape(stack, allocated, depth, virtualTypes, operand, arity, 0, objects);
                     // An unlowered reflection member is valid IL, but a
                     // compiler descriptor cannot be sent to an upstream body.
                     if (next < 0 && depth >= arity && PeLibrary.RuntimeTypeMetadata.IsReference(stack[depth - arity]))

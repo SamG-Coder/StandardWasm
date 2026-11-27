@@ -54,6 +54,22 @@ namespace PeLibrary
                 ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2, "System", "RuntimeType");
         }
 
+        internal static bool IsCoreGenericTypeGetter(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            int flags = MethodDefinitions.ReadColumn(image, layout, row, 2);
+            if ((flags & 0x2857) != 0x0846 ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "get_IsGenericType"))
+                return false;
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return false;
+            int declaring = ObjectLayouts.Owner(image, heaps, layout, row, false);
+            if (!ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, declaring, "System", "Type")) return false;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), 0, cursor);
+            return end >= 0 && SignatureReader.TakeElement(image, cursor, end, SignatureReader.Boolean) && cursor[0] == end;
+        }
+
         internal static bool ValidDefinition(byte[] image, int[] heaps, int row)
         {
             // TypeDef row 1 is the module pseudo-type and has no runtime Type.
