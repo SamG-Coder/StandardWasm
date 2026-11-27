@@ -12,7 +12,8 @@
 // therefore never a silent stub and never a raw trap.
 //
 // registry maps "<dll>!<entry>" (P/Invoke; dll lower-case without ".dll") or "internalcall!<Namespace.Type::Method>" to a
-// JavaScript function over Wasm values: i32 as Number, i64 as BigInt, f32/f64 as Number.
+// JavaScript function over Wasm values: i32 as Number, i64 as BigInt, f32/f64 as Number. A pointer
+// is an i32 address into the host-lent memory 0, which entries reach through state.memory (Stage 365).
 
 const nativeHelperModule = "standardwasm:native";
 export const comImportModule = "standardwasm:com";
@@ -103,6 +104,95 @@ export function nativeImports(module, registry, state = { system: 0, pinvoke: 0 
     }
     return imports;
 }
+
+// Stage 365 (decision 0083, step 2): a pointer argument or result is a wasm32 address into the
+// module's memory 0, which the host lends as imports["standardwasm:resources"].memory. An entry
+// that dereferences one reads state.memory, which the host sets to that same WebAssembly.Memory.
+// Each call makes a fresh view, because memory.grow detaches the previous buffer.
+//
+// On Windows, a callee that dereferences null or an unmapped address raises an access violation,
+// which the CLR does not turn into a catchable exception: the process ends. Here the entry throws
+// a host Error instead, which no managed catch clause can intercept either.
+function nativeBytes(state, address, length) {
+    if (!(state.memory instanceof WebAssembly.Memory))
+        throw Error("StandardWasm: a native entry dereferences a pointer, but the host set no state.memory");
+    const bytes = new Uint8Array(state.memory.buffer);
+    const start = address >>> 0;
+    if (start === 0 || start + length > bytes.length)
+        throw Error("StandardWasm: access violation at native address " + start);
+    return bytes;
+}
+
+const fileTimeUnixEpochMilliseconds = 11644473600000n; // 1601-01-01 to 1970-01-01
+const errorInvalidParameter = 87;
+
+// FileTimeToSystemTime: 100 ns ticks since 1601-01-01 UTC into a SYSTEMTIME, truncated to whole
+// milliseconds. Values with the top bit set fail with ERROR_INVALID_PARAMETER and leave the
+// output untouched.
+function fileTimeToSystemTime(state, fileTime, systemTime) {
+    nativeBytes(state, fileTime, 8);
+    const bytes = nativeBytes(state, systemTime, 16);
+    const view = new DataView(bytes.buffer);
+    const ticks = view.getBigUint64(fileTime >>> 0, true);
+    if (ticks > 0x7fffffffffffffffn) { state.system = errorInvalidParameter; return 0; }
+    // At most 9.1e14 ms past 1970, inside both Number's exact range and Date's.
+    const date = new Date(Number(ticks / 10000n - fileTimeUnixEpochMilliseconds));
+    const fields = [date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDay(), date.getUTCDate(),
+        date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(), date.getUTCMilliseconds()];
+    fields.forEach((value, i) => view.setUint16((systemTime >>> 0) + 2 * i, value, true));
+    return 1;
+}
+
+// SystemTimeToFileTime: validates every field except wDayOfWeek (ignored) against the documented
+// SYSTEMTIME range. A field out of range fails with ERROR_INVALID_PARAMETER and leaves the output
+// untouched.
+function systemTimeToFileTime(state, systemTime, fileTime) {
+    const bytes = nativeBytes(state, systemTime, 16);
+    nativeBytes(state, fileTime, 8);
+    const view = new DataView(bytes.buffer);
+    const [year, month, , day, hour, minute, second, milliseconds] =
+        Array.from({ length: 8 }, (_, i) => view.getUint16((systemTime >>> 0) + 2 * i, true));
+    const monthDays = month === 2 ? (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28)
+        : [4, 6, 9, 11].includes(month) ? 30 : 31;
+    if (year < 1601 || year > 30827 || month < 1 || month > 12 || day < 1 || day > monthDays ||
+        hour > 23 || minute > 59 || second > 59 || milliseconds > 999) {
+        state.system = errorInvalidParameter;
+        return 0;
+    }
+    const unix = BigInt(Date.UTC(year, month - 1, day, hour, minute, second, milliseconds));
+    view.setBigUint64(fileTime >>> 0, (unix + fileTimeUnixEpochMilliseconds) * 10000n, true);
+    return 1;
+}
+
+// C strlen over memory 0. Running past the end of memory is the access violation above.
+function stringLength(state, text) {
+    const bytes = nativeBytes(state, text, 1);
+    const start = text >>> 0;
+    const end = bytes.indexOf(0, start);
+    if (end < 0) throw Error("StandardWasm: access violation at native address " + bytes.length);
+    return end - start;
+}
+
+// C memcpy: copies count bytes and returns the destination. Zero bytes touch neither pointer, so
+// null operands are allowed then, as in ucrtbase. Overlapping ranges are undefined in C; this
+// copy behaves like memmove.
+function memoryCopy(state, destination, source, count) {
+    const length = count >>> 0;
+    if (length === 0) return destination;
+    nativeBytes(state, source, length);
+    const bytes = nativeBytes(state, destination, length);
+    bytes.copyWithin(destination >>> 0, source >>> 0, (source >>> 0) + length);
+    return destination;
+}
+
+// Pointer entries the Stage 365 fixture uses, with the semantics of x86 kernel32 and ucrtbase.
+// A host combines them with windowsScalars and sets state.memory.
+export const windowsPointers = Object.freeze({
+    "kernel32!FileTimeToSystemTime": fileTimeToSystemTime,
+    "kernel32!SystemTimeToFileTime": systemTimeToFileTime,
+    "ucrtbase!strlen": stringLength,
+    "ucrtbase!memcpy": memoryCopy,
+});
 
 // MulDiv(number, numerator, denominator): the 64-bit product divided with rounding half away
 // from zero; -1 when the denominator is zero or the result does not fit in 32 bits.

@@ -331,6 +331,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [359 · Window visibility](stage-359-window-visibility/README.md) | `npm run demo -- stage-359-window-visibility` | Compare WS_VISIBLE through live child ancestry against Windows |
 | [361 · Thread window enumeration](stage-361-enum-thread-windows/README.md) | `npm run demo -- stage-361-enum-thread-windows` | Compare real stdcall callbacks, ordering and payload with Windows |
 | [363 · Launch-directory long paths](stage-363-launch-long-paths/README.md) | `npm run demo -- stage-363-launch-long-paths` | Mount the dropped publish as the virtual executable directory and match Windows GetLongPathNameW respelling, case folding and short-buffer writes |
+| [365 · Native pointer arguments](stage-365-native-pointer-arguments/README.md) | `npm run demo -- stage-365-native-pointer-arguments` | Pass unmanaged pointers through typed DllImports and match kernel32 FILETIME/SYSTEMTIME conversions and ucrtbase strlen/memcpy over fixed and stackalloc memory with the x86 CLR |
 
 ## Adding a stage
 
