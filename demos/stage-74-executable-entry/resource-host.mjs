@@ -224,7 +224,8 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     }
     if (requestedWin32.size) {
         const usesModules = requestedWin32.has("getModuleHandleW") || requestedWin32.has("createActCtxW");
-        const filesystem = requestedWin32.has("getFullPathNameW") ? platform?.win32FileSystem : undefined;
+        const usesFileSystem = requestedWin32.has("getFullPathNameW") || requestedWin32.has("getLongPathNameW");
+        const filesystem = usesFileSystem ? platform?.win32FileSystem : undefined;
         imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : [], windows, errors, dynamicLibraries,
             platform?.windowCreationMetrics, filesystem, platform?.win32Desktop === true, platform?.displayCapabilities);
     }

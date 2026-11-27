@@ -1,26 +1,14 @@
-const noAccess = 998, invalidName = 123, filenameTooLong = 206, notSupported = 50;
-const maximumUnits = 32766; // UNICODE_STRING content; leave room for NUL.
+import { deviceComponent, maximumUnits, readPath } from "./win32-path-input.mjs";
+
+const noAccess = 998, invalidName = 123, notSupported = 50;
+
 const invalidOrdinaryPath = /[<>|"*?\u0000-\u001f]/u;
-const deviceComponent = /^(?:CON|PRN|AUX|NUL|CLOCK\$|COM[1-9¹²³]|LPT[1-9¹²³])(?:[. ]|$)/iu;
 
 function canonicalDirectory(path) {
     if (typeof path !== "string" || path.length > maximumUnits ||
         !/^[A-Za-z]:\\(?:[^\\/:*?"<>|\u0000-\u001f]+(?:\\[^\\/:*?"<>|\u0000-\u001f]+)*)?$/u.test(path))
         return false;
     return path.slice(3).split("\\").every(part => !/[. ]$/u.test(part) && !deviceComponent.test(part));
-}
-
-function readPath(view, address) {
-    if (address === 0) return { error: noAccess };
-    let path = "";
-    for (let index = 0; index <= maximumUnits; index++) {
-        const offset = address + 2 * index;
-        if (offset > view.byteLength - 2) return { error: noAccess };
-        const unit = view.getUint16(offset, true);
-        if (unit === 0) return { path, bytes: 2 * (index + 1) };
-        path += String.fromCharCode(unit);
-    }
-    return { error: filenameTooLong };
 }
 
 function resolvePath(input, cwd, capacity) {

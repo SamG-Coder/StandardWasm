@@ -226,6 +226,14 @@ Run `node demos/stage-74-executable-entry/verify-temp-path-host.mjs` on
 Windows with both Kernel32 exports, matching x86 and default-host .NET 10
 runtimes, Node and Edge. Results go under `artifacts/temp-path-host/`.
 
+## Virtual long-path lookup
+
+GetLongPathNameW resolves names within the launch's explicit virtual filesystem
+mount. An embedder supplies the root, current directory and file or directory
+entries through platform.win32FileSystem. The mount supports optional DOS aliases,
+in-place UTF-16 expansion and short-buffer retries. See the
+[Stage 254 provider contract](../stage-254-virtual-long-paths/README.md).
+
 ### Dynamic export lookup
 
 The host registry starts empty and registers browser callbacks under explicit

@@ -3,6 +3,7 @@ import { createActivationContexts } from "./activation-context.mjs";
 import { createDpiAwareness, dpiImportNames } from "./dpi-awareness.mjs";
 import { createDisplayContexts, displayContextImportNames } from "./display-context.mjs";
 import { createFullPathHost } from "./full-path-host.mjs";
+import { createLongPathHost } from "./long-path-host.mjs";
 import { createWindowMessageRegistration } from "./window-messages.mjs";
 import { createThreadHandleHost } from "./thread-handle-host.mjs";
 import { createWindowStationHost } from "./window-station-host.mjs";
@@ -11,7 +12,7 @@ import { createDefaultWindowProcedure, createWindowClassState, createWindowCreat
 export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
     "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom",
-    "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "redrawWindow", "registerWindowMessageW",
+    "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "getLongPathNameW", "redrawWindow", "registerWindowMessageW",
     "getWindowThreadProcessId", "duplicateHandle", "getExitCodeThread", "getUserObjectInformationW"
 ]);
 export const win32ImportNames = new Set([
@@ -195,6 +196,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         loadLibraryExW,
         getProcAddress,
         getFullPathNameW: createFullPathHost(memory, win32FileSystem, errors),
+        getLongPathNameW: createLongPathHost(memory, win32FileSystem, errors),
         // Only this registry's explicitly bound WNDPROC tokens are callable.
         callWindowProcW(token, hwnd, message, wparam, lparam) {
             return dynamicLibraries.invoke(token, windowProcedureSignature, hwnd, message, wparam, lparam);
