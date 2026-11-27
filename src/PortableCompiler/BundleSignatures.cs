@@ -190,7 +190,7 @@ namespace PortableCompiler
                 {
                     int match = PointerSignatures.Match(bundle, caller, callerLayout, callerHeaps,
                         callerOwner, target, targetLayout, targetHeaps, targetOwner, left, leftEnd, right, rightEnd,
-                        leftClass, rightClass, next);
+                        leftClass, rightClass, next, objects, context, targetContext);
                     if (match <= 0) return match;
                     left = next[0];
                     right = match;

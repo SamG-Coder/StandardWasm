@@ -27,6 +27,7 @@ Run("NullRect", Pattern(5), []);
 Run("Walk", Pattern(5), [Pointer(0), Int(8)]);
 Run("Walk", Pattern(9), [Pointer(128), Int(0)]);
 Run("ConstructorFieldStores", Pattern(9), [Pointer(32), Int(17)]);
+Run("ReadGenericAddresses", Pattern(9), [Pointer(32), Pointer(64)]);
 
 // Pack and Size: the CLR measures them (5 and 12), and the compiler diagnoses the sizeof (-2).
 foreach (string name in new[] { "PackedSize", "SizedSize" })

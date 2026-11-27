@@ -213,8 +213,8 @@ namespace PortableCompiler
                     types[target] = Native;
                 else if (element == PointerStorage.Element)
                 {
-                    int storage = PointerSignatures.ReadStorage(bundle, image, methods, heap,
-                        assembly, cursor, end, next);
+                    int storage = PointerSignatures.ReadClosedStorage(bundle, image, methods, heap,
+                        assembly, cursor, end, next, objects, context, methodArguments);
                     if (storage < 0) return storage;
                     cursor = next[0];
                     types[target] = storage;

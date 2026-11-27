@@ -36,6 +36,15 @@ namespace StructPointerFixture
 
     public static unsafe class Kernels
     {
+        private struct Address<T> where T : unmanaged
+        {
+            private void* address;
+
+            public Address(void* address) => this.address = address;
+
+            public T* Value => (T*)address;
+        }
+
         public static int PackedSize() => sizeof(Packed);
         public static int SizedSize() => sizeof(Sized);
         public static int ByteLongSize() => sizeof(ByteLong);
@@ -57,6 +66,13 @@ namespace StructPointerFixture
         public static int FieldAddress(Rect* r) { int* p = &r->Bottom; *p = 99; return (int)((byte*)p - (byte*)r) * 1000 + r->Bottom; }
         public static int NullRect() { try { return ((Rect*)null)->Top; } catch (System.NullReferenceException) { return -5; } }
         public static int Walk(Rect* rs, int n) { int s = 0; for (int i = 0; i < n; i++) s += rs[i].Left * 3 + rs[i].Bottom; return s; }
+
+        public static int ReadGenericAddresses(Rect* rectangle, int* number)
+        {
+            var rectangleAddress = new Address<Rect>(rectangle);
+            var numberAddress = new Address<int>(number);
+            return rectangleAddress.Value->Bottom + *numberAddress.Value;
+        }
 
         public static int ConstructorFieldStores(ConstructorPair* other, int value)
         {
