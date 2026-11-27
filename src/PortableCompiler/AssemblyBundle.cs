@@ -275,7 +275,16 @@ namespace PortableCompiler
                 if (matched >= 0) return -5;
                 matched = owner;
             }
-            return matched < 0 ? -4 : matched;
+            if (matched < 0)
+            {
+                bundle.MissingImage = caller;
+                bundle.MissingHeaps = heaps;
+                var copy = new int[reference.Length];
+                for (int i = 0; i < reference.Length; i++) copy[i] = reference[i];
+                bundle.MissingReference = copy;
+                return -4;
+            }
+            return matched;
         }
     }
 }
