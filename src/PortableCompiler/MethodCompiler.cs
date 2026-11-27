@@ -799,7 +799,7 @@ namespace PortableCompiler
                     if (frameRoots != null) NativeFrameWasm.ExcludeNativeRoots(frameRoots, frameCells);
                     if (stub < 0 && nativeKind == NativeThunks.None)
                     {
-                        functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
+                        functions = LinkOperands(bundle, image, layout, heaps, count, owner, source, context,
                             parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                             bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
                             initializers, reflection, typeCalls, instantiations, methodArguments, inlineLocations, frameCells, parameters, signatures[signature],
@@ -1598,7 +1598,7 @@ namespace PortableCompiler
         }
 
         private static int LinkOperands(BundleImages bundle, byte[] image, int[] layout,
-            int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, bool valueConstructor, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
+            int[] heaps, int methodCount, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, bool valueConstructor, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, long[] hostUse, int[] virtualTypes, int[] virtualUsed,
             TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, RuntimeTypeCalls typeCalls,
             MethodInstantiations instantiations, int[] methodArguments,
@@ -1623,6 +1623,10 @@ namespace PortableCompiler
                     records[slot] = kind == BranchIl.BoundScopedFieldLoad ? BranchIl.GetField : BranchIl.SetField;
                     continue;
                 }
+                // A direct CLI call still contains its original MethodDef row.
+                // Validate it before reflection recognizers read its metadata.
+                if (kind == BranchIl.Call && (records[slot + 1] < 1 || records[slot + 1] > methodCount))
+                    return -1;
                 if ((kind == BranchIl.Call || kind == BranchIl.MemberCall) &&
                     RuntimeTypeTokens.LowerExactHandleGetter(image, layout, heaps, records, slot, clauses)) continue;
                 if ((kind == BranchIl.Call || kind == BranchIl.MemberCall && records[slot + 3] != 0x73) &&
