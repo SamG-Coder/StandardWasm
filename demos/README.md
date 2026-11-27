@@ -291,6 +291,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [294 · Assembly type definitions by name](stage-294-assembly-type-lookup/README.md) | `npm run demo -- stage-294-assembly-type-lookup` | Find canonical CLR TypeDefs by exact name within a chosen assembly |
 | [295 · DPI-aware window rectangle adjustment](stage-295-dpi-window-rect/README.md) | `npm run demo -- stage-295-dpi-window-rect` | Compare the original Win32 RECT adjustment with the browser host |
 | [296 � Win32 window handle lifetime](stage-296-is-window/README.md) | `npm run demo -- stage-296-is-window` | Compare live, null, invalid and destroyed HWNDs against Windows |
+| [298 - Fixed string concatenation](stage-298-corelib-concat-construction/README.md) | `npm run demo -- stage-298-corelib-concat-construction` | Compare original CoreLib concatenation, UTF-16 copies, and reference identity |
 
 ## Adding a stage
 
