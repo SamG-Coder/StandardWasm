@@ -256,6 +256,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [272 · Boolean storage aliases](stage-272-boolean-storage-aliases/README.md) | `npm run demo -- stage-272-boolean-storage-aliases` | Preserve live aliases through one-field views in the original volatile write |
 | [274 · Runtime assembly equality](stage-274-runtime-assembly-equality/README.md) | `npm run demo -- stage-274-runtime-assembly-equality` | Compare canonical runtime descriptors by reference identity |
 | [275 · Runtime assembly arrays](stage-275-runtime-assembly-arrays/README.md) | `npm run demo -- stage-275-runtime-assembly-arrays` | Resolve authentic assembly array signatures to the same element identity |
+| [278 · Writable byte spans](stage-278-writable-byte-spans/README.md) | `npm run demo -- stage-278-writable-byte-spans` | Compare ranged byte views and original array aliasing with Windows |
 
 ## Adding a stage
 

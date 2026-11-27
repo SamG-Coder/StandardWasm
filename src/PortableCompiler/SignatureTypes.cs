@@ -17,12 +17,14 @@ namespace PortableCompiler
         internal const int ReadOnlyByteSpan = 0x88, StaticByteLocation = 0x89, CharacterSpanCallback = 0x8a, Int32Location = 0x8b;
         internal const int EventHandlerLocation = 0x8c, Int16Location = 0x8d, NativeIntLocation = 0x8e, ReadOnlyCharacterLocation = 0x8f;
         internal const int ReadOnlyInt32Span = 0x90, Int64Location = 0x91;
+        internal const int WritableByteSpan = 0x92, WritableByteLocation = 0x93;
         // Reference locations retain their nominal element type in the verifier,
         // even when their Wasm representation is the shared object cell.
         private const int ReferenceLocationBase = 32768;
         internal static bool IsManagedLocation(int type) =>
             IsReferenceLocation(type) || IsPacked16ReadLocation(type) || type == BooleanLocation ||
-            type == StaticByteLocation || type == Int32Location || type == Int64Location || type == NativeIntLocation;
+            type == StaticByteLocation || type == WritableByteLocation ||
+            type == Int32Location || type == Int64Location || type == NativeIntLocation;
 
         internal static bool IsPacked16Location(int type) => type == CharacterLocation || type == Int16Location;
 
@@ -55,7 +57,9 @@ namespace PortableCompiler
             location == EventHandlerLocation ? ObjectLayouts.EventHandlerReference : location - ReferenceLocationBase;
 
         internal static bool IsSpan(int type) => type == ObjectSpan || type == CharacterSpan || type == WritableCharacterSpan ||
-            type == ReadOnlyByteSpan || type == ReadOnlyInt32Span;
+            type == ReadOnlyByteSpan || type == WritableByteSpan || type == ReadOnlyInt32Span;
+
+        internal static bool IsWritableSpan(int type) => type == WritableCharacterSpan || type == WritableByteSpan;
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
         // Keep the located CLI type in the verifier even though all cells share a Wasm heap.
         private const int ValueLocationBase = 65536;

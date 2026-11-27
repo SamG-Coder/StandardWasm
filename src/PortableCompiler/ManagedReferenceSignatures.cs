@@ -141,6 +141,8 @@ namespace PortableCompiler
                 if (type != 0 && SpanMetadata.IsDefinition(image, layout, heaps, head[0])) return type;
                 if (type == CharacterSpan && SpanMetadata.IsDefinition(image, layout, heaps, head[0], writable: true))
                     return WritableCharacterSpan;
+                if (type == ReadOnlyByteSpan && SpanMetadata.IsDefinition(image, layout, heaps, head[0], writable: true))
+                    return WritableByteSpan;
             }
             if (head[1] == 0x12 && count == 2 && arguments[0] == GenericScalar.Key(3) &&
                 arguments[1] == GenericScalar.Key(0x18) &&

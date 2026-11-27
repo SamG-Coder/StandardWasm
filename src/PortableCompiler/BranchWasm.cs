@@ -1291,20 +1291,20 @@ namespace PortableCompiler
                     int resultSpill = Spill(spills, maximum, spillFlags, ObjectSpan, top - 1);
                     used = SpanWasm.Create(code, used, vector, count, resultSpill);
                 }
-                else if (kind == StringAsSpan)
+                else if (kind == StringAsSpan || kind == WritableByteArraySpan)
                 {
+                    int type = kind == StringAsSpan ? CharacterSpan : WritableByteSpan;
                     int first = top - operand;
                     int source = Spill(spills, maximum, spillFlags, states[state + first], first);
-                    int view = Spill(spills, maximum, spillFlags, CharacterSpan, first);
-                    used = SpanWasm.FromOwner(code, used, source, CharacterSpan, true);
+                    int view = Spill(spills, maximum, spillFlags, type, first);
+                    used = SpanWasm.FromOwner(code, used, source, type, kind == StringAsSpan);
                     used = Local(code, used, 0x21, view);
                     if (operand != 0)
                     {
-                        // The ranged overloads use the same zero-length null view
-                        // and unsigned bounds as slicing a full string span.
+                        // Validate ranges against the original owner's bounds.
                         int start = Spill(spills, maximum, spillFlags, I32, first + 1);
                         int length = operand == 2 ? Spill(spills, maximum, spillFlags, I32, top) : -1;
-                        used = SpanWasm.Slice(code, used, CharacterSpan, view, start, length, false);
+                        used = SpanWasm.Slice(code, used, type, view, start, length, false);
                         used = Local(code, used, 0x21, view);
                     }
                 }
@@ -1324,7 +1324,7 @@ namespace PortableCompiler
                     used = Local(code, used, 0x21, destination == 0
                         ? Spill(spills, maximum, spillFlags, WritableCharacterSpan, top - 1) : destination - 1);
                 }
-                // A SpanAsReadOnly operation only changes the logical type.
+                // Read-only conversions only change the logical type.
                 // Both descriptors occupy the same Wasm spill bank.
                 else if (kind == SpanLength || kind == SpanIsEmpty)
                 {
@@ -1335,15 +1335,18 @@ namespace PortableCompiler
                 }
                 else if (kind == SpanAddress)
                 {
-                    int view = Spill(spills, maximum, spillFlags, WritableCharacterSpan, top - 1);
+                    int type = records[slot + 3];
+                    bool bytes = type == WritableByteSpan;
+                    int location = bytes ? WritableByteLocation : CharacterLocation;
+                    int view = Spill(spills, maximum, spillFlags, type, top - 1);
                     int index = Spill(spills, maximum, spillFlags, I32, top);
-                    if (frameShape[25] != 0) used = NativeCharacterViewWasm.ElementLocation(code, used, view, index);
+                    if (!bytes && frameShape[25] != 0) used = NativeCharacterViewWasm.ElementLocation(code, used, view, index);
                     else
                     {
-                        used = SpanWasm.Address(code, used, Chars, view, index);
-                        used = Gc(code, used, 0, CharacterLocation); // struct.new traced location
+                        used = SpanWasm.Address(code, used, bytes ? Bytes : Chars, view, index);
+                        used = Gc(code, used, 0, location); // struct.new traced location
                     }
-                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, CharacterLocation, top - 1));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, location, top - 1));
                 }
                 else if (kind == SpanSlice)
                 {
@@ -1446,7 +1449,7 @@ namespace PortableCompiler
                     bool packed = IsPacked16ReadLocation(type);
                     if (frameShape[25] != 0 && packed)
                         used = NativeCharacterViewWasm.ReadLocation(code, used, address);
-                    else if (packed || type == BooleanLocation || type == StaticByteLocation ||
+                    else if (packed || type == BooleanLocation || type == StaticByteLocation || type == WritableByteLocation ||
                         type == Int32Location || type == Int64Location || type == NativeIntLocation)
                     {
                         int vector = type == NativeIntLocation ? NativeVector :
@@ -1472,7 +1475,8 @@ namespace PortableCompiler
                     int source = Spill(spills, maximum, spillFlags, value, top);
                     if (frameShape[25] != 0 && IsPacked16Location(type))
                         used = NativeCharacterViewWasm.WriteLocation(code, used, address, source);
-                    else if (IsPacked16Location(type) || type == BooleanLocation || type == Int32Location || type == Int64Location || type == NativeIntLocation)
+                    else if (IsPacked16Location(type) || type == BooleanLocation || type == WritableByteLocation ||
+                        type == Int32Location || type == Int64Location || type == NativeIntLocation)
                     {
                         int vector = type == NativeIntLocation ? NativeVector :
                             type == Int32Location ? Ints : type == Int64Location ? Longs : IsPacked16Location(type) ? Chars : Bytes;

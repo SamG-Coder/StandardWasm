@@ -1239,6 +1239,7 @@ namespace PortableCompiler
                             else if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler)
                                 tags = ExceptionTypes.Argument; // decision 0092: mismatched nominal types
                             else if (kind == BranchIl.NativeCharacterSpan || kind == BranchIl.SpanSlice ||
+                                kind == BranchIl.WritableByteArraySpan ||
                                 kind == BranchIl.StringAsSpan && operation != 0)
                                 tags = ExceptionTypes.ArgumentOutOfRange;
                             else if (kind == BranchIl.CopyCharacterSpan)
@@ -2677,8 +2678,15 @@ namespace PortableCompiler
                             hostUse[0] = hostUse[0] | WasmImports.NativeCharacterViews;
                             continue;
                         }
+                        if (span == BranchIl.WritableByteArraySpan && opcode == 0x73)
+                        {
+                            records[slot] = span;
+                            records[slot + 1] = 2; // start and count following the owner array
+                            records[slot + 3] = 0;
+                            continue;
+                        }
                         if (span == BranchIl.CharacterArrayAsSpan ||
-                            span == BranchIl.SpanAsReadOnly && opcode == 0x28 ||
+                            (span == BranchIl.SpanAsReadOnly || span == BranchIl.ByteSpanAsReadOnly) && opcode == 0x28 ||
                             span == BranchIl.ByteArrayAsSpan)
                         {
                             records[slot] = span;

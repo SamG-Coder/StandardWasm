@@ -90,6 +90,7 @@ namespace PortableCompiler
         internal const int SetCurrentThreadHandle = 224; // [scoped Thread&] -> []
         internal const int LoadMonoCurrentThread = 225; // [] -> [Thread]
         internal const int BoxAggregateToInterface = 226; // [aggregate] -> [verified interface]
+        internal const int WritableByteArraySpan = 233, ByteSpanAsReadOnly = 234;
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
