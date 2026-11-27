@@ -213,6 +213,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [212 · Scoped native frame layouts](stage-212-scoped-native-frame-layout/README.md) | `npm run demo -- stage-212-scoped-native-frame-layout` | Verify stable frame-field pointers for reference-free ref structs |
 | [213 · In-place native frame constructors](stage-213-native-frame-constructor/README.md) | `npm run demo -- stage-213-native-frame-constructor` | Check native field initialization and borrowed pointer aliasing across runtimes |
 | [214 · Scoped native instance receivers](stage-214-scoped-native-receiver/README.md) | `npm run demo -- stage-214-scoped-native-receiver` | Verify field readers and disposal on the original native frame slot |
+| [215 · Closed type comparisons in CoreLib](stage-215-core-type-branches/README.md) | `npm run demo -- stage-215-core-type-branches` | Compare closed generic type-identity branches across runtimes |
 
 ## Adding a stage
 

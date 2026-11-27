@@ -98,6 +98,30 @@ namespace PeLibrary
             return cursor != end ? 0 : getType ? 1 : equality ? 2 : 3;
         }
 
+        // CoreLib calls its own Type operators by MethodDef. Match the same
+        // canonical type signature as the MemberRef path.
+        internal static int CoreTypeComparison(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x2450) != 0x10) return 0;
+            uint name = (uint)MethodDefinitions.ReadColumn(image, layout, row, 3);
+            bool equal = MatchesAscii(image, heaps, name, "op_Equality");
+            if (!equal && !MatchesAscii(image, heaps, name, "op_Inequality")) return 0;
+
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return 0;
+            int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+            if (owner < 1 || !ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, owner, "System", "Type")) return 0;
+
+            var cursor = new int[1];
+            int blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
+            int end = SignatureReader.ReadStatic(image, heaps, blob, 2, cursor);
+            if (end < 0 || !SignatureReader.TakeElement(image, cursor, end, SignatureReader.Boolean)) return 0;
+            for (int argument = 0; argument < 2; argument++)
+                if (SignatureReader.ReadClass(image, cursor, end) != owner << 2) return 0;
+            return cursor[0] == end ? equal ? 2 : 3 : 0;
+        }
+
         // Runtime descriptors dispatch ToString through the canonical Object slot.
         internal static bool IsCoreObjectToString(byte[] image, int[] heaps, int[] layout, int row)
         {

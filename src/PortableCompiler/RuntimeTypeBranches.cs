@@ -32,8 +32,7 @@ namespace PortableCompiler
                 int rightCall = Next(records, second);
                 if (!GetTypeCall(image, layout, heaps, records, rightCall, methodCount)) continue;
                 int compare = Next(records, rightCall);
-                if (!IsStaticMember(records, compare)) continue;
-                int operation = RuntimeTypeMetadata.ObjectTypeMember(image, heaps, layout, records[compare + 1]);
+                int operation = TypeComparison(image, layout, heaps, records, compare, methodCount);
                 if (operation != 2 && operation != 3) continue;
                 int branch = Next(records, compare);
                 if (branch >= records.Length || records[branch] != Conditional ||
@@ -151,6 +150,15 @@ namespace PortableCompiler
                 ? records[slot + 1] > 0 && records[slot + 1] <= methodCount &&
                     RuntimeTypeMetadata.IsCoreGetTypeFromHandle(image, heaps, layout, records[slot + 1])
                 : IsStaticMember(records, slot) && RuntimeTypeMetadata.IsGetTypeFromHandle(image, heaps, layout, records[slot + 1]));
+
+        private static int TypeComparison(byte[] image, int[] layout, int[] heaps, int[] records, int slot, int methodCount)
+        {
+            if (IsStaticMember(records, slot))
+                return RuntimeTypeMetadata.ObjectTypeMember(image, heaps, layout, records[slot + 1]);
+            if (slot >= records.Length || records[slot] != Call || records[slot + 3] != 0) return 0;
+            int row = records[slot + 1];
+            return row > 0 && row <= methodCount ? RuntimeTypeMetadata.CoreTypeComparison(image, heaps, layout, row) : 0;
+        }
 
         private static bool FoldTypePropertyBranch(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
             int context, int[] methodArguments, int[] objects, int[] records, int[] clauses, int first, int handle, int getter)
