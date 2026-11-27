@@ -6,7 +6,7 @@ namespace PortableCompiler
     {
         // A non-nullable value cannot produce a null box. This pattern
         // observes only nullness, so it needs neither a box nor a reference layout.
-        internal static bool Fold(int[] records, int slot, int[] clauses)
+        internal static bool TryFoldBoxNullTest(int[] records, int slot, int[] clauses)
         {
             int literal = records[slot + 2] * Width;
             if (literal >= records.Length || records[literal] != NullLiteral ||

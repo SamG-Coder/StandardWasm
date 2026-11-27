@@ -1380,7 +1380,7 @@ namespace PortableCompiler
                         if (type < 0) return type;
                         if ((ObjectLayouts.IsEnumKey(type) || ObjectLayouts.IsValueType(objects, type) &&
                             !ObjectLayouts.IsNullableValueType(objects, type) && !ObjectLayouts.IsByRefLikeValue(objects, type)) &&
-                            BoxNullTests.Fold(records, slot, clauses))
+                            BoxNullTests.TryFoldBoxNullTest(records, slot, clauses))
                             continue;
                         if (IsObjectReference(type) && !ObjectLayouts.IsValueType(objects, type))
                         {
