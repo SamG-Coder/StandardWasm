@@ -322,6 +322,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [349 - CoreLib runtime type comparisons](stage-349-core-type-comparison/README.md) | `npm run demo -- stage-349-core-type-comparison` | Compare canonical runtime type descriptors at direct CoreLib operator calls |
 | [350 - Default equality comparer activation](stage-350-default-equality-comparers/README.md) | `npm run demo -- stage-350-default-equality-comparers` | Compare original generic comparer execution and track remaining dispatch gaps |
 | [351 - Canonical RuntimeType casts](stage-351-runtime-type-casts/README.md) | `npm run demo -- stage-351-runtime-type-casts` | Preserve identity, null and typed failures for casts to CoreLib RuntimeType |
+| [353 - WinForms accessibility notifications](stage-353-window-accessibility-events/README.md) | `npm run demo -- stage-353-window-accessibility-events` | Compare ordered WinEvent delivery and the void USER32 import with Windows |
 
 ## Adding a stage
 

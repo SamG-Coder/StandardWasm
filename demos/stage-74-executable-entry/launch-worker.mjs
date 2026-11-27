@@ -6,7 +6,8 @@ self.addEventListener("message", async ({ data }) => {
         if (!response.ok) throw Error("The self-hosted compiler is unavailable.");
         // Workers do not expose the top-level window's display information.
         const { displayCapabilities, ...selection } = data;
-        self.postMessage({ result: await runManagedEntry(await response.arrayBuffer(), selection, { displayCapabilities }) });
+        const onWinEvent = event => self.postMessage({ winEvent: event });
+        self.postMessage({ result: await runManagedEntry(await response.arrayBuffer(), selection, { displayCapabilities, onWinEvent }) });
     } catch (error) {
         self.postMessage({ error: error.message });
     }

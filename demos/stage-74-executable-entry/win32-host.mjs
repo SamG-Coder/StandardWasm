@@ -6,6 +6,7 @@ import { createFullPathHost } from "./full-path-host.mjs";
 import { createFilePathHost } from "./long-path-host.mjs";
 import { createAdjustWindowRectExForDpi } from "./window-rect.mjs";
 import { createThreadMessageQueue, createWindowMessageRegistration } from "./window-messages.mjs";
+import { createWindowEventPublisher } from "./window-events.mjs";
 import { createThreadHandleHost } from "./thread-handle-host.mjs";
 import { createWindowStationHost } from "./window-station-host.mjs";
 import { createDefaultWindowProcedure, createWindowClassState, createWindowCreation, createInvalidateRect, createRedrawWindow,
@@ -22,7 +23,8 @@ export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, ...displayContextImportNames,
     "callWindowProcW", "setClassLongW", "deactivateActCtx", "releaseActCtx",
     "getCurrentProcess", "getCurrentThread", "getCurrentThreadId", "closeHandle", "getProcessWindowStation",
-    "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError", "postThreadMessageW", "postMessageW"
+    "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError", "postThreadMessageW", "postMessageW",
+    "notifyWinEvent"
 ]);
 
 const moduleNotFound = 126;
@@ -60,7 +62,7 @@ export function createNativeSymbolLookup(memory, libraries, errors) {
 
 export function createWin32Host(memory, executablePath, assets = [], windows = createWindowState(),
     errors = { system: 0, pinvoke: 0 }, dynamicLibraries, windowCreationMetrics, win32FileSystem, desktop = false,
-    displayCapabilities) {
+    displayCapabilities, onWinEvent) {
     if (desktop && dynamicLibraries && !dynamicLibraries.hasLibrary("user32.dll")) {
         dynamicLibraries.registerLibrary("user32.dll", new Map([["DefWindowProcW", {
             signature: windowProcedureSignature,
@@ -229,6 +231,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         adjustWindowRectExForDpi: createAdjustWindowRectExForDpi(memory, setError),
         ...createThreadHandleHost(memory, () => windows.getCurrentThreadId(), setError),
         ...createThreadMessageQueue(memory, windows, setError),
+        notifyWinEvent: createWindowEventPublisher(windows, onWinEvent),
         ...createWindowStationHost(memory, desktop, setError),
         registerWindowMessageW: createWindowMessageRegistration(memory, setError),
         bCryptGenRandom,

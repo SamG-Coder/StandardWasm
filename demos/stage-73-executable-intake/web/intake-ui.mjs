@@ -42,9 +42,15 @@ run.addEventListener("click", async () => {
         active = undefined;
     };
     active = cancel;
-    worker.onmessage = ({ data }) => data.error
-        ? finish("error", data.error)
-        : finish(data.result.state, JSON.stringify(data.result, null, 2));
+    worker.onmessage = ({ data }) => {
+        if (current !== revision || active !== cancel) return;
+        if (data.winEvent) {
+            drop.dispatchEvent(new CustomEvent("standardwasm-winevent", { bubbles: true, detail: data.winEvent }));
+            return;
+        }
+        if (data.error) finish("error", data.error);
+        else finish(data.result.state, JSON.stringify(data.result, null, 2));
+    };
     worker.onerror = () => finish("error", "The local launch worker failed.");
     try {
         const framework = await Promise.all(frameworkFiles.map(async file => ({

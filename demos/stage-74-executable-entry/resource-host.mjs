@@ -247,7 +247,7 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
             requestedWin32.has("deleteFileW");
         const filesystem = usesFileSystem ? platform?.win32FileSystem : undefined;
         imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : [], windows, errors, dynamicLibraries,
-            platform?.windowCreationMetrics, filesystem, platform?.win32Desktop === true, platform?.displayCapabilities);
+            platform?.windowCreationMetrics, filesystem, platform?.win32Desktop === true, platform?.displayCapabilities, platform?.onWinEvent);
     }
     if (requestedCom.size) {
         const { imports: dispatch, registerInterface } = createComHost(memory);
