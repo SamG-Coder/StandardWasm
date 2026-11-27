@@ -209,6 +209,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [208 · Int32 native frame locals](stage-208-int32-native-frame-locals/README.md) | `npm run demo -- stage-208-int32-native-frame-locals` | Compare typed local access and native pointer aliases over stable frame cells |
 | [209 · GUI thread handle lifecycle](stage-209-thread-handle-lifecycle/README.md) | `npm run demo -- stage-209-thread-handle-lifecycle` | Compare the launch thread identity, duplicate handles, exit status and errors against Windows |
 | [210 · Unboxing a closed generic reference](stage-210-generic-reference-unbox/README.md) | `npm run demo -- stage-210-generic-reference-unbox` | Match generic reference casts, identity and typed failures across runtimes |
+| [211 · Native aggregate field pointers](stage-211-native-aggregate-field-pointer/README.md) | `npm run demo -- stage-211-native-aggregate-field-pointer` | Keep field pointers attached to stable blittable frame storage |
 
 ## Adding a stage
 
