@@ -43,6 +43,33 @@ public static class Probe
 
     public static int NetStandardPacked() => NetStandardRange.ClearPacked();
 
+    private enum ByteFlag : byte { High = 227 }
+    private enum SignedByteFlag : sbyte { Low = -117 }
+    private enum WideFlag : long { High = 0x1_0000_0000 }
+    private enum UnsignedWideFlag : ulong { High = 0x8000_0000_0000_0001 }
+
+    public static int EnumVectors()
+    {
+        var bytes = new ByteFlag[2];
+        bytes[0] = ByteFlag.High;
+        bytes[1] = ByteFlag.High;
+        Array.Clear(bytes, 1, 1);
+        var wide = new WideFlag[1];
+        wide[0] = WideFlag.High;
+        Array.Clear(wide);
+        var signed = new SignedByteFlag[2];
+        signed[0] = SignedByteFlag.Low;
+        signed[1] = SignedByteFlag.Low;
+        Array.Clear(signed, 1, 1);
+        var unsigned = new UnsignedWideFlag[2];
+        unsigned[0] = UnsignedWideFlag.High;
+        unsigned[1] = UnsignedWideFlag.High;
+        Array.Clear(unsigned, 0, 1);
+        return (int)bytes[0] + (int)bytes[1] + (int)signed[0] + (int)signed[1] +
+            (wide[0] == 0 ? 1000 : -1000) +
+            (unsigned[0] == 0 && unsigned[1] == UnsignedWideFlag.High ? 2000 : -2000);
+    }
+
     public static int ReferenceAlias()
     {
         object marker = "updated";

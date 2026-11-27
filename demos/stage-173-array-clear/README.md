@@ -13,6 +13,7 @@ its current snapshot. The slot's stable cell and owner remain available to
 interior references, and independent snapshots retain their values.
 
 Both engines match the Windows x86 CLR for primitive/reference defaults,
+signed and unsigned packed and wide enums,
 range preservation, live scalar/reference/aggregate and projected aliases,
 an independent snapshot, and typed null and range errors. The .NET 10 fixture
 exercises the whole-array overload. A linked .NET Standard 2.0 assembly

@@ -5,7 +5,7 @@ using System.Text.Json;
 using ManagedArrayClear;
 
 if (IntPtr.Size != 4) throw new InvalidOperationException("Expected the Windows x86 CLR.");
-Func<int>[] cases = [Probe.WholeNumeric, Probe.ReferenceRange, Probe.ReferenceAlias, Probe.NetStandardPacked,
+Func<int>[] cases = [Probe.WholeNumeric, Probe.ReferenceRange, Probe.ReferenceAlias, Probe.NetStandardPacked, Probe.EnumVectors,
     Probe.NumericAlias, Probe.WholeAggregate,
     Probe.ProjectedAggregateRange, Probe.EmptyAtEnd, Probe.NullWhole, Probe.NullRangeFirst, Probe.NegativeIndex,
     Probe.NegativeLength, Probe.OverflowRange, Probe.ZeroPastEnd];

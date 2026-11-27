@@ -34,7 +34,7 @@ namespace PortableCompiler
 
             used = Local(code, used, 0x20, array);
             used = length < 0 ? Const(code, used, 0) : Local(code, used, 0x20, cursor);
-            used = DefaultElement(code, used, vector, element);
+            used = DefaultElement(code, used, element == 0 ? ArrayValueType(vector) : element);
             used = length < 0 ? Length(code, used, array) : Local(code, used, 0x20, length);
             return Gc(code, used, 0x10, vector); // array.fill
         }
@@ -99,23 +99,23 @@ namespace PortableCompiler
         private static int Cell(byte[] code, int used, int vector, int array, int cursor) =>
             Gc(code, Local(code, Local(code, used, 0x20, array), 0x20, cursor), 0x0b, vector); // array.get
 
-        private static int DefaultElement(byte[] code, int used, int vector, int element)
+        private static int DefaultElement(byte[] code, int used, int element)
         {
-            if (element != 0)
+            if (!IsScalar(element))
             {
                 code[used++] = 0xd0;
                 code[used++] = NullSpillWasm.NullRef; // bottom reference matches every nullable element heap
                 return used;
             }
-            if (vector == Longs)
+            if (element == I64)
             {
                 code[used++] = 0x42; code[used++] = 0;
                 return used;
             }
-            if (vector == Singles || vector == Doubles)
+            if (IsFloat(element))
             {
-                code[used++] = vector == Singles ? (byte)0x43 : (byte)0x44;
-                int size = vector == Singles ? 4 : 8;
+                code[used++] = element == F32 ? (byte)0x43 : (byte)0x44;
+                int size = element == F32 ? 4 : 8;
                 for (int i = 0; i < size; i++) code[used++] = 0;
                 return used;
             }
