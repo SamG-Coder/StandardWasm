@@ -141,13 +141,13 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
 
     const fixture = upload(fixtureBytes);
     const encoder = new TextEncoder();
-    const names = ["Exchange", "Read", "LookupModule", "Create", "Lifecycle", "PointerRoundTrip", "Alias", "Sum", "LockRoundTrip", "ReleaseDepth", "MatchPair", "ObjectSpanAliases", "ObjectSpanBounds", "DpiValid", "DpiAwareness", "DpiApply", "DpiCurrent", "DpiIsAware"].map(name => encoder.encode(name));
+    const names = ["Exchange", "Read", "LookupModule", "Create", "Lifecycle", "PointerRoundTrip", "Alias", "Sum", "LockRoundTrip", "ReleaseDepth", "MatchPair", "ObjectSpanAliases", "ObjectSpanBounds", "DpiValid", "DpiAwareness", "DpiApply", "DpiCurrent", "DpiIsAware", "BooleanAliases", "BooleanWithMonitor"].map(name => encoder.encode(name));
     const manifest = new Uint8Array(names.reduce((size, name) => size + 8 + name.length, 0));
     const view = new DataView(manifest.buffer);
     let offset = 0;
     for (const name of names) {
         const row = compiler.FindRow(fixture, upload(name));
-        if (row <= 0) throw Error("Missing Marshal fixture export");
+        if (row <= 0) throw Error("Missing Win32 fixture export " + new TextDecoder().decode(name));
         view.setInt32(offset, row, true);
         view.setInt32(offset + 4, name.length, true);
         manifest.set(name, offset + 8);
@@ -178,6 +178,8 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
     const monitor = [0, 1, 2, 3].map(exports.LockRoundTrip).concat([0, 1, 2].map(exports.ReleaseDepth));
     const filter = [0, 1, 2, 3].map(exports.MatchPair);
     const objectSpans = [0, 1].map(exports.ObjectSpanAliases).concat([-1, 0, 1].map(exports.ObjectSpanBounds));
+    const booleanLocations = [0, 1, 2].map(exports.BooleanAliases)
+        .concat([0, 1].map(exports.BooleanWithMonitor));
     const dpi = [];
     // Each Windows oracle invocation starts a fresh process.
     for (const scenario of dpiScenarios) {
@@ -189,7 +191,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans, booleanLocations, dpi };
 }
 
 function readOracle(...args) {
@@ -201,7 +203,7 @@ const oracle = readOracle();
 const dpiScenarios = [[0, -4, -2, 98], [98, -4], [99, 102, 101, 103], [-5, -4]];
 const compilerPath = process.argv[2];
 const framework = { name: basename(oracle.framework), bytes: readFileSync(oracle.framework) };
-const expectedCompiler = { legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle, pointers: oracle.compiledPointers, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor, filter: oracle.compiledFilter, objectSpans: oracle.compiledObjectSpans };
+const expectedCompiler = { legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle, pointers: oracle.compiledPointers, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor, filter: oracle.compiledFilter, objectSpans: oracle.compiledObjectSpans, booleanLocations: oracle.compiledBooleanLocations };
 let compilerBytes, fixtureBytes;
 if (compilerPath) {
     execFileSync("dotnet", ["build", fileURLToPath(new URL("./Win32Fixture", import.meta.url)), "-c", "Release"],
@@ -254,6 +256,7 @@ try {
         }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes],
             name: framework.name, dpiScenarios });
         assert.deepEqual(compiled, expectedCompiler);
+        console.log("Five managed Boolean alias cases matched the CLR in Node and Edge.");
         console.log("Four isolated DPI startup sequences matched Windows CLR in Node and Edge.");
         console.log("Single-object spans matched CLR argument and local aliasing and typed bounds failures.");
         console.log("Two-type exception filters matched the CLR for both matches, a rejection, and normal completion.");

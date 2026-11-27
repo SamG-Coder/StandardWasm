@@ -131,6 +131,13 @@ namespace PortableCompiler
                     left = next[0];
                     right = match;
                 }
+                else if (element == 0x10 && !field && i > 0)
+                {
+                    if (left >= leftEnd || right >= rightEnd || caller[left] != target[right] ||
+                        SignatureTypes.LocationFromElement(caller[left]) == 0) return 0;
+                    left++;
+                    right++;
+                }
                 else if (element == PointerStorage.Element)
                 {
                     int match = PointerSignatures.Match(bundle, caller, callerLayout, callerHeaps,

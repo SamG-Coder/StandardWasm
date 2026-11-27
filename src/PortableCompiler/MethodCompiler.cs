@@ -192,6 +192,7 @@ namespace PortableCompiler
             var nativePlans = new NativeAggregatePlans();
             // Reuse local pin metadata across methods. Signature decoding resets each slot.
             var pinned = new int[frame.Length];
+            var booleanLocals = new byte[frame.Length];
             var initializerSlot = new int[1];
             int exceptionTags = 0;
             var noCatch = new int[0];
@@ -360,7 +361,7 @@ namespace PortableCompiler
                     int localBlob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, body[3]);
                     if (localBlob < 0)
                         return -1;
-                    locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context, methodArguments, pinned, filters);
+                    locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context, methodArguments, pinned, filters, booleanLocals);
                     if (locals < 0)
                         return locals;
                     // CorILMethod_InitLocals (body[4]) is deliberately not required. Without it
@@ -399,11 +400,11 @@ namespace PortableCompiler
                     }
                     virtualUsed[0] = 0;
                     var inlineLocations = new int[parameters + locals];
-                    var objectCells = new int[parameters + locals];
+                    var frameCells = new int[parameters + locals];
                     functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
                         parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
-                        initializers, reflection, instantiations, methodArguments, inlineLocations, objectCells, parameters, nativePlans, nativeStatics);
+                        initializers, reflection, instantiations, methodArguments, inlineLocations, frameCells, parameters, nativePlans, nativeStatics, booleanLocals);
                     if (functions < 0)
                         return functions;
 
@@ -468,9 +469,9 @@ namespace PortableCompiler
                         if (capacity > int.MaxValue - 24) return -3;
                         capacity += 24;
                     }
-                    for (int slot = 0; slot < objectCells.Length; slot++)
+                    for (int slot = 0; slot < frameCells.Length; slot++)
                     {
-                        if (objectCells[slot] == 0) continue;
+                        if (frameCells[slot] == 0) continue;
                         if (capacity > int.MaxValue - 32) return -3;
                         capacity += 32;
                     }
@@ -703,7 +704,7 @@ namespace PortableCompiler
                     }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
-                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers, reflection, inlineLocations, nativePlans.Plans, filters, objectCells);
+                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers, reflection, inlineLocations, nativePlans.Plans, filters, frameCells);
                 }
 
                 if (used < 0) return used;
@@ -782,7 +783,7 @@ namespace PortableCompiler
             int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, bool valueConstructor, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed,
             TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, MethodInstantiations instantiations, int[] methodArguments,
-            int[] inlineLocations, int[] objectCells, int parameterCount, NativeAggregatePlans nativePlans, NativeStaticFields nativeStatics)
+            int[] inlineLocations, int[] frameCells, int parameterCount, NativeAggregatePlans nativePlans, NativeStaticFields nativeStatics, byte[] booleanLocals)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
@@ -892,7 +893,7 @@ namespace PortableCompiler
                     {
                         int vector = ObjectLayouts.RegisterArray(objects, ObjectReference);
                         if (vector < 0) return vector;
-                        objectCells[local] = vector;
+                        frameCells[local] = vector;
                         records[slot] = BranchIl.Nop;
                         records[next] = BranchIl.LoadSingleObjectSpan;
                         records[next + 1] = local;
@@ -909,6 +910,13 @@ namespace PortableCompiler
                         records[next] = BranchIl.Monitor;
                         records[next + 1] = local + 1;
                         hostUse[0] = hostUse[0] | WasmImports.Monitor;
+                        continue;
+                    }
+                    if (type == I32 && local >= parameterCount && booleanLocals[local - parameterCount] != 0)
+                    {
+                        // Preserve the originating CLI type even though by-value Boolean and Int32 share i32.
+                        frameCells[local] = Bytes;
+                        records[slot] = BranchIl.LoadBooleanLocation;
                         continue;
                     }
                     if (IsSpan(type))
@@ -1937,7 +1945,7 @@ namespace PortableCompiler
         // Class slots have already resolved to an assembly-qualified layout.
         private static bool IsSharedBundleType(int type) =>
             IsScalar(type) || type == String || type == ObjectReference || type == NullPointer ||
-            RuntimeTypeMetadata.IsStorage(type) || IsSpan(type) || IsArray(StackType(type)) || IsValueLocation(type) ||
+            RuntimeTypeMetadata.IsStorage(type) || type == BooleanLocation || IsSpan(type) || IsArray(StackType(type)) || IsValueLocation(type) ||
             // The platform event types share a compiler-owned ABI across assemblies.
             // A Delegate slot currently holds only supported EventHandler values.
             type == EventArgsReference || type == EventHandlerReference || type == DelegateReference ||

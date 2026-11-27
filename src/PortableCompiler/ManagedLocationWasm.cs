@@ -30,6 +30,21 @@ namespace PortableCompiler
             return Local(code, used, 0x21, result);
         }
 
+        internal static int TakeCell(byte[] code, int used, int cell, int result)
+        {
+            used = Local(code, used, 0x20, cell);
+            used = Const(code, used, 0);
+            used = Gc(code, used, 0, BooleanLocation);
+            return Local(code, used, 0x21, result);
+        }
+
+        internal static int LoadCell(byte[] code, int used, int cell, int vector)
+        {
+            used = Local(code, used, 0x20, cell);
+            used = Const(code, used, 0);
+            return Gc(code, used, vector == Bytes ? 0x0d : 0x0b, vector);
+        }
+
         // Leave [owner, index] for the array instruction. The owner and its
         // bounds were checked when the alias was created. Wasm arrays cannot
         // resize, and only this emitter constructs location values.

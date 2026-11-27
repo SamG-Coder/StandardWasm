@@ -12,8 +12,11 @@ namespace PortableCompiler
         // A location is a traced alias with invariant element type, outside
         // the ordinary Object/reference conversion lattice.
         internal const int ObjectLocation = 0x80, ObjectSpan = 0x81, CharacterSpan = 0x82;
-        internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84;
-        internal static bool IsManagedLocation(int type) => type == ObjectLocation || type == CharacterLocation;
+        internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84, BooleanLocation = 0x86;
+        internal static bool IsManagedLocation(int type) =>
+            type == ObjectLocation || type == CharacterLocation || type == BooleanLocation;
+        internal static int LocationFromElement(int element) =>
+            element == 0x1c ? ObjectLocation : element == 3 ? CharacterLocation : element == 2 ? BooleanLocation : 0;
         internal static bool IsSpan(int type) => type == ObjectSpan || type == CharacterSpan || type == WritableCharacterSpan;
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
         // Keep the located CLI type in the verifier even though all cells share a Wasm heap.
@@ -106,7 +109,7 @@ namespace PortableCompiler
         // write only their slots. Stack values normalize CLI small integers to i32.
         // context is the closed declaring layout that supplies VAR arguments,
         // or zero when the declaring type is not generic.
-        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context, int[] methodArguments = null, int[] pinned = null, int[] filters = null)
+        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context, int[] methodArguments = null, int[] pinned = null, int[] filters = null, byte[] booleanLocals = null)
         {
             if (index <= 0 || index >= heap[1])
                 return -2;
@@ -144,6 +147,7 @@ namespace PortableCompiler
                 if (filterLocal == 2 && element != 2) return -2;
                 if (filterLocal == 1 && element != 0x12) return -2;
                 if (locals && pinned != null) pinned[i] = 0;
+                if (locals && booleanLocals != null) booleanLocals[i] = element == 2 ? (byte)1 : (byte)0;
                 int target = offset + i + (i == 0 ? 0 : implicitSlots);
                 if (element == PinnedLocals.Pinned)
                 {
@@ -192,9 +196,9 @@ namespace PortableCompiler
                 else if (element == 0x1c)
                     types[target] = ObjectLayouts.ObjectReference;
                 else if (element == 0x10 && (locals || i > 0) && cursor < end &&
-                    (image[cursor] == 0x1c || image[cursor] == 3))
+                    LocationFromElement(image[cursor]) != 0)
                 {
-                    types[target] = image[cursor++] == 0x1c ? ObjectLocation : CharacterLocation;
+                    types[target] = LocationFromElement(image[cursor++]);
                 }
                 else if (element == 0x1d && cursor < end)
                 {

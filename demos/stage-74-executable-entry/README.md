@@ -65,6 +65,12 @@ The managed probe also checks pinned addresses of blittable static structs.
 A direct managed store and a pointer store use the same stable linear-memory
 storage, including after a static initializer and across separate exports.
 
+The managed Boolean probe takes the address of local Boolean slots and
+passes those locations through ordinary `ref bool` and `out bool` calls. It
+checks that direct assignments and aliased reads still see the same value,
+including when the slot also serves as `Monitor.Enter`'s lock flag. The
+probe also exercises a Boolean cell and a single-object span in one frame.
+
 The monitor probe checks the CLR's reentrant lock behavior on the launch
 worker's single managed execution agent. It verifies lockTaken and typed
 failure paths. Monitor wait and pulse and scheduling across multiple

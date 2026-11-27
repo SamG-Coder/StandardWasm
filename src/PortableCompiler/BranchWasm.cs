@@ -10,7 +10,7 @@ namespace PortableCompiler
         private const int LocationSpill = 1, SpanSpill = 2;
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection, int[] inlineLocations, int[] nativePlans, int[] filters, int[] objectCells)
+            byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection, int[] inlineLocations, int[] nativePlans, int[] filters, int[] frameCells)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -44,12 +44,11 @@ namespace PortableCompiler
             const int MaxLocals = 50000;
             if (arguments > MaxLocals || locals > MaxLocals || exceptionLocals > MaxLocals ||
                 continuations > MaxLocals) return -2;
-            int cellCount = 0, cellVector = 0;
-            for (int i = 0; i < objectCells.Length; i++)
+            int cellCount = 0;
+            for (int i = 0; i < frameCells.Length; i++)
             {
-                if (objectCells[i] == 0) continue;
+                if (frameCells[i] == 0) continue;
                 cellCount++;
-                cellVector = objectCells[i];
             }
             int spills = arguments + locals + (hasNull ? 1 : 0);
             int fixedLocals = spills + classes + (stringScratch ? 5 : 0) +
@@ -68,7 +67,7 @@ namespace PortableCompiler
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
                 (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
                 (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0) +
-                (staticRegion >= 0 ? 1 : 0) + (cellCount != 0 ? 1 : 0));
+                (staticRegion >= 0 ? 1 : 0) + cellCount);
             // The saved shadow-stack pointer follows every other local.
             int stackFrame = objectBase + exceptionLocals;
             int staticAddress = stackFrame + (stackPointer >= 0 ? 1 : 0);
@@ -157,22 +156,27 @@ namespace PortableCompiler
             int[] cellLocals = null;
             if (cellCount != 0)
             {
-                used = WasmBinary.Unsigned(code, used, cellCount);
-                used = WasmBinary.ValueType(code, used, cellVector);
-                cellLocals = new int[objectCells.Length];
-                int cell = staticAddress + (staticRegion >= 0 ? 1 : 0);
-                for (int i = 0; i < objectCells.Length; i++)
+                for (int i = 0; i < frameCells.Length; i++)
                 {
-                    if (objectCells[i] == 0) continue;
-                    // Each by-value source has its own traced array cell.
-                    // The span remains an alias when CIL writes the frame slot.
+                    if (frameCells[i] == 0) continue;
+                    code[used++] = 1;
+                    used = WasmBinary.ValueType(code, used, frameCells[i]);
+                }
+                cellLocals = new int[frameCells.Length];
+                int cell = staticAddress + (staticRegion >= 0 ? 1 : 0);
+                for (int i = 0; i < frameCells.Length; i++)
+                {
+                    if (frameCells[i] == 0) continue;
+                    // Every load, store and managed address of this slot uses the same cell.
+                    int vector = frameCells[i];
                     if (i < arguments) used = Local(code, used, 0x20, i);
+                    else if (vector == Bytes) used = Const(code, used, 0);
                     else
                     {
                         code[used++] = 0xd0; // ref.null eq
                         code[used++] = 0x6d;
                     }
-                    used = Gc(code, used, 8, cellVector); // array.new_fixed
+                    used = Gc(code, used, 8, vector); // array.new_fixed
                     code[used++] = 1;
                     used = Local(code, used, 0x21, cell);
                     cellLocals[i] = cell++;
@@ -229,12 +233,8 @@ namespace PortableCompiler
                     if (kind == Load)
                     {
                         pushed = StackType(frame[operand]);
-                        if (objectCells[operand] != 0)
-                        {
-                            used = Local(code, used, 0x20, cellLocals[operand]);
-                            used = Const(code, used, 0);
-                            used = Gc(code, used, 0x0b, cellVector); // array.get
-                        }
+                        if (frameCells[operand] != 0)
+                            used = ManagedLocationWasm.LoadCell(code, used, cellLocals[operand], frameCells[operand]);
                         else used = inlineLocations[operand] == 0 ? Local(code, used, 0x20, operand) :
                             InlineObjectStorageWasm.Snapshot(code, used, pushed, inlineLocations[operand], operand, FieldCount(objects, pushed));
                     }
@@ -442,8 +442,8 @@ namespace PortableCompiler
                     int source = states[state + top];
                     int spilled = Spill(spills, maximum, spillFlags, source, top);
                     int type = frame[operand], backing = inlineLocations[operand];
-                    if (objectCells[operand] != 0)
-                        used = InlineObjectStorageWasm.Set(code, used, cellVector, cellLocals[operand], 0, spilled);
+                    if (frameCells[operand] != 0)
+                        used = InlineObjectStorageWasm.Set(code, used, frameCells[operand], cellLocals[operand], 0, spilled);
                     else if (backing != 0)
                         used = InlineObjectStorageWasm.Store(code, used, type, backing, operand, spilled, FieldCount(objects, type));
                     else
@@ -679,7 +679,15 @@ namespace PortableCompiler
                 else if (kind == Monitor)
                 {
                     int target = Spill(spills, maximum, spillFlags, states[state + top], top);
+                    bool backed = operand > 0 && frameCells[operand - 1] == Bytes;
+                    if (backed)
+                    {
+                        used = ManagedLocationWasm.LoadCell(code, used, cellLocals[operand - 1], Bytes);
+                        used = Local(code, used, 0x21, operand - 1);
+                    }
                     used = MonitorWasm.Emit(code, used, target, operand, frameShape[23]);
+                    if (backed)
+                        used = InlineObjectStorageWasm.Set(code, used, Bytes, cellLocals[operand - 1], 0, operand - 1);
                 }
                 else if (kind == Win32Error)
                 {
@@ -732,6 +740,11 @@ namespace PortableCompiler
                 {
                     used = Local(code, used, 0x20, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, records[slot + 3], depth));
+                }
+                else if (kind == LoadBooleanLocation)
+                {
+                    int target = Spill(spills, maximum, spillFlags, BooleanLocation, depth);
+                    used = ManagedLocationWasm.TakeCell(code, used, cellLocals[operand], target);
                 }
                 else if (kind == LoadSingleObjectSpan)
                 {
@@ -808,10 +821,11 @@ namespace PortableCompiler
                 {
                     int type = states[state + top];
                     int address = Spill(spills, maximum, spillFlags, type, top);
-                    if (type == CharacterLocation)
+                    if (type == CharacterLocation || type == BooleanLocation)
                     {
-                        used = ManagedLocationWasm.AccessElement(code, used, address, Chars);
-                        used = Gc(code, used, 0x0d, Chars); // array.get_u
+                        int vector = type == CharacterLocation ? Chars : Bytes;
+                        used = ManagedLocationWasm.AccessElement(code, used, address, vector);
+                        used = Gc(code, used, 0x0d, vector); // array.get_u
                     }
                     else
                     {
@@ -828,11 +842,12 @@ namespace PortableCompiler
                     int type = states[state + top - 1], value = states[state + top];
                     int address = Spill(spills, maximum, spillFlags, type, top - 1);
                     int source = Spill(spills, maximum, spillFlags, value, top);
-                    if (type == CharacterLocation)
+                    if (type == CharacterLocation || type == BooleanLocation)
                     {
-                        used = ManagedLocationWasm.AccessElement(code, used, address, Chars);
+                        int vector = type == CharacterLocation ? Chars : Bytes;
+                        used = ManagedLocationWasm.AccessElement(code, used, address, vector);
                         used = Local(code, used, 0x20, source);
-                        used = Gc(code, used, 0x0e, Chars); // array.set truncates to i16
+                        used = Gc(code, used, 0x0e, vector); // truncate to the packed element width
                     }
                     else
                     {
