@@ -266,7 +266,7 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
     const byteLocations = [0, 1, 2].map(bundledExports.ReadStaticByteLocation);
     const rootModule = await compile(["CompareThroughRoot", "CompareReturnedType", "CheckCoreStringFirstCharacter",
         "CheckCoreStringContains", "CheckCoreWhitespace", "CheckCoreStringTrim", "ScopedWritableSpan", "CheckStackBackedSpan", "CheckScopedReference",
-        "CheckScopedReceiverReset", "CheckScopedNestedValue", "CheckSpanFromEnd", "CheckSpanSlices", "CheckCharacterCallback", "CheckStringCreation",
+        "CheckScopedReceiverReset", "CheckScopedNestedValue", "CheckSpanFromEnd", "CheckSpanSlices", "CheckStringFromSpan", "CheckCharacterCallback", "CheckStringCreation",
         "CheckStaticEventCallback", "ExactValueRead"], runtimeAssets);
     const { exports: rootExports } = await instantiate(rootModule, compiler, []);
     const rootDispatch = [0, 1, 2, 3].map(rootExports.CompareThroughRoot);
@@ -279,6 +279,7 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
     const scopedNestedValue = [0, -1, 65, 2147483647].map(rootExports.CheckScopedNestedValue);
     const spanFromEnd = [0, 1, 2, 3].map(rootExports.CheckSpanFromEnd);
     const spanSlices = Array.from({ length: 9 }, (_, scenario) => rootExports.CheckSpanSlices(scenario));
+    const stringsFromSpan = [0, 1, 2].map(rootExports.CheckStringFromSpan);
     const stackBackedSpan = [0, 1, 2, 3, 4, 5].map(rootExports.CheckStackBackedSpan);
     const scopedReference = [0, -1, 65, 0xffff].map(rootExports.CheckScopedReference);
     const characterCallbacks = [-1, 0, 1, 2, 17].map(rootExports.CheckCharacterCallback);
@@ -313,7 +314,7 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, enumVectors, windowEnabled, systemRandom, randomStatuses, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringContains, stringTrim, scopedWritableSpan, scopedReceiverReset, scopedNestedValue, spanFromEnd, spanSlices, stackBackedSpan, scopedReference, characterCallbacks, stringCreation, staticEventCallbacks, debuggerStatus, exactValueReads, byteSpan, byteLocations, whitespace, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, enumVectors, windowEnabled, systemRandom, randomStatuses, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringContains, stringTrim, scopedWritableSpan, scopedReceiverReset, scopedNestedValue, spanFromEnd, spanSlices, stringsFromSpan, stackBackedSpan, scopedReference, characterCallbacks, stringCreation, staticEventCallbacks, debuggerStatus, exactValueReads, byteSpan, byteLocations, whitespace, dpi };
 }
 
 function readOracle(...args) {
@@ -340,6 +341,7 @@ const expectedCompiler = {
     stringContains: oracle.compiledStringContains, stringTrim: oracle.compiledStringTrim,
     scopedWritableSpan: oracle.scopedWritableSpan, stackBackedSpan: oracle.stackBackedSpan, scopedReference: oracle.scopedReference,
     scopedReceiverReset: oracle.scopedReceiverReset, scopedNestedValue: oracle.scopedNestedValue, spanFromEnd: oracle.spanFromEnd, spanSlices: oracle.spanSlices,
+    stringsFromSpan: oracle.stringsFromSpan,
     systemRandom: oracle.systemRandom, randomStatuses: oracle.randomStatuses,
     characterCallbacks: oracle.characterCallbacks, staticEventCallbacks: oracle.staticEventCallbacks,
     stringCreation: oracle.stringCreation,
@@ -418,6 +420,7 @@ try {
         console.log("Four scoped span cases matched CLR aliasing, default length, and UTF-16 wraparound in Node and Edge.");
         console.log("Six stack-backed span results matched the CLR in Node and Edge, including typed bounds and length failures.");
         console.log("Nine span slice cases matched CLR aliasing, native offsets, empty spans, typed range failures, and application extensions in Node and Edge.");
+        console.log("Three string-from-span cases matched CLR identity and UTF-16 snapshots in Node and Edge.");
         console.log("Four scoped byref cases matched CLR field mutation, span replacement, and value-copy independence in Node and Edge.");
         console.log("Four scoped receiver resets matched CLR alias updates and preserved earlier copies in Node and Edge.");
         console.log("Four nested value copies in scoped structs matched the CLR in Node and Edge.");

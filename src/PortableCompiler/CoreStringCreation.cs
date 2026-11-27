@@ -7,6 +7,38 @@ namespace PortableCompiler
 {
     internal static class CoreStringCreation
     {
+        // The exposed constructor is a CLR internal call. Bind only the
+        // platform signature with a ReadOnlySpan<char> parameter.
+        internal static bool IsReadOnlySpanConstructor(byte[] image, int[] layout, int[] heaps, int row, bool member)
+        {
+            int declaring, signature;
+            if (member)
+            {
+                var reference = new int[AssemblyReferences.SymbolWidth];
+                if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference) < 0 ||
+                    !MatchesAscii(image, heaps, (uint)reference[4], ".ctor")) return false;
+                declaring = reference[AssemblyReferences.ParentType];
+                signature = reference[5];
+            }
+            else
+            {
+                if (!ObjectLayouts.IsConstructor(image, heaps, layout, row) ||
+                    MethodDefinitions.ReadColumn(image, layout, row, 0) != 0 ||
+                    MethodDefinitions.ReadColumn(image, layout, row, 1) != 0x1000) return false;
+                int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+                if (owner < 1) return false;
+                declaring = owner << 2;
+                signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
+            }
+            if (!PlatformTypeReferences.IsString(image, heaps, layout, declaring)) return false;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, signature, 1, cursor);
+            if (end < 0 || !SignatureReader.TakeElement(image, cursor, end, SignatureReader.Void)) return false;
+            int span = SignatureReader.ReadSingleArgumentValue(image, cursor, end);
+            return span > 0 && SpanMetadata.IsDefinition(image, layout, heaps, span) &&
+                SignatureReader.TakeElement(image, cursor, end, SignatureReader.Character) && cursor[0] == end;
+        }
+
         // Only the verified private construction sequence may expose a
         // writable span of a string's backing array. The original checks,
         // delegate call, and return remain in the managed body.

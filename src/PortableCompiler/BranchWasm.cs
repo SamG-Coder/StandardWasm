@@ -449,6 +449,12 @@ namespace PortableCompiler
                     used = StringWasm.FirstCodeUnit(code, used, reference);
                     used = Local(code, used, 0x21, spills + top);
                 }
+                else if (kind == StringFromSpan)
+                {
+                    int span = Spill(spills, maximum, spillFlags, CharacterSpan, top);
+                    used = StringWasm.CopySpan(code, used, span, operand, scratch, frameShape[25] != 0);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, String, top));
+                }
                 else if (kind == AllocateString)
                 {
                     used = StringWasm.AllocateForConstruction(code, used, Spill(spills, maximum, spillFlags, Native, top));

@@ -103,6 +103,8 @@ UTF-16 offsets for pointer-backed slices, the empty span, and typed range failur
 An application extension named `Slice` shifts the requested offset and calls the
 framework member internally. The fixture compares its result with a direct
 framework call and invokes a second extension using member syntax.
+The CoreLib string constructor cases compare empty-string identity and UTF-16
+snapshots of managed and pointer-backed spans, including later source writes.
 The by-reference case mutates an integer field and replaces a span in the
 caller's scoped struct. The caller observes both updates while its earlier
 value copy still refers to the original array. A separate case resets a

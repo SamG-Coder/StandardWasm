@@ -397,6 +397,8 @@ namespace PortableCompiler
                     ? Push(stack, allocated, depth - 2, String) : -1;
             if (kind == StringFromChars)
                 return Match(stack, depth, Chars) ? Push(stack, allocated, depth - 1, String) : -1;
+            if (kind == StringFromSpan)
+                return Match(stack, depth, CharacterSpan) ? Push(stack, allocated, depth - 1, String) : -1;
             if (kind == AllocateString)
                 return Match(stack, depth, Native) ? Push(stack, allocated, depth - 1, String) : -1;
             if (kind == StringConstructionSpan)

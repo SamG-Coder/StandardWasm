@@ -47,6 +47,18 @@ namespace PortableCompiler
             return used;
         }
 
+        internal static int GuardBase(byte[] code, int used, int view)
+        {
+            used = SpanWasm.LoadField(code, used, view, 1);
+            code[used++] = 0x45;
+            return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.NullTag);
+        }
+
+        // The caller has verified that this is a native descriptor and
+        // established its non-null base and element bounds.
+        internal static int ReadWithinSpan(byte[] code, int used, int view, int index) =>
+            LinearMemoryWasm.Load(code, LinearAddress(code, used, view, index), 0x49);
+
         internal static int ReadLocation(byte[] code, int used, int location)
         {
             used = OpenLocation(code, used, location, I32);

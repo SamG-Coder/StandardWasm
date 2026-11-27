@@ -247,6 +247,69 @@ namespace PortableCompiler
             return Wrap(code, Local(code, used, 0x20, scratch));
         }
 
+        internal static int CopySpan(byte[] code, int used, int span, int empty, int scratch, bool nativeCharacters)
+        {
+            int output = scratch + 2, length = scratch + 3, index = scratch + 4;
+            used = Local(code, SpanWasm.Length(code, used, span), 0x21, length);
+            code[used++] = 0x02; // block (result String)
+            used = WasmBinary.ValueType(code, used, SignatureTypes.String);
+            used = IfEmpty(code, used, length);
+            used = LoadLiteral(code, used, empty, 0, 0);
+            used = ReturnString(code, used);
+
+            used = Local(code, used, 0x20, length);
+            used = BranchWasm.Gc(code, used, 7, SignatureTypes.Chars);
+            used = Local(code, used, 0x21, output);
+            if (nativeCharacters)
+            {
+                // A nonempty descriptor with a null owner addresses linear memory.
+                used = SpanWasm.LoadField(code, used, span, 0);
+                code[used++] = 0xd1;
+                code[used++] = 0x04; code[used++] = 0x40;
+                used = CopyNativeSpan(code, used, span, output, length, index);
+                code[used++] = 0x05;
+            }
+            used = Local(code, used, 0x20, output);
+            used = Zero(code, used);
+            used = SpanWasm.LoadField(code, used, span, 0);
+            code[used++] = 0xfb; code[used++] = 0x16; // ref.cast non-null
+            used = WasmBinary.Signed(code, used, WasmBinary.HeapType(SignatureTypes.Chars));
+            used = SpanWasm.LoadField(code, used, span, 1);
+            used = Local(code, used, 0x20, length);
+            used = BranchWasm.Gc(code, used, 0x11, SignatureTypes.Chars);
+            used = WasmBinary.Unsigned(code, used, WasmBinary.HeapType(SignatureTypes.Chars));
+            if (nativeCharacters) code[used++] = 0x0b;
+
+            used = Wrap(code, Local(code, used, 0x20, output));
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        private static int CopyNativeSpan(byte[] code, int used, int span, int output, int length, int index)
+        {
+            // Read exact UTF-16 units before publishing an immutable string.
+            // The span length bounds the loop and each byte offset is scaled by 2.
+            used = NativeCharacterViewWasm.GuardBase(code, used, span);
+            used = Local(code, Zero(code, used), 0x21, index);
+            code[used++] = 0x02; code[used++] = 0x40;
+            code[used++] = 0x03; code[used++] = 0x40;
+            used = Local(code, used, 0x20, index);
+            used = Local(code, used, 0x20, length);
+            code[used++] = 0x46;
+            code[used++] = 0x0d; code[used++] = 1;
+            used = Local(code, used, 0x20, output);
+            used = Local(code, used, 0x20, index);
+            used = NativeCharacterViewWasm.ReadWithinSpan(code, used, span, index);
+            used = BranchWasm.Gc(code, used, 0x0e, SignatureTypes.Chars);
+            used = Local(code, used, 0x20, index);
+            used = BranchWasm.Const(code, used, 1);
+            code[used++] = 0x6a;
+            used = Local(code, used, 0x21, index);
+            code[used++] = 0x0c; code[used++] = 0;
+            code[used++] = 0x0b; code[used++] = 0x0b;
+            return used;
+        }
+
         internal static int FirstCodeUnit(byte[] code, int used, int reference)
         {
             used = Unwrap(code, Local(code, used, 0x20, reference));

@@ -918,6 +918,8 @@ namespace PortableCompiler
                             else if (kind == BranchIl.ThrowFrameworkArgument)
                                 tags = operation == ExceptionTagsWasm.ArgumentNullTag
                                     ? ExceptionTypes.ArgumentNull : ExceptionTypes.ArgumentOutOfRange;
+                            else if (kind == BranchIl.StringFromSpan)
+                                tags = (hostFeatures & WasmImports.NativeCharacterViews) != 0 ? ExceptionTypes.NullReference : 0;
                             else if (kind == BranchIl.SpanRead || kind == BranchIl.SpanAddress)
                                 tags = ExceptionTypes.IndexOutOfRange |
                                     ((hostFeatures & WasmImports.NativeCharacterViews) != 0 ? ExceptionTypes.NullReference : 0);
@@ -990,7 +992,7 @@ namespace PortableCompiler
                     {
                         int kind = records[slot];
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
-                            kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.ConsoleWrite ||
+                            kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.StringFromSpan || kind == BranchIl.ConsoleWrite ||
                             kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine) frameShape[5] = 1;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
@@ -1856,6 +1858,17 @@ namespace PortableCompiler
                 {
                     int status = StringLiterals.Lower(image, heaps, records, slot, literals, literalSize, globals);
                     if (status < 0) return status;
+                    continue;
+                }
+                if ((kind == BranchIl.NewObject && records[slot + 3] == 0 ||
+                    kind == BranchIl.MemberCall && records[slot + 3] == 0x73) &&
+                    CoreStringCreation.IsReadOnlySpanConstructor(image, layout, heaps, records[slot + 1], kind == BranchIl.MemberCall))
+                {
+                    int empty = StringLiterals.Empty(globals);
+                    if (empty < 0) return empty;
+                    records[slot] = BranchIl.StringFromSpan;
+                    records[slot + 1] = empty;
+                    records[slot + 3] = 0;
                     continue;
                 }
                 if ((kind == BranchIl.Call || kind == BranchIl.MemberCall) && records[slot + 3] ==

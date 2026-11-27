@@ -4,7 +4,7 @@ namespace PeLibrary
 {
     internal static class SignatureReader
     {
-        internal const int Void = 0x01, Boolean = 0x02, Int32 = 0x08;
+        internal const int Void = 0x01, Boolean = 0x02, Character = 0x03, Int32 = 0x08;
         private const int ValueType = 0x11, Class = 0x12, TypeParameter = 0x13, GenericInstance = 0x15;
         private const int Instance = 0x20;
 
@@ -50,11 +50,16 @@ namespace PeLibrary
         // parameter, e.g. a return type of SomeValue<!0>.
         internal static int ReadGenericValue(byte[] image, int[] cursor, int end, int parameter)
         {
+            int definition = ReadSingleArgumentValue(image, cursor, end);
+            if (definition < 0 || !TakeElement(image, cursor, end, TypeParameter)) return -1;
+            return CompressedUnsigned(image, cursor[0], end, cursor) == parameter ? definition : -1;
+        }
+
+        internal static int ReadSingleArgumentValue(byte[] image, int[] cursor, int end)
+        {
             if (!TakeElement(image, cursor, end, GenericInstance)) return -1;
             var head = new int[2];
-            if (ReadGenericHeader(image, cursor, end, head) != 1 || head[1] != ValueType ||
-                !TakeElement(image, cursor, end, TypeParameter)) return -1;
-            return CompressedUnsigned(image, cursor[0], end, cursor) == parameter ? head[0] : -1;
+            return ReadGenericHeader(image, cursor, end, head) == 1 && head[1] == ValueType ? head[0] : -1;
         }
 
         internal static bool TakeElement(byte[] image, int[] cursor, int end, int element)

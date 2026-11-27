@@ -97,6 +97,35 @@ public static class ScopedSpanProbe
 
     private static int ReadLast(ReadOnlySpan<char> view) => view[^1];
 
+    public static unsafe int CheckStringFromSpan(int scenario)
+    {
+        if (scenario == 0)
+        {
+            ReadOnlySpan<char> empty = default;
+            return ReferenceEquals(new string(empty), string.Empty) ? 17 : -1;
+        }
+        if (scenario == 1)
+        {
+            var storage = new char[3];
+            storage[1] = '\ud800';
+            storage[2] = '\u2000';
+            ReadOnlySpan<char> view = new Span<char>(storage);
+            string snapshot = new string(view.Slice(1, 2));
+            storage[1] = 'x';
+            return snapshot.Length * 100 + snapshot[0] + snapshot[1];
+        }
+        char* native = stackalloc char[3];
+        native[0] = 'a';
+        native[1] = '\udfff';
+        native[2] = 'c';
+        ReadOnlySpan<char> pointer = new Span<char>(native, 3);
+        ReadOnlySpan<char> tail = pointer.Slice(1);
+        string first = new string(tail);
+        string second = new string(tail);
+        native[1] = 'x';
+        return !ReferenceEquals(first, second) && first == second ? first[0] + first[1] : -2;
+    }
+
     public static unsafe int CheckSpanSlices(int scenario)
     {
         if (scenario == 5)
