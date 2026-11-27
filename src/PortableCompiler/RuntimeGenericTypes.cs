@@ -12,11 +12,12 @@ namespace PortableCompiler
     internal sealed class RuntimeGenericTypes
     {
         private const int Owner = 0, Row = 1, Vector = 2, Function = 3, Width = 4;
+        private const int VoidArgument = -7;
         private int[] entries = new int[4 * Width];
         private int count;
         internal bool HasFactories => count != 0;
 
-        internal static int OpenDefinition(BundleImages bundle, int[] objects, int[] records, int slot, int[] clauses)
+        internal static int OpenDefinition(BundleImages bundle, int[] objects, int[] records, int slot, int[] clauses, int[] literalArgument)
         {
             // Only accept an inline length-one Type[] with index zero and an
             // exact Type producer. Every step has exactly one fall-through inlet.
@@ -28,6 +29,7 @@ namespace PortableCompiler
             {
                 value = RuntimeTypeRelations.Previous(records, value, clauses);
                 if (value < 0 || records[value] != LoadTypeToken) return -1;
+                literalArgument[0] = records[value + 1];
             }
             else if (records[value] != Load) return -1;
             int index = RuntimeTypeRelations.Previous(records, value, clauses);
@@ -46,7 +48,7 @@ namespace PortableCompiler
             return receiver >= 0 && records[receiver] == LoadTypeToken ? records[receiver + 1] : -1;
         }
 
-        internal int Bind(BundleImages bundle, int[] objects, int[] globals, int open,
+        internal int Bind(BundleImages bundle, int[] objects, int[] globals, int open, int literalArgument,
             int[] owners, int[] arities, int[] offsets, int[] signatures, int used, int[] result)
         {
             int globalOwner = StaticFields.Owner(globals, open);
@@ -70,6 +72,12 @@ namespace PortableCompiler
             if (GenericParameters.Check(image, heaps, layout, row, new[] { GenericScalar.Key(8) }, objects, deferred) != 0 ||
                 GenericParameters.Check(image, heaps, layout, row, new int[] { ObjectReference }, objects, deferred) != 0)
                 return -2;
+            if (literalArgument >= 0)
+            {
+                var core = CoreTypes(bundle);
+                int argument = Argument(bundle, objects, globals, literalArgument, core, new int[0], prepareLiteral: true);
+                if (argument != VoidArgument && argument <= 0) return argument == 0 ? -2 : argument;
+            }
             for (int entry = 0; entry < count * Width; entry += Width)
                 if (entries[entry + Owner] == owner && entries[entry + Row] == row)
                 {
@@ -105,8 +113,7 @@ namespace PortableCompiler
         {
             if (count == 0) return used;
             int sourceCount = globals[0]; // The pre-existing reachable descriptor set.
-            var stringIdentity = new int[2];
-            int hasString = RuntimeTypeTokens.FindCoreType(bundle, "String", stringIdentity);
+            var core = CoreTypes(bundle);
             var layout = new int[4];
             var heaps = new int[8];
             var arguments = new int[1];
@@ -131,23 +138,33 @@ namespace PortableCompiler
                 used = GuardNull(code, used, 2, ExceptionTagsWasm.ArgumentNullTag);
                 for (int global = 0; global < sourceCount; global++)
                 {
-                    int argument = Argument(bundle, objects, globals, global, hasString == 0, stringIdentity, noArguments);
+                    int argument = Argument(bundle, objects, globals, global, core, noArguments);
                     if (argument == 0) continue;
-                    if (argument < 0) return argument;
-                    arguments[0] = argument;
-                    int type = BundleLayouts.RegisterInstantiation(bundle, image, layout, heaps, owner,
-                        row << 2, objects, arguments, false);
-                    if (type < 0) return type;
-                    int result = RuntimeTypeTokens.BindLayout(bundle, objects, type, globals);
-                    if (result < 0) return result;
+                    bool isVoid = argument == VoidArgument;
+                    if (!isVoid && argument < 0) return argument;
+                    int result = -1;
+                    if (!isVoid)
+                    {
+                        arguments[0] = argument;
+                        int type = BundleLayouts.RegisterInstantiation(bundle, image, layout, heaps, owner,
+                            row << 2, objects, arguments, false);
+                        if (type < 0) return type;
+                        result = RuntimeTypeTokens.BindLayout(bundle, objects, type, globals);
+                        if (result < 0) return result;
+                    }
                     if (code.Length - used < 24) return -3;
                     used = Local(code, used, 0x20, 2);
                     used = LoadGlobal(code, used, global);
                     code[used++] = 0xd3; // ref.eq
                     code[used++] = 0x04;
                     code[used++] = 0x40;
-                    used = LoadGlobal(code, used, result);
-                    code[used++] = 0x0f;
+                    if (isVoid)
+                        used = ExceptionTagsWasm.Throw(code, used, ExceptionTagsWasm.ArgumentTag);
+                    else
+                    {
+                        used = LoadGlobal(code, used, result);
+                        code[used++] = 0x0f;
+                    }
                     code[used++] = 0x0b;
                 }
                 code[used++] = 0x00; // No linked canonical descriptor for this argument.
@@ -157,8 +174,23 @@ namespace PortableCompiler
             return used;
         }
 
+        private static int[] CoreTypes(BundleImages bundle)
+        {
+            var identity = new int[2];
+            var core = new int[3]; // owner, String TypeDef, Void TypeDef
+            core[0] = -1;
+            if (RuntimeTypeTokens.FindCoreType(bundle, "String", identity) == 0)
+            {
+                core[0] = identity[0];
+                core[1] = identity[1];
+            }
+            if (RuntimeTypeTokens.FindCoreType(bundle, "Void", identity) == 0 && identity[0] == core[0])
+                core[2] = identity[1];
+            return core;
+        }
+
         private static int Argument(BundleImages bundle, int[] objects, int[] globals, int global,
-            bool hasString, int[] stringIdentity, int[] noArguments)
+            int[] core, int[] noArguments, bool prepareLiteral = false)
         {
             int key = StaticFields.Owner(globals, global), row = StaticFields.Row(globals, global);
             if (!RuntimeTypeTokens.IsDescriptorOwner(key) || row < 0) return 0;
@@ -176,17 +208,41 @@ namespace PortableCompiler
                 int type = row - RuntimeTypeTokens.ClosedTypeKey;
                 return type >= FirstClass && type - FirstClass < objects[0] && !IsByRefLikeValue(objects, type) ? type : 0;
             }
-            if (hasString && owner == stringIdentity[0] && row == stringIdentity[1]) return String;
+            int[] layout = null, heaps = null;
+            byte[] image = null;
+            if (owner == core[0] || prepareLiteral)
+            {
+                image = bundle.Get(owner);
+                layout = new int[4];
+                heaps = new int[8];
+                if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+            }
+            if (owner == core[0])
+            {
+                if (row == core[1]) return String;
+                if (row == core[2]) return VoidArgument;
+                // The CLI key must win even when a linked method independently
+                // reserved a nominal layout for this same CoreLib primitive.
+                int element = ArrayTypeRefs.PrimitiveElement(image, heaps, layout, row << 2);
+                if (element > 0) return GenericScalar.Key(element);
+            }
             int known = Find(objects, owner, row, noArguments);
             if (known != 0) return IsByRefLikeValue(objects, known) ? 0 : known;
             int enumeration = FindEnum(objects, owner, row);
-            if (enumeration != 0) return enumeration;
-            byte[] image = bundle.Get(owner);
-            var layout = new int[4];
-            var heaps = new int[8];
-            if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
-            int element = ArrayTypeRefs.PrimitiveElement(image, heaps, layout, row << 2);
-            return element > 0 ? GenericScalar.Key(element) : 0;
+            if (enumeration != 0 || !prepareLiteral) return enumeration;
+
+            // A literal descriptor can be the only managed use of this TypeDef.
+            // Register its real layout now so failures retain the calling IL location.
+            var deferred = new int[8];
+            int status = GenericParameters.Check(image, heaps, layout, row, noArguments, objects, deferred);
+            if (status < 0) return status;
+            var shape = new int[5];
+            status = ReadShape(image, heaps, layout, row, shape);
+            bool value = status == -2;
+            if (value) status = ReadShape(image, heaps, layout, row, shape, true);
+            if (status < 0) return status;
+            int argument = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, row << 2, objects, value, true);
+            return IsByRefLikeValue(objects, argument) ? -2 : argument;
         }
 
         private static int LoadGlobal(byte[] code, int used, int global)

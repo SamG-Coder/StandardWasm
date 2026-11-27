@@ -1423,7 +1423,7 @@ namespace PortableCompiler
             // GetType can publish additional argument descriptors before the factories are written.
             if (reflection.GenericTypes.HasFactories)
             {
-                exceptionTags |= ExceptionTypes.ArgumentNull;
+                exceptionTags |= ExceptionTypes.ArgumentNull | ExceptionTypes.Argument;
                 length = reflection.GenericTypes.Write(bundle, moduleCode, length, objects, globals, bodyOffsets, sizes);
                 if (length < 0) return length;
             }
@@ -1626,11 +1626,12 @@ namespace PortableCompiler
                 {
                     if (RuntimeTypeMetadata.IsMakeGenericType(image, heaps, layout, records[slot + 1], kind == BranchIl.Call))
                     {
-                        int open = RuntimeGenericTypes.OpenDefinition(bundle, objects, records, slot, clauses);
+                        var literalArgument = new[] { -1 };
+                        int open = RuntimeGenericTypes.OpenDefinition(bundle, objects, records, slot, clauses, literalArgument);
                         if (open >= 0)
                         {
                             var helper = new int[1];
-                            functions = reflection.GenericTypes.Bind(bundle, objects, globals, open, owners, arities,
+                            functions = reflection.GenericTypes.Bind(bundle, objects, globals, open, literalArgument[0], owners, arities,
                                 offsets, signatures, functions, helper);
                             if (functions < 0) return functions;
                             records[slot] = BranchIl.Call;
