@@ -12,8 +12,6 @@ namespace PortableCompiler
         internal static void Lower(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
             int row, int[] records, int[] objects, int[] clauses)
         {
-            if (!MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "CopyTo"))
-                return;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
             int declaring = ObjectLayouts.Owner(image, heaps, layout, row, false);
@@ -21,9 +19,18 @@ namespace PortableCompiler
                 !ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, declaring, "System", "String"))
                 return;
 
-            for (int start = 0; start < records.Length; start += Width)
+            for (int check = 0; check < records.Length; check += Width)
             {
-                if (!At(records, start, FrameAddress, 1)) continue;
+                if (!At(records, check, Load, 0)) continue;
+                int measured = Next(records, check, Call, -1, clauses);
+                int target = Next(records, measured, FrameAddress, 1, clauses);
+                int targetLength = Next(records, target, MemberCall, -1, clauses);
+                int guard = Next(records, targetLength, Conditional, -1, clauses);
+                int start = Next(records, guard, FrameAddress, 1, clauses);
+                if (start < 0 || records[guard + 3] != 0x4b || // bgt.un: source length > destination length
+                    records[measured + 3] != 0 || records[targetLength + 3] != 0x28 ||
+                    SpanMetadata.Accessor(bundle, image, layout, heaps, owner, records[targetLength + 1],
+                        0, null, WritableCharacterSpan, objects) != SpanLength) continue;
                 int destination = Next(records, start, GetField, -1, clauses);
                 int source = Next(records, destination, Load, 0, clauses);
                 int characters = Next(records, source, FieldAddress, -1, clauses);
@@ -31,7 +38,8 @@ namespace PortableCompiler
                 int length = Next(records, sourceForLength, Call, -1, clauses);
                 int count = Next(records, length, ConvertInteger, 0xe0, clauses);
                 int move = Next(records, count, MethodSpecCall, -1, clauses);
-                if (move < 0 || records[destination + 3] != 1 || records[characters + 3] != 0 ||
+                if (move < 0 || records[guard + 1] <= move / Width || records[length + 1] != records[measured + 1] ||
+                    records[destination + 3] != 1 || records[characters + 3] != 0 ||
                     records[length + 3] != 0 || records[move + 3] != 0 ||
                     !IsSpanReference(bundle, image, heaps, layout, owner, records[destination + 1], objects) ||
                     !StringMetadata.IsFirstCodeUnitDefinition(image, heaps, layout, records[characters + 1]) ||
@@ -39,6 +47,8 @@ namespace PortableCompiler
                     !CoreStringRange.IsCharacterMemmove(image, layout, heaps, counts, first,
                         0x2b000000u | (uint)records[move + 1])) continue;
 
+                // Only the move operands change. The guarded caller still
+                // decides whether a short destination returns or throws.
                 records[start] = Load;
                 records[start + 1] = 0;
                 records[destination] = StringAsSpan;

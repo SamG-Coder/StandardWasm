@@ -220,6 +220,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [219 · Exact TypeHandle round-trips](stage-219-exact-type-handle/README.md) | `npm run demo -- stage-219-exact-type-handle` | Preserve descriptor identity through TypeHandle on proven typeof receivers |
 | [222 · Explicit type initialization](stage-222-explicit-type-initialization/README.md) | `npm run demo -- stage-222-explicit-type-initialization` | Verify explicit calls to guarded managed initializers |
 | [223 · Win32 process window station](stage-223-window-station/README.md) | `npm run demo -- stage-223-window-station` | Compare the borrowed station handle and user-object flags with x86 Windows |
+| [225 · Guarded string-to-span copies](stage-225-proven-string-span-moves/README.md) | `npm run demo -- stage-225-proven-string-span-moves` | Verify original CoreLib copy guards, return values and alias-visible writes |
 
 ## Adding a stage
 
