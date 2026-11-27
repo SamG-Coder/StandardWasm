@@ -46,7 +46,7 @@ namespace PortableCompiler
             // Reserve capacity before changing either queue. Suppression can
             // reduce the number moved during the second pass.
             // Both passes use the same snapshot, including previous pending roots.
-            used = Loop(code, used);
+            used = BeginWasmLoop(code, used);
             used = StopAtGlobal(code, used, cursor, registered);
             used = ReadRegistered(code, used, cursor);
             used = Call(code, used, first + Contains);
@@ -55,12 +55,12 @@ namespace PortableCompiler
             used = Advance(code, used, discovered);
             code[used++] = 0x0b;
             used = Advance(code, used, cursor);
-            used = EndLoop(code, used);
+            used = EndBeginWasmLoop(code, used);
             used = ReservePending(code, used, pending, discovered, first + Clear);
 
             used = Const(code, used, 0);
             used = Local(code, used, 0x21, cursor);
-            used = Loop(code, used);
+            used = BeginWasmLoop(code, used);
             used = StopAtGlobal(code, used, cursor, registered);
             used = ReadRegistered(code, used, cursor);
             used = Local(code, used, 0x22, receiver);
@@ -79,7 +79,7 @@ namespace PortableCompiler
             code[used++] = 0x0b;
             code[used++] = 0x0b;
             used = Advance(code, used, cursor);
-            used = EndLoop(code, used);
+            used = EndBeginWasmLoop(code, used);
 
             used = Local(code, used, 0x20, kept);
             used = Null(code, used);

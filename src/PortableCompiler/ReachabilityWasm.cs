@@ -45,7 +45,7 @@ namespace PortableCompiler
             used = Local(code, used, 0x21, 0);
             // The marked prefix doubles as a worklist. Appending a distinct
             // receiver extends the loop without revisiting an alias or cycle.
-            used = Loop(code, used);
+            used = BeginWasmLoop(code, used);
             used = StopAtGlobal(code, used, 0, marks);
             used = Local(code, used, 0x20, 0);
             used = Index(code, used, 0x25, Table);
@@ -54,7 +54,7 @@ namespace PortableCompiler
             used = Local(code, used, 0x21, 2);
             used = Const(code, used, 0);
             used = Local(code, used, 0x21, 1);
-            used = Loop(code, used);
+            used = BeginWasmLoop(code, used);
             used = Local(code, used, 0x20, 1);
             used = Local(code, used, 0x20, 2);
             used = StopAtLimit(code, used);
@@ -63,9 +63,9 @@ namespace PortableCompiler
             used = Call(code, used, first + 1); // typed edge read
             used = Call(code, used, first + Add);
             used = Advance(code, used, 1);
-            used = EndLoop(code, used);
+            used = EndBeginWasmLoop(code, used);
             used = Advance(code, used, 0);
-            used = EndLoop(code, used);
+            used = EndBeginWasmLoop(code, used);
             return Index(code, used, 0x23, marks);
         }
 
@@ -73,19 +73,19 @@ namespace PortableCompiler
         {
             used = Const(code, used, 0);
             used = Local(code, used, 0x21, 0);
-            used = Loop(code, used);
+            used = BeginWasmLoop(code, used);
             used = StopAtGlobal(code, used, 0, count);
             used = Local(code, used, 0x20, 0);
             used = Index(code, used, 0x25, table);
             used = Call(code, used, add);
             used = Advance(code, used, 0, stride);
-            return EndLoop(code, used);
+            return EndBeginWasmLoop(code, used);
         }
 
         private static int Find(byte[] code, int used, int marks)
         {
             code[used++] = 1; code[used++] = 1; code[used++] = 0x7f; // cursor
-            used = Loop(code, used);
+            used = BeginWasmLoop(code, used);
             used = StopAtGlobal(code, used, 1, marks);
             used = Local(code, used, 0x20, 1);
             used = Index(code, used, 0x25, Table);
@@ -96,7 +96,7 @@ namespace PortableCompiler
             code[used++] = 0x0f;
             code[used++] = 0x0b;
             used = Advance(code, used, 1);
-            used = EndLoop(code, used);
+            used = EndBeginWasmLoop(code, used);
             return Const(code, used, 0);
         }
 
@@ -149,14 +149,14 @@ namespace PortableCompiler
             return Index(code, used, 0x24, count);
         }
 
-        internal static int Loop(byte[] code, int used)
+        internal static int BeginWasmLoop(byte[] code, int used)
         {
             code[used++] = 0x02; code[used++] = 0x40;
             code[used++] = 0x03; code[used++] = 0x40;
             return used;
         }
 
-        internal static int EndLoop(byte[] code, int used)
+        internal static int EndBeginWasmLoop(byte[] code, int used)
         {
             code[used++] = 0x0c; code[used++] = 0;
             code[used++] = 0x0b; code[used++] = 0x0b;

@@ -69,7 +69,7 @@ namespace PortableCompiler
         {
             used = Const(code, used, 0);
             used = Local(code, used, 0x21, 1);
-            used = Loop(code, used);
+            used = BeginWasmLoop(code, used);
             used = StopAtGlobal(code, used, 1, count);
             used = Local(code, used, 0x20, 1);
             used = Index(code, used, 0x25, table);
@@ -77,7 +77,7 @@ namespace PortableCompiler
             code[used++] = 0xd3; // ref.eq
             code[used++] = 0x0d; code[used++] = 1;
             used = Advance(code, used, 1);
-            return EndLoop(code, used);
+            return EndBeginWasmLoop(code, used);
         }
 
         private static int CompareEnd(byte[] code, int used, int count)
