@@ -4,6 +4,7 @@ namespace PortableCompiler
 {
     internal static class ReferenceCastWasm
     {
+        internal const int CheckedInterface = 1, ProvenInterface = 2;
         internal static int Emit(byte[] code, int used, int source, int target, int type, bool cast)
         {
             int heap = WasmBinary.HeapType(type);

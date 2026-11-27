@@ -8,6 +8,7 @@ namespace PortableCompiler
     internal sealed class RuntimeInterfaceTests
     {
         private const int BoundPrimitivePlan = 1;
+        internal const int RequiresExactStackType = 1;
         private int[] heads, boxMatches;
 
         internal int Bind(BundleImages bundle, int[] objects, int type)
@@ -23,7 +24,7 @@ namespace PortableCompiler
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0 ||
                 MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;
             if (!PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return 0;
-            if (HasArguments(objects, type)) return -2;
+            if (HasArguments(objects, type)) return RequiresExactStackType;
 
             int row = TypeDef(objects, type);
             if (!InterfaceImplementations.HasDefinitionReference(image, heaps, layout, row)) return 0;

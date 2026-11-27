@@ -1751,8 +1751,16 @@ namespace PortableCompiler
                     else if (ObjectLayouts.IsInterface(objects, type))
                     {
                         int bound = reflection.InterfaceTests.Bind(bundle, objects, type);
-                        if (bound < 0) return bound;
-                        records[slot + 3] = 1;
+                        if (bound == RuntimeInterfaceTests.RequiresExactStackType)
+                        {
+                            if (kind != BranchIl.CastClass) return -2;
+                            records[slot + 3] = ReferenceCastWasm.ProvenInterface;
+                        }
+                        else
+                        {
+                            if (bound < 0) return bound;
+                            records[slot + 3] = ReferenceCastWasm.CheckedInterface;
+                        }
                     }
                     else if (type != String && (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0] ||
                         ObjectLayouts.ArrayElement(objects, type) != 0)) return -2;

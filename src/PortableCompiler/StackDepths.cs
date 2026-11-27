@@ -487,8 +487,12 @@ namespace PortableCompiler
             }
             if (kind == CastClass || kind == TestClass)
             {
-                if (depth < 1 || IsValueType(objects, stack[depth - 1]) ||
-                    (stack[depth - 1] != NullValue && !IsReference(stack[depth - 1]))) return -1;
+                if (depth < 1) return -1;
+                int source = stack[depth - 1];
+                if (source != NullValue && (!IsReference(source) || IsValueType(objects, source))) return -1;
+                // The closed interface has no dynamic cast helper. Every
+                // input must already have the exact CLI interface type or be null.
+                if (extra == ReferenceCastWasm.ProvenInterface && source != NullValue && source != operand) return -2;
                 return Push(stack, allocated, depth - 1, operand);
             }
             if (kind == StringEquals)
