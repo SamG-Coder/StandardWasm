@@ -138,10 +138,17 @@ namespace PortableCompiler
             bool construct = MatchesAscii(image, heaps, name, ".ctor");
             if (!construct && !MatchesAscii(image, heaps, name, "Invoke")) return 0;
             int parent = reference[AssemblyReferences.GenericParent];
-            if (parent <= 0) return 0;
-            int type = ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps,
-                owner, parent, objects, context, methodArguments);
+            int type = parent > 0
+                ? ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps,
+                    owner, parent, objects, context, methodArguments)
+                : ReferencedDefinition(bundle, image, layout, heaps, owner, row, objects);
             if (type < 0 || !DelegateShapes.IsKey(type)) return 0;
+            if (parent <= 0)
+            {
+                // A delegate TypeDef in another assembly: the key came from its Invoke MethodDef, so
+                // only the .ctor's (object, native int) shape needs checking here.
+                if (!construct) { key[0] = type; return Invoke; }
+            }
             int blob = reference[5];
             if (blob <= 0 || blob >= heaps[1]) return 0;
             var next = new int[1];
@@ -177,6 +184,24 @@ namespace PortableCompiler
             if (at != start + size) return 0;
             key[0] = type;
             return Invoke;
+        }
+
+        // The delegate key of a MemberRef's TypeRef parent when that resolves to a delegate TypeDef in
+        // another bundle assembly, else 0.
+        private static int ReferencedDefinition(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
+            int row, int[] objects)
+        {
+            int parent = AssemblyReferences.MemberParent(image, heaps, layout, row);
+            if (parent < 0 || (parent & 7) != 1 || bundle.Length == 0) return 0; // MemberRefParent TypeRef
+            var identity = new int[2];
+            if (AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, (parent >> 3) << 2 | 1, identity) < 0 ||
+                identity[1] <= 0 || identity[0] == owner)
+                return 0;
+            byte[] target = bundle.Get(identity[0]);
+            var targetLayout = new int[4];
+            var targetHeaps = new int[8];
+            if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return 0;
+            return DefinedStorage(bundle, target, targetLayout, targetHeaps, identity[0], identity[1], objects);
         }
 
         // Whether target (signature at `shape`, `arity` operands) can be the method of a delegate with
