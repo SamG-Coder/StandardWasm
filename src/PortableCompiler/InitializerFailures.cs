@@ -20,6 +20,27 @@ namespace PortableCompiler
         internal static bool IsCacheRow(int owner, int row) => owner == 0 && row >= CacheStart && row < CacheEnd;
 
         // found = (bundle index, MethodDef row) of that constructor, or (-1, 0).
+        // found[0] is the bundle index of the CoreLib definition, or -1 when the bundle has none.
+        internal static int FindCoreLib(BundleImages bundle, int[] found)
+        {
+            found[0] = -1;
+            for (int owner = 0; owner < bundle.Count; owner++)
+            {
+                // Fresh tables per image: ReadCounts leaves absent tables untouched, so counts
+                // reused from a previous image would misidentify the CoreLib definition.
+                var layout = new int[4];
+                var heaps = new int[8];
+                var counts = new int[45];
+                byte[] image = bundle.Get(owner);
+                if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+                if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;
+                if (!PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) continue;
+                found[0] = owner;
+                return 0;
+            }
+            return 0;
+        }
+
         internal static int FindConstructor(BundleImages bundle, int[] found)
         {
             found[0] = -1;

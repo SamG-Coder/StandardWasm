@@ -10,6 +10,12 @@ namespace PortableCompiler
         internal const int Width = ExceptionRegions.Width, Resume = 0, TryStart = 1, TryLength = 2, Mask = 5;
         private const int HandlerStart = 3, HandlerLength = 4;
 
+        // Stage 155: a catch handler that keeps the exception on the stack (no leading pop).
+        internal static bool IsBound(int[] clauses, int clause) =>
+            !IsFinally(clauses, clause) && clauses[clause + Resume] == clauses[clause + HandlerStart];
+
+        internal static int HandlerOffset(int[] clauses, int clause) => clauses[clause + HandlerStart];
+
         internal static int Validate(int[] records, int[] clauses, int[] location)
         {
             int length = records.Length / BranchIl.Width;
@@ -33,11 +39,20 @@ namespace PortableCompiler
                     continue;
                 }
                 int entry = start * BranchIl.Width;
+                if (StartsTry(clauses, start)) return -1;
+                if (records[entry] != Pop)
+                {
+                    // Stage 155 (decision 0082): the handler binds the exception. It resumes at its
+                    // first instruction with the caught object as its only stack value, which the
+                    // dispatcher writes just before entering it. Only the dispatcher reaches a
+                    // handler start (Edge below rejects other entries).
+                    clauses[clause + Resume] = start;
+                    continue;
+                }
                 // The generated handler resumes with an empty stack after consuming
                 // the original exception operand. No other edge may target that pop.
-                if (records[entry] != Pop) return -2;
                 int resume = records[entry + 2];
-                if (resume >= end || StartsTry(clauses, start)) return -1;
+                if (resume >= end) return -1;
                 clauses[clause + Resume] = resume;
             }
 

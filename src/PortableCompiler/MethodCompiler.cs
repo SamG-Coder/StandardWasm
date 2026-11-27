@@ -261,7 +261,7 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[27];
+            var frameShape = new int[ExceptionDispatchWasm.FrameSlot + ExceptionDispatchWasm.FrameWidth];
             var shadowStack = new int[3]; // $sp, base, limit globals + 1
             var pinRegistry = new int[1]; // the live-pin count global + 1 (decision 0077)
             // Each emitted global needs at least five bytes in the destination.
@@ -618,10 +618,15 @@ namespace PortableCompiler
                     var outgoingNulls = new byte[hasNull ? states.Length : 0];
                     var allocatedStates = new byte[virtualUsed[0] != 0 ? states.Length : 0];
                     int exceptionLocals = 0;
+                    var fixedObjects = new int[ExceptionDispatchWasm.FrameWidth];
+                    for (int i = 0; i < fixedObjects.Length; i += 2) fixedObjects[i] = -1;
                     if (catchRegion.Length != 0)
                     {
                         exceptionLocals = ExceptionClauses.Validate(records, catchRegion, location);
                         if (exceptionLocals < 0) return exceptionLocals;
+                        functions = BindCaughtExceptions(bundle, catchRegion, location, owners, rows, contexts, bases, indices,
+                            arities, offsets, signatures, objects, functions, fixedObjects);
+                        if (functions < 0) return functions;
                     }
                     var descriptorMismatch = new int[3];
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
@@ -1011,6 +1016,8 @@ namespace PortableCompiler
                     frameShape[25] = hostFeatures & WasmImports.NativeCharacterViews;
                     // Stage 151 (decision 0079): readLine's function index + 1, when the body reads a line.
                     frameShape[26] = readsLine ? WasmImports.InputFunction(hostFeatures) + 1 : 0;
+                    for (int i = 0; i < ExceptionDispatchWasm.FrameWidth; i++)
+                        frameShape[ExceptionDispatchWasm.FrameSlot + i] = fixedObjects[i];
                     frameShape[19] = resourceOpen ? ((hostFeatures & WasmImports.Console) != 0 ? ConsoleWasm.ImportCount + 1 : 1) : 0;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
@@ -2794,27 +2801,84 @@ namespace PortableCompiler
             failure[TypeInitializerWasm.FailureCache] = cache + 1;
             // Step 2: the CoreLib exception for each fixed tag, built with its parameterless
             // constructor (default message from SR, decision 0081). Unbound ones keep the trap.
-            for (int i = 0; i < TypeInitializerWasm.FixedFailureCount; i++)
+            var fixedTable = new int[2 * TypeInitializerWasm.FixedFailureCount];
+            functions = BindDefaultExceptions(bundle, found[0], owners, rows, contexts, bases, indices, arities, offsets,
+                signatures, objects, functions, fixedTable);
+            if (functions < 0) return functions;
+            for (int i = 0; i < fixedTable.Length; i++) failure[TypeInitializerWasm.FailureFixed + i] = fixedTable[i];
+            return functions;
+        }
+
+        // For fixed failure i, table[2 * i] is CoreLib's parameterless constructor (function index, or
+        // -1) and table[2 * i + 1] its class. Only where the CLR's runtime-raised exception carries that
+        // same default message: a failed cast names its types and the argument checks name their
+        // parameter, so those stay -1 rather than build an object with a different Message.
+        private static int BindDefaultExceptions(BundleImages bundle, int core, int[] owners, int[] rows, int[] contexts,
+            int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int functions, int[] table)
+        {
+            for (int i = 0; i < table.Length; i += 2) table[i] = -1;
+            byte[] coreLib = bundle.Get(core);
+            var coreLayout = new int[4];
+            var coreHeaps = new int[8];
+            if (CompressedTables.FindWithHeaps(coreLib, coreLayout, coreHeaps) < 0) return -1;
+            for (int i = 0; 2 * i < table.Length; i++)
             {
-                failure[TypeInitializerWasm.FailureFixed + 2 * i] = -1;
-                // Only where the CLR's runtime-raised exception carries that same default message.
-                // A failed cast names its types and the argument checks name their parameter, so
-                // those tags keep the explicit trap rather than an object with a different Message.
                 if (!TypeInitializerWasm.DefaultMessageMatches(i)) continue;
                 int type = ObjectLayouts.FindTypeDefinition(coreLib, coreHeaps, coreLayout, "System", FixedFailureTypeName(i));
                 int row = type == 0 ? 0 : InitializerFailures.FindDefaultConstructor(coreLib, coreHeaps, coreLayout, type);
                 if (row == 0) continue;
-                int linked = indices[bases[found[0]] + row] - 1;
+                int linked = indices[bases[core] + row] - 1;
                 if (linked < 0)
                 {
-                    functions = Register(bundle, coreLib, coreLayout, coreHeaps, found[0], row, 0, owners, rows, contexts,
+                    functions = Register(bundle, coreLib, coreLayout, coreHeaps, core, row, 0, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, functions);
                     if (functions < 0) return functions;
                     linked = functions - 1;
                 }
-                failure[TypeInitializerWasm.FailureFixed + 2 * i] = linked;
-                failure[TypeInitializerWasm.FailureFixed + 2 * i + 1] = signatures[offsets[linked] + 1];
+                table[2 * i] = linked;
+                table[2 * i + 1] = signatures[offsets[linked] + 1];
             }
+            return functions;
+        }
+
+        // Stage 155 (decision 0082): a bound catch handler needs an object for everything its clause
+        // receives. A thrown managed object is one already; a fixed tag the CLR raises with the default
+        // message is built from CoreLib's parameterless constructor (bound here into fixedObjects). A
+        // clause that cannot receive objects (no linked class), or that receives such a fixed tag while
+        // CoreLib's constructor cannot be bound, is diagnosed at its handler.
+        private static int BindCaughtExceptions(BundleImages bundle, int[] clauses, int[] location, int[] owners, int[] rows,
+            int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects,
+            int functions, int[] fixedObjects)
+        {
+            int needed = 0;
+            for (int clause = 0; clause < clauses.Length; clause += ExceptionClauses.Width)
+            {
+                if (!ExceptionClauses.IsBound(clauses, clause)) continue;
+                int mask = clauses[clause + ExceptionClauses.Mask];
+                if (location.Length != 0) location[2] = ExceptionClauses.HandlerOffset(clauses, clause);
+                if (!ManagedExceptionClauses.CatchesObjects(mask)) return -2;
+                needed = needed | (ManagedExceptionClauses.FixedBits(mask) & ((1 << ExceptionDispatchWasm.FixedObjectCount) - 1));
+            }
+            if (needed != 0)
+            {
+                var found = new int[2];
+                if (InitializerFailures.FindCoreLib(bundle, found) < 0) return -1;
+                if (found[0] >= 0)
+                {
+                    functions = BindDefaultExceptions(bundle, found[0], owners, rows, contexts, bases, indices, arities, offsets,
+                        signatures, objects, functions, fixedObjects);
+                    if (functions < 0) return functions;
+                }
+                for (int clause = 0; clause < clauses.Length; clause += ExceptionClauses.Width)
+                {
+                    if (!ExceptionClauses.IsBound(clauses, clause)) continue;
+                    int bits = ManagedExceptionClauses.FixedBits(clauses[clause + ExceptionClauses.Mask]);
+                    if (location.Length != 0) location[2] = ExceptionClauses.HandlerOffset(clauses, clause);
+                    for (int tag = 0; tag < ExceptionDispatchWasm.FixedObjectCount; tag++)
+                        if ((bits & (1 << tag)) != 0 && fixedObjects[2 * tag] < 0) return -2;
+                }
+            }
+            if (location.Length != 0) location[2] = -1;
             return functions;
         }
 

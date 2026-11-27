@@ -28,7 +28,16 @@ namespace PortableCompiler
                 {
                     int handler = catchRegion[clause + ExceptionClauses.Resume];
                     if (depths[handler] != 0) continue;
-                    depths[handler] = 1; // Handler resumes after discarding the exception.
+                    if (ExceptionClauses.IsBound(catchRegion, clause))
+                    {
+                        // [caught]: the clause's class, or Object for a catch of System.Object.
+                        // MethodCompiler only accepts a bound clause that receives objects.
+                        int mask = catchRegion[clause + ExceptionClauses.Mask];
+                        if (maximum == 0 || !ManagedExceptionClauses.CatchesObjects(mask)) return -2;
+                        depths[handler] = 2;
+                        states[handler * maximum] = ManagedExceptionClauses.CaughtClass(mask);
+                    }
+                    else depths[handler] = 1; // Handler resumes after discarding the exception.
                     pending[handler] = head + 1;
                     head = handler + 1;
                 }
