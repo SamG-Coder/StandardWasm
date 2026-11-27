@@ -1150,6 +1150,13 @@ namespace PortableCompiler
                                 if (bytes < 0) return bytes;
                                 capacity += bytes;
                             }
+                            if (kind == BranchIl.FormatEnum)
+                            {
+                                int names = unchecked((int)PeLibrary.ImageBytes.U32(literals, (uint)operation));
+                                if (capacity > int.MaxValue - EnumFormattingWasm.Capacity ||
+                                    names > (int.MaxValue - capacity - EnumFormattingWasm.Capacity) / EnumFormattingWasm.NameCapacity) return -3;
+                                capacity += EnumFormattingWasm.Capacity + names * EnumFormattingWasm.NameCapacity;
+                            }
                             int inlineLocal = kind == BranchIl.Load || kind == BranchIl.Store ? operation :
                                 kind == BranchIl.ConstructValue ? records[slot + 3] : -1;
                             if (inlineLocal >= 0 && inlineLocations[inlineLocal] != 0)
@@ -1281,6 +1288,7 @@ namespace PortableCompiler
                             kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine || kind == BranchIl.CopyCharacterSpan ||
                             kind == BranchIl.FindCharacterInSpan) frameShape[5] |= 1;
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
+                        if (kind == BranchIl.FormatEnum) frameShape[5] |= 5;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
                             frameShape[6] = 1;
@@ -1289,7 +1297,7 @@ namespace PortableCompiler
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
                         arities, code, remainderFixup, catchRegion, outgoingNulls, outgoingReferences, objects, initializers.FieldInitializers,
                         reflection, inlineLocations, nativePlans.Plans, filters, frameCells, pointers, rootCount, frameRoots,
-                        tracksFinalizers ? finalizers : null, wrapsFailure ? failure : null, primitiveArrays, projections);
+                        tracksFinalizers ? finalizers : null, wrapsFailure ? failure : null, primitiveArrays, projections, literals);
                 }
 
                 if (used < 0) return used;
@@ -1718,6 +1726,13 @@ namespace PortableCompiler
                     int next = records[slot + 2] * BranchIl.Width;
                     if (type == I32 && PrimitiveHashCalls.LowerFrame(bundle, image, layout, heaps, owner,
                         context, methodArguments, objects, records, clauses, slot)) continue;
+                    int enumFormatting = EnumFormatting.LowerFrame(bundle, image, layout, heaps, owner,
+                        context, methodArguments, objects, records, clauses, slot, type, globals, literals, literalSize);
+                    if (enumFormatting != 0)
+                    {
+                        if (enumFormatting < 0) return enumFormatting;
+                        continue;
+                    }
                     if (IsObjectReference(type) && !ObjectLayouts.IsValueType(objects, type))
                     {
                         int constrained = ConstrainedReferenceCalls.Lower(bundle, image, layout, heaps, owner, context,

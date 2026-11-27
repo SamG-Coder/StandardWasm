@@ -93,8 +93,13 @@ namespace PeLibrary
             if (first < 1 || end < first || end > (uint)(counts[4] + 1)) return -1;
             int fields = defs + counts[2] * defWidth;
             if (valueBase == 2)
-                return valueType && (flags & 0x138) == 0x100
-                    ? EnumStorage.Read(image, streams, methods, fields, (int)first, (int)end) : -2;
+            {
+                if (!valueType || (flags & 0x138) != 0x100) return -2;
+                shape[0] = fields;
+                shape[1] = (int)first;
+                shape[2] = (int)(end - first);
+                return EnumStorage.Read(image, streams, methods, fields, (int)first, (int)end);
+            }
             // LayoutMask: 0 auto, 0x08 sequential, 0x10 explicit, 0x18 reserved.
             uint layout = flags & 0x18;
             // A class may be auto or sequential. Sequential order only matters

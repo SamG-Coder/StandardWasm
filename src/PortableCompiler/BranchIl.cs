@@ -85,7 +85,7 @@ namespace PortableCompiler
         internal const int CallDynamicNative = 179, CallPinnedCharacterNative = 180, ReinterpretPacked16Location = 181, CopyCharacterSpan = 182, PinStaticBytes = 183, ArrayClear = 184;
         // [ReadOnlySpan<char>, char, char] -> [first matching index or -1].
         internal const int FindCharacterInSpan = 186, EqualCharacterSpans = 187, TakeReadOnlyCharacterLocation = 188;
-        internal const int NativeFieldPointer = 189, NativeFrameFieldAddress = 190;
+        internal const int NativeFieldPointer = 189, NativeFrameFieldAddress = 190, FormatEnum = 191;
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

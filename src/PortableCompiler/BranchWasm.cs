@@ -13,13 +13,14 @@ namespace PortableCompiler
             byte[] outgoingNulls, int[] outgoingReferences, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection,
             int[] inlineLocations, int[] nativePlans, int[] filters, int[] frameCells,
             FunctionPointerPlan pointers, int rootCount, byte[] frameRoots, FinalizerSlots finalizers, int[] failure,
-            PrimitiveArrayWasm primitiveArrays, ValueFieldProjections projections)
+            PrimitiveArrayWasm primitiveArrays, ValueFieldProjections projections, byte[] literals)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
             int classes = frameShape[4];
             bool stringScratch = (frameShape[5] & 1) != 0;
             bool scopedPinScratch = (frameShape[5] & 2) != 0;
+            bool enumScratch = (frameShape[5] & 4) != 0;
             bool eventScratch = frameShape[6] != 0;
             int exceptionLocals = frameShape[8], continuations = frameShape[9];
             int hostImports = frameShape[10];
@@ -58,13 +59,14 @@ namespace PortableCompiler
                 cellCount++;
             }
             int spills = arguments + locals + (hasNull ? 1 : 0);
-            int fixedLocals = spills + classes + (stringScratch ? 5 : 0) +
+            int fixedLocals = spills + classes + (stringScratch ? 5 : 0) + (enumScratch ? 2 : 0) +
                 (eventScratch ? 6 : 0) + (scopedPinScratch ? 8 : 0) + (resourceFunction >= 0 ? 7 : 0) + 1 + 2 * exceptionLocals + continuations +
                 (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0) + (staticRegion >= 0 ? 1 : 0) + cellCount + (tracksRoots ? 1 : 0) + (failure != null ? 1 : 0);
             if (fixedLocals > MaxLocals || maximum > (MaxLocals - fixedLocals) / spillKinds) return -2;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
-            int eventLocals = scratch + (stringScratch ? 5 : 0);
+            int enumLocals = scratch + (stringScratch ? 5 : 0);
+            int eventLocals = enumLocals + (enumScratch ? 2 : 0);
             int scopedPinLocals = eventLocals + (eventScratch ? 6 : 0);
             int resourceLocals = scopedPinLocals + (scopedPinScratch ? 8 : 0);
             int pcLocal = resourceLocals + (resourceFunction >= 0 ? 7 : 0);
@@ -73,7 +75,7 @@ namespace PortableCompiler
             // eqref followed by one saved object per clause.
             int objectBase = continuationBase + continuations;
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
-                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (scopedPinScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
+                (stringScratch ? 2 : 0) + (enumScratch ? 1 : 0) + (eventScratch ? 2 : 0) + (scopedPinScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
                 (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0) +
                 (staticRegion >= 0 ? 1 : 0) + cellCount + (tracksRoots ? 1 : 0) + (failure != null ? 1 : 0));
             // The saved shadow-stack pointer follows every other local.
@@ -119,6 +121,11 @@ namespace PortableCompiler
                 used = WasmBinary.ValueType(code, used, Chars);
                 code[used++] = 2;
                 code[used++] = 0x7f;
+            }
+            if (enumScratch)
+            {
+                code[used++] = 2;
+                code[used++] = 0x7e; // invariant magnitude and digit workspace
             }
             if (eventScratch)
             {
@@ -390,6 +397,14 @@ namespace PortableCompiler
                     used = Local(code, used, 0x20, flag);
                     code[used++] = operand == I64 ? (byte)0x51 : (byte)0x46; // eq
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top - 1));
+                }
+                else if (kind == FormatEnum)
+                {
+                    int element = records[slot + 3];
+                    used = EnumFormattingWasm.Emit(code, used, literals, operand, element,
+                        Spill(spills, maximum, spillFlags, EnumFormatting.StackStorage(element), top),
+                        Spill(spills, maximum, spillFlags, String, top), scratch, scratch + 3, scratch + 4,
+                        enumLocals, enumLocals + 1);
                 }
                 else if (kind == EqualRuntimeTypes)
                 {
