@@ -95,6 +95,33 @@ namespace PortableCompiler
             return 1;
         }
 
+        // Runtime representations such as String do not have nominal layouts.
+        // Walk the metadata hierarchy without reserving an unused class layout.
+        internal static int ImplementsCoreReference(BundleImages bundle, int[] objects, int[] required, string name, string space)
+        {
+            var identity = new int[2];
+            int status = RuntimeTypeTokens.FindCoreType(bundle, name, identity, space);
+            if (status < 0) return status;
+            var arguments = new int[0];
+            var layout = new int[4];
+            var heaps = new int[8];
+            var shape = new int[5];
+            for (int depth = 0; depth < ObjectLayouts.MaxTypeDepth; depth++)
+            {
+                int owner = identity[0], row = identity[1];
+                if (owner == AssemblyBundle.ObjectOwner) return 0;
+                status = Search(bundle, objects, required, owner, row, arguments, 0, 0);
+                if (status != 0) return status;
+                byte[] image = bundle.Get(owner);
+                if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+                status = ObjectLayouts.ReadShape(image, heaps, layout, row, shape);
+                if (status < 0) return status;
+                status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, shape[3], identity);
+                if (status < 0) return status;
+            }
+            return -2;
+        }
+
         private static int Search(BundleImages bundle, int[] objects, int[] required,
             int owner, int row, int[] substitutions, int context, int depth)
         {

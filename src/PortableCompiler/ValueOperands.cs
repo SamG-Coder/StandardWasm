@@ -1,5 +1,6 @@
 using PeLibrary;
 using static PortableCompiler.BranchIl;
+using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
@@ -63,10 +64,39 @@ namespace PortableCompiler
             if (next >= records.Length || Entry(records, next / Width, clauses)) return -2;
             int kind = records[next];
             if (kind == GetField) return 0;
+            if (kind == LoadIndirect && readOnly)
+            {
+                int receiver = frame[0];
+                if (ObjectLayouts.AssemblyOf(objects, receiver) != owner) return -2;
+                int element = ArrayTypeRefs.PrimitiveElement(image, heaps, layout, ObjectLayouts.TypeDef(objects, receiver) << 2);
+                if (element < 0) return element;
+                int storage = PrimitiveBoxing.Storage(element);
+                if (!PrimitiveLoadMatches(storage, records[next + 1]) ||
+                    !PrimitiveBoxing.HasPayloadField(objects, receiver, storage)) return -2;
+                // CoreLib can dereference primitive this directly (ldind).
+                // Read the snapshot's verified payload field without a native address.
+                records[next] = BoundScopedFieldLoad;
+                records[next + 1] = 0;
+                records[next + 3] = FieldAccess.Encode(receiver, storage);
+                return 0;
+            }
             if (kind == InitializeValue)
                 return readOnly ? -2 :
                     Clear(bundle, image, layout, heaps, owner, records, slot, next, frame[0], objects, context, methodArguments);
             return LowerAddressUse(image, layout, heaps, methodCount, records, slot, 0, clauses, readOnly);
+        }
+
+        private static bool PrimitiveLoadMatches(int storage, int opcode)
+        {
+            if (storage == I32) return opcode == 0x4a || opcode == 0x4b;
+            if (storage == I64) return opcode == 0x4c;
+            if (storage == Native) return opcode == 0x4d;
+            if (storage == F32) return opcode == 0x4e;
+            if (storage == F64) return opcode == 0x4f;
+            if (storage == Signed8) return opcode == 0x46;
+            if (storage == Unsigned8) return opcode == 0x47;
+            if (storage == Signed16) return opcode == 0x48;
+            return (storage == Unsigned16 || storage == Character) && opcode == 0x49;
         }
 
         // Keep the owning value location on the stack for an immediate read

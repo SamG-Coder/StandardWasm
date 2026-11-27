@@ -897,6 +897,7 @@ namespace PortableCompiler
                         }
                         if (depths[pc] != 0)
                         {
+                            if (kind == BranchIl.BoxValue) dispatch.AddBox(operation);
                             if (hasNull)
                             {
                                 capacity = NullSpillWasm.Transfer(sizingBuffer, capacity, records, pc,
@@ -1051,7 +1052,7 @@ namespace PortableCompiler
                 features[0] = hostFeatures | hostUse[0];
                 return Reemit;
             }
-            length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, length, hostImports, location);
+            length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, objects, length, hostImports, location);
             if (length < 0) return length;
             var interfacePosition = new[] { length };
             functions = reflection.InterfaceTests.Write(moduleCode, interfacePosition, objects, offsets, signatures,
@@ -1304,7 +1305,8 @@ namespace PortableCompiler
                         records[slot] = BranchIl.CastHandler;
                     else if (ObjectLayouts.IsInterface(objects, type))
                     {
-                        if (!RuntimeInterfaceTests.UsesClassLayouts(bundle, objects, type)) return -2;
+                        int bound = reflection.InterfaceTests.Bind(bundle, objects, type);
+                        if (bound < 0) return bound;
                         records[slot + 3] = 1;
                     }
                     else if (type != String && (type < ObjectLayouts.FirstClass ||

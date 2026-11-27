@@ -7,9 +7,9 @@ namespace PortableCompiler
     internal static class InterfaceSlots
     {
         internal static int SelectBody(BundleImages bundle, int[] objects,
-            int receiver, int declared, int owner, int row, int[] symbol)
+            int receiver, int declared, int owner, int row, int[] symbol, bool primitiveMap = false)
         {
-            if (!Implements(objects, receiver, declared)) return -2;
+            if (!primitiveMap && !Implements(objects, receiver, declared)) return -2;
 
             byte[] declaration = bundle.Get(owner);
             var declarationLayout = new int[4];
@@ -22,7 +22,9 @@ namespace PortableCompiler
             var heaps = new int[8];
             var range = new int[2];
             int declaredContext = HasArguments(objects, declared) ? declared : 0;
-            bool hasMap = false;
+            // Primitive maps are proved by the TypeDef's interface metadata.
+            // Value layouts do not populate the class assignability graph.
+            bool hasMap = primitiveMap;
             for (int type = receiver; type >= FirstClass; type = Parent(objects, type))
             {
                 int targetOwner = AssemblyOf(objects, type);

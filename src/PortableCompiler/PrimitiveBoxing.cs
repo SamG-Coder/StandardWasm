@@ -10,6 +10,8 @@ namespace PortableCompiler
 
         internal static bool IsLayout(int[] objects, int type) => ObjectLayouts.AssemblyOf(objects, type) == Owner;
 
+        internal static int FindLayout(int[] objects) => ObjectLayouts.Find(objects, Owner, 0, new int[0]);
+
         internal static int Layout(int[] objects)
         {
             var arguments = new int[0];
@@ -34,6 +36,18 @@ namespace PortableCompiler
         }
 
         internal static int Storage(int element) => GenericScalar.Storage(GenericScalar.Key(element));
+
+        internal static bool HasPayloadField(int[] objects, int type, int storage)
+        {
+            int count = 0;
+            for (int field = 0; field < ObjectLayouts.LayoutFieldCount(objects, type); field++)
+            {
+                int shape = ObjectLayouts.LayoutFieldType(objects, type, field);
+                if (shape == 0) continue;
+                if (shape != storage || ++count != 1) return false;
+            }
+            return count == 1;
+        }
 
         internal static int WriteType(byte[] output, int cursor)
         {
@@ -72,6 +86,12 @@ namespace PortableCompiler
             used = ThrowUnless(code, used);
             used = TestElement(code, used, local, type, element);
             used = ThrowUnless(code, used);
+            return Payload(code, used, local, element, type);
+        }
+
+        // The caller has tested both the single box heap and its CLI tag.
+        internal static int Payload(byte[] code, int used, int local, int element, int type)
+        {
             used = Field(code, used, local, type, 1);
             int storage = Storage(element);
             if (storage == SignatureTypes.F64) code[used++] = 0xbf; // f64.reinterpret_i64

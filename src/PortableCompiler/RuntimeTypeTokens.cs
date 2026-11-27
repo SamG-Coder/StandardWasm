@@ -45,22 +45,24 @@ namespace PortableCompiler
         internal static int BindIdentity(int[] globals, int owner, int row) =>
             StaticFields.Register(globals, -3 - owner, row, ObjectLayouts.ObjectReference);
 
-        internal static int FindCoreType(BundleImages bundle, string name, int[] identity)
+        internal static int FindCoreType(BundleImages bundle, string name, int[] identity, string space = "System")
         {
             int found = -1;
             var layout = new int[4];
             var heaps = new int[8];
-            var counts = new int[45];
             for (int owner = 0; owner < bundle.Count; owner++)
             {
                 byte[] image = bundle.Get(owner);
                 if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+                // ReadCounts leaves absent tables untouched. Each image needs
+                // a fresh table map, including when CoreLib follows a facade.
+                var counts = new int[45];
                 int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
                 if (first < 0) return -1;
                 if (!PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) continue;
                 for (int row = 1; row <= counts[2]; row++)
                 {
-                    if (!ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row, "System", name)) continue;
+                    if (!ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row, space, name)) continue;
                     if (found >= 0) return -5;
                     found = owner;
                     identity[0] = owner;

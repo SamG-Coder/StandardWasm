@@ -8,8 +8,8 @@ namespace PortableCompiler
     internal sealed class VirtualDispatch
     {
         private const int Function = 0, Owner = 1, Row = 2, Receiver = 3,
-            Declared = 4, CallerOwner = 5, CallerRow = 6, CallerOffset = 7, Scanned = 8, Head = 9, SiteWidth = 10;
-        private const int Class = 0, Target = 1, Next = 2, CaseWidth = 3;
+            Declared = 4, CallerOwner = 5, CallerRow = 6, CallerOffset = 7, Scanned = 8, Head = 9, ScannedBoxes = 10, SiteWidth = 11;
+        private const int Class = 0, Target = 1, Next = 2, BoxElement = 3, CaseWidth = 4;
 
         private readonly byte[] known = new byte[MaxClasses];
         private readonly int[] allocations = new int[MaxClasses];
@@ -17,7 +17,7 @@ namespace PortableCompiler
         private readonly RuntimeTypeCalls typeCalls;
         private int[] sites = new int[0];
         private int[] cases = new int[0];
-        private int allocationsCount, sitesUsed, casesUsed = CaseWidth;
+        private int allocationsCount, sitesUsed, casesUsed = CaseWidth, boxes;
 
         internal VirtualDispatch(int capacity, RuntimeTypeCalls typeCalls)
         {
@@ -38,6 +38,8 @@ namespace PortableCompiler
             known[index] = 1;
             allocations[allocationsCount++] = type;
         }
+
+        internal void AddBox(int element) => boxes |= 1 << element;
 
         internal int Add(int function, int owner, int row, int receiver, int declared, int callerOwner, int callerRow, int pc)
         {
@@ -87,33 +89,102 @@ namespace PortableCompiler
                     if (!MethodCompiler.VirtualSignaturesMatch(arities, offsets, signatures, target,
                         signatures, shape, arities[dispatcher], type, objects)) return -2;
                     if (target == functions) functions++;
-                    if (casesUsed > cases.Length - CaseWidth) return -3;
-
-                    // Parent layouts always precede children. A subtype test
-                    // for a child must run before a test for its base.
-                    int prior = 0;
-                    int next = sites[site + Head];
-                    while (next != 0 && cases[next + Class] > type)
-                    {
-                        prior = next;
-                        next = cases[next + Next];
-                    }
-                    int at = casesUsed;
-                    casesUsed += CaseWidth;
-                    cases[at + Class] = type;
-                    cases[at + Target] = target;
-                    cases[at + Next] = next;
-                    if (prior == 0) sites[site + Head] = at;
-                    else cases[prior + Next] = at;
+                    int added = AddCase(site, type, target, 0);
+                    if (added < 0) return added;
                 }
                 sites[site + Scanned] = allocationsCount;
+                if (IsInterface(objects, sites[site + Declared]) && boxes != sites[site + ScannedBoxes])
+                {
+                    functions = ExpandBoxes(bundle, objects, owners, rows, contexts, bases, indices, arities,
+                        offsets, signatures, functions, location, site);
+                    if (functions < 0) return functions;
+                }
             }
             return functions;
         }
 
-        internal int Write(byte[] code, int[] bodyOffsets, int[] sizes, int[] arities, int[] offsets,
-            int[] signatures, int length, int hostImports, int[] location)
+        private int ExpandBoxes(BundleImages bundle, int[] objects, int[] owners, int[] rows, int[] contexts,
+            int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int functions, int[] location, int site)
         {
+            int declared = sites[site + Declared], dispatcher = sites[site + Function];
+            int pending = boxes & ~sites[site + ScannedBoxes];
+            var required = new[] { AssemblyOf(objects, declared), TypeDef(objects, declared) };
+            if (HasArguments(objects, declared))
+            {
+                sites[site + ScannedBoxes] = boxes;
+                return functions;
+            }
+            for (int element = 2; element < 32; element++)
+            {
+                if ((pending & (1 << element)) == 0) continue;
+                int primitive = GenericScalar.Key(element);
+                int implements = BundleConstraints.Implements(bundle, objects, primitive, required, 0);
+                if (implements < 0) return implements;
+                if (implements == 0) continue;
+                CompileLocation.Set(location, sites[site + CallerOwner], sites[site + CallerRow], sites[site + CallerOffset]);
+                var identity = new int[2];
+                int found = BundleConstraints.FindPrimitive(bundle, primitive, identity);
+                if (found <= 0) return found < 0 ? found : -2;
+                byte[] image = bundle.Get(identity[0]);
+                var layout = new int[4];
+                var heaps = new int[8];
+                if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+                int type = BundleLayouts.RegisterValue(bundle, image, layout, heaps, identity[0], identity[1], objects);
+                if (type < 0) return type;
+                if (!PrimitiveBoxing.HasPayloadField(objects, type, GenericScalar.Storage(primitive))) return -2;
+                var method = new int[3];
+                int selected = InterfaceSlots.SelectBody(bundle, objects, type, declared, sites[site + Owner],
+                    sites[site + Row], method, primitiveMap: true);
+                if (selected < 0) return selected;
+                if (method[0] != identity[0]) return -2;
+                int target = MethodCompiler.Lookup(owners, rows, contexts, bases, indices, functions, method[0], method[1], type);
+                if (target < 0)
+                {
+                    target = functions;
+                    functions = MethodCompiler.Register(bundle, image, layout, heaps, method[0], method[1],
+                        type, owners, rows, contexts, bases, indices, arities, offsets, signatures,
+                        objects, functions, allowVirtual: true, receiverOverride: type);
+                    if (functions < 0) return functions;
+                }
+                int shape = offsets[dispatcher];
+                int result = BindResult(bundle, objects, signatures[shape], signatures, offsets,
+                    owners, rows, contexts, target);
+                if (result < 0) return result;
+                if (!MethodCompiler.VirtualSignaturesMatch(arities, offsets, signatures, target,
+                    signatures, shape, arities[dispatcher], type, objects)) return -2;
+                int added = AddCase(site, type, target, element);
+                if (added < 0) return added;
+            }
+            sites[site + ScannedBoxes] = boxes;
+            return functions;
+        }
+
+        private int AddCase(int site, int type, int target, int element)
+        {
+            if (casesUsed > cases.Length - CaseWidth) return -3;
+            // Parent layouts always precede children. Test children first.
+            int prior = 0;
+            int next = sites[site + Head];
+            while (next != 0 && cases[next + Class] > type)
+            {
+                prior = next;
+                next = cases[next + Next];
+            }
+            int entry = casesUsed;
+            casesUsed += CaseWidth;
+            cases[entry + Class] = type;
+            cases[entry + Target] = target;
+            cases[entry + Next] = next;
+            cases[entry + BoxElement] = element;
+            if (prior == 0) sites[site + Head] = entry;
+            else cases[prior + Next] = entry;
+            return 0;
+        }
+
+        internal int Write(byte[] code, int[] bodyOffsets, int[] sizes, int[] arities, int[] offsets,
+            int[] signatures, int[] objects, int length, int hostImports, int[] location)
+        {
+            int boxLayout = boxes == 0 ? 0 : PrimitiveBoxing.FindLayout(objects);
             for (int site = 0; site < sitesUsed; site += SiteWidth)
             {
                 int function = sites[site + Function], arity = arities[function];
@@ -124,14 +195,16 @@ namespace PortableCompiler
                 for (int entry = sites[site + Head]; entry != 0; entry = cases[entry + Next])
                 {
                     int type = cases[entry + Class], target = cases[entry + Target];
+                    int element = cases[entry + BoxElement], armBytes = element == 0 ? 26 : 96;
                     if (code.Length - length < 2 || arity > (code.Length - length - 2) / 6 ||
-                        code.Length - length - 2 - arity * 6 < 26) return -3;
-                    length = VirtualDispatchWasm.Arm(code, length, type, signatures[offsets[target] + 1],
-                        hostImports + target, arity);
+                        code.Length - length - 2 - arity * 6 < armBytes) return -3;
+                    length = element == 0
+                        ? VirtualDispatchWasm.Arm(code, length, type, signatures[offsets[target] + 1], hostImports + target, arity)
+                        : VirtualDispatchWasm.BoxArm(code, length, boxLayout, element, type, hostImports + target, arity);
                 }
 
-                // The caller checked null. All reachable non-null managed
-                // classes are covered by the completed allocation fixed point.
+                // The caller checked null. The fixed point covers reachable
+                // managed allocations and boxes with supported slot bodies.
                 code[length++] = 0x00; // unreachable
                 code[length++] = 0x0b; // end
                 sizes[function] = length - bodyOffsets[function];
