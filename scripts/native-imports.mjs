@@ -5,7 +5,7 @@
 //   module "internalcall"          name = "Namespace.Type::Method"
 //   module "standardwasm:native"   present, library, clearLastError, saveLastError (host helpers)
 // The dynamic imports share a table in import order. For a native call, the module asks
-// present(k), then library(k). COM entries keep their ordinals and resolve separately.
+// present(k), then library(k). Routed calls keep their ordinals and resolve separately.
 // Native lookup raises CoreLib's
 // DllNotFoundException when the registry has no entry at all for that DLL, and
 // EntryPointNotFoundException when the DLL is known but lacks the entry. A missing entry is
@@ -16,15 +16,20 @@
 
 const nativeHelperModule = "standardwasm:native";
 export const comImportModule = "standardwasm:com";
+export const nativeIndirectImportModule = "standardwasm:native-indirect";
 const nativeHelperNames = new Set(["present", "library", "clearLastError", "saveLastError"]);
 
 export function isNativeImportModule(name) {
     return name.startsWith("native:") || name === "internalcall" || name === nativeHelperModule;
 }
 
+function isRoutedImportModule(name) {
+    return name === comImportModule || name === nativeIndirectImportModule;
+}
+
 function nativeDeclarations(module) {
     return WebAssembly.Module.imports(module)
-        .filter(entry => isNativeImportModule(entry.module) || entry.module === comImportModule);
+        .filter(entry => isNativeImportModule(entry.module) || isRoutedImportModule(entry.module));
 }
 
 // A DLL name as the Windows loader compares it: case-insensitive, with ".dll" optional.
@@ -52,8 +57,8 @@ export function nativeImports(module, registry, state = { system: 0, pinvoke: 0 
     const helpers = new Set();
     let nativeCount = 0;
     const entries = nativeDeclarations(module).map(({ module: owner, name, kind }) => {
-        // COM has a separate registry but occupies this index in the compiler's table.
-        if (owner === comImportModule) return null;
+        // Routed calls use their own registries and still occupy a native-table slot.
+        if (isRoutedImportModule(owner)) return null;
         const separator = name.lastIndexOf("::");
         if (kind !== "function" || !name || name.includes("\0") || owner.includes("\0") ||
             (owner.startsWith("native:") && !normalizeDll(owner.slice("native:".length))) ||

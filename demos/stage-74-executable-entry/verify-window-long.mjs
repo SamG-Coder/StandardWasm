@@ -72,7 +72,7 @@ try {
         if (path === "/scripts/native-imports.mjs")
             return route.fulfill({ contentType: "text/javascript", body: readFileSync(join(root, path)) });
         if (path !== "/stage-73-executable-intake/loader/pe.mjs" &&
-            !["resource-host", "com-host", "win32-host", "window-state", "activation-context", "dpi-awareness"]
+            !["resource-host", "com-host", "dynamic-library-host", "win32-host", "window-state", "activation-context", "dpi-awareness"]
                 .some(name => path === "/stage-74-executable-entry/" + name + ".mjs")) return route.abort();
         return route.fulfill({ contentType: "text/javascript", body: readFileSync(join(root, "demos", path)) });
     });

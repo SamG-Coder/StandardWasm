@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { runOn32BitClr, wasm32Runtime } from "../../scripts/runtime-packs.mjs";
 import { root } from "../../scripts/toolchain.mjs";
-import { createDynamicLibraryHost } from "../stage-74-executable-entry/dynamic-library-host.mjs";
+import { instantiateManagedModule } from "../stage-74-executable-entry/resource-host.mjs";
+import { createTempPathHost } from "../stage-74-executable-entry/temp-path-host.mjs";
+import { serveLaunch } from "../stage-74-executable-entry/launch-server.mjs";
 
 const stage = join(root, "demos/stage-165-dynamic-native-calls");
 const evidence = join(root, "artifacts/stage-165-dynamic-native-calls");
@@ -19,7 +21,7 @@ assert.ok(oracle.callOffset >= 0);
 const compiler = readFileSync(process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts/StandardWasm.Compiler.wasm"));
 const assembly = readFileSync(oracle.assembly);
 
-async function exercise(compilerBytes, assemblyBytes, { row, unsupportedRow, pinnedEntryRow }, createRegistry) {
+async function exercise(compilerBytes, assemblyBytes, { row, unsupportedRow, pinnedEntryRow }, instantiate) {
     const { instance: { exports: tool } } = await WebAssembly.instantiate(compilerBytes);
     function upload(bytes) {
         const managed = tool.CreateBytes(bytes.length);
@@ -39,32 +41,32 @@ async function exercise(compilerBytes, assemblyBytes, { row, unsupportedRow, pin
     const bytes = Uint8Array.from({ length }, (_, i) => tool.ReadByte(output, i));
     const module = await WebAssembly.compile(bytes);
     const imports = WebAssembly.Module.imports(module).map(item => [item.module, item.name, item.kind]);
-    const memory = new WebAssembly.Memory({ initial: 1 });
-    const buffer = new DataView(memory.buffer);
+    let buffer, write, other, handle, free;
     const address = 128;
-    buffer.setUint16(address, 0x03a9, true);
-    buffer.setUint16(address + 2, 0xffee, true);
     const signature = "platform:u32(i32,p32)";
-    const library = createRegistry({ system: 0, pinvoke: 0 });
-    library.registerLibrary("fixture.dll", new Map([
-        ["Write", { signature, invoke(input, pointer) {
-            if (pointer === 0) return 0xffffffff;
-            buffer.setUint16(pointer, buffer.getUint16(pointer, true) + input, true);
-            return (input + 0xf1234567) >>> 0;
-        } }],
-        ["Other", { signature, invoke: (input, pointer) => (buffer.getUint16(pointer, true) - input) >>> 0 }]
-    ]));
-    const handle = library.loadLibrary("fixture.dll");
-    const write = library.getProcAddress(handle, "Write");
-    const other = library.getProcAddress(handle, "Other");
-    const { exports } = await WebAssembly.instantiate(module, {
-        "standardwasm:resources": { memory },
-        "standardwasm:native-indirect": { [signature]: (token, input, pointer) => library.invoke(token, signature, input, pointer) }
+    const { exports } = await instantiate(module, tool, [], {}, undefined, undefined, undefined, {
+        configureNativeLibraries({ memory, registerLibrary, loadLibrary, getProcAddress, freeLibrary }) {
+            buffer = new DataView(memory.buffer);
+            buffer.setUint16(address, 0x03a9, true);
+            buffer.setUint16(address + 2, 0xffee, true);
+            registerLibrary("fixture.dll", new Map([
+                ["Write", { signature, invoke(input, pointer) {
+                    if (pointer === 0) return 0xffffffff;
+                    buffer.setUint16(pointer, buffer.getUint16(pointer, true) + input, true);
+                    return (input + 0xf1234567) >>> 0;
+                } }],
+                ["Other", { signature, invoke: (input, pointer) => (buffer.getUint16(pointer, true) - input) >>> 0 }]
+            ]));
+            handle = loadLibrary("fixture.dll");
+            write = getProcAddress(handle, "Write");
+            other = getProcAddress(handle, "Other");
+            free = freeLibrary;
+        }
     });
     const first = exports.run(write, -7, address) >>> 0;
     const second = exports.run(other, 17, address) >>> 0;
     const nullPointer = exports.run(write, 5, 0) >>> 0;
-    library.freeLibrary(handle);
+    free(handle);
     let staleRejected = false;
     try { exports.run(write, -7, address); }
     catch (error) { staleRejected = /unregistered dynamic export token/.test(error.message); }
@@ -72,9 +74,99 @@ async function exercise(compilerBytes, assemblyBytes, { row, unsupportedRow, pin
         staleRejected, reject, location, pinnedReject, pinnedLocation, imports };
 }
 
+const nativeIndirect = "standardwasm:native-indirect";
+const signature = "platform:u32(i32,p32)";
+const win32 = "standardwasm:win32", helpers = "standardwasm:native";
+const hiddenError = "System.Runtime.InteropServices.Marshal::GetLastPInvokeError";
+
+function resolverProbe({ field = signature, memory = true, wrongType = false, duplicate = false } = {}) {
+    const i32 = 0x7f;
+    const types = [
+        [0x60, 3, i32, i32, i32, 1, i32],
+        [0x60, 1, i32, 1, i32],
+        [0x60, 0, 1, i32],
+        [0x60, 1, i32, 0],
+        [0x60, 3, i32, i32, i32, 1, 0x7e]
+    ];
+    const functions = [
+        [win32, "getLastSystemError", 2],
+        [win32, "setLastPInvokeError", 3],
+        [nativeIndirect, field, wrongType ? 4 : 0],
+        [helpers, "present", 1],
+        [helpers, "library", 1],
+        ["native:kernel32.dll", "MulDiv", 0],
+        ["internalcall", hiddenError, 2]
+    ];
+    if (duplicate) functions.push(functions[2]);
+    const name = text => [text.length, ...Buffer.from(text)];
+    const section = (id, payload) => {
+        let bytes = payload.length;
+        const size = [];
+        do {
+            size.push((bytes & 127) | (bytes > 127 ? 128 : 0));
+            bytes >>>= 7;
+        } while (bytes);
+        return [id, ...size, ...payload];
+    };
+    const imports = functions.map(([owner, entry, type]) => [...name(owner), ...name(entry), 0, type]);
+    if (memory) imports.unshift([...name("standardwasm:resources"), ...name("memory"), 2, 0, 1]);
+    const exports = functions.map((_, index) =>
+        [...name(index === 2 ? "invoke" : index === 6 ? "getLastPInvokeError" : "entry" + index), 0, index]);
+    return [0, 97, 115, 109, 1, 0, 0, 0,
+        ...section(1, [types.length, ...types.flat()]),
+        ...section(2, [imports.length, ...imports.flat()]),
+        ...section(7, [exports.length, ...exports.flat()])
+    ];
+}
+
+async function exerciseResolver(instantiate, createTempPath, variants, signature) {
+    const platformWith = configureNativeLibraries => ({ configureNativeLibraries });
+    const start = (name, platform, runtimeImports = {}) => instantiate(
+        new WebAssembly.Module(Uint8Array.from(variants[name])), {}, [], runtimeImports,
+        undefined, undefined, undefined, platform);
+    const declines = async (work, pattern) => {
+        try { await work(); }
+        catch (error) { return pattern.test(error.message); }
+        return false;
+    };
+    const directory = "V:\\Scratch\\";
+    let token, memory;
+    const config = platformWith(({ memory: guestMemory, errors, registerLibrary, loadLibrary, getProcAddress }) => {
+        memory = guestMemory;
+        const provider = createTempPath(memory, directory, errors);
+        registerLibrary("kernel32", new Map([
+            ["GetTempPathW", { signature, invoke: provider.getTempPathW }]
+        ]));
+        token = getProcAddress(loadLibrary("kernel32.dll", 0, 0x800), "GetTempPathW");
+    });
+    const { exports: instance } = await start("mixed", config);
+    const firstToken = token;
+    instance.entry1(321); // fixed Win32 setLastPInvokeError
+    const invalid = instance.invoke(firstToken, 1, 0);
+    const system = instance.entry0(); // fixed Win32 getLastSystemError
+    const saved = instance.getLastPInvokeError(); // direct InternalCall
+    const required = instance.invoke(firstToken, 0, 0);
+    const length = instance.invoke(firstToken, required, 8);
+    const text = String.fromCharCode(...new Uint16Array(memory.buffer, 8, required));
+    const direct = instance.entry5(10, 3, 2);
+    const ordinals = [0, 3, 4].map(index => [instance.entry3(index), instance.entry4(index)]);
+
+    const { exports: second } = await start("mixed", config);
+    const foreign = await declines(() => second.invoke(firstToken, 0, 0), /unregistered dynamic export token/);
+    const noProvider = await declines(() => start("mixed", undefined, {
+        "standardwasm:native-indirect": { [signature]: () => 0 }
+    }), /requires an explicit browser library provider/);
+    const wrongName = await declines(() => start("wrongName", config), /invalid native indirect import/);
+    const noMemory = await declines(() => start("noMemory", config), /requires the StandardWasm memory import/);
+    const duplicate = await declines(() => start("duplicate", config), /invalid native indirect import/);
+    const wrongType = await declines(() => start("wrongType", config), /signature|type/i);
+    return { invalid, system, saved, required, length, text, direct, ordinals,
+        foreign, noProvider, wrongName, noMemory, duplicate, wrongType, freshError: second.getLastPInvokeError() };
+}
+
 assert.equal(oracle.pinnedResult, 0xf1234568);
 const rows = { row: oracle.row, unsupportedRow: oracle.unsupportedRow, pinnedEntryRow: oracle.pinnedEntryRow };
-const result = await exercise(compiler, assembly, rows, createDynamicLibraryHost);
+const result = await exercise(compiler, assembly, rows, instantiateManagedModule);
 assert.deepEqual(result, {
     first: oracle.first, second: oracle.second, nullPointer: oracle.nullPointer, units: oracle.units, staleRejected: true,
     reject: -2, location: [0, oracle.unsupportedRow, oracle.callOffset],
@@ -83,32 +175,49 @@ assert.deepEqual(result, {
         ["standardwasm:native-indirect", "platform:u32(i32,p32)", "function"]]
 });
 
+const variants = {
+    mixed: resolverProbe(), wrongName: resolverProbe({ field: "wrong" }),
+    noMemory: resolverProbe({ memory: false }), wrongType: resolverProbe({ wrongType: true }),
+    duplicate: resolverProbe({ duplicate: true })
+};
+const resolver = await exerciseResolver(instantiateManagedModule, createTempPathHost, variants, signature);
+assert.deepEqual(resolver, {
+    invalid: 0, system: 998, saved: 321, required: 12, length: 11, text: "V:\\Scratch\\\0", direct: 15,
+    ordinals: [[0, 0], [1, 1], [1, 1]],
+    foreign: true, noProvider: true, wrongName: true, noMemory: true, duplicate: true, wrongType: true, freshError: 0
+});
+
+const server = await serveLaunch(0, new Uint8Array());
 const browser = await chromium.launch({ channel: "msedge" });
 try {
     const page = await browser.newPage();
     const assets = {
-        "/": ["text/html", "<!doctype html>"],
         "/compiler": ["application/wasm", compiler],
-        "/assembly": ["application/octet-stream", assembly],
-        "/registry.mjs": ["text/javascript", readFileSync(join(stage, "../stage-74-executable-entry/dynamic-library-host.mjs"))]
+        "/assembly": ["application/octet-stream", assembly]
     };
-    await page.route("http://127.0.0.1/**", route => {
-        const [contentType, body] = assets[new URL(route.request().url()).pathname];
-        return route.fulfill({ contentType, body });
+    await page.route(server.url + "/**", route => {
+        const asset = assets[new URL(route.request().url()).pathname];
+        return asset ? route.fulfill({ contentType: asset[0], body: asset[1] }) : route.continue();
     });
-    await page.goto("http://127.0.0.1/");
-    const edge = await page.evaluate(async ({ source, rows }) => {
-        const { createDynamicLibraryHost } = await import("/registry.mjs");
+    await page.goto(server.url);
+    const { edge, edgeResolver } = await page.evaluate(async ({ source, resolverSource, rows, variants, signature }) => {
+        const { instantiateManagedModule } = await import("/launch/resource-host.mjs");
+        const { createTempPathHost } = await import("/launch/temp-path-host.mjs");
         const [wasm, image] = await Promise.all(["/compiler", "/assembly"]
             .map(async path => (await fetch(path)).arrayBuffer()));
-        return (0, eval)("(" + source + ")")(wasm, image, rows, createDynamicLibraryHost);
-    }, { source: exercise.toString(), rows });
+        return {
+            edge: await (0, eval)("(" + source + ")")(wasm, image, rows, instantiateManagedModule),
+            edgeResolver: await (0, eval)("(" + resolverSource + ")")(instantiateManagedModule, createTempPathHost, variants, signature)
+        };
+    }, { source: exercise.toString(), resolverSource: exerciseResolver.toString(), rows, variants, signature });
     assert.deepEqual(edge, result);
+    assert.deepEqual(edgeResolver, resolver);
     const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
     const report = { compiler: sha256(compiler), assembly: sha256(assembly), clr: oracle.runtime,
-        clrArchitecture: oracle.architecture, node: process.version, edge: browser.version(), result };
+        clrArchitecture: oracle.architecture, node: process.version, edge: browser.version(), result, resolver };
     writeFileSync(join(evidence, "results.json"), JSON.stringify(report, null, 2) + "\n");
     console.log(JSON.stringify(report));
 } finally {
     await browser.close();
+    await server.close();
 }

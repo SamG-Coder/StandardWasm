@@ -9,7 +9,7 @@ function readManifest(asset) {
     return JSON.parse(decoder.decode(asset.bytes));
 }
 
-export async function runManagedEntry(compilerBytes, selection) {
+export async function runManagedEntry(compilerBytes, selection, platform) {
     const config = readManifest(selection.config);
     const deps = readManifest(selection.deps);
     const target = config.runtimeOptions?.tfm;
@@ -74,7 +74,7 @@ export async function runManagedEntry(compilerBytes, selection) {
     const code = Uint8Array.from({ length }, (_, i) => compiler.ReadByte(output, i));
     const module = await WebAssembly.compile(code);
     const { exports } = await instantiateManagedModule(module, compiler, [selection.entry, ...companions],
-        {}, selection.executablePath);
+        {}, selection.executablePath, undefined, undefined, platform);
     if (typeof exports.run !== "function" || exports.run.length !== 0)
         throw Error("This entry host supports a parameterless managed entry point.");
     const exitCode = exports.run();

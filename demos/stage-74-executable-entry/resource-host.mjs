@@ -1,5 +1,6 @@
-import { comImportModule, isNativeImportModule, nativeImports, windowsScalars } from "../../scripts/native-imports.mjs";
+import { comImportModule, isNativeImportModule, nativeImports, nativeIndirectImportModule, windowsScalars } from "../../scripts/native-imports.mjs";
 import { comDispatchSignature, createComHost } from "./com-host.mjs";
+import { createDynamicLibraryHost, createNativeIndirectDispatch, nativeIndirectSignature } from "./dynamic-library-host.mjs";
 import { createWin32Host, win32ImportModule, win32ImportNames, win32MemoryImports } from "./win32-host.mjs";
 
 export const resourceImportModule = "standardwasm:resources";
@@ -107,13 +108,14 @@ const resourceImportKinds = new Map([
     ["memory", "memory"], ["reserveName", "function"], ["locate", "function"]
 ]);
 
-export function instantiateManagedModule(module, compiler, assets, runtimeImports = {}, executablePath, windows, configureCom) {
+export function instantiateManagedModule(module, compiler, assets, runtimeImports = {}, executablePath, windows, configureCom, platform = {}) {
     const requestedResources = new Set();
     const requestedWin32 = new Set();
     let wantsMonitor = false;
     let wantsDebugger = false;
     let wantsNative = false;
     let wantsCom = false;
+    let wantsNativeIndirect = false;
     for (const { module: owner, name, kind } of WebAssembly.Module.imports(module)) {
         if (owner === resourceImportModule) {
             if (resourceImportKinds.get(name) !== kind || requestedResources.has(name))
@@ -145,6 +147,12 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
             wantsCom = true;
             continue;
         }
+        if (owner === nativeIndirectImportModule) {
+            if (kind !== "function" || name !== nativeIndirectSignature || wantsNativeIndirect)
+                throw Error("The generated module requests an invalid native indirect import.");
+            wantsNativeIndirect = true;
+            continue;
+        }
         if (isNativeImportModule(owner)) {
             wantsNative = true;
             continue;
@@ -161,9 +169,13 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         throw Error("The requested Win32 functions require the StandardWasm memory import.");
     if (wantsCom && !requestedResources.has("memory"))
         throw Error("COM dispatch requires the StandardWasm memory import.");
+    if (wantsNativeIndirect && !requestedResources.has("memory"))
+        throw Error("Native indirect dispatch requires the StandardWasm memory import.");
+    if (wantsNativeIndirect && typeof platform?.configureNativeLibraries !== "function")
+        throw Error("Native indirect dispatch requires an explicit browser library provider.");
 
     let memory;
-    // Both import families run on the same emulated CLR thread. Keep the
+    // The platform families run on the same emulated CLR thread. Keep the
     // system and saved error slots shared within one instance and isolated across instances.
     const errors = { system: 0, pinvoke: 0 };
     let imports = { ...runtimeImports };
@@ -189,6 +201,11 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         // receive the dispatch entry point.
         configureCom?.({ registerInterface });
         imports[comImportModule] = dispatch;
+    }
+    if (wantsNativeIndirect) {
+        const { invoke, ...registry } = createDynamicLibraryHost(errors);
+        platform.configureNativeLibraries({ memory, errors, ...registry });
+        imports[nativeIndirectImportModule] = { [nativeIndirectSignature]: createNativeIndirectDispatch(invoke) };
     }
     if (wantsMonitor) imports[threadingModule] = createMonitorHost();
     if (wantsDebugger) {

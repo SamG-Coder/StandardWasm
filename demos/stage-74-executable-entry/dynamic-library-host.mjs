@@ -1,3 +1,20 @@
+export const nativeIndirectSignature = "platform:u32(i32,p32)";
+
+let indirectDispatchType;
+
+// Re-export the callback as a Wasm function so the guest's import must match
+// (i32 token, i32 scalar, i32 pointer) -> i32 at link time.
+export function createNativeIndirectDispatch(invoke) {
+    indirectDispatchType ??= new WebAssembly.Module(Uint8Array.of(
+        0, 97, 115, 109, 1, 0, 0, 0,
+        1, 8, 1, 0x60, 3, 0x7f, 0x7f, 0x7f, 1, 0x7f,
+        2, 5, 1, 0, 0, 0, 0,
+        7, 8, 1, 4, 0x63, 0x61, 0x6c, 0x6c, 0, 0 // export "call"
+    ));
+    const dispatch = (token, input, pointer) => invoke(token, nativeIndirectSignature, input, pointer);
+    return new WebAssembly.Instance(indirectDispatchType, { "": { "": dispatch } }).exports.call;
+}
+
 const moduleNotFound = 126, entryPointNotFound = 127, invalidHandle = 6, invalidParameter = 87;
 const searchSystem32 = 0x800;
 const invalidValue = Symbol();

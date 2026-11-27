@@ -15,3 +15,15 @@ The verification also checks stale token rejection and diagnostics located
 at an unsupported signed-result signature and at a fixed managed character
 reference. The original C# code can pin that reference on Windows. The
 browser pinning implementation for that location remains pending.
+
+The executable loader resolves the indirect import only when trusted host code
+passes a `configureNativeLibraries` callback in the optional platform
+configuration for `runManagedEntry`. The callback receives the new instance's
+Wasm memory, Win32 error slots, and registration and lookup functions. It may
+register exports backed by a provider, such as a mounted virtual temporary
+directory. Each launch creates its own registry.
+
+The loader probe checks mixed direct and indirect imports, identical access
+to the shared error slots, a configured temp-path export, wrong Wasm import
+types, and absent configuration. Resolving native exports from original
+CoreLib calls still requires the managed native-library lookup bindings.
