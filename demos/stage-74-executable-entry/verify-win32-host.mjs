@@ -266,7 +266,7 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
     const byteLocations = [0, 1, 2].map(bundledExports.ReadStaticByteLocation);
     const rootModule = await compile(["CompareThroughRoot", "CompareReturnedType", "CheckCoreStringFirstCharacter",
         "CheckCoreStringContains", "CheckCoreWhitespace", "CheckCoreStringTrim", "ScopedWritableSpan", "CheckStackBackedSpan", "CheckScopedReference",
-        "CheckScopedReceiverReset", "CheckSpanFromEnd", "CheckCharacterCallback", "CheckStringCreation",
+        "CheckScopedReceiverReset", "CheckScopedNestedValue", "CheckSpanFromEnd", "CheckCharacterCallback", "CheckStringCreation",
         "CheckStaticEventCallback", "ExactValueRead"], runtimeAssets);
     const { exports: rootExports } = await instantiate(rootModule, compiler, []);
     const rootDispatch = [0, 1, 2, 3].map(rootExports.CompareThroughRoot);
@@ -276,6 +276,7 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
     const stringTrim = [0, 1, 2, 3, 4, 5, 6, 7].map(rootExports.CheckCoreStringTrim);
     const scopedWritableSpan = [0, 65, 0x2000, 0xffff].map(rootExports.ScopedWritableSpan);
     const scopedReceiverReset = [0, 65, 0x2000, 0xffff].map(rootExports.CheckScopedReceiverReset);
+    const scopedNestedValue = [0, -1, 65, 2147483647].map(rootExports.CheckScopedNestedValue);
     const spanFromEnd = [0, 1, 2, 3].map(rootExports.CheckSpanFromEnd);
     const stackBackedSpan = [0, 1, 2, 3, 4, 5].map(rootExports.CheckStackBackedSpan);
     const scopedReference = [0, -1, 65, 0xffff].map(rootExports.CheckScopedReference);
@@ -311,7 +312,7 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, enumVectors, windowEnabled, systemRandom, randomStatuses, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringContains, stringTrim, scopedWritableSpan, scopedReceiverReset, spanFromEnd, stackBackedSpan, scopedReference, characterCallbacks, stringCreation, staticEventCallbacks, debuggerStatus, exactValueReads, byteSpan, byteLocations, whitespace, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, enumVectors, windowEnabled, systemRandom, randomStatuses, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringContains, stringTrim, scopedWritableSpan, scopedReceiverReset, scopedNestedValue, spanFromEnd, stackBackedSpan, scopedReference, characterCallbacks, stringCreation, staticEventCallbacks, debuggerStatus, exactValueReads, byteSpan, byteLocations, whitespace, dpi };
 }
 
 function readOracle(...args) {
@@ -337,7 +338,7 @@ const expectedCompiler = {
     typeReturn: oracle.compiledTypeReturn, stringField: oracle.compiledStringField, byteSpan: oracle.compiledByteSpan,
     stringContains: oracle.compiledStringContains, stringTrim: oracle.compiledStringTrim,
     scopedWritableSpan: oracle.scopedWritableSpan, stackBackedSpan: oracle.stackBackedSpan, scopedReference: oracle.scopedReference,
-    scopedReceiverReset: oracle.scopedReceiverReset, spanFromEnd: oracle.spanFromEnd,
+    scopedReceiverReset: oracle.scopedReceiverReset, scopedNestedValue: oracle.scopedNestedValue, spanFromEnd: oracle.spanFromEnd,
     systemRandom: oracle.systemRandom, randomStatuses: oracle.randomStatuses,
     characterCallbacks: oracle.characterCallbacks, staticEventCallbacks: oracle.staticEventCallbacks,
     stringCreation: oracle.stringCreation,
@@ -417,6 +418,7 @@ try {
         console.log("Six stack-backed span results matched the CLR in Node and Edge, including typed bounds and length failures.");
         console.log("Four scoped byref cases matched CLR field mutation, span replacement, and value-copy independence in Node and Edge.");
         console.log("Four scoped receiver resets matched CLR alias updates and preserved earlier copies in Node and Edge.");
+        console.log("Four nested value copies in scoped structs matched the CLR in Node and Edge.");
         console.log("Five system-random buffer sizes and four return statuses matched Windows in Node and Edge.");
         console.log("Five span callbacks and three static event cases matched the CLR in Node and Edge.");
         console.log("Five original CoreLib String.StartsWith(char) cases matched the CLR in Node and Edge.");

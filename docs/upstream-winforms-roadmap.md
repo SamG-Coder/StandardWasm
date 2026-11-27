@@ -197,10 +197,12 @@ traced cell across direct reads, writes and byrefs. This clears the startup
 diagnostic on the static address in `AppDomain.get_CurrentDomain`.
 Reference `Interlocked.CompareExchange` now compares object identity and
 conditionally updates the same managed cell within its Wasm agent. The
-desktop compiler replay next reports `NativeWindow.OnShutdown`. Its first
-local is the original CoreLib `System.Threading.Lock.Scope`, and the
-signature reader rejects that slot before IL decoding. Production collection
-scheduling, host roots, and re-registration remain open.
+desktop compiler replay accepts the original CoreLib
+`System.Threading.Lock.Scope` layout by allowing its ordinary nested
+`ThreadId` value. `NativeWindow.OnShutdown` now reaches `IL_00d0`,
+the constrained call to `IDisposable.Dispose` on a generic list enumerator.
+Production collection scheduling, host roots, and re-registration remain
+open.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

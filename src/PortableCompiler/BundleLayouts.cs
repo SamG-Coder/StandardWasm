@@ -148,11 +148,11 @@ namespace PortableCompiler
                     table, first + offset, type, objects, reference, false);
                 if (storage < 0) return storage;
                 // A supported span carries its owner in the span descriptor.
-                // Other locations and nested scoped values require separate lifetime analysis.
+                // Ordinary nested values use the existing copy representation.
+                // The field reader rejects other nested scoped values before this point.
                 if (byRefLike && storage != 0 &&
-                    (ObjectLayouts.IsValueType(objects, storage) ||
-                        (!SignatureTypes.IsScalar(storage) && !SignatureTypes.IsReference(storage) &&
-                         !SignatureTypes.IsSpan(storage)))) return -2;
+                    !SignatureTypes.IsScalar(storage) && !SignatureTypes.IsReference(storage) &&
+                    !SignatureTypes.IsSpan(storage)) return -2;
                 if (overlay && storage != 0)
                 {
                     int width = ExplicitValueLayouts.ViewWidth(objects, storage);

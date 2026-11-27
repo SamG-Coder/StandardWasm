@@ -62,6 +62,29 @@ public static class ScopedSpanProbe
 
     private static void ResetView(ref MutableCharacterView view) => view.Reset();
 
+    private readonly struct ScopeState
+    {
+        internal readonly int Value;
+
+        internal ScopeState(int value) => Value = value;
+    }
+
+    private readonly ref struct NestedScope
+    {
+        internal readonly ScopeState State;
+
+        internal NestedScope(ScopeState state) => State = state;
+    }
+
+    public static int CheckScopedNestedValue(int seed)
+    {
+        var scope = new NestedScope(new ScopeState(seed));
+        ScopeState original = scope.State;
+        scope = new NestedScope(new ScopeState(unchecked(seed + 1)));
+        ScopeState replacement = scope.State;
+        return original.Value ^ replacement.Value;
+    }
+
     public static unsafe int CheckSpanFromEnd(int length)
     {
         if (length < 0 || length > 3) return -101;
