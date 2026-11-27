@@ -13,6 +13,7 @@ namespace PeLibrary
         private const int Arguments = 10, Arity = 11, Element = 12, ExplicitSlots = 13;
         private const int ValueShape = 0x40000000, NullableShape = 0x20000000, InlineArrayShape = 0x10000000, ByRefLikeShape = 0x08000000;
         private const int ArrayEnumerableShape = 0x04000000;
+        private const int ArrayListShape = 0x02000000;
         internal const int ExplicitSlotWidth = 8;
         private const int FieldStorageBits = 16, FieldStorageMask = (1 << FieldStorageBits) - 1;
         private const int EnumHead = 3, EnumKeyBase = 0x100000;
@@ -561,6 +562,20 @@ namespace PeLibrary
         internal static void MarkArrayEnumerable(int[] registry, int type) =>
             registry[Slot(type) + ShapeFlags] |= ArrayEnumerableShape;
 
+        internal static void MarkArrayList(int[] registry, int type) =>
+            registry[Slot(type) + ShapeFlags] |= ArrayListShape;
+
+        internal static bool IsExactArrayList(int[] registry, int source, int target)
+        {
+            if (!IsInterface(registry, target) || (registry[Slot(target) + ShapeFlags] & ArrayListShape) == 0)
+                return false;
+            // The VM supplies the interface on the SZ array object, so the
+            // caller passes the original reference and retains array identity.
+            int element = ArrayElementKey(registry, source);
+            return element >= FirstClass && element - FirstClass < registry[0] &&
+                element == Argument(registry, target, 0);
+        }
+
         internal static bool IsExactArrayEnumerable(int[] registry, int source, int target)
         {
             if (!IsInterface(registry, target) || (registry[Slot(target) + ShapeFlags] & ArrayEnumerableShape) == 0)
@@ -574,7 +589,7 @@ namespace PeLibrary
         internal static bool Implements(int[] registry, int source, int target)
         {
             if (source < FirstClass || !IsInterface(registry, target)) return false;
-            return IsExactArrayEnumerable(registry, source, target) ||
+            return IsExactArrayEnumerable(registry, source, target) || IsExactArrayList(registry, source, target) ||
                 FindInterface(registry, source, target, new byte[registry[0]]);
         }
 

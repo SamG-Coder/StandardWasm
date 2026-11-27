@@ -99,9 +99,14 @@ namespace PortableCompiler
             int[] layout, int[] heaps, int owner, int type, int[] objects)
         {
             if (!ObjectLayouts.BeginFields(objects, type)) return type;
-            if (ObjectLayouts.IsInterface(objects, type) && ObjectLayouts.ArgumentCount(objects, type) == 1 &&
-                SzArrayEnumeration.IsEnumerable(image, layout, heaps, ObjectLayouts.TypeDef(objects, type)))
-                ObjectLayouts.MarkArrayEnumerable(objects, type);
+            if (ObjectLayouts.IsInterface(objects, type) && ObjectLayouts.ArgumentCount(objects, type) == 1)
+            {
+                int row = ObjectLayouts.TypeDef(objects, type);
+                if (SzArrayEnumeration.IsEnumerable(image, layout, heaps, row))
+                    ObjectLayouts.MarkArrayEnumerable(objects, type);
+                else if (SzArrayEnumeration.IsList(image, layout, heaps, row))
+                    ObjectLayouts.MarkArrayList(objects, type);
+            }
             int parent = ObjectLayouts.Parent(objects, type);
             if (parent != 0)
             {

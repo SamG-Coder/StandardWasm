@@ -124,7 +124,8 @@ namespace PortableCompiler
                 {
                     int type = allocations[index];
                     if (receiver != ObjectReference && ArrayElementKey(objects, type) != 0 &&
-                        !IsExactArrayEnumerable(objects, type, sites[site + Declared])) continue;
+                        !IsExactArrayEnumerable(objects, type, sites[site + Declared]) &&
+                        !IsExactArrayList(objects, type, sites[site + Declared])) continue;
                     if (!SignatureTypes.Assignable(type, receiver, objects)) continue;
                     CompileLocation.Set(location, sites[site + CallerOwner], sites[site + CallerRow], sites[site + CallerOffset]);
                     int shape = offsets[dispatcher];
