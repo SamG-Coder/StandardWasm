@@ -50,6 +50,9 @@ the original typed aliases, and include a data-initialized vector. An export
 that accepts storage-typed primitive arrays from the Wasm host still leaves
 the runtime type unknown, so affected reflection calls report a diagnostic.
 
+The BitConverter case compiles CoreLib's original Boolean overload and checks
+its primitive TypeDef allocation, byte values, array identity and fresh storage.
+
 The enum array cases check that the C# compiler emitted a field-backed array
 initializer and compare its contents with the CLR. They cover one-, two-,
 four-, and eight-byte elements, including values that need the full 64 bits.

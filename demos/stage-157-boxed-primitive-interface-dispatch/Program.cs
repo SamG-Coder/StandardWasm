@@ -34,6 +34,7 @@ internal static class Program
             TypeSimpleNames, NullTypeSimpleName, TypeNameAndDisplayName,
             WritableSpanString, ReadOnlySpanString, EmptySpanString, NativeSpanString,
             PackedByteEnumRva, PackedShortEnumRva, IntEnumRva, LongEnumRva,
+            OriginalCoreLibPrimitiveAllocation,
             PrimitiveVectorTypeIdentity, PrimitiveVectorAliases, InitializedPrimitiveVectorIdentity,
             ClosedValueIsNotNull, ClosedValueIsNull, ClosedReferenceNullCheck,
             NarrowEnumFlags, WideEnumFlags, UnsetEnumFlags
@@ -43,6 +44,9 @@ internal static class Program
             if (run.Method.Name.EndsWith("EnumRva", StringComparison.Ordinal) && !HasArrayInitializer(run.Method))
                 throw new InvalidOperationException(run.Method.Name + " did not emit a FieldRVA array initializer.");
         }
+        var getBytes = typeof(BitConverter).GetMethod(nameof(BitConverter.GetBytes), [typeof(bool)])!;
+        if (!HasPrimitiveDefinitionAllocation(getBytes, typeof(byte)))
+            throw new InvalidOperationException("BitConverter.GetBytes(bool) did not allocate via a CoreLib TypeDef.");
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
             acceptedDiagnostic = run.Method.Name.StartsWith("OriginalInt", StringComparison.Ordinal) ? intDiagnostic :
@@ -155,6 +159,26 @@ internal static class Program
             (SignedLongData)72057594037927937L, (SignedLongData)long.MaxValue, (SignedLongData)3141592653589L];
         return (long)values[0] == long.MinValue && (long)values[2] == 72057594037927937L &&
             (long)values[3] == long.MaxValue ? 97 : 0;
+    }
+
+    public static int OriginalCoreLibPrimitiveAllocation()
+    {
+        byte[] one = BitConverter.GetBytes(true);
+        byte[] zero = BitConverter.GetBytes(false);
+        if (one.Length != 1 || zero.Length != 1 || one[0] != 1 || zero[0] != 0) return 0;
+        one[0] = 255;
+        return one.GetType() == typeof(byte[]) && one.GetType() != typeof(sbyte[]) && zero[0] == 0 ? one[0] : 0;
+    }
+
+    private static bool HasPrimitiveDefinitionAllocation(MethodInfo method, Type element)
+    {
+        byte[] il = method.GetMethodBody()!.GetILAsByteArray()!;
+        for (int i = 0; i + 4 < il.Length; i++)
+        {
+            if (il[i] != 0x8d || il[i + 4] != 2) continue; // newarr TypeDef
+            return method.Module.ResolveType(BitConverter.ToInt32(il, i + 1)) == element;
+        }
+        return false;
     }
 
     private static bool HasArrayInitializer(MethodInfo method)

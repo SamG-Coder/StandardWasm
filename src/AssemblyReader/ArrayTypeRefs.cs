@@ -21,9 +21,12 @@ namespace PeLibrary
         internal static int TokenElement(byte[] image, int[] streams, int[] methods, uint token)
         {
             int row = (int)(token & 0xffffff);
-            if (token >> 24 != 1 || row == 0)
-                return -2;
-            return PrimitiveElement(image, streams, methods, row << 2 | 1, includeRuntimeExtensions: true);
+            uint table = token >> 24;
+            if ((table != 1 && table != 2) || row == 0) return -2;
+            // CoreLib names its own primitives with TypeDef tokens. Resolve them
+            // through the same platform-identity check as signature binding.
+            int coded = row << 2 | (table == 1 ? 1 : 0);
+            return PrimitiveElement(image, streams, methods, coded, includeRuntimeExtensions: true);
         }
 
         internal static int PrimitiveElement(byte[] image, int[] streams, int[] methods, int coded, bool includeRuntimeExtensions = false)
@@ -91,7 +94,7 @@ namespace PeLibrary
             if ((U32(image, type) & 7) != 1) return -2; // Top-level public primitive.
             uint name = Index(image, type + 4, strings);
             uint ns = Index(image, type + (uint)(4 + strings), strings);
-            return NamedElement(image, streams, name, ns);
+            return ns == 0 ? -2 : NamedElement(image, streams, name, ns);
         }
 
         private static int NamedElement(byte[] image, int[] streams, uint name, uint ns)
