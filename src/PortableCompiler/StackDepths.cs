@@ -168,7 +168,15 @@ namespace PortableCompiler
                 return PeLibrary.MarshalErrorMetadata.IsSetter(operand)
                     ? Match(stack, depth, I32) ? depth - 1 : -1
                     : Push(stack, allocated, depth, I32);
-            if (kind == PinString) return Push(stack, allocated, depth, Native);
+            if (kind == LoadObject)
+                return depth >= 1 && IsNativeInteger(stack[depth - 1]) ? Push(stack, allocated, depth - 1, operand) : -2;
+            if (kind == StoreObject)
+                return depth >= 2 && IsNativeInteger(stack[depth - 2]) &&
+                    (stack[depth - 1] == operand || stack[depth - 1] == NullValue) ? depth - 2 : -2;
+            if (kind == InitializeNative)
+                return depth >= 1 && IsNativeInteger(stack[depth - 1]) ? depth - 1 : -2;
+            if (kind == PinString)
+                return Match(stack, depth, String) ? Push(stack, allocated, depth - 1, Native) : -2;
             if (kind == LocalAllocate)
             {
                 // ECMA-335 III.3.47: the size is a native unsigned int (an int32 is accepted).

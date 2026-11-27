@@ -41,8 +41,15 @@ namespace PortableCompiler
         internal const int NewObjectSpan = 104, SpanLength = 105, SpanRead = 106, StringAsSpan = 108;
         internal const int CharacterArrayAsSpan = 109, SpanAddress = 110, SpanAsReadOnly = 111;
         // sizeof <type>: lowered to an int32 Constant once the layout is measured.
-        internal const int GetObjectType = 116, EqualRuntimeTypes = 117, PinString = 118, Win32Error = 119;
+        internal const int GetObjectType = 116, EqualRuntimeTypes = 117, Win32Error = 119;
         internal const int SizeOf = 112; // clear of the reflection kinds 73–75 (Stage 131)
+        // ldobj / stobj / initobj of a blittable struct through a native address (decision 0073).
+        // Operand: the registry value type; auxiliary: native plan index + 1.
+        internal const int LoadObject = 113, StoreObject = 114, InitializeNative = 115; // clear of Stage 131
+        // A fixed string's address (decision 0077): [String] -> [Native], a frame-owned UTF-16
+        // copy with a NUL terminator, or 0 for null. Auxiliary 1: null raises NullReferenceException.
+        // 118 matches the integration line, where 116 and 117 are runtime-type kinds.
+        internal const int PinString = 118;
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
@@ -407,6 +414,13 @@ namespace PortableCompiler
                 {
                     kind = op <= 0x4f ? LoadIndirect : StoreIndirect;
                     operand = op;
+                }
+                else if (op == 0x71 || op == 0x81)
+                {
+                    if (length - pc < 4) return -1;
+                    operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                    pc += 4;
+                    kind = op == 0x71 ? LoadObject : StoreObject;
                 }
                 else if (op == 0) kind = Nop;
                 else if (op == 0x2a) kind = Return;

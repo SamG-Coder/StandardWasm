@@ -174,6 +174,9 @@ namespace PortableCompiler
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * 3];
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
+            var nativePlans = new NativeAggregatePlans();
+            // Reuse local pin metadata across methods. Signature decoding resets each slot.
+            var pinned = new int[frame.Length];
             var initializerSlot = new int[1];
             int exceptionTags = 0;
             var noCatch = new int[0];
@@ -294,7 +297,6 @@ namespace PortableCompiler
                 int signature = offsets[current];
                 int result = signatures[signature];
                 bool resourceOpen = reflection.ResourceOwner == owner && reflection.ResourceOpen == source;
-                bool pinsString = false;
                 // The Wasm result of a value constructor is its receiver's final
                 // value. Its IL returns void, so stack analysis checks void.
                 bool valueConstructor = IsValueConstructor(image, layout, heaps, source, signatures, signature, parameters, objects);
@@ -323,11 +325,7 @@ namespace PortableCompiler
                     int localBlob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, body[3]);
                     if (localBlob < 0)
                         return -1;
-                    pinsString = parameters == 1 && frame[0] == String &&
-                        (MethodDefinitions.ReadColumn(image, layout, source, 2) & 0x10) != 0 &&
-                        PinnedStringIl.Matches(image, heaps, layout, body, localBlob);
-                    if (!pinsString)
-                        locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context, methodArguments);
+                    locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context, methodArguments, pinned);
                     if (locals < 0)
                         return locals;
                     // CorILMethod_InitLocals (body[4]) is deliberately not required. Without it
@@ -348,19 +346,23 @@ namespace PortableCompiler
                     var records = new int[body[1] * BranchIl.Width];
                     status = resourceOpen
                         ? ResourceOpenIl.Decode(image, body, records, location, parameters)
-                        : pinsString ? PinnedStringIl.Decode(image, body, records, location) :
-                            BranchIl.Decode(image, body[0], body[1], parameters, locals, records, location, catchRegion.Length != 0);
+                        : BranchIl.Decode(image, body[0], body[1], parameters, locals, records, location, catchRegion.Length != 0);
                     if (status < 0)
                         return status;
                     status = ArrayInitializers.Lower(image, heaps, layout, records, literals, literalSize, location);
                     if (status < 0)
                         return status;
+                    if (locals != 0 && !resourceOpen)
+                    {
+                        status = PinnedStrings.Lower(image, heaps, layout, records, pinned, parameters, locals, location);
+                        if (status < 0) return status;
+                    }
                     virtualUsed[0] = 0;
                     var inlineLocations = new int[parameters + locals];
                     functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
                         parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
-                        initializers, reflection, instantiations, methodArguments, inlineLocations, parameters);
+                        initializers, reflection, instantiations, methodArguments, inlineLocations, parameters, nativePlans);
                     if (functions < 0)
                         return functions;
 
@@ -453,6 +455,15 @@ namespace PortableCompiler
                         {
                             int address = pc * maximum + depths[pc] - (kind == BranchIl.LoadIndirect ? 2 : 3);
                             if (IsNativeInteger(states[address])) linearMemory = true;
+                        }
+                        if ((kind == BranchIl.LoadObject || kind == BranchIl.StoreObject || kind == BranchIl.InitializeNative) && depths[pc] != 0)
+                        {
+                            linearMemory = true;
+                            int fields = ObjectLayouts.FieldCount(objects, records[slot + 1]);
+                            // A load or store per field, nested structs included (bounded by size).
+                            int bytes = 64 + 24 * (fields + NativeAggregates.Size(nativePlans.Plans, records[slot + 3] - 1));
+                            if (capacity > int.MaxValue - bytes) return -3;
+                            capacity += bytes;
                         }
                         // Stage 143 (decision 0071): p->F loads and stores also address memory 0.
                         bool fieldStore = kind == BranchIl.SetField || kind == BranchIl.UpdateConstructorField;
@@ -547,6 +558,8 @@ namespace PortableCompiler
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection || kind == BranchIl.GetObjectType ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
                                 kind == BranchIl.LoadObjectIndirect || kind == BranchIl.StoreObjectIndirect ||
+                                kind == BranchIl.LoadObject || kind == BranchIl.StoreObject || kind == BranchIl.InitializeNative ||
+                                (kind == BranchIl.PinString && records[slot + 3] != 0) ||
                                 kind == BranchIl.ExchangeHandlerField || (kind == BranchIl.Call && (records[slot + 3] & 1) != 0))
                                 tags = ExceptionTypes.NullReference;
                             else if (kind == BranchIl.Binary)
@@ -605,7 +618,7 @@ namespace PortableCompiler
                     }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
-                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers, reflection, inlineLocations);
+                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers, reflection, inlineLocations, nativePlans.Plans);
                 }
 
                 if (used < 0) return used;
@@ -672,7 +685,7 @@ namespace PortableCompiler
             int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, bool valueConstructor, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed,
             TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, MethodInstantiations instantiations, int[] methodArguments,
-            int[] inlineLocations, int parameterCount)
+            int[] inlineLocations, int parameterCount, NativeAggregatePlans nativePlans)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
@@ -763,7 +776,7 @@ namespace PortableCompiler
                     if (lowered == -2 && valueConstructor)
                         records[slot] = BranchIl.LoadConstructorAddress;
                     else if (lowered < 0)
-                        return lowered;
+                        return ManagedObjectCopy(records, slot, location, lowered);
                     continue;
                 }
                 if (kind == BranchIl.FrameAddress)
@@ -788,7 +801,7 @@ namespace PortableCompiler
                     }
                     int lowered = ValueOperands.LowerFrame(bundle, image, layout, heaps,
                         owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses);
-                    if (lowered < 0) return lowered;
+                    if (lowered < 0) return ManagedObjectCopy(records, slot, location, lowered);
                     continue;
                 }
                 if (kind == BranchIl.ConstrainedStatic)
@@ -890,7 +903,25 @@ namespace PortableCompiler
                     records[slot + 3] = checkReceiver ? 1 : 0;
                     continue;
                 }
-                if (kind == BranchIl.FieldToken || kind == BranchIl.InitializeValue)
+                if (kind == BranchIl.LoadObject || kind == BranchIl.StoreObject || kind == BranchIl.InitializeValue)
+                {
+                    // Stage 145 (decision 0073): a blittable struct through a native address.
+                    // initobj on a managed local was lowered by ValueOperands already.
+                    uint token = unchecked((uint)records[slot + 1]);
+                    uint table = token >> 24;
+                    int row = (int)(token & 0xffffff);
+                    if (table != 1 && table != 2) return -2;
+                    int coded = row << 2 | (table == 1 ? 1 : 0);
+                    int type = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true);
+                    if (type < 0) return type;
+                    int plan = NativeAggregates.Plan(bundle, objects, type, nativePlans);
+                    if (plan < 0) return plan;
+                    if (kind == BranchIl.InitializeValue) records[slot] = BranchIl.InitializeNative;
+                    records[slot + 1] = type;
+                    records[slot + 3] = plan + 1;
+                    continue;
+                }
+                if (kind == BranchIl.FieldToken)
                     return -2;
                 if (kind == BranchIl.GetField || kind == BranchIl.SetField || kind == BranchIl.FieldAddress)
                 {
@@ -1656,6 +1687,26 @@ namespace PortableCompiler
                 type = element;
             }
             return type == ObjectLayouts.ObjectReference || type == Delegate || type == EventHandlerReference;
+        }
+
+        // A managed address consumed by ldobj or stobj (for example `this = new S(...)`, #271)
+        // is diagnosed at that instruction, which is where it was rejected before Stage 145
+        // decoded them. initobj keeps its diagnostic at the address load.
+        private static int ManagedObjectCopy(int[] records, int slot, int[] location, int status)
+        {
+            int next = records[slot + 2] * BranchIl.Width;
+            for (int step = 0; step < 16 && next < records.Length; step++)
+            {
+                int kind = records[next];
+                if (kind == BranchIl.LoadObject || kind == BranchIl.StoreObject)
+                {
+                    if (location.Length != 0) location[2] = next / BranchIl.Width;
+                    return status;
+                }
+                if (kind == BranchIl.Return || kind == BranchIl.Branch || kind == BranchIl.Conditional) break;
+                next = records[next + 2] * BranchIl.Width;
+            }
+            return status;
         }
 
         private static int NextSignature(int[] offsets, int[] arities, int functions) =>

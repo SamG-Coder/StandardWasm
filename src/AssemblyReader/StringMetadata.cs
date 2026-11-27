@@ -102,6 +102,7 @@ namespace PeLibrary
             return 0;
         }
 
+        // instance char& modreq(InAttribute) GetPinnableReference(): ref readonly char.
         private static bool PinnableSignature(byte[] image, int[] heaps, int[] methods, int[] counts, int offset)
         {
             var next = new int[1];
@@ -120,6 +121,29 @@ namespace PeLibrary
                 MatchesAscii(image, heaps, (uint)reference[2], "InAttribute") &&
                 MatchesAscii(image, heaps, (uint)reference[3], "System.Runtime.InteropServices") &&
                 PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, reference[AssemblyReferences.AssemblyRow]);
+        }
+
+        // static int32 RuntimeHelpers.get_OffsetToStringData(): the netstandard fixed-string
+        // form adds it to the pinned string's address (decision 0077).
+        internal static bool IsOffsetToStringData(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            var member = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadMember(image, heaps, layout, row, member) < 0 || member[AssemblyReferences.Depth] != 0 ||
+                !MatchesAscii(image, heaps, (uint)member[4], "get_OffsetToStringData") ||
+                !MatchesAscii(image, heaps, (uint)member[2], "RuntimeHelpers") ||
+                !MatchesAscii(image, heaps, (uint)member[3], "System.Runtime.CompilerServices"))
+                return false;
+            var counts = new int[45];
+            if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0 ||
+                !PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, layout, counts, member[AssemblyReferences.AssemblyRow]))
+                return false;
+            int blob = member[5], limit = heaps[0] + heaps[1];
+            if (blob <= 0 || blob >= heaps[1]) return false;
+            var next = new int[1];
+            int bytes = CompressedUnsigned(image, heaps[0] + blob, limit, next);
+            int start = next[0];
+            return bytes == 3 && bytes <= limit - start &&
+                image[start] == 0 && image[start + 1] == 0 && image[start + 2] == 8;
         }
 
         private static uint Index(byte[] image, uint at, int width) => width == 2 ? U16(image, at) : U32(image, at);

@@ -106,7 +106,7 @@ namespace PortableCompiler
         // write only their slots. Stack values normalize CLI small integers to i32.
         // context is the closed declaring layout that supplies VAR arguments,
         // or zero when the declaring type is not generic.
-        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context, int[] methodArguments = null)
+        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context, int[] methodArguments = null, int[] pinned = null)
         {
             if (index <= 0 || index >= heap[1])
                 return -2;
@@ -140,7 +140,20 @@ namespace PortableCompiler
                 if (cursor >= end)
                     return -2;
                 int element = image[cursor++];
+                if (locals && pinned != null) pinned[i] = 0;
                 int target = offset + i + (i == 0 ? 0 : implicitSlots);
+                if (element == PinnedLocals.Pinned)
+                {
+                    // Stage 149 (decision 0077): only the two fixed-string forms are pinned.
+                    // A pinned string stays a String reference (Wasm GC never moves it); a
+                    // pinned char& holds the native address of the frame's UTF-16 copy.
+                    int kind = locals && pinned != null && cursor < end ? PinnedLocals.Kind(image, cursor, end) : 0;
+                    if (kind == 0) return -2;
+                    pinned[i] = kind;
+                    cursor += kind == PinnedLocals.Text ? 1 : 2;
+                    types[target] = kind == PinnedLocals.Text ? String : Native;
+                    continue;
+                }
                 if (!locals && i == 0 && element == 1)
                     types[target] = Void;
                 else if (element == 2 || element == 8 || element == 9)

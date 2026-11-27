@@ -65,13 +65,19 @@ namespace PortableCompiler
                     storage == SignatureTypes.Signed16 || storage == SignatureTypes.Unsigned16 ? 2 : 1;
                 result[0] = bytes;
                 result[1] = bytes;
+                // An enum field is a scalar in memory and in the managed registry: report
+                // its underlying ldind so callers load it directly (Codex review of #296).
+                if (result.Length > 2)
+                    result[2] = storage == SignatureTypes.I64 ? 0x4c : storage == SignatureTypes.I32 ? 0x4a :
+                        storage == SignatureTypes.Signed16 ? 0x48 : storage == SignatureTypes.Unsigned16 ? 0x49 :
+                        storage == SignatureTypes.Signed8 ? 0x46 : 0x47;
                 return 0;
             }
             // Sequential layout (0x08). Explicit layout (0x10) needs its FieldLayout offsets.
             if (layoutKind != 0x08) return -2;
             var field = new int[3];
             int offset = 0, align = 1;
-            var nested = new int[2];
+            var nested = new int[3];
             for (int row = first; row < end; row++)
             {
                 AssemblyReferences.ReadField(image, layout, table, row, field);
@@ -91,12 +97,14 @@ namespace PortableCompiler
                     var identity = new int[2];
                     int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, coded, identity);
                     if (status < 0) return status;
+                    nested[2] = 0; // only an enum reports an underlying load
                     status = Measure(bundle, identity[0], identity[1], nested, depth + 1);
                     if (status < 0) return status;
                     size = nested[0];
                     int fieldAlign = nested[1];
                     offset = (offset + fieldAlign - 1) / fieldAlign * fieldAlign;
-                    if (row == target) { found[0] = offset; found[1] = 0; }
+                    // A nested struct is loaded field by field (0); an enum loads as its underlying scalar.
+                    if (row == target) { found[0] = offset; found[1] = nested[2]; }
                     offset += size;
                     if (fieldAlign > align) align = fieldAlign;
                     continue;
