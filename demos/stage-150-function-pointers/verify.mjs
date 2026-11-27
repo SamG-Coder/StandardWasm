@@ -19,10 +19,12 @@ run("dotnet", ["build", "-c", "Release", join(stage, "Fixture")]);
 const fixture = join(stage, "Fixture", "bin", "Release", "netstandard2.0", "FunctionPointerFixture.dll");
 run("dotnet", ["run", "-c", "Release", "--project", join(stage, "Oracle"), "--", evidence, fixture]);
 const oracle = JSON.parse(readFileSync(join(evidence, "oracle.json"), "utf8"));
-const files = [readFileSync(compiler), readFileSync(fixture)];
+// The dependency holds an ordinary (object, nint) constructor and a delegate type reached by MemberRef.
+const dependency = join(stage, "Fixture", "bin", "Release", "netstandard2.0", "FunctionPointerDependency.dll");
+const files = [readFileSync(compiler), readFileSync(fixture), readFileSync(dependency)];
 const tests = { cases: oracle.cases, traps: oracle.traps, rejects: oracle.rejects };
 
-async function runCases(compiler, fixture, tests) {
+async function runCases(compiler, fixture, dependency, tests) {
     const { instance: { exports: build } } = await WebAssembly.instantiate(compiler);
     const capacity = 1 << 20;
     const output = build.CreateBytes(capacity);
@@ -42,10 +44,15 @@ async function runCases(compiler, fixture, tests) {
         return upload(bytes);
     }
 
-    const image = new Uint8Array(fixture);
-    const packed = new Uint8Array(image.length + 4);
-    new DataView(packed.buffer).setUint32(0, image.length, true);
-    packed.set(image, 4);
+    // Bundle: [u32 length][assembly] for the fixture, then its dependency.
+    const images = [new Uint8Array(fixture), new Uint8Array(dependency)];
+    const packed = new Uint8Array(images.reduce((total, image) => total + 4 + image.length, 0));
+    let cursor = 0;
+    for (const image of images) {
+        new DataView(packed.buffer).setUint32(cursor, image.length, true);
+        packed.set(image, cursor + 4);
+        cursor += 4 + image.length;
+    }
     const bundle = upload(packed);
     const compiled = new Map();
 
@@ -96,7 +103,7 @@ async function runCases(compiler, fixture, tests) {
     return results;
 }
 
-const node = await runCases(files[0], files[1], tests);
+const node = await runCases(files[0], files[1], files[2], tests);
 const browser = await chromium.launch({ channel: "msedge" });
 try {
     const page = await browser.newPage();
@@ -107,8 +114,8 @@ try {
     });
     await page.goto("http://127.0.0.1/");
     const edge = await page.evaluate(async ({ tests, source }) => {
-        const [compiler, fixture] = await Promise.all([0, 1].map(async i => (await fetch("/" + i)).arrayBuffer()));
-        return (0, eval)("(" + source + ")")(compiler, fixture, tests);
+        const [compiler, fixture, dependency] = await Promise.all([0, 1, 2].map(async i => (await fetch("/" + i)).arrayBuffer()));
+        return (0, eval)("(" + source + ")")(compiler, fixture, dependency, tests);
     }, { tests, source: runCases.toString() });
     assert.deepEqual(edge, node);
     writeFileSync(join(evidence, "results.json"), JSON.stringify({
@@ -117,5 +124,5 @@ try {
     const values = node.filter(result => result.value !== undefined).length;
     console.log("Node " + process.version + " and Edge " + browser.version() + " matched " + values +
         " function-pointer results from the CLR " + oracle.runtime + "; a null call is an engine trap and " +
-        tests.rejects.length + " unmanaged calli stays a located diagnostic.");
+        tests.rejects.length + " located diagnostics remain (unmanaged calli, a static-target delegate).");
 } finally { await browser.close(); }

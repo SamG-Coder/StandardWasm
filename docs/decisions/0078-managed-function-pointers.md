@@ -14,10 +14,19 @@ module table 2, a funcref table:
   lowered to `i32.const k`. `k` is `M`'s slot, assigned at link time. Slot 0
   stays null, so a null pointer cannot call anything.
 - **Delegate or pointer.** Roslyn emits `ldftn` directly before `newobj` both for a
-  delegate and for an ordinary constructor that takes a function pointer. Only a
-  constructor with the delegate signature `instance void .ctor(object, native int)`
-  (ECMA-335 II.14.6.1) takes the delegate path (Codex review of c6b68c7). Any
-  other constructor receives the slot as an argument.
+  delegate and for an ordinary constructor that takes a function pointer (Codex
+  reviews of c6b68c7 and ee7556a). A signature check alone is not enough, because
+  an ordinary constructor may also take `(object, nint)`. The declaring type
+  decides, because only delegates have runtime-implemented methods (ECMA-335
+  II.14.6):
+  - a platform delegate MemberRef, as the delegate path recognizes them
+  - a local MethodDef whose implementation flags say `Runtime`
+  - a MemberRef to a TypeRef in another bundle assembly, resolved and checked for
+    any runtime-implemented method
+
+  Any other constructor receives the slot as an ordinary argument. A generic
+  (TypeSpec) parent with the delegate signature keeps the delegate path and its
+  existing diagnostic.
 - **Identity.** One method always gets one slot, so two loads of `&M` compare
   equal, as on the CLR.
 - **`ELEMENT_TYPE_FNPTR`.** Locals, parameters and fields of this type are

@@ -5,4 +5,7 @@
     <LangVersion>9.0</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Dependency/FunctionPointerDependency.csproj" />
+  </ItemGroup>
 </Project>

@@ -16,6 +16,19 @@ namespace FunctionPointerFixture
         public int Invoke(int value) => callback(value);
     }
 
+    // An ordinary constructor with the delegate signature (object, native int): it is not a
+    // delegate, so ldftn followed by this newobj passes the address (Codex review of ee7556a).
+    public sealed class NativeHandle
+    {
+        public readonly object Owner;
+        public readonly nint Address;
+        public NativeHandle(object owner, nint address)
+        {
+            Owner = owner;
+            Address = address;
+        }
+    }
+
     // Stage 150 (decision 0078): managed function pointers. ldftn of a static method yields
     // a native-size code address and calli calls through it with the call-site signature.
     public static unsafe class Kernels
@@ -88,6 +101,24 @@ namespace FunctionPointerFixture
             var holder = which == 0 ? new Holder(&Double) : new Holder(&Negate);
             return holder.Invoke(value);
         }
+
+        public static int Handle(int value)
+        {
+            var handle = new NativeHandle(null, (nint)(delegate*<int, int>)&Double);
+            if (handle.Address == 0) return -1;
+            return ((delegate*<int, int>)handle.Address)(value);
+        }
+
+        // The same through a MemberRef to another assembly's ordinary (object, nint) constructor.
+        public static int RemoteHandle(int value)
+        {
+            var slot = new FunctionPointerDependency.NativeSlot(null, (nint)(delegate*<int, int>)&Negate);
+            if (slot.Address == 0) return -1;
+            return ((delegate*<int, int>)slot.Address)(value);
+        }
+
+        // A static method bound to another assembly's delegate type keeps its delegate diagnostic.
+        public static int RejectRemoteDelegate(int value) => new FunctionPointerDependency.Transform(Double)(value);
 
         // Recursion through a pointer.
         private static int Factorial(int n) => n <= 1 ? 1 : n * ((delegate*<int, int>)&Factorial)(n - 1);

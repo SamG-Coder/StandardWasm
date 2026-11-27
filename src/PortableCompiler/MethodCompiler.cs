@@ -1130,7 +1130,7 @@ namespace PortableCompiler
                     // Only the delegate constructor shape counts: an ordinary constructor can take
                     // a function pointer straight from ldftn (Codex review of c6b68c7).
                     int following = records[slot + 2] * BranchIl.Width;
-                    if (!FeedsDelegateConstructor(image, heaps, layout, records, following))
+                    if (!FeedsDelegateConstructor(bundle, image, heaps, layout, owner, records, following))
                     {
                         if ((MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) == 0) return -2;
                         records[slot] = BranchIl.FunctionAddress;
@@ -1427,23 +1427,51 @@ namespace PortableCompiler
             return status;
         }
 
-        // A delegate constructor is `instance void .ctor(object, native int)` (ECMA-335 II.14.6.1).
-        // A constructor taking a function pointer declares FNPTR instead, so the signature alone
-        // tells the two newobj forms apart before either path is chosen.
-        private static bool FeedsDelegateConstructor(byte[] image, int[] heaps, int[] layout, int[] records, int following)
+        // Decides whether an adjacent newobj builds a delegate from this ldftn (decision 0078).
+        // The signature alone is not enough: an ordinary constructor may also take (object, nint)
+        // (Codex review of ee7556a). A delegate is identified by its declaring type. Only
+        // delegates have runtime-implemented methods (ECMA-335 II.14.6); an ordinary
+        // (object, nint) constructor has an IL body. The declaring type is:
+        // - a platform delegate MemberRef, as the delegate path itself recognizes them;
+        // - a local MethodDef, whose own implementation flags say Runtime;
+        // - a MemberRef to a TypeRef in another bundle assembly, resolved there and checked
+        //   for any runtime-implemented method. A generic (TypeSpec) parent with the delegate
+        //   shape keeps the delegate path and its existing diagnostic.
+        private static bool FeedsDelegateConstructor(BundleImages bundle, byte[] image, int[] heaps, int[] layout,
+            int owner, int[] records, int following)
         {
             if (following >= records.Length) return false;
-            int kind = records[following], blob;
-            if (kind == BranchIl.MemberCall && records[following + 3] == 0x73)
-            {
-                var member = new int[AssemblyReferences.SymbolWidth];
-                if (AssemblyReferences.ReadMember(image, heaps, layout, records[following + 1], member, allowClosedParent: true) < 0)
-                    return false;
-                blob = member[5];
-            }
-            else if (kind == BranchIl.NewObject)
-                blob = MethodDefinitions.ReadColumn(image, layout, records[following + 1], 4);
-            else return false;
+            int kind = records[following], row = records[following + 1];
+            if (kind == BranchIl.NewObject)
+                return (MethodDefinitions.ReadColumn(image, layout, row, 1) & 3) == 3; // CodeTypeMask: Runtime
+            if (kind != BranchIl.MemberCall || records[following + 3] != 0x73) return false;
+            if (DelegateMetadata.Member(image, heaps, layout, row) == DelegateMetadata.Construct ||
+                EventMetadata.Member(image, heaps, layout, row) == EventMetadata.ConstructHandler)
+                return true;
+            var member = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadMember(image, heaps, layout, row, member, allowClosedParent: true) < 0 ||
+                !HasDelegateConstructorShape(image, heaps, member[5]))
+                return false;
+            int parent = AssemblyReferences.MemberParent(image, heaps, layout, row);
+            if (parent < 0 || (parent & 7) != 1 || bundle.Length == 0) return true;
+            var identity = new int[2];
+            if (AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, (parent >> 3) << 2 | 1, identity) < 0 ||
+                identity[1] <= 0)
+                return true; // unresolved: keep the delegate path's diagnostic
+            byte[] target = bundle.Get(identity[0]);
+            var targetLayout = new int[4];
+            var targetHeaps = new int[8];
+            if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return true;
+            var range = new int[2];
+            if (ObjectLayouts.MethodRange(target, targetHeaps, targetLayout, identity[1], range) < 0) return true;
+            for (int method = range[0]; method < range[1]; method++)
+                if ((MethodDefinitions.ReadColumn(target, targetLayout, method, 1) & 3) == 3) return true;
+            return false;
+        }
+
+        // `instance void .ctor(object, native int)` (ECMA-335 II.14.6.1).
+        private static bool HasDelegateConstructorShape(byte[] image, int[] heaps, int blob)
+        {
             if (blob <= 0 || blob >= heaps[1]) return false;
             var next = new int[1];
             int size = ImageBytes.CompressedUnsigned(image, heaps[0] + blob, heaps[0] + heaps[1], next);

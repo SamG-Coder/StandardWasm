@@ -25,6 +25,8 @@ foreach (int count in new[] { 0, 1, 2, 5, 12 }) Run("Fold", count);
 for (int which = 0; which <= 2; which++) Run("Field", which, 11);
 Run("Constructed", 0, 21);
 Run("Constructed", 1, 21);
+Run("Handle", 21);
+Run("RemoteHandle", 21);
 Run("Wide", 3, 4);
 Run("Wide", -7, 2000);
 Run("Void", 42);
@@ -39,7 +41,9 @@ Run("IsNull", 2);
 // A null call ends the CLR process with an access violation, so it is checked in Wasm only.
 var traps = new[] { new { name = "CallNull", row = Row("CallNull"), inputs = new[] { 3 } } };
 // Unmanaged calling conventions stay a located diagnostic (#274).
-var rejects = new[] { new { name = "RejectUnmanaged", row = Row("RejectUnmanaged"), status = -2, offset = 4 } };
+var rejects = new[] { new { name = "RejectUnmanaged", row = Row("RejectUnmanaged"), status = -2, offset = 4 },
+    // A real delegate type in the dependency keeps the delegate path's diagnostic at the ldftn.
+    new { name = "RejectRemoteDelegate", row = Row("RejectRemoteDelegate"), status = -2, offset = 1 } };
 File.WriteAllText(Path.Combine(evidence, "oracle.json"), JsonSerializer.Serialize(new
 {
     fixture, cases, traps, rejects, runtime = Environment.Version.ToString(),
