@@ -67,6 +67,34 @@ namespace PortableCompiler
             return LoadField(code, used, location, 1);
         }
 
+        internal static int OffsetStaticByte(byte[] code, int used, int location, int offset)
+        {
+            used = SpanWasm.OpenByteLocation(code, used, location);
+            used = LoadField(code, used, location, 0);
+            used = LoadField(code, used, location, 1);
+            used = Local(code, used, 0x20, offset);
+            code[used++] = 0x6a; // native-width byte offset
+            used = Gc(code, used, 0, StaticByteLocation);
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        internal static int ReadStaticUInt16(byte[] code, int used, int location)
+        {
+            // Wasm is little-endian. Read two adjacent bytes at any alignment
+            // without making the address a pointer into linear memory.
+            used = AccessElement(code, used, location, Bytes);
+            used = Gc(code, used, 0x0d, Bytes);
+            used = AccessElement(code, used, location, Bytes);
+            used = Const(code, used, 1);
+            code[used++] = 0x6a;
+            used = Gc(code, used, 0x0d, Bytes);
+            used = Const(code, used, 8);
+            code[used++] = 0x74;
+            code[used++] = 0x72;
+            return used;
+        }
+
         private static int LoadField(byte[] code, int used, int location, byte field)
         {
             used = Local(code, used, 0x20, location);

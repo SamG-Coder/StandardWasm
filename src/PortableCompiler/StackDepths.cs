@@ -195,6 +195,12 @@ namespace PortableCompiler
                 return depth > 0 && Assignable(stack[depth - 1], operand, objects)
                     ? Push(stack, allocated, depth - 1, ObjectReference) : -2;
             if (kind == LoadStaticByteSpan) return Push(stack, allocated, depth, ReadOnlyByteSpan);
+            if (kind == TakeStaticByteLocation)
+                return Match(stack, depth, ReadOnlyByteSpan) ? Push(stack, allocated, depth - 1, StaticByteLocation) : -2;
+            if (kind == OffsetStaticByteLocation)
+                return depth >= 2 && Match(stack, depth - 1, StaticByteLocation) && IsNativeInteger(stack[depth - 1]) ? depth - 1 : -2;
+            if (kind == ReadStaticUInt16)
+                return Match(stack, depth, StaticByteLocation) ? Push(stack, allocated, depth - 1, I32) : -2;
             if (kind == LoadString) return Push(stack, allocated, depth, String);
             if (kind == LoadTypeToken) return Push(stack, allocated, depth, PeLibrary.RuntimeTypeMetadata.Handle);
             // Only an unmanaged pointer (a native int, decision 0060) addresses memory 0.
@@ -278,7 +284,7 @@ namespace PortableCompiler
                 if (depth < 1) return -2;
                 int address = stack[depth - 1];
                 if (!IsNativeInteger(address) && (address != CharacterLocation || operand != 0x49) &&
-                    (address != BooleanLocation || operand != 0x47)) return -2;
+                    (address != BooleanLocation && address != StaticByteLocation || operand != 0x47)) return -2;
                 return Push(stack, allocated, depth - 1, IndirectType(operand));
             }
             if (kind == StoreIndirect)

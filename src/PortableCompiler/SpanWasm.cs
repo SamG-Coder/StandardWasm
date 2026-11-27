@@ -61,20 +61,39 @@ namespace PortableCompiler
             return used;
         }
 
-        internal static int FromStaticBytes(byte[] code, int used, int offset, int length)
+        internal static int FromStaticBytes(byte[] code, int used, int offset, int length, int backing)
         {
-            if (length == 0)
-            {
-                code[used++] = 0xd0; // empty view with no passive segment
-                return WasmBinary.Signed(code, used, WasmBinary.HeapType(ReadOnlyByteSpan));
-            }
             used = Const(code, used, offset);
-            used = Const(code, used, length);
+            used = Const(code, used, backing);
             used = Gc(code, used, 9, Bytes); // fresh packed owner from the passive data segment
             code[used++] = 0;
             used = Const(code, used, 0);
             used = Const(code, used, length);
             return Gc(code, used, 0, ReadOnlyByteSpan);
+        }
+
+        internal static int TakeStaticByteLocation(byte[] code, int used, int view)
+        {
+            used = OpenByteLocation(code, used, view);
+            used = LoadField(code, used, view, 0);
+            used = LoadField(code, used, view, 1);
+            used = Gc(code, used, 0, StaticByteLocation);
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        // GetReference(default) yields a null location. Taking or advancing
+        // the address doesn't dereference its owner.
+        internal static int OpenByteLocation(byte[] code, int used, int local)
+        {
+            used = Local(code, used, 0x20, local);
+            code[used++] = 0xd1; // ref.is_null
+            code[used++] = 0x04;
+            used = WasmBinary.ValueType(code, used, StaticByteLocation);
+            code[used++] = 0xd0; // ref.null
+            used = WasmBinary.Signed(code, used, WasmBinary.HeapType(StaticByteLocation));
+            code[used++] = 0x05;
+            return used;
         }
 
         internal static int Length(byte[] code, int used, int view)

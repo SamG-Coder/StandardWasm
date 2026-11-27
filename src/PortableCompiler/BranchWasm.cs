@@ -311,8 +311,25 @@ namespace PortableCompiler
                 }
                 else if (kind == LoadStaticByteSpan)
                 {
-                    used = SpanWasm.FromStaticBytes(code, used, operand, records[slot + 3]);
+                    used = SpanWasm.FromStaticBytes(code, used, operand, records[slot + 3], records[slot + Width + 1]);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, ReadOnlyByteSpan, depth));
+                }
+                else if (kind == TakeStaticByteLocation)
+                {
+                    used = SpanWasm.TakeStaticByteLocation(code, used, Spill(spills, maximum, spillFlags, ReadOnlyByteSpan, top));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, StaticByteLocation, top));
+                }
+                else if (kind == OffsetStaticByteLocation)
+                {
+                    int target = Spill(spills, maximum, spillFlags, StaticByteLocation, top - 1);
+                    int offset = Spill(spills, maximum, spillFlags, states[state + top], top);
+                    used = ManagedLocationWasm.OffsetStaticByte(code, used, target, offset);
+                    used = Local(code, used, 0x21, target);
+                }
+                else if (kind == ReadStaticUInt16)
+                {
+                    used = ManagedLocationWasm.ReadStaticUInt16(code, used, Spill(spills, maximum, spillFlags, StaticByteLocation, top));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top));
                 }
                 else if (kind == LoadString)
                 {
@@ -922,7 +939,7 @@ namespace PortableCompiler
                 {
                     int type = states[state + top];
                     int address = Spill(spills, maximum, spillFlags, type, top);
-                    if (type == CharacterLocation || type == BooleanLocation)
+                    if (type == CharacterLocation || type == BooleanLocation || type == StaticByteLocation)
                     {
                         int vector = type == CharacterLocation ? Chars : Bytes;
                         used = ManagedLocationWasm.AccessElement(code, used, address, vector);

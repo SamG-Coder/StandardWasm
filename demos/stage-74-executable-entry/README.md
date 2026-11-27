@@ -94,7 +94,10 @@ caller that compares the result as a `System.Type`. The original CoreLib
 `String.StartsWith(char)` body also runs against the browser's UTF-16
 storage, including embedded NUL, empty, and null-receiver cases. The static
 byte span probe uses the original PE's readonly data and
-checks unsigned byte values and typed bounds failures.
+checks unsigned byte values and typed bounds failures. A readonly location
+keeps that backing field alive across calls and supports byte offsets and
+unaligned little-endian reads. The compiler tests these operations directly
+and through the original CoreLib Unicode tables used by `Char.IsWhiteSpace`.
 
 The monitor probe checks the CLR's reentrant lock behavior on the launch
 worker's single managed execution agent. It verifies lockTaken and typed

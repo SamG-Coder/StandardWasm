@@ -656,7 +656,7 @@ namespace PortableCompiler
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection || kind == BranchIl.GetObjectType ||
-                                kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
+                                kind == BranchIl.LoadIndirect || kind == BranchIl.ReadStaticUInt16 || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
                                 kind == BranchIl.LoadManagedCell || kind == BranchIl.StoreManagedCell || kind == BranchIl.ClearManagedCell ||
                                 kind == BranchIl.LoadObjectIndirect || kind == BranchIl.StoreObjectIndirect ||
                                 kind == BranchIl.LoadObject || kind == BranchIl.StoreObject || kind == BranchIl.InitializeNative ||
@@ -1023,6 +1023,15 @@ namespace PortableCompiler
                     var spec = new int[MethodSpecifications.Width];
                     int status = MethodSpecifications.Read(image, heaps, layout, counts, records[slot + 1], spec);
                     if (status < 0) return status;
+                    if (!checkReceiver)
+                    {
+                        int intrinsic = StaticByteIntrinsics.Identify(image, layout, heaps, counts, spec);
+                        if (intrinsic != 0)
+                        {
+                            records[slot] = intrinsic;
+                            continue;
+                        }
+                    }
                     int method = spec[MethodSpecifications.Target];
                     int row = method >> 1, targetOwner = owner, targetContext = 0;
                     byte[] targetImage = image;
@@ -1262,6 +1271,12 @@ namespace PortableCompiler
                     bool addressOf = kind == BranchIl.StaticFieldAddress;
                     bool write = kind == BranchIl.StoreStaticField || addressOf;
                     bool linked = records[slot + 3] != 0;
+                    if (!write && !linked && StaticByteIntrinsics.IsLittleEndian(image, layout, heaps, field))
+                    {
+                        records[slot] = BranchIl.Constant;
+                        records[slot + 1] = 1; // Wasm native data is little-endian.
+                        continue;
+                    }
                     if (!write && linked && EventMetadata.Member(image, heaps, layout, field) == EventMetadata.Empty)
                     {
                         int eventGlobal = StaticFields.Register(globals, StaticFields.EventOwner, 0, EventArgsReference);

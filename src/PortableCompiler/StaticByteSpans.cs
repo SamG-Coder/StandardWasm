@@ -9,6 +9,7 @@ namespace PortableCompiler
             int owner, int context, int[] methodArguments, int[] records, int[] objects, int[] clauses,
             byte[] bytes, int[] size, int[] location)
         {
+            var backingSize = new int[1];
             for (int slot = 0; slot < records.Length; slot += Width)
             {
                 if (records[slot] != StaticFieldAddress || records[slot + 3] != 0) continue;
@@ -23,18 +24,22 @@ namespace PortableCompiler
 
                 // The original static address never escapes. The verified
                 // constructor consumes a bounded range of immutable PE bytes.
+                // A later managed reference can read beyond the view while
+                // remaining inside the original field, so retain that field.
                 if (location.Length != 0) location[2] = slot / Width;
                 int count = records[length + 1], offset = size[0];
                 if (count < 0) return -2;
-                int source = ArrayInitializerMetadata.FindStaticData(image, heaps, layout, records[slot + 1], count);
+                int source = ArrayInitializerMetadata.FindStaticData(image, heaps, layout, records[slot + 1], count, backingSize);
                 if (source < 0) return source;
-                if (count > bytes.Length - offset) return -3;
-                for (int i = 0; i < count; i++) bytes[offset + i] = image[source + i];
-                size[0] = offset + count;
+                int backing = backingSize[0];
+                if (backing > bytes.Length - offset) return -3;
+                for (int i = 0; i < backing; i++) bytes[offset + i] = image[source + i];
+                size[0] = offset + backing;
                 records[slot] = LoadStaticByteSpan;
                 records[slot + 1] = offset;
                 records[slot + 2] = records[call + 2];
                 records[slot + 3] = count;
+                records[slot + Width + 1] = backing; // Reserved operand record inside ldsflda.
                 records[length] = 0;
                 records[call] = 0;
             }
