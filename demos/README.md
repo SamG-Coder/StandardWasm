@@ -258,6 +258,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [273 · Runtime generic type classification](stage-273-runtime-type-generic-kind/README.md) | `npm run demo -- stage-273-runtime-type-generic-kind` | Verify generic metadata, arrays, null and nominal virtual overrides |
 | [276 · Runtime generic type definitions](stage-276-runtime-generic-definitions/README.md) | `npm run demo -- stage-276-runtime-generic-definitions` | Verify exact definition identity, fresh typed failures and nominal dispatch |
 | [277 · Runtime generic type arguments](stage-277-runtime-generic-arguments/README.md) | `npm run demo -- stage-277-runtime-generic-arguments` | Verify ordered canonical generic arguments and independent reflection arrays |
+| [280 · Enum type classification](stage-280-runtime-type-enum-kind/README.md) | `npm run demo -- stage-280-runtime-type-enum-kind` | Verify exact Enum ancestry and nominal virtual overrides |
 
 ## Adding a stage
 
