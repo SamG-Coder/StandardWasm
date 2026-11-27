@@ -101,7 +101,10 @@ namespace PortableCompiler
                         int declaringLayout = closed;
                         if (declaringLayout == 0)
                             declaringLayout = ObjectLayouts.Find(objects, matched, declaring, new int[0]);
-                        family = ObjectLayouts.Inherits(objects, callerReceiver, declaringLayout);
+                        // The trusted System.Object has no nominal layout to walk.
+                        family = ObjectLayouts.Inherits(objects, callerReceiver, declaringLayout) ||
+                            declaringLayout == 0 && !ObjectLayouts.IsValueType(objects, callerReceiver) &&
+                            ObjectLayouts.IsCoreObjectType(target, targetHeaps, targetLayout, declaring << 2);
                     }
                     if (!family && !(baseCall && opcode == 0x28)) continue;
                 }

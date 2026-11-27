@@ -43,18 +43,21 @@ namespace PortableCompiler
 
         // pc is the pc local. Saved exception locals: exnref at pc + 1 (scratch) and
         // pc + 2 + clause; eqref at objects (scratch) and objects + 1 + clause.
-        internal static int End(byte[] code, int used, int pc, int[] region, bool saveHandlers, int objects, int[] filters)
+        internal static int End(byte[] code, int used, int pc, int[] region, bool saveHandlers, int objects, int[] filters,
+            int rootCount, int rootFrame)
         {
             code[used++] = 0x0b; // try_table
             code[used++] = 0;    // only the catch edges may reach the destinations
             for (int tag = 0; tag < ExceptionTagsWasm.Count; tag++)
             {
                 code[used++] = 0x0b; // tag destination
+                if (rootCount >= 0) used = RootStackWasm.Leave(code, used, rootCount, rootFrame);
                 // Remaining fixed blocks plus the object block lie between here and the pc loop.
                 int loop = ExceptionTagsWasm.Count - tag;
                 used = Dispatch(code, used, pc, region, ExceptionTagsWasm.FixedTag(tag), loop, saveHandlers, objects);
             }
             code[used++] = 0x0b; // object destination: [eqref]
+            if (rootCount >= 0) used = RootStackWasm.Leave(code, used, rootCount, rootFrame);
             return DispatchObject(code, used, pc, region, saveHandlers, objects, filters);
         }
 

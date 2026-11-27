@@ -9,7 +9,7 @@ namespace PortableCompiler
     {
         internal const int RegisteredTable = 5, PendingTable = 6;
         internal const int RegisteredKey = int.MinValue + 19, PendingKey = int.MinValue + 20;
-        internal const int Register = ReachabilityWasm.End, Discover = Register + 1, Pop = Discover + 1, End = Pop + 1;
+        internal const int Register = ReachabilityWasm.End, Discover = Register + 1, Pop = Discover + 1, RunNext = Pop + 1, End = RunNext + 1;
 
         internal static int Write(byte[] code, int used, int entry, int first, int registered, int pending)
         {

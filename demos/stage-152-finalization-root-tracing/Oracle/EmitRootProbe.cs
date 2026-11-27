@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -9,17 +8,18 @@ internal static class EmitRootProbe
 {
     private delegate int CompileRoots(byte[] bundle, byte[] entries, byte[] output, int[] location);
 
-    internal static int[] Write(string outputPath)
+    internal static int[] Write(string outputPath, string corePath)
     {
-        byte[] image = File.ReadAllBytes(typeof(RootProbe).Assembly.Location);
-        // Finalizer binding uses the trusted Object slot's metadata without lowering CoreLib bodies.
-        byte[] core = File.ReadAllBytes(typeof(object).Assembly.Location);
-        byte[] bundle = new byte[image.Length + core.Length + 2 * sizeof(int)];
-        BinaryPrimitives.WriteInt32LittleEndian(bundle, image.Length);
-        image.CopyTo(bundle, sizeof(int));
-        int companion = image.Length + sizeof(int);
-        BinaryPrimitives.WriteInt32LittleEndian(bundle.AsSpan(companion), core.Length);
-        core.CopyTo(bundle, companion + sizeof(int));
+        using var bundle = new MemoryStream();
+        using var images = new BinaryWriter(bundle);
+        string pack = Path.GetDirectoryName(corePath)!;
+        foreach (string path in new[] { typeof(RootProbe).Assembly.Location, corePath,
+            Path.Combine(pack, "netstandard.dll"), Path.Combine(pack, "System.Runtime.dll") })
+        {
+            byte[] image = File.ReadAllBytes(path);
+            images.Write(image.Length);
+            images.Write(image);
+        }
         using var manifest = new MemoryStream();
         using var entries = new BinaryWriter(manifest);
         foreach (string name in new[] { nameof(RootProbe.ObserveFrames), nameof(RootProbe.ObserveConstructor),
@@ -27,6 +27,10 @@ internal static class EmitRootProbe
             Export(typeof(RootProbe), name);
         Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.Allocate));
         Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.ValueOf));
+        Export(typeof(FinalizableAllocations), "get_Finalized");
+        Export(typeof(FinalizableAllocations), "get_Total");
+        Export(typeof(FinalizableAllocations), "get_OverridesRan");
+        Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.TakeResurrected));
 
         void Export(Type type, string name)
         {
@@ -41,7 +45,7 @@ internal static class EmitRootProbe
             .CreateDelegate<CompileRoots>();
         byte[] output = new byte[1 << 20];
         int[] location = new int[3];
-        int length = compile(bundle, manifest.ToArray(), output, location);
+        int length = compile(bundle.ToArray(), manifest.ToArray(), output, location);
         if (length <= 0) throw new Exception($"Root probe compiler returned {length} at {string.Join(", ", location)}");
         File.WriteAllBytes(outputPath, output[..length]);
 
@@ -63,7 +67,14 @@ internal static class EmitRootProbe
         GC.WaitForPendingFinalizers();
         if (FinalizableAllocations.Finalized != 4 || FinalizableAllocations.Total != 40 || FinalizableAllocations.OverridesRan != 1)
             throw new Exception("Actual CLR finalizer allocation results changed");
-        return new { count = FinalizableAllocations.Finalized, total = FinalizableAllocations.Total };
+        object resurrected = FinalizableAllocations.TakeResurrected();
+        if (resurrected is null || FinalizableAllocations.ValueOf(resurrected) != 19 || FinalizableAllocations.TakeResurrected() is not null)
+            throw new Exception("Unexpected CLR resurrection result");
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        if (FinalizableAllocations.Finalized != 4) throw new Exception("The resurrected receiver finalized again");
+        return new { count = FinalizableAllocations.Finalized, total = FinalizableAllocations.Total,
+            overrides = FinalizableAllocations.OverridesRan, resurrected = FinalizableAllocations.ValueOf(resurrected) };
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void AllocateAndRelease()

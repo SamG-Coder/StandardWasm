@@ -4,13 +4,15 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { root, run } from "../../scripts/toolchain.mjs";
+import { wasm32Runtime } from "../../scripts/runtime-packs.mjs";
 
 const stage = join(root, "demos", "stage-152-finalization-root-tracing");
 const artifacts = join(root, "artifacts", "finalization-root-tracing");
 mkdirSync(artifacts, { recursive: true });
 const evidence = mkdtempSync(join(artifacts, "run-"));
 const oraclePath = join(evidence, "oracle.json");
-run("dotnet", ["run", "-c", "Release", "--project", join(stage, "Oracle"), "--", oraclePath]);
+run("dotnet", ["run", "-c", "Release", "--project", join(stage, "Oracle"), "--", oraclePath,
+    join(wasm32Runtime().directory, "System.Private.CoreLib.dll")]);
 const oracle = JSON.parse(readFileSync(oraclePath, "utf8"));
 const assets = {
     compiler: readFileSync(process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts", "StandardWasm.Compiler.wasm")),
@@ -69,7 +71,7 @@ async function observeRoots(bytes) {
         __root_probe_edge_read: read, __root_probe_mark: mark, __root_probe_contains: contains,
         __root_probe_clear: clear, __root_probe_register: register, __root_probe_discover: discover,
         __root_probe_pop: pop, ObserveFrames, ObserveConstructor, ThrowWithRoot, BuildGraph, SetStaticRoot,
-        Allocate, ValueOf } = instance.exports;
+        __root_probe_run_next: runNext, Allocate, ValueOf, get_Finalized, get_Total, get_OverridesRan, TakeResurrected } = instance.exports;
     function assertEmpty() {
         if (count.value !== 0) throw new Error("Root scope was not restored");
         for (let i = 0; i < table.length; i++)
@@ -149,14 +151,34 @@ async function observeRoots(bytes) {
     if (!receivers.includes(direct) || !receivers.includes(inheritedReceiver) || !receivers.includes(overridingReceiver) ||
         receivers.includes(notFinalizable) || pop() !== null)
         throw new Error("The pending queue did not preserve the allocated receiver identities");
-    const allocationFinalizers = { count: finalized, total: receivers.reduce((sum, item) => sum + ValueOf(item), 0) };
+    const allocationReceivers = { count: finalized, total: receivers.reduce((sum, item) => sum + ValueOf(item), 0) };
+    Allocate(1, 13);
+    Allocate(2, 17);
+    const expectedResurrection = Allocate(3, 19);
+    try { Allocate(2, -9); }
+    catch (error) {
+        if (!(error instanceof WebAssembly.Exception) || !error.is(instance.exports["\0nullReference"])) throw error;
+    }
+    if (get_Finalized() !== 0 || discover() !== finalized) throw new Error("Callbacks ran before dequeue or discovery missed an allocation");
+    for (let index = 0; index < finalized; index++) {
+        if (runNext() !== 1) throw new Error("The pending callback was not dispatched");
+        assertEmpty();
+    }
+    if (runNext() !== 0 || mark() !== 1 || contains(expectedResurrection) !== 1)
+        throw new Error("Expected only the resurrected receiver to stay rooted");
+    const resurrected = TakeResurrected();
+    if (resurrected !== expectedResurrection || TakeResurrected() !== null || discover() !== 0 || runNext() !== 0)
+        throw new Error("The resurrected instance lost its identity or finalized twice");
+    const allocationFinalizers = { count: get_Finalized(), total: get_Total(), overrides: get_OverridesRan(),
+        resurrected: ValueOf(resurrected) };
     return { values: [value, constructed], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph, staticRoot: true,
-        discovered, allocationFinalizers };
+        discovered, allocationReceivers, allocationFinalizers };
 }
 
 const expectedRoots = { values: oracle.rootProbeResult,
     snapshots: [{ count: 3, unique: 2 }, { count: 2, unique: 1 }, { count: 1, unique: 1 }, { count: 3, unique: 2 }, { count: 1, unique: 1 }],
     clearedOnReturn: true, clearedOnUnwind: true, graph: oracle.graph, staticRoot: true, discovered: [0, 1, 0, 1, 2],
+    allocationReceivers: { count: oracle.allocationFinalizers.count, total: oracle.allocationFinalizers.total },
     allocationFinalizers: oracle.allocationFinalizers };
 const node = await probe(assets);
 assert.deepEqual(node, oracle.result);

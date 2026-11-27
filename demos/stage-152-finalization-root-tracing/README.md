@@ -1,7 +1,8 @@
 # Stage 152 · Finalization root tracing
 
 Run `npm run demo -- stage-152-finalization-root-tracing` after building the
-self-hosted compiler with `npm test`. The runner compiles the same .NET Standard
+self-hosted compiler with `npm test`. Install matching .NET 10 runtimes for
+the SDK host and Windows x86. The runner compiles the same .NET Standard
 2.0 DLL in Node and Microsoft Edge, executes the resulting standalone Wasm, and
 compares seven cases with .NET 10. Results go to `artifacts/finalization-root-tracing/`.
 
@@ -69,11 +70,16 @@ direct, inherited and overriding destructors and a constructor that throws.
 The unrelated virtual method named `Finalize` creates a different slot and
 does not register its receiver.
 
-The diagnostic exports also support manual queue tests. The allocation test
-uses automatic registration and inspects the pending receivers. Running
-their managed callbacks and binding the original CoreLib suppression APIs
+The diagnostic step invokes the managed destructor selected by the original
+virtual slot. It roots the receiver while its callback runs and uses the
+original x86 CoreLib for the final call to `Object.Finalize`. Both engines
+match the CLR's destructor and base-call effects. The overriding destructor
+resurrects the same receiver through a managed static. Clearing that static
+and discovering again never schedules another callback unless registered again.
+
+Binding the original CoreLib suppression APIs and collection scheduling
 remain open, along with host roots,
 traversal of runtime wrappers such as view owners and event delegates,
-managed addresses, protected regions, indirect calls and a cleanup policy for
+managed addresses, catch and filter roots, indirect calls and a cleanup policy for
 raw Wasm traps. JavaScript invokes the pass at a probe observation point and
 checks the result. The Wasm module performs the worklist and edge traversal.

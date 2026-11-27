@@ -415,8 +415,10 @@ namespace PortableCompiler
                     byte[] frameRoots = null;
                     if (rootProbe)
                     {
-                        if (catchRegion.Length != 0 || resourceOpen || initializerPrologue >= 0) return -2;
-                        frameRoots = RootStackWasm.MapFrame(records, frame, parameters + locals);
+                        if (resourceOpen || initializerPrologue >= 0 || filterEnds != null) return -2;
+                        for (int clause = 0; clause < catchRegion.Length; clause += ExceptionClauses.Width)
+                            if (!ExceptionClauses.IsFinally(catchRegion, clause)) return -2;
+                        frameRoots = RootStackWasm.MapFrame(records, frame, parameters + locals, catchRegion.Length != 0);
                         if (frameRoots == null) return -2;
                     }
                     if (filterEnds != null)
@@ -517,16 +519,39 @@ namespace PortableCompiler
                     int capacity = body[1] * 64 + 32;
                     if (rootProbe)
                     {
+                        var finalizerTarget = new int[2];
                         for (int pc = 0; pc < depths.Length; pc++)
                         {
                             int slot = pc * BranchIl.Width;
                             if (depths[pc] == 0 || records[slot] != BranchIl.NewObject) continue;
                             int constructor = records[slot + 1];
                             int type = signatures[offsets[constructor] + 1];
-                            status = finalizers.Includes(bundle, objects, type);
-                            if (status >= 0) continue;
+                            if (type < FirstClass || IsValueType(objects, type) || finalizers.Callback(type) >= 0) continue;
+                            status = finalizers.Includes(bundle, objects, type, finalizerTarget);
+                            if (status == 0) continue;
                             if (location.Length != 0) location[2] = pc;
-                            return status;
+                            if (status < 0) return status;
+                            int finalizerOwner = finalizerTarget[0], finalizerRow = finalizerTarget[1];
+                            byte[] finalizerImage = bundle.Get(finalizerOwner);
+                            var finalizerLayout = new int[4];
+                            var finalizerHeaps = new int[8];
+                            if (CompressedTables.FindWithHeaps(finalizerImage, finalizerLayout, finalizerHeaps) < 0) return -1;
+                            int declaringRow = ObjectLayouts.Owner(finalizerImage, finalizerHeaps, finalizerLayout, finalizerRow, false);
+                            int declaring = type;
+                            while (declaring >= FirstClass && (AssemblyOf(objects, declaring) != finalizerOwner ||
+                                TypeDef(objects, declaring) != declaringRow)) declaring = Parent(objects, declaring);
+                            if (declaring < FirstClass) return -2;
+                            int finalizerContext = HasArguments(objects, declaring) ? declaring : 0;
+                            int callback = Lookup(owners, rows, contexts, bases, indices, functions, finalizerOwner, finalizerRow, finalizerContext);
+                            if (callback < 0)
+                            {
+                                functions = Register(bundle, finalizerImage, finalizerLayout, finalizerHeaps, finalizerOwner,
+                                    finalizerRow, finalizerContext, owners, rows, contexts, bases, indices, arities, offsets,
+                                    signatures, objects, functions, allowVirtual: true);
+                                if (functions < 0) return functions;
+                                callback = functions - 1;
+                            }
+                            finalizers.BindCallback(type, callback);
                         }
                         long extra = (long)body[1] * (96L + 20L * (parameters + locals + maximum));
                         if (extra > int.MaxValue - capacity) return -3;
@@ -550,6 +575,7 @@ namespace PortableCompiler
                         // nominal ref.test and clear the other kind's saved reference (decision 0054).
                         int handlerBytes = 32 + (ExceptionTagsWasm.Count + 1) * 20 +
                             catchRegion.Length / ExceptionClauses.Width * (48 * (ExceptionTagsWasm.Count + 1));
+                        if (rootProbe) handlerBytes += (ExceptionTagsWasm.Count + 1) * 32;
                         if (capacity > int.MaxValue - handlerBytes) return -3;
                         capacity += handlerBytes;
                     }
@@ -880,6 +906,8 @@ namespace PortableCompiler
                     if (entry < ReachabilityWasm.Mark) length = HeapEdgesWasm.Write(moduleCode, length, objects, read);
                     else if (entry < ReachabilityWasm.End)
                         length = ReachabilityWasm.Write(moduleCode, length, entry, rootWalker, rootCount, markedCount, pendingCount, globals);
+                    else if (entry == FinalizerQueueWasm.RunNext)
+                        length = FinalizerDispatchWasm.Write(moduleCode, length, objects, finalizers, rootWalker, hostImports, rootCount);
                     else length = FinalizerQueueWasm.Write(moduleCode, length, entry, rootWalker, registeredCount, pendingCount);
                     if (length < 0) return length;
                     sizes[functions] = length - bodyOffsets[functions];

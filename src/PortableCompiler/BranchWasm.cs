@@ -1393,7 +1393,8 @@ namespace PortableCompiler
                 code[used++] = 0x0b;
             }
             code[used++] = 0;
-            if (catchRegion.Length != 0) used = ExceptionDispatchWasm.End(code, used, pcLocal, catchRegion, exceptionLocals > 1, objectBase, filters);
+            if (catchRegion.Length != 0) used = ExceptionDispatchWasm.End(code, used, pcLocal, catchRegion, exceptionLocals > 1,
+                objectBase, filters, tracksRoots ? rootCount : -1, rootFrame);
             code[used++] = 0x0b;
             code[used++] = 0;
             if (guard >= 0) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers);

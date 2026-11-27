@@ -8,9 +8,12 @@ namespace PortableCompiler
     {
         internal readonly int[] RegistrationFixups = new int[1];
         private readonly byte[] cached = new byte[MaxClasses];
+        private readonly int[] callbacks = new int[MaxClasses];
         private readonly int[] root = new int[2];
 
         internal bool Registers(int type) => type >= FirstClass && cached[type - FirstClass] == 2;
+        internal int Callback(int type) => callbacks[type - FirstClass] - 1;
+        internal void BindCallback(int type, int function) => callbacks[type - FirstClass] = function + 1;
 
         internal int ReadRoot(BundleImages bundle)
         {
@@ -46,12 +49,11 @@ namespace PortableCompiler
             return -2;
         }
 
-        internal int Includes(BundleImages bundle, int[] objects, int type)
+        internal int Includes(BundleImages bundle, int[] objects, int type, int[] target)
         {
             if (type < FirstClass || IsValueType(objects, type) || IsInterface(objects, type)) return 0;
             int index = type - FirstClass;
             if (cached[index] != 0) return cached[index] - 1;
-            var target = new int[2];
             int status = VirtualSlots.SelectVirtualBody(bundle, objects, type, true, ObjectReference, root[0], root[1], target, true);
             if (status < 0) return status;
             int hasFinalizer = target[0] == root[0] && target[1] == root[1] ? 0 : 1;

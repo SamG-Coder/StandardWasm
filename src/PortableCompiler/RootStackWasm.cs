@@ -18,9 +18,10 @@ namespace PortableCompiler
         private const string RegisterExport = "__root_probe_register";
         private const string DiscoverExport = "__root_probe_discover";
         private const string PopExport = "__root_probe_pop";
-        internal const int ExportCount = 10;
+        private const string RunNextExport = "__root_probe_run_next";
+        internal const int ExportCount = 11;
 
-        internal static byte[] MapFrame(int[] records, int[] frame, int slots)
+        internal static byte[] MapFrame(int[] records, int[] frame, int slots, bool protectedRegion)
         {
             int length = records.Length / BranchIl.Width;
             if (slots != 0 && length > int.MaxValue / slots) return null;
@@ -30,8 +31,14 @@ namespace PortableCompiler
             {
                 if (IsManagedLocation(frame[slot]) || IsValueLocation(frame[slot]) || IsSpan(frame[slot])) return null;
                 if (!IsObjectReference(frame[slot])) continue;
-                if (FrameRootLiveness.Analyze(records, slot, false, live) != 0) return null;
-                for (int pc = 0; pc < length; pc++) map[pc * slots + slot] = live[pc];
+                if (!protectedRegion && FrameRootLiveness.Analyze(records, slot, false, live) != 0) return null;
+                for (int pc = 0; pc < length; pc++)
+                {
+                    // Until exception-edge liveness is available, keep reference slots for the entire protected frame.
+                    if (protectedRegion && records[pc * BranchIl.Width] == BranchIl.FrameAddress && records[pc * BranchIl.Width + 1] == slot)
+                        return null;
+                    map[pc * slots + slot] = protectedRegion ? (byte)1 : live[pc];
+                }
             }
             return map;
         }
@@ -40,7 +47,8 @@ namespace PortableCompiler
             ExportSize(EdgeCountExport, walker) + ExportSize(EdgeReadExport, walker + 1) +
             ExportSize(MarkExport, walker + ReachabilityWasm.Mark) + ExportSize(ContainsExport, walker + ReachabilityWasm.Contains) +
             ExportSize(ClearExport, walker + ReachabilityWasm.Clear) + ExportSize(RegisterExport, walker + FinalizerQueueWasm.Register) +
-            ExportSize(DiscoverExport, walker + FinalizerQueueWasm.Discover) + ExportSize(PopExport, walker + FinalizerQueueWasm.Pop);
+            ExportSize(DiscoverExport, walker + FinalizerQueueWasm.Discover) + ExportSize(PopExport, walker + FinalizerQueueWasm.Pop) +
+            ExportSize(RunNextExport, walker + FinalizerQueueWasm.RunNext);
 
         private static int ExportSize(string name, int index) => name.Length + 2 + WasmBinary.UnsignedSize(index);
 
@@ -55,7 +63,8 @@ namespace PortableCompiler
             used = Export(code, used, ClearExport, 0, walker + ReachabilityWasm.Clear);
             used = Export(code, used, RegisterExport, 0, walker + FinalizerQueueWasm.Register);
             used = Export(code, used, DiscoverExport, 0, walker + FinalizerQueueWasm.Discover);
-            return Export(code, used, PopExport, 0, walker + FinalizerQueueWasm.Pop);
+            used = Export(code, used, PopExport, 0, walker + FinalizerQueueWasm.Pop);
+            return Export(code, used, RunNextExport, 0, walker + FinalizerQueueWasm.RunNext);
         }
 
         private static int Export(byte[] code, int used, string name, byte kind, int index)

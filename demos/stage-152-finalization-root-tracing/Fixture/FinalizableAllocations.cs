@@ -5,6 +5,7 @@ namespace ManagedFinalizationExperiment
         private static int finalized;
         private static int total;
         private static int overrides;
+        private static object resurrected;
 
         public static object Allocate(int kind, int value)
         {
@@ -19,6 +20,12 @@ namespace ManagedFinalizationExperiment
         public static int Finalized => finalized;
         public static int Total => total;
         public static int OverridesRan => overrides;
+        public static object TakeResurrected()
+        {
+            object receiver = resurrected;
+            resurrected = null;
+            return receiver;
+        }
 
         private class NewSlot
         {
@@ -52,7 +59,11 @@ namespace ManagedFinalizationExperiment
         private sealed class Overrides : Registered
         {
             internal Overrides(int value) : base(value) { }
-            ~Overrides() { overrides++; }
+            ~Overrides()
+            {
+                overrides++;
+                resurrected = this;
+            }
         }
     }
 }
