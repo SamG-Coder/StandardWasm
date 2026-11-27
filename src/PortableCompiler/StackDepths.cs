@@ -660,11 +660,17 @@ namespace PortableCompiler
                 if (depth < 1) return -1;
                 int source = stack[depth - 1];
                 if (!IsScalar(source)) return -1;
-                if (IsNativeInteger(source) && kind != ConvertInteger && kind != Narrow) return -2;
                 if (kind == Unary)
-                    return IsFloat(source) && operand != 0x6c ? -1 : depth;
+                {
+                    if (IsFloat(source) && operand != 0x6c) return -1;
+                    // Unary native arithmetic preserves word width. In particular,
+                    // complementing a known zero no longer proves a null pointer.
+                    if (source == NativeZero) stack[depth - 1] = Native;
+                    return depth;
+                }
                 if (kind == ConvertFloat)
                 {
+                    if (IsNativeInteger(source)) return -2;
                     if (IsFloat(source) && (operand == 0x76 || operand == UnsignedSingle)) return -1;
                     stack[depth - 1] = FloatWasm.Target(operand);
                 }

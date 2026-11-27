@@ -838,7 +838,7 @@ namespace PortableCompiler
                 else if (kind == Unary || kind == Narrow || kind == ConvertInteger || kind == ConvertFloat)
                 {
                     int source = states[state + top];
-                    int target = kind == Unary ? source : kind == ConvertFloat ? FloatWasm.Target(operand) :
+                    int target = kind == Unary ? (source == NativeZero ? Native : source) : kind == ConvertFloat ? FloatWasm.Target(operand) :
                         kind == ConvertInteger ? records[slot + 3] == ProvenNativeZero ? NativeZero : IntegerConversionType(operand) : I32;
                     used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, source, top));
                     if (kind == Unary && IsFloat(source))
