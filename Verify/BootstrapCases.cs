@@ -5,7 +5,7 @@ internal static class BootstrapCases
 {
     internal static void Add(List<object> cases)
     {
-        const int capacity = 2 << 20;
+        const int capacity = 4 << 20;
         var type = typeof(CompilerExports);
         byte[] dll = File.ReadAllBytes(type.Assembly.Location);
         string[] exports = ["CompileModule", "CompileBundle", "Compile", "CreateBytes", "SetByte", "ReadByte", "FindRow",

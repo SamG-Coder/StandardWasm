@@ -35,5 +35,5 @@ Wasm stack inside an initializer. The CLR would end the process, so it has no CL
 It checks that the next host entry retires the interrupted initializer instead of treating
 it as recursion.
 
-`GetHashCode`, `ToString`, `GetType` and `Equals` on a root object, `lock`, and a static call
+`GetHashCode`, `ToString`, `GetType` and `Equals` on a root object and a static call
 into a closed precise generic type must return the explicit -2 diagnostic at their instruction. The design is decision 0057.

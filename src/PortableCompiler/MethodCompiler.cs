@@ -171,7 +171,7 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[23];
+            var frameShape = new int[24];
             var shadowStack = new int[3]; // $sp, base, limit globals + 1
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * 3];
@@ -442,6 +442,12 @@ namespace PortableCompiler
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
+                        if (kind == BranchIl.Monitor && depths[slot / BranchIl.Width] != 0)
+                        {
+                            if (capacity > int.MaxValue - MonitorWasm.Capacity) return -3;
+                            capacity += MonitorWasm.Capacity;
+                            exceptionTags |= ExceptionTypes.Argument | ExceptionTypes.ArgumentNull | ExceptionTypes.SynchronizationLock;
+                        }
                         if (kind == BranchIl.ConsoleWrite && depths[slot / BranchIl.Width] != 0)
                         {
                             if (capacity > int.MaxValue - ConsoleWasm.WriteCapacity) return -3;
@@ -613,6 +619,7 @@ namespace PortableCompiler
                     frameShape[9] = hasFinally ? catchRegion.Length / ExceptionClauses.Width : 0;
                     frameShape[10] = hostImports;
                     frameShape[20] = WasmImports.Win32ErrorBase(hostFeatures);
+                    frameShape[23] = WasmImports.MonitorSlot(hostFeatures);
                     frameShape[11] = valueConstructor ? 1 : 0;
                     frameShape[12] = initializerPrologue + 1;
                     frameShape[13] = initializerGuard + 1;
@@ -801,7 +808,22 @@ namespace PortableCompiler
                     // The value-type this argument is already a managed address.
                     // ldarga.0 would instead take the address of that argument slot.
                     if (valueReceiver && records[slot + 1] == 0) return -2;
-                    int type = frame[records[slot + 1]];
+                    int local = records[slot + 1];
+                    int type = frame[local];
+                    int next = records[slot + 2] * BranchIl.Width;
+                    if (type == I32 && local >= parameterCount && next < records.Length &&
+                        records[next] == BranchIl.MemberCall && records[next + 3] == 0x28 &&
+                        !ValueOperands.Entry(records, next / BranchIl.Width, clauses) &&
+                        MonitorMetadata.Identify(image, heaps, layout, records[next + 1]) == MonitorMetadata.EnterTaken)
+                    {
+                        // The byref is consumed by the next instruction. Set the
+                        // original frame slot only after the monitor was acquired.
+                        records[slot] = BranchIl.Nop;
+                        records[next] = BranchIl.Monitor;
+                        records[next + 1] = local + 1;
+                        hostUse[0] = hostUse[0] | WasmImports.Monitor;
+                        continue;
+                    }
                     if (IsSpan(type))
                     {
                         int span = SpanOperands.Bind(bundle, image, layout, heaps, owner, context, methodArguments,
@@ -1125,6 +1147,17 @@ namespace PortableCompiler
                     // Platform shortcuts do not consume a managed location.
                     int address = records[slot + BranchIl.Width + 1];
                     bool addressed = address != 0;
+                    if (!addressed && opcode == 0x28)
+                    {
+                        int monitor = MonitorMetadata.Identify(image, heaps, layout, member);
+                        if (monitor == MonitorMetadata.Enter || monitor == MonitorMetadata.Exit)
+                        {
+                            records[slot] = BranchIl.Monitor;
+                            records[slot + 1] = monitor == MonitorMetadata.Exit ? -1 : 0;
+                            hostUse[0] = hostUse[0] | WasmImports.Monitor;
+                            continue;
+                        }
+                    }
                     if (!addressed && (opcode == 0x73 || opcode == 0x28))
                     {
                         int span = SpanMetadata.ClassifyCharacterSpanCall(bundle, image, layout, heaps,

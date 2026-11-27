@@ -50,7 +50,7 @@ namespace PortableCompiler
         // copy with a NUL terminator, or 0 for null. Auxiliary 1: null raises NullReferenceException.
         // 118 matches the integration line, where 116 and 117 are runtime-type kinds.
         internal const int PinString = 118;
-        internal const int StaticFieldAddress = 121, LoadNativeStatic = 122, StoreNativeStatic = 123;
+        internal const int StaticFieldAddress = 121, LoadNativeStatic = 122, StoreNativeStatic = 123, Monitor = 124;
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.

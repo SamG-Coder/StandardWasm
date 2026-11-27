@@ -23,7 +23,7 @@ foreach (string name in new[]
 {
     "ReachedOnce", "CallAfterArgument", "StoreAfterRightHand", "BeforeFieldInitOnce", "ConstructorTriggers",
     "InheritedField", "Recursion", "CatchInsideInitializer", "BundledDependency", "RelaxedGenericCall",
-    "DistinctObjects", "StaticFieldAlias", "NotNominalClass"
+    "DistinctObjects", "StaticFieldAlias", "NotNominalClass", "Locked"
 })
 {
     var (kernels, context) = Load(name);
@@ -56,16 +56,14 @@ Failure("ReadOuterFailing", [("run", "ReadOuterFailing"), ("inner", "ReadFailing
     context.Unload();
 }
 
-// Object members on a root object, Monitor (lock) and a precise generic
-// initializer stay located diagnostics.
-foreach (string name in new[] { "RootHashCode", "RootToString", "RootGetType", "RootEquals", "Locked", "PreciseGenericCall" })
+// Object members on a root object and a precise generic initializer stay located diagnostics.
+foreach (string name in new[] { "RootHashCode", "RootToString", "RootGetType", "RootEquals", "PreciseGenericCall" })
 {
     var (kernels, context) = Load(name);
     MethodInfo method = kernels.GetMethod(name)!;
     string clr = ((int)method.Invoke(null, null)!).ToString();
     byte[] il = method.GetMethodBody()!.GetILAsByteArray()!;
-    // lock passes its taken flag by address: the ldloca of Monitor.Enter(object, ref bool).
-    int offset = IlOffset(il, name == "Locked" ? OpCodes.Ldloca_S : name == "PreciseGenericCall" ? OpCodes.Call : OpCodes.Callvirt);
+    int offset = IlOffset(il, name == "PreciseGenericCall" ? OpCodes.Call : OpCodes.Callvirt);
     cases.Add(new { name, row = Row(method), images, clr, status = -2, diagnostic = new[] { 0, Row(method), offset } });
     context.Unload();
 }

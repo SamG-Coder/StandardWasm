@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { root, run } from "../../scripts/toolchain.mjs";
 import { runOn32BitClr, wasm32Runtime } from "../../scripts/runtime-packs.mjs";
+import { createMonitorHost } from "../stage-74-executable-entry/resource-host.mjs";
 
 // Stage 129 (decision 0057): run reachable type initializers with CLI trigger semantics,
 // and allocate plain System.Object instances. The bundle carries the supported 32-bit
@@ -23,7 +24,7 @@ const oracle = JSON.parse(readFileSync(join(evidence, "oracle.json"), "utf8"));
 assert.equal(oracle.process, "X86");
 const files = [compiler, ...oracle.files].map(path => readFileSync(path));
 
-async function runCases(compiler, images, cases) {
+async function runCases(compiler, images, cases, monitorHost) {
     const { instance: { exports: build } } = await WebAssembly.instantiate(compiler);
     const capacity = 1 << 21;
     const output = build.CreateBytes(capacity);
@@ -94,8 +95,13 @@ async function runCases(compiler, images, cases) {
 
         if (status < 1 || status > capacity) throw Error(test.name + " returned " + status + " at " + diagnostic);
         const code = Uint8Array.from({ length: status }, (_, i) => build.ReadByte(output, i));
-        const { instance, module } = await WebAssembly.instantiate(code);
-        if (WebAssembly.Module.imports(module).length) throw Error(test.name + " has runtime imports");
+        const module = await WebAssembly.compile(code);
+        const imports = WebAssembly.Module.imports(module);
+        const expectedImport = test.name === "Locked" ? 1 : 0;
+        if (imports.length !== expectedImport || imports.some(item =>
+            item.module !== "standardwasm:threading" || item.name !== "changeMonitorDepth" || item.kind !== "function"))
+            throw Error(test.name + " has unexpected runtime imports");
+        const instance = await WebAssembly.instantiate(module, expectedImport ? { "standardwasm:threading": monitorHost() } : {});
 
         if (test.sequence) {
             // Same instance throughout: a failed initializer must trap on every trigger,
@@ -116,7 +122,7 @@ async function runCases(compiler, images, cases) {
     return results;
 }
 
-const node = await runCases(files[0], files.slice(1), oracle.cases);
+const node = await runCases(files[0], files.slice(1), oracle.cases, createMonitorHost);
 const browser = await chromium.launch({ channel: "msedge" });
 try {
     const page = await browser.newPage();
@@ -126,11 +132,11 @@ try {
         return route.fulfill({ contentType: "application/octet-stream", body: files[Number(path.slice(1))] });
     });
     await page.goto("http://127.0.0.1/");
-    const edge = await page.evaluate(async ({ count, cases, source }) => {
+    const edge = await page.evaluate(async ({ count, cases, source, monitorSource }) => {
         const [compiler, ...images] = await Promise.all(Array.from({ length: count }, async (_, i) =>
             (await fetch("/" + i)).arrayBuffer()));
-        return (0, eval)("(" + source + ")")(compiler, images, cases);
-    }, { count: files.length, cases: oracle.cases, source: runCases.toString() });
+        return (0, eval)("(" + source + ")")(compiler, images, cases, (0, eval)("(" + monitorSource + ")"));
+    }, { count: files.length, cases: oracle.cases, source: runCases.toString(), monitorSource: createMonitorHost.toString() });
     assert.deepEqual(edge, node);
     writeFileSync(join(evidence, "results.json"), JSON.stringify({
         runtime: oracle.runtime, clrProcess: oracle.process, node: process.version, edge: browser.version(), results: node

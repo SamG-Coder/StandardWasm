@@ -82,6 +82,24 @@ export function createResourceHost(compiler, images) {
     return { memory, imports: { [resourceImportModule]: { memory, reserveName, locate } } };
 }
 
+const threadingModule = "standardwasm:threading";
+
+export function createMonitorHost() {
+    // Compiled managed execution is synchronous on one Wasm agent. Identity
+    // stays in the GC, and unused monitor keys can be collected.
+    const depth = new WeakMap();
+    return {
+        changeMonitorDepth(target, delta) {
+            const current = depth.get(target) ?? 0;
+            if (delta === -1 && current === 0) return 0;
+            const next = current + delta;
+            if (next === 0) depth.delete(target);
+            else depth.set(target, next);
+            return 1;
+        }
+    };
+}
+
 const resourceImportKinds = new Map([
     ["memory", "memory"], ["reserveName", "function"], ["locate", "function"]
 ]);
@@ -89,11 +107,18 @@ const resourceImportKinds = new Map([
 export function instantiateManagedModule(module, compiler, assets, runtimeImports = {}, executablePath) {
     const requestedResources = new Set();
     const requestedWin32 = new Set();
+    let wantsMonitor = false;
     for (const { module: owner, name, kind } of WebAssembly.Module.imports(module)) {
         if (owner === resourceImportModule) {
             if (resourceImportKinds.get(name) !== kind || requestedResources.has(name))
                 throw Error("The generated module requests an invalid resource import.");
             requestedResources.add(name);
+            continue;
+        }
+        if (owner === threadingModule) {
+            if (kind !== "function" || name !== "changeMonitorDepth" || wantsMonitor)
+                throw Error("The generated module requests an invalid monitor import.");
+            wantsMonitor = true;
             continue;
         }
         if (owner === win32ImportModule) {
@@ -126,5 +151,6 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         const usesModules = requestedWin32.has("getModuleHandleW") || requestedWin32.has("createActCtxW");
         imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : []);
     }
+    if (wantsMonitor) imports[threadingModule] = createMonitorHost();
     return WebAssembly.instantiate(module, imports);
 }

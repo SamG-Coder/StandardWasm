@@ -12,7 +12,8 @@ const managedTags = [
     ["\0nullReference", "System.NullReferenceException"],
     ["\0invalidCast", "System.InvalidCastException"],
     ["\0argument", "System.ArgumentException"],
-    ["\0argumentNull", "System.ArgumentNullException"]
+    ["\0argumentNull", "System.ArgumentNullException"],
+    ["\0synchronizationLock", "System.Threading.SynchronizationLockException"]
 ];
 
 export function managedExceptionType(exports, error) {

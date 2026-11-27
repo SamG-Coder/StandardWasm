@@ -267,7 +267,7 @@ namespace TypeInitializerFixture
 
         public static int NotNominalClass() => Fresh() is Empty ? 0 : 1;
 
-        // Object members on a root object and Monitor stay explicit diagnostics.
+        // Object members on a root object stay explicit diagnostics.
         public static int RootHashCode() => Fresh().GetHashCode() == 0 ? 0 : 1;
 
         public static int RootToString() => Fresh().ToString().Length;

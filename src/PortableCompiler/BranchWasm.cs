@@ -637,6 +637,11 @@ namespace PortableCompiler
                     used = WasmBinary.Unsigned(code, used, operand);
                     code[used++] = 0x0b;
                 }
+                else if (kind == Monitor)
+                {
+                    int target = Spill(spills, maximum, spillFlags, states[state + top], top);
+                    used = MonitorWasm.Emit(code, used, target, operand, frameShape[23]);
+                }
                 else if (kind == Win32Error)
                 {
                     bool setter = PeLibrary.MarshalErrorMetadata.IsSetter(operand);

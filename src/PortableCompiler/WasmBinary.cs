@@ -36,7 +36,9 @@ namespace PortableCompiler
             // Tag indices stay stable even when lower tags are unused.
             bool argumentException = (exceptionTags & ExceptionTypes.Argument) != 0;
             bool argumentNull = (exceptionTags & ExceptionTypes.ArgumentNull) != 0;
-            int tagCount = argumentNull ? ExceptionTagsWasm.ArgumentNullTag + 1 :
+            bool synchronizationLock = (exceptionTags & ExceptionTypes.SynchronizationLock) != 0;
+            int tagCount = synchronizationLock ? ExceptionTagsWasm.SynchronizationLockTag + 1 :
+                argumentNull ? ExceptionTagsWasm.ArgumentNullTag + 1 :
                 argumentException ? ExceptionTagsWasm.ArgumentTag + 1 : invalidCast ? ExceptionTagsWasm.InvalidCastTag + 1 :
                 nullReference ? ExceptionTagsWasm.NullTag + 1 :
                 bounds ? ExceptionTagsWasm.IndexTag + 1 : divide ? ExceptionTagsWasm.DivideTag + 1 : overflow ? 1 : 0;
@@ -145,12 +147,13 @@ namespace PortableCompiler
             int exportCount = exports.Length + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0) +
                 (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) +
                 (nullReference ? 1 : 0) + (invalidCast ? 1 : 0) + (argumentException ? 1 : 0) + (objectTag ? 1 : 0) +
-                (argumentNull ? 1 : 0);
+                (argumentNull ? 1 : 0) + (synchronizationLock ? 1 : 0);
             int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
                 (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
                 (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0) +
                 (argumentException ? ExceptionTagsWasm.ArgumentExportSize : 0) + (objectTag ? ExceptionTagsWasm.ObjectExportSize : 0) +
-                (argumentNull ? ExceptionTagsWasm.ArgumentNullExportSize : 0);
+                (argumentNull ? ExceptionTagsWasm.ArgumentNullExportSize : 0) +
+                (synchronizationLock ? ExceptionTagsWasm.SynchronizationLockExportSize : 0);
             if (argumentArray != 0) exportSize += EntryArgumentsWasm.ExportBytes(builderIndex);
             int tagSize = 1 + (tagCount - (objectTag ? 1 : 0)) * (1 + UnsignedSize(tagType)) +
                 (objectTag ? 1 + UnsignedSize(objectTagType) : 0);
@@ -426,6 +429,7 @@ namespace PortableCompiler
             if (invalidCast) cursor = ExceptionTagsWasm.WriteInvalidCastExport(output, cursor);
             if (argumentException) cursor = ExceptionTagsWasm.WriteArgumentExport(output, cursor);
             if (argumentNull) cursor = ExceptionTagsWasm.WriteArgumentNullExport(output, cursor);
+            if (synchronizationLock) cursor = ExceptionTagsWasm.WriteSynchronizationLockExport(output, cursor);
             if (objectTag) cursor = ExceptionTagsWasm.WriteObjectExport(output, cursor);
 
             if (thunks[0] != 0)

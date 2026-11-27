@@ -58,3 +58,8 @@ deactivation, and the errors for a missing manifest and invalid flags.
 The managed probe also checks pinned addresses of blittable static structs.
 A direct managed store and a pointer store use the same stable linear-memory
 storage, including after a static initializer and across separate exports.
+
+The monitor probe checks the CLR's reentrant lock behavior on the launch
+worker's single managed execution agent. It verifies lockTaken and typed
+failure paths. Monitor wait and pulse and scheduling across multiple
+managed threads require separate support.

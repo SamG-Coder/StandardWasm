@@ -164,6 +164,8 @@ namespace PortableCompiler
             // Only an unmanaged pointer (a native int, decision 0060) addresses memory 0.
             // A proven null (NativeZero) spills as Native and raises NullReferenceException
             // at run time, as on the CLR. A managed byref stays a diagnostic.
+            if (kind == Monitor)
+                return depth > 0 && Assignable(stack[depth - 1], ObjectReference, objects) ? depth - 1 : -2;
             if (kind == Win32Error)
                 return PeLibrary.MarshalErrorMetadata.IsSetter(operand)
                     ? Match(stack, depth, I32) ? depth - 1 : -1
