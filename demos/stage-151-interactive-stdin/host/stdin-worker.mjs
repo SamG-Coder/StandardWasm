@@ -7,20 +7,22 @@ import { createLineInput } from "/stage-110-console-arguments/host/console-host.
 //   page -> worker: { start: selection }, { input: text }, { eof: true }
 //   worker -> page: { output: { stream, text } } as the program writes, then { result } or { error }
 const input = createLineInput();
-let pending = { 1: "", 2: "" }, scheduled = false;
+// One ordered queue across both streams: a write to the other stream starts a new chunk,
+// so stdout A, stderr B, stdout C stays three messages in that order (Codex review of
+// 26fc3a4). Only adjacent writes to the same stream are batched.
+let pending = [], scheduled = false;
 
 // Code units are batched per task so a prompt arrives before the read that follows it.
 function flush() {
     scheduled = false;
-    for (const stream of [1, 2]) {
-        if (!pending[stream]) continue;
-        self.postMessage({ output: { stream, text: pending[stream] } });
-        pending[stream] = "";
-    }
+    for (const chunk of pending) self.postMessage({ output: chunk });
+    pending = [];
 }
 
 function onWrite(stream, unit) {
-    pending[stream] += String.fromCharCode(unit);
+    const last = pending[pending.length - 1];
+    if (last && last.stream === stream) last.text += String.fromCharCode(unit);
+    else pending.push({ stream, text: String.fromCharCode(unit) });
     if (!scheduled) {
         scheduled = true;
         queueMicrotask(flush);

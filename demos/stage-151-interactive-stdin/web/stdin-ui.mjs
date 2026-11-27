@@ -10,6 +10,7 @@ const stdout = document.querySelector("#stdout"), stderr = document.querySelecto
 const input = document.querySelector("#input"), send = document.querySelector("#send"), eof = document.querySelector("#eof");
 const ticks = document.querySelector("#ticks");
 let selection, worker;
+const transcript = [];
 setInterval(() => { ticks.value = String(Number(ticks.value) + 1); }, 20);
 
 function show(state, text) {
@@ -56,6 +57,8 @@ run.addEventListener("click", () => {
             throw Error("Arguments must be a JSON array of strings.");
     } catch (error) { show("error", error.message); return; }
     stdout.textContent = stderr.textContent = "";
+    // The interleaved order of both streams as the worker delivered them (decision 0079).
+    transcript.length = 0;
     worker?.terminate();
     worker = new Worker("/stage-151-interactive-stdin/host/stdin-worker.mjs", { type: "module" });
     run.disabled = true;
@@ -67,7 +70,13 @@ run.addEventListener("click", () => {
         show(state, text);
     };
     worker.onmessage = ({ data }) => {
-        if (data.output) (data.output.stream === 1 ? stdout : stderr).textContent += data.output.text;
+        if (data.output) {
+            (data.output.stream === 1 ? stdout : stderr).textContent += data.output.text;
+            const last = transcript[transcript.length - 1];
+            if (last && last.stream === data.output.stream) last.text += data.output.text;
+            else transcript.push({ stream: data.output.stream, text: data.output.text });
+            document.querySelector("#transcript").textContent = JSON.stringify(transcript);
+        }
         else if (data.error) finish("error", data.error);
         else finish(data.result.state, JSON.stringify(data.result, null, 2));
     };

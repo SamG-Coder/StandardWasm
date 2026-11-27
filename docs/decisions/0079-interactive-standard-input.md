@@ -41,9 +41,16 @@ Engine requirements: Edge 158 runs JSPI unflagged. Node 24.19 needs
 - **Encoding.** Without a console, .NET decodes redirected stdin with the ANSI code
   page, as it does for output (decision 0039). The host decodes the same bytes with the
   same modelled encoding.
+  - Code page 1252 maps its five undefined bytes (0x81, 0x8D, 0x8F, 0x90, 0x9D) to the C1
+    code points of the same value in both directions, as .NET does.
+  - UTF-8 without a preamble keeps a leading EF BB BF as U+FEFF in the line.
+
+  Raw byte inputs check both properties as UTF-16 units (Codex review of 26fc3a4).
 - **Ordering.** Writes are synchronous host calls between suspensions, so prompts,
   submitted lines and output keep the program's order. The browser worker streams each
-  write to the page before the next read suspends.
+  write to the page before the next read suspends. It keeps one ordered queue across both
+  streams and merges only adjacent writes to the same stream, so stdout and stderr
+  transitions keep their order (Codex review of 26fc3a4).
 - **Exceptions.** A managed exception leaving the entry rejects the `promising` Promise
   with the same `WebAssembly.Exception`, and the launcher still reports it as unhandled.
 

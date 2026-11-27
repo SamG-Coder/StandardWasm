@@ -1,7 +1,7 @@
 # Stage 151 · Interactive standard input
 
-An ordinary .NET 10 console app prompts with `Console.Out.Write` and reads lines with
-`Console.ReadLine()` until EOF. For each line it writes `hello <line>`, or `(empty)` for an
+An ordinary .NET 10 console app prompts and reads lines with `Console.ReadLine()` until EOF. The
+prompt interleaves the streams: stdout `name`, stderr `!`, then stdout `? `. For each line it writes `hello <line>`, or `(empty)` for an
 empty line. At EOF it writes `eof` to stderr and returns:
 
     lines + 10 × empty lines + 100 × UTF-16 code units read
@@ -35,8 +35,10 @@ The inputs are:
 - `Grüße`, plus an emoji when the ANSI code page is UTF-8
 
 In Edge, the CRLF inputs are typed into the page one line at a time, each after its prompt
-appears, then closed with *End of input*. While each read waits, the page's own timer must
-keep ticking.
+appears, then closed with *End of input*. Before each read, the page must already show the
+prompt's three chunks in order (stdout, stderr, stdout). At the end, its stdout and stderr
+transcript must match the program's write order. While each read waits, the page's own timer
+must keep ticking.
 
 To use the page directly, run `node demos/stage-151-interactive-stdin/run.mjs --serve` after
 `npm test`. Drop the publish output, select **Run managed entry**, type lines, and select

@@ -19,6 +19,9 @@ function encodeWindows1252(units) {
     units.forEach((unit, index) => {
         let byte = -1;
         if (unit < 0x80 || unit >= 0xa0 && unit <= 0xff) byte = unit;
+        // .NET's code page 1252 round-trips the five undefined bytes as U+0081, U+008D,
+        // U+008F, U+0090 and U+009D (Codex review of 26fc3a4).
+        else if (unit >= 0x80 && unit <= 0x9f && windows1252High[unit - 0x80] === 0) byte = unit;
         else if (unit >= 0xd800 && unit <= 0xdfff) byte = 0x3f; // .NET writes '?' for each surrogate code unit.
         else if (windows1252High.includes(unit)) byte = 0x80 + windows1252High.indexOf(unit);
         // .NET applies Windows best-fit mappings to other characters. They are
@@ -42,14 +45,17 @@ const encoders = { "utf-8": encodeUtf8, "windows-1252": encodeWindows1252 };
 
 // Stage 151 (decision 0079): standard input. Console.InputEncoding follows the same
 // configuration as the output, so redirected stdin bytes decode as the CLR decodes them.
+// The five undefined bytes decode to the C1 code points of the same value, as in .NET.
 function decodeWindows1252(bytes) {
     let text = "";
     for (const byte of bytes)
-        text += String.fromCharCode(byte >= 0x80 && byte <= 0x9f ? windows1252High[byte - 0x80] || 0xfffd : byte);
+        text += String.fromCharCode(byte >= 0x80 && byte <= 0x9f ? windows1252High[byte - 0x80] || byte : byte);
     return text;
 }
 const decoders = {
-    "utf-8": bytes => new TextDecoder("utf-8").decode(bytes),
+    // A console encoding without a preamble keeps a leading EF BB BF as U+FEFF in the line,
+    // as .NET's Console.ReadLine does. TextDecoder would otherwise consume it.
+    "utf-8": bytes => new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes),
     "windows-1252": decodeWindows1252
 };
 
