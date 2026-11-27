@@ -240,3 +240,9 @@ calls `MulDiv`. The registry supplies the shared host lookup and dispatch
 primitives for the eventual compiler adapters.
 [CoreLib export QCall](https://github.com/dotnet/runtime/blob/v10.0.10/src/coreclr/System.Private.CoreLib/src/System/Runtime/InteropServices/NativeLibrary.CoreCLR.cs#L18-L30) ·
 [CoreCLR export implementation](https://github.com/dotnet/runtime/blob/v10.0.10/src/coreclr/vm/nativelibrary.cpp#L260-L281)
+
+The temp-path verifier also runs the original `Path.GetTempPath()` against a
+260-code-unit directory. The first 260-unit native buffer needs one more
+code unit for the terminator, so CoreLib grows its buffer and retries.
+Node and Edge compare the complete buffers from the two hosted exports
+against Windows on both sides of that boundary.

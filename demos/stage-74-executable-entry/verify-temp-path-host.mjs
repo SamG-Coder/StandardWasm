@@ -170,6 +170,12 @@ function exerciseRegistry(createRegistry, createTempPath, scalars, oracle) {
 
 const capacities = oracle.current.map(({ capacity }) => capacity);
 const node = exercise(createTempPathHost, oracle.path, capacities);
+const growthCapacities = oracle.growth.current.map(({ capacity }) => capacity);
+const nodeGrowth = exercise(createTempPathHost, oracle.growth.path, growthCapacities);
+assert.equal(oracle.growth.path.length, 260);
+assert.equal(oracle.growth.current.find(({ capacity }) => capacity === 260).count, 261);
+assert.deepEqual(nodeGrowth.legacy, oracle.growth.legacy);
+assert.deepEqual(nodeGrowth.current, oracle.growth.current);
 const nodeRegistry = exerciseRegistry(createDynamicLibraryHost, createTempPathHost, windowsScalars, oracle);
 assert.deepEqual(nodeRegistry.oracleShape, oracle.registry);
 const required = oracle.path.length + 1;
@@ -201,18 +207,22 @@ try {
         return route.fulfill({ contentType: "text/html", body: "<!doctype html>" });
     });
     await page.goto("http://127.0.0.1/");
-    const { edge, edgeRegistry } = await page.evaluate(async ({ source, registrySource, oracle, capacities }) => {
+    const { edge, edgeRegistry, edgeGrowth } = await page.evaluate(async ({ source, registrySource, oracle, capacities, growthCapacities }) => {
         const { createTempPathHost } = await import("/temp-path-host.mjs");
         const { createDynamicLibraryHost } = await import("/dynamic-library-host.mjs");
         const { windowsScalars } = await import("/native-imports.mjs");
+        const run = (0, eval)("(" + source + ")");
         return {
-            edge: (0, eval)("(" + source + ")")(createTempPathHost, oracle.path, capacities),
+            edge: run(createTempPathHost, oracle.path, capacities),
+            edgeGrowth: run(createTempPathHost, oracle.growth.path, growthCapacities),
             edgeRegistry: (0, eval)("(" + registrySource + ")")(createDynamicLibraryHost, createTempPathHost, windowsScalars, oracle)
         };
-    }, { source: exercise.toString(), registrySource: exerciseRegistry.toString(), oracle, capacities });
+    }, { source: exercise.toString(), registrySource: exerciseRegistry.toString(), oracle, capacities, growthCapacities });
     assert.deepEqual(edge, node);
     assert.deepEqual(edgeRegistry, nodeRegistry);
-    const results = { oracle, node, edge, nodeRegistry, edgeRegistry, nodeVersion: process.version, edgeVersion: browser.version() };
+    assert.deepEqual(edgeGrowth, nodeGrowth);
+    const results = { oracle, node, edge, nodeRegistry, edgeRegistry, nodeGrowth, edgeGrowth,
+        nodeVersion: process.version, edgeVersion: browser.version() };
     writeFileSync(join(evidence, "results.json"), JSON.stringify(results, null, 2) + "\n");
     console.log("Node and Edge matched " + capacities.length + " buffer cases for both Windows exports, including the system error slot and Unicode output.");
     console.log("Dynamic loading matched Windows lookup results and exercised typed dispatch, missing exports, and per-instance lifetimes.");
