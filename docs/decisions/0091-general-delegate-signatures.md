@@ -73,6 +73,10 @@ invocation lists. That lifts the type-identity and multicast limits below.
   bundle-wide, so they belong to the shared cross-assembly ABI (`IsSharedBundleType`). Value-type
   parameters and results are storable and pass as in an ordinary call, and thunk types use
   `ObjectLayouts.Representation` like every function signature. Interface types are separate work.
+- **MemberRef `ldftn`.** An `ldftn` whose token is a MemberRef (a method in another bundle
+  assembly, or a lambda in a closed generic class) resolves through `AssemblyBundle.Resolve` like a
+  non-virtual call. It then shares the MethodDef path's delegate-target checks
+  (`LinkFunctionPointer`). A virtual target stays -2.
 - **Not yet:** generic delegate TypeDefs, `ldvirtftn` targets, closed static targets, delegate
   equality, `Target`/`Method`, `BeginInvoke`/`EndInvoke` and interface-typed parameters. All are
   diagnosed.

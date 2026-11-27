@@ -88,5 +88,5 @@ try {
     }, null, 2) + "\n");
     console.log("Node " + process.version + " and Edge " + browser.version() + " matched " + node.length +
         " referenced-assembly delegate results from the x86 CLR " + oracle.runtime +
-        " (TypeRef delegates in both directions, nested value-type callbacks; casts diagnosed).");
+        " (TypeRef delegates in both directions, nested value-type callbacks, dependency and generic-lambda ldftn).");
 } finally { await browser.close(); }

@@ -22,6 +22,11 @@ CLR's value for every kernel:
 - app lambdas invoked by the dependency, and a dependency-built delegate invoked by the app
 - a nested `Native.EnumCallback(Handle, IntPtr) -> Flag` over wrapper structs, called back by a
   managed enumeration that stops when the callback returns 0
+- method groups that name a dependency method (`ldftn` of a MemberRef), and lambdas in a generic
+  class (`ldftn` of the closed closure type's MemberRef)
+
+`RejectVirtualDependencyTarget` must stay diagnosed, because a virtual method group compiles to
+`ldvirtftn` and needs virtual dispatch for its target.
 
 `CastFromObject` was diagnosed on Stage 220 itself. With Stage 221's nominal invocation lists
 (decision 0092) it returns the CLR's value. Native callbacks, which pass a managed delegate

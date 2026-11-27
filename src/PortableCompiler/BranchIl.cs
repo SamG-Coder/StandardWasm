@@ -389,9 +389,11 @@ namespace PortableCompiler
                         if (length - pc < 4) return -1;
                         uint token = ImageBytes.U32(image, (uint)(start + pc));
                         pc += 4;
-                        if (token >> 24 != 6) return -2;
+                        // A MethodDef row, or (negated) a MemberRef row: a method of another bundle
+                        // assembly or of a closed generic type, such as a lambda in a generic class.
+                        if (token >> 24 != 6 && token >> 24 != 0x0a) return -2;
                         kind = LoadFunction;
-                        operand = (int)(token & 0xffffff);
+                        operand = token >> 24 == 6 ? (int)(token & 0xffffff) : -(int)(token & 0xffffff);
                     }
                     else if (extended >= 0x09 && extended <= 0x0e)
                     {
