@@ -41,6 +41,10 @@ The bucket fixture saves a returned `ref int` in a managed local, rebinds an
 alias, and writes through it from another .NET Standard assembly. It compares
 array values, full-width arithmetic and typed null and bounds failures. It
 also checks the diagnostic for an exported managed address.
+The returned-location fixture carries a struct array element through a
+closed generic method in another assembly. It also borrows a reference
+array element, checks writes through returned aliases and earlier value
+copies, and covers typed bounds errors and exported byref rejection.
 
 The struct-array fixture takes two references to one closed generic element.
 It checks default slots, value copies, direct array stores, writes through

@@ -40,6 +40,9 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     entryFailures = inputs.Select(EntryArrayProbe.CheckEntryArrayFailure).ToArray(),
     bucketAliases = inputs.Select(BucketProbe.ReadManagedBuckets).ToArray(),
     bucketFailures = inputs.Select(BucketProbe.CheckBucketFailure).ToArray(),
+    returnedLocations = inputs.Select(ByRefReturnProbe.CheckReturnedLocations).ToArray(),
+    returnedLocationFailures = inputs.Select(ByRefReturnProbe.CheckReturnedLocationFailure).ToArray(),
+    locationExportDiagnostic = new[] { 0, typeof(ByRefReturnProbe).GetMethod(nameof(ByRefReturnProbe.RejectExportedLocation))!.MetadataToken & 0xffffff, -1 },
     bucketExportDiagnostic = new[] { 0, typeof(BucketProbe).GetMethod(nameof(BucketProbe.RejectExportedBucket))!.MetadataToken & 0xffffff, -1 },
     boxingDiagnostic = new[] { 0, generic.MetadataToken & 0xffffff, 1 }
 }));

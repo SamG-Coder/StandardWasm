@@ -240,8 +240,8 @@ namespace PortableCompiler
                     int location = ManagedReferenceSignatures.ReadLocation(bundle, image, methods, heap,
                         assembly, next, end, context, objects, methodArguments);
                     if (location < 0) return location;
-                    // Only array-backed Int32 references currently return through this ABI.
-                    if (!locals && i == 0 && location != Int32Location) return -2;
+                    // Internal calls return the tracked location itself. The
+                    // compiler entry-point check still rejects host byref exports.
                     cursor = next[0];
                     types[target] = location;
                 }

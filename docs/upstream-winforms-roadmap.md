@@ -150,8 +150,10 @@ against the final class layouts and preserves the tested reference.
 identity from an object reference. Plain objects, strings and observed
 primitive boxes use their own canonical descriptors. Arrays and other
 representations without exact runtime type identity remain outside this
-lookup. The startup replay reaches the by-reference `FindValue` call in
-`Dictionary.TryGetValue`.
+lookup. Internal calls now carry supported managed locations as results,
+which lets the replay bind the by-reference `FindValue` return in
+`Dictionary.TryGetValue`. The next diagnostic is the `Byte[]` type token
+in the original `Value.get_Type`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

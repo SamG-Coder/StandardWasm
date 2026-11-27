@@ -36,6 +36,10 @@ internal static class ValueConstructionCases
         Check(nameof(EntryArrayProbe.CheckEntryArrayFailure), EntryArrayProbe.CheckEntryArrayFailure);
         Check(nameof(BucketProbe.ReadManagedBuckets), BucketProbe.ReadManagedBuckets);
         Check(nameof(BucketProbe.CheckBucketFailure), BucketProbe.CheckBucketFailure);
+        Check(nameof(ByRefReturnProbe.CheckReturnedLocations), ByRefReturnProbe.CheckReturnedLocations);
+        Check(nameof(ByRefReturnProbe.CheckReturnedLocationFailure), ByRefReturnProbe.CheckReturnedLocationFailure);
+        MethodInfo exportedLocation = Method(nameof(ByRefReturnProbe.RejectExportedLocation));
+        Reject(exportedLocation, [0, Row(exportedLocation), -1]);
         MethodInfo exportedBucket = Method(nameof(BucketProbe.RejectExportedBucket));
         Reject(exportedBucket, [0, Row(exportedBucket), -1]);
 
@@ -82,7 +86,7 @@ internal static class ValueConstructionCases
         typeof(Kernels).GetMethod(name) ?? typeof(BucketProbe).GetMethod(name) ??
         typeof(EntryArrayProbe).GetMethod(name) ?? typeof(ClosedInterfaceProbe).GetMethod(name) ??
         typeof(ClosedClassProbe).GetMethod(name) ?? typeof(MutableReceiverProbe).GetMethod(name) ??
-        typeof(InterfaceCastProbe).GetMethod(name)!;
+        typeof(InterfaceCastProbe).GetMethod(name) ?? typeof(ByRefReturnProbe).GetMethod(name)!;
     private static int Row(MethodBase method) => method.MetadataToken & 0xffffff;
 
     private static byte[] Manifest(MethodBase method)

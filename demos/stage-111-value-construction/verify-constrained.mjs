@@ -76,6 +76,9 @@ async function verify(compiler, fixture, packed, containment, containmentPacked,
         frameworkReceivers: await runEntry("CheckFrameworkReceiver"),
         entryFailures: await runEntry("CheckEntryArrayFailure"),
         bucketAliases: await runEntry("ReadManagedBuckets"), bucketFailures: await runEntry("CheckBucketFailure"),
+        returnedLocations: await runEntry("CheckReturnedLocations"),
+        returnedLocationFailures: await runEntry("CheckReturnedLocationFailure"),
+        locationExportRejection: compileEntry("RejectExportedLocation"),
         bucketExportRejection: compileEntry("RejectExportedBucket"), rejection: compileEntry("RejectInheritedValueHash") };
     image = upload(containment);
     bundle = upload(containmentPacked);
@@ -109,6 +112,9 @@ const expected = {
     entryFailures: oracle.entryFailures,
     bucketAliases: oracle.bucketAliases,
     bucketFailures: oracle.bucketFailures,
+    returnedLocations: oracle.returnedLocations,
+    returnedLocationFailures: oracle.returnedLocationFailures,
+    locationExportRejection: { status: -2, diagnostic: oracle.locationExportDiagnostic },
     bucketExportRejection: { status: -2, diagnostic: oracle.bucketExportDiagnostic },
     rejection: { status: -2, diagnostic: oracle.boxingDiagnostic }
 };

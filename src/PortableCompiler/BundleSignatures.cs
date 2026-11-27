@@ -170,7 +170,7 @@ namespace PortableCompiler
                     int rightType = ManagedReferenceSignatures.ReadLocation(bundle, target, targetLayout, targetHeaps,
                         targetOwner, next, rightEnd, targetContext, objects);
                     if (leftType == -1) return -1;
-                    if (leftType < 0 || leftType != rightType || i == 0 && leftType != SignatureTypes.Int32Location) return 0;
+                    if (leftType < 0 || leftType != rightType) return 0;
                     right = next[0];
                 }
                 else if (element == 0x1b)
