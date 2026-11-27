@@ -4,6 +4,21 @@ namespace PeLibrary
 {
     internal static class NestedTypes
     {
+        // The enclosing TypeDef row of a nested type, or 0 for a top-level type (NestedClass, II.22.32).
+        internal static int Enclosing(byte[] image, int[] heaps, int[] methods, int[] counts, int child)
+        {
+            if (child < 1 || child > counts[2] || counts[41] == 0) return 0;
+            int table = MetadataTableRows.TableStart(heaps, methods, counts, 41);
+            if (table < 0) return 0;
+            int indexWidth = counts[2] < 65536 ? 2 : 4;
+            for (int row = 0; row < counts[41]; row++)
+            {
+                uint entry = (uint)(table + row * 2 * indexWidth);
+                if (Index(image, entry, indexWidth) == child) return Index(image, entry + (uint)indexWidth, indexWidth);
+            }
+            return 0;
+        }
+
         internal static bool IsDirectChild(byte[] image, int[] heaps, int[] methods, int[] counts, int child, int parent)
         {
             if (child < 1 || child > counts[2] || parent < 1 || parent > counts[2] || child == parent ||
