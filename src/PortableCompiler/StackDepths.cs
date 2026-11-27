@@ -61,6 +61,7 @@ namespace PortableCompiler
                 }
                 if (kind == Return)
                 {
+                    if (depth == 1 && stack[0] == ReadOnlyCharacterLocation) return -2;
                     if (result == Void ? depth != 0 : depth != 1 || !Assignable(stack[0], result, objects))
                         return -1;
                     continue;
@@ -230,7 +231,11 @@ namespace PortableCompiler
             int start = depth - arity + constructed;
             if (start < 0) return -1;
             for (int i = constructed; i < arity; i++)
-                if (!Assignable(stack[start + i - constructed], types[offset + 1 + i], objects)) return -1;
+            {
+                int argument = stack[start + i - constructed];
+                if (!Assignable(argument, types[offset + 1 + i], objects))
+                    return argument == ReadOnlyCharacterLocation ? -2 : -1;
+            }
             int result = types[offset + constructed];
             bool freshClass = constructed != 0 && result >= FirstClass && !IsValueType(objects, result);
             return result == Void ? start : Push(stack, allocated, start, StackType(result), freshClass);
@@ -247,6 +252,8 @@ namespace PortableCompiler
                 return Match(stack, depth, ReadOnlyByteSpan) ? Push(stack, allocated, depth - 1, StaticByteLocation) : -2;
             if (kind == TakeCharacterSpanLocation)
                 return Match(stack, depth, WritableCharacterSpan) ? Push(stack, allocated, depth - 1, CharacterLocation) : -2;
+            if (kind == TakeReadOnlyCharacterLocation)
+                return Match(stack, depth, CharacterSpan) ? Push(stack, allocated, depth - 1, ReadOnlyCharacterLocation) : -2;
             if (kind == OffsetStaticByteLocation || kind == OffsetCharacterLocation)
             {
                 int location = kind == OffsetCharacterLocation ? CharacterLocation : StaticByteLocation;
@@ -368,7 +375,7 @@ namespace PortableCompiler
             {
                 if (depth < 1) return -2;
                 int address = stack[depth - 1];
-                if (!IsNativeInteger(address) && (address != CharacterLocation || operand != 0x49) &&
+                if (!IsNativeInteger(address) && (address != CharacterLocation && address != ReadOnlyCharacterLocation || operand != 0x49) &&
                     (address != Int16Location || operand != 0x48) &&
                     (address != BooleanLocation && address != StaticByteLocation || operand != 0x47) &&
                     (address != Int32Location || operand != 0x4a && operand != 0x4b) &&
@@ -505,7 +512,8 @@ namespace PortableCompiler
             {
                 if (depth == 0) return -2;
                 int address = stack[depth - 1];
-                return IsNativeInteger(address) || extra != 0 && address == extra
+                return IsNativeInteger(address) || extra != 0 && address == extra ||
+                    address == ReadOnlyCharacterLocation && extra == CharacterLocation
                     ? Push(stack, allocated, depth - 1, I32) : -2;
             }
             if (kind == CallDynamicNative || kind == CallPinnedCharacterNative)
@@ -560,7 +568,7 @@ namespace PortableCompiler
                 // A pinned char& local can already hold an address produced by
                 // a string copy. A general managed UTF-16 alias still needs
                 // pinning semantics before it can be exposed to memory 0.
-                if (extra == PinnedLocals.Character && source == CharacterLocation) return -2;
+                if (source == ReadOnlyCharacterLocation || extra == PinnedLocals.Character && source == CharacterLocation) return -2;
                 return Assignable(source, frame[operand], objects) ? depth - 1 : -1;
             }
             if (kind == CheckedConversion)

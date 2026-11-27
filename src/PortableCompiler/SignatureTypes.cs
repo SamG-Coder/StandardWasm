@@ -14,15 +14,20 @@ namespace PortableCompiler
         internal const int ObjectLocation = 0x80, ObjectSpan = 0x81, CharacterSpan = 0x82;
         internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84, BooleanLocation = 0x86, StringLocation = 0x87;
         internal const int ReadOnlyByteSpan = 0x88, StaticByteLocation = 0x89, CharacterSpanCallback = 0x8a, Int32Location = 0x8b;
-        internal const int EventHandlerLocation = 0x8c, Int16Location = 0x8d, NativeIntLocation = 0x8e;
+        internal const int EventHandlerLocation = 0x8c, Int16Location = 0x8d, NativeIntLocation = 0x8e, ReadOnlyCharacterLocation = 0x8f;
         // Reference locations retain their nominal element type in the verifier,
         // even when their Wasm representation is the shared object cell.
         private const int ReferenceLocationBase = 32768;
         internal static bool IsManagedLocation(int type) =>
-            IsReferenceLocation(type) || IsPacked16Location(type) || type == BooleanLocation ||
+            IsReferenceLocation(type) || IsPacked16ReadLocation(type) || type == BooleanLocation ||
             type == StaticByteLocation || type == Int32Location || type == NativeIntLocation;
 
         internal static bool IsPacked16Location(int type) => type == CharacterLocation || type == Int16Location;
+
+        // A readonly span anchor uses the same Wasm carrier, with a distinct
+        // verifier type so it cannot become a writable managed argument.
+        internal static bool IsPacked16ReadLocation(int type) =>
+            IsPacked16Location(type) || type == ReadOnlyCharacterLocation;
 
         internal static bool IsReferenceLocation(int type) =>
             type == ObjectLocation || type == StringLocation || type == EventHandlerLocation ||

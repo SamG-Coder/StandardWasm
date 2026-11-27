@@ -424,11 +424,12 @@ namespace PortableCompiler
                     used = SpanWasm.FromStaticBytes(code, used, operand, records[slot + 3], records[slot + Width + 1]);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, ReadOnlyByteSpan, depth));
                 }
-                else if (kind == TakeStaticByteLocation || kind == TakeCharacterSpanLocation)
+                else if (kind == TakeStaticByteLocation || kind == TakeCharacterSpanLocation || kind == TakeReadOnlyCharacterLocation)
                 {
-                    bool characters = kind == TakeCharacterSpanLocation;
-                    int viewType = characters ? WritableCharacterSpan : ReadOnlyByteSpan;
-                    int locationType = characters ? CharacterLocation : StaticByteLocation;
+                    int viewType = kind == TakeCharacterSpanLocation ? WritableCharacterSpan :
+                        kind == TakeReadOnlyCharacterLocation ? CharacterSpan : ReadOnlyByteSpan;
+                    int locationType = kind == TakeCharacterSpanLocation ? CharacterLocation :
+                        kind == TakeReadOnlyCharacterLocation ? ReadOnlyCharacterLocation : StaticByteLocation;
                     int view = Spill(spills, maximum, spillFlags, viewType, top);
                     used = SpanWasm.TakeLocation(code, used, view, locationType);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, locationType, top));
@@ -944,7 +945,7 @@ namespace PortableCompiler
                     int address = Spill(spills, maximum, spillFlags, type, top);
                     used = Local(code, used, 0x20, address);
                     code[used++] = IsNativeInteger(type) ? (byte)0x45 : (byte)0xd1; // i32.eqz or ref.is_null
-                    if (IsPacked16Location(type))
+                    if (IsPacked16ReadLocation(type))
                         used = ManagedLocationWasm.TestCharacterAddress(code, used, address);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top));
                 }
@@ -1350,14 +1351,15 @@ namespace PortableCompiler
                 {
                     int type = states[state + top];
                     int address = Spill(spills, maximum, spillFlags, type, top);
-                    if (frameShape[25] != 0 && IsPacked16Location(type))
+                    bool packed = IsPacked16ReadLocation(type);
+                    if (frameShape[25] != 0 && packed)
                         used = NativeCharacterViewWasm.ReadLocation(code, used, address);
-                    else if (IsPacked16Location(type) || type == BooleanLocation || type == StaticByteLocation ||
+                    else if (packed || type == BooleanLocation || type == StaticByteLocation ||
                         type == Int32Location || type == NativeIntLocation)
                     {
                         int vector = type == NativeIntLocation ? NativeVector :
-                            type == Int32Location ? Ints : IsPacked16Location(type) ? Chars : Bytes;
-                        if (IsPacked16Location(type)) used = GuardNull(code, used, address);
+                            type == Int32Location ? Ints : packed ? Chars : Bytes;
+                        if (packed) used = GuardNull(code, used, address);
                         used = ValueFieldProjectionWasm.Read(code, used, frameShape[7], address, vector, type, projections);
                     }
                     else

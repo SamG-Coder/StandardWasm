@@ -74,9 +74,13 @@ namespace PortableCompiler
             int size = CompressedUnsigned(image, heaps[0] + signature, limit, next);
             int start = next[0];
             if (size <= 0 || size > limit - start) return 0;
-            if (marshal && (key == 3 || key == 5) && MatchesAscii(image, heaps, (uint)name, "GetReference") &&
-                IsSpanReference(image, layout, heaps, start, start + size, next, writable: key == 3))
-                return key == 3 ? TakeCharacterSpanLocation : TakeStaticByteLocation;
+            if (marshal && (key == 3 || key == 5) && MatchesAscii(image, heaps, (uint)name, "GetReference"))
+            {
+                if (IsSpanReference(image, layout, heaps, start, start + size, next, writable: key == 3))
+                    return key == 3 ? TakeCharacterSpanLocation : TakeStaticByteLocation;
+                if (key == 3 && IsSpanReference(image, layout, heaps, start, start + size, next, writable: false))
+                    return TakeReadOnlyCharacterLocation;
+            }
 
             if (!unsafeType) return 0;
             // static T& AddByteOffset<T>(T&, nint/nuint)
