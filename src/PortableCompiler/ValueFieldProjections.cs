@@ -122,11 +122,9 @@ namespace PortableCompiler
             next[0]++;
             int modifier = ReadFieldModifier(image, heaps, layout, next, end);
             if (modifier < 0) return modifier;
-            // IsVolatile orders the load or store through its IL prefix. The
-            // address still denotes the same field in the single-agent heap.
-            if (modifier != 0 && classStorage != I32 && classStorage != Unsigned8) return -2;
             if (classStorage != 0)
             {
+                if (modifier != 0 && classStorage != I32 && classStorage != Unsigned8) return -2;
                 int type = ManagedReferenceSignatures.Read(bundle, image, layout, heaps,
                     AssemblyOf(objects, owner), next, end, owner, objects, 0);
                 if (type < 0) return type;
@@ -145,6 +143,9 @@ namespace PortableCompiler
             int location = ManagedReferenceSignatures.ReadLocation(bundle, image, layout, heaps,
                 AssemblyOf(objects, owner), next, end, owner, objects);
             if (location < 0) return location;
+            // Taking an address does not perform a volatile load or store.
+            // Reuse the owner-carrying reference projection for value fields.
+            if (modifier != 0 && !IsReferenceLocation(location)) return -2;
             return next[0] == end && Kind(location) != 0 ? location : -2;
         }
     }

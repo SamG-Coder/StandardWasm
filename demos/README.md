@@ -327,6 +327,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [355 - Same-queue window sends](stage-355-send-message-timeout/README.md) | `npm run demo -- stage-355-send-message-timeout` | Compare synchronous SendMessageTimeoutW dispatch, output words, and last-error behavior |
 | [356 - Closed generic interface casts](stage-356-closed-interface-tests/README.md) | `npm run demo -- stage-356-closed-interface-tests` | Verify exact runtime membership of supported closed CoreLib interfaces |
 | [357 - COM class activation](stage-357-com-activation/README.md) | `npm run demo -- stage-357-com-activation` | Compare HRESULT, output pointers and typed vtable dispatch after class activation |
+| [358 · Volatile reference-field addresses](stage-358-volatile-reference-field-address/README.md) | `npm run demo -- stage-358-volatile-reference-field-address` | Compare array-rooted managed aliases to volatile reference fields |
 
 ## Adding a stage
 
