@@ -38,8 +38,10 @@ namespace PortableCompiler
                 sourceLayout, source, sourceHeaps, name, false);
             if (explicitSlot != 0) return explicitSlot < 0 ? explicitSlot : -2;
 
+            int declaredContext = HasArguments(objects, declared) ? declared : 0;
             symbol[0] = owner;
             symbol[1] = row;
+            if (symbol.Length > 2) symbol[2] = declaredContext;
             int declarationFlags = MethodDefinitions.ReadColumn(source, sourceLayout, row, 2);
             int declarationAccess = declarationFlags & 7;
             bool familySlot = declarationAccess == 4 || declarationAccess == 5;
@@ -52,6 +54,7 @@ namespace PortableCompiler
             {
                 int type = ancestors[i];
                 int targetOwner = AssemblyOf(objects, type), typeRow = TypeDef(objects, type);
+                int targetContext = HasArguments(objects, type) ? type : 0;
                 byte[] image = bundle.Get(targetOwner);
                 if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
                 explicitSlot = HasClassMethodImpl(bundle, objects, type, targetOwner, image, heaps, layout,
@@ -62,6 +65,7 @@ namespace PortableCompiler
                     if (!finalizer || final) return -2;
                     symbol[0] = targetOwner;
                     symbol[1] = explicitSlot;
+                    if (symbol.Length > 2) symbol[2] = targetContext;
                     final = (MethodDefinitions.ReadColumn(image, layout, explicitSlot, 2) & 0x20) != 0;
                 }
 
@@ -77,7 +81,8 @@ namespace PortableCompiler
                     if (!AssemblyReferences.SameString(source, sourceHeaps, name, image, heaps, candidateName)) continue;
                     int blob = MethodDefinitions.ReadColumn(image, layout, candidate, 4);
                     int match = BundleSignatures.Match(bundle, source, sourceLayout, sourceHeaps, owner,
-                        signature, image, layout, heaps, targetOwner, blob, false, objects);
+                        signature, image, layout, heaps, targetOwner, blob, false, objects, declaredContext,
+                        declaredContext != 0 || targetContext != 0 ? targetContext : -1);
                     if (match < 0) return match;
                     if (match == 0) continue;
                     if (selected != 0) return -5;
@@ -98,6 +103,7 @@ namespace PortableCompiler
                 if (final) return -2;
                 symbol[0] = targetOwner;
                 symbol[1] = selected;
+                if (symbol.Length > 2) symbol[2] = targetContext;
                 final = (flags & 0x20) != 0;
             }
             return 0;
@@ -116,6 +122,17 @@ namespace PortableCompiler
                 int coded = VirtualSlotMetadata.NextNamedMethodImplParent(image, heaps, layout, typeRow,
                     declaration, declarationHeaps, name, cursor, implementation);
                 if (coded <= 0) return coded;
+                if ((coded & 3) == 2)
+                {
+                    // A MethodImpl on a closed interface cannot replace a class slot.
+                    // A closed class remap is still diagnosed at its exact declaration.
+                    int declarationType = ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps,
+                        owner, coded >> 2, type, objects, null);
+                    if (declarationType < 0) return declarationType;
+                    for (int ancestor = type; ancestor >= FirstClass; ancestor = Parent(objects, ancestor))
+                        if (ancestor == declarationType) return finalizer ? -2 : 1;
+                    continue;
+                }
                 int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, coded, parent);
                 if (status < 0) return status == -1 ? -1 : -2;
 

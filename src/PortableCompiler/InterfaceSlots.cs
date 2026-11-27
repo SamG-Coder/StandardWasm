@@ -71,7 +71,7 @@ namespace PortableCompiler
                 // A final virtual implementation is already a concrete slot
                 // target. Only an overridable slot needs class dispatch.
                 if ((selectedFlags & 0x60) == 0x40)
-                    return bodyContext == 0 ? VirtualSlots.SelectVirtualBody(bundle, objects, receiver, true, type, targetOwner, selected, symbol) : -2;
+                    return VirtualSlots.SelectVirtualBody(bundle, objects, receiver, true, type, targetOwner, selected, symbol);
                 symbol[0] = targetOwner;
                 symbol[1] = selected;
                 if (symbol.Length > 2) symbol[2] = bodyContext;

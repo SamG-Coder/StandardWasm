@@ -38,5 +38,6 @@ instance members. The interface declaration and its body each keep their own
 closed type arguments during slot matching. A dispatcher is keyed by the
 closed interface as well as its member, so two instantiations of one interface
 on a single class select separate MethodImpl bodies. An overridable body on
-a closed generic class and calls to generic interface methods still require
-separate lowering. Stage 111 checks these bindings in Node and Edge.
+a closed generic class uses class-slot dispatch with the type arguments of
+each declaration and override. Calls to generic interface methods still
+require separate lowering. Stage 111 checks these bindings in Node and Edge.

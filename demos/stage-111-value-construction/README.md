@@ -57,3 +57,7 @@ generic implementer, polymorphic calls, and a typed null receiver failure.
 The primitive hash fixture invokes the original CoreLib `Int32` and `UInt32`
 `GetHashCode` overrides through constrained generic calls. It covers signed
 and unsigned values and reading the current `Int32` from an array reference.
+
+The closed class fixture dispatches through two generic instantiations and
+selects ordinary overrides and hidden slots. It also checks a virtual body
+reached through an interface and a typed null-receiver exception.

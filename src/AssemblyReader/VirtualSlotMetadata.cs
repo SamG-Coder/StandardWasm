@@ -83,10 +83,10 @@ namespace PeLibrary
                 // TypeDef and TypeRef use the same first two tags in
                 // MemberRefParent and TypeDefOrRef, with different widths.
                 int parentTag = parent & 7;
-                if (parentTag > 1) return -2;
+                if (parentTag > 1 && parentTag != 4) return -2;
                 int parentRow = parent >> 3;
-                if (parentRow < 1 || parentRow > counts[parentTag == 0 ? 2 : 1]) return -1;
-                return (parentRow << 2) | parentTag;
+                if (parentRow < 1 || parentRow > counts[parentTag == 4 ? 27 : parentTag == 0 ? 2 : 1]) return -1;
+                return (parentRow << 2) | (parentTag == 4 ? 2 : parentTag);
             }
             return 0;
         }

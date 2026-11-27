@@ -1842,7 +1842,6 @@ namespace PortableCompiler
                         // Keep callvirt's null check even when dispatch cannot select another body.
                         bool finalClosedMethod = targetContext > 0 && (symbol[4] & 0x20) != 0;
                         bool deferred = opcode == 0x6f && virtualMethod && !finalClosedMethod;
-                        if (deferred && targetContext != 0 && !ObjectLayouts.IsInterface(objects, targetContext)) return -2;
                         if (deferred || linked < 0)
                         {
                             byte[] targetImage = bundle.Get(targetOwner);

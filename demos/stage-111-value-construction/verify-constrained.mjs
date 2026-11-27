@@ -60,6 +60,7 @@ async function verify(compiler, fixture, packed, inputs) {
     const debuggerImports = { "standardwasm:runtime": { isDebuggerAttached: () => 0 } };
     const [debuggerStatus] = await runEntry("ReadManagedDebuggerStatus", debuggerImports, [undefined]);
     return { values: await runEntry("InvokeValueOverride"), typeBranches: await runEntry("CheckTypeBranches"), debuggerStatus,
+        closedClasses: await runEntry("CheckClosedClassSlots"), closedClassNull: await runEntry("CheckClosedClassNull"),
         closedInterfaces: await runEntry("CheckClosedInterface"), closedInterfaceNull: await runEntry("CheckClosedInterfaceNull"),
         primitiveHashes: await runEntry("CheckPrimitiveHash"),
         primitiveDescriptors: await runEntry("CheckPrimitiveDescriptors"),
@@ -74,6 +75,8 @@ const expected = {
     values: oracle.values,
     typeBranches: oracle.typeBranches,
     debuggerStatus: oracle.debuggerStatus,
+    closedClasses: oracle.closedClasses,
+    closedClassNull: oracle.closedClassNull,
     closedInterfaces: oracle.closedInterfaces,
     closedInterfaceNull: oracle.closedInterfaceNull,
     primitiveHashes: oracle.primitiveHashes,
