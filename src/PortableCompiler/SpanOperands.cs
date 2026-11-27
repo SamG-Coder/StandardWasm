@@ -8,7 +8,7 @@ namespace PortableCompiler
         // Neither accessor mutates the descriptor itself. A load can supply
         // its current value. A constructor initializes the destination slot.
         internal static int Bind(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
-            int context, int[] methodArguments, int[] records, int address, int spanType, int[] objects, int[] clauses,
+            int context, int[] methodArguments, int[] records, int address, int spanType, int[] objects, int[] clauses, int[] frame, int[] hostUse,
             int fieldCaller = 0)
         {
             bool field = fieldCaller != 0;
@@ -23,6 +23,63 @@ namespace PortableCompiler
                 records[call] = StringFromSpan;
                 records[call + 3] = spanType;
                 return 1;
+            }
+            if (spanType == SignatureTypes.CharacterSpan)
+            {
+                int copy = records[call] == Load ? Next(records, call, clauses) : -1;
+                if (records[call] == FrameAddress && frame[records[call + 1]] == SignatureTypes.WritableCharacterSpan)
+                {
+                    int index = Next(records, call, clauses);
+                    int slice = SliceWithSpanLength(bundle, image, layout, heaps, owner, context, methodArguments,
+                        records, index, frame, objects, clauses);
+                    if (slice >= 0) copy = Next(records, slice, clauses);
+                }
+                if (copy >= 0 && IsDirectMemberCall(records, copy) &&
+                    SpanMetadata.IsCharacterCopyTo(bundle, image, layout, heaps, owner, records[copy + 1],
+                        context, methodArguments, objects))
+                {
+                    records[address] = field ? GetField : Load;
+                    records[copy] = CopyCharacterSpan;
+                    return 1;
+                }
+            }
+            if (spanType == SignatureTypes.WritableCharacterSpan)
+            {
+                int slice = SliceWithSpanLength(bundle, image, layout, heaps, owner, context, methodArguments,
+                    records, call, frame, objects, clauses);
+                if (slice >= 0)
+                {
+                    // Taking the other descriptor's length cannot replace
+                    // the writable receiver or invalidate its backing owner.
+                    int size = records[call + 2] * Width;
+                    records[address] = field ? GetField : Load;
+                    records[call] = Load;
+                    records[size] = SpanLength;
+                    records[size + 3] = SignatureTypes.CharacterSpan;
+                    records[slice] = SpanSlice;
+                    records[slice + 1] = 1;
+                    records[slice + 3] = spanType;
+                    return 1;
+                }
+            }
+            if (!field && spanType == SignatureTypes.WritableCharacterSpan && records[call] == Load &&
+                SignatureTypes.IsNativeInteger(frame[records[call + 1]]))
+            {
+                int size = Next(records, call, clauses);
+                if (size >= 0 && (records[size] == Constant || records[size] == Load))
+                {
+                    int constructor = Next(records, size, clauses);
+                    if (constructor >= 0 && IsDirectMemberCall(records, constructor) &&
+                        SpanMetadata.ClassifySpanCall(bundle, image, layout, heaps, owner, records[constructor + 1],
+                            context, methodArguments, objects, constructor: true) == NativeCharacterSpan)
+                    {
+                        records[address] = Nop;
+                        records[constructor] = NativeCharacterSpan;
+                        records[constructor + 3] = records[address + 1] + 1;
+                        hostUse[0] |= WasmImports.NativeCharacterViews;
+                        return 1;
+                    }
+                }
             }
             int argument = call, lengthCall = -1;
             bool indexed = records[call] == Load || records[call] == Constant;
@@ -116,6 +173,21 @@ namespace PortableCompiler
                 records[lengthCall + 3] = spanType;
             }
             return 1;
+        }
+
+        private static int SliceWithSpanLength(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
+            int context, int[] methodArguments, int[] records, int index, int[] frame, int[] objects, int[] clauses)
+        {
+            if (index < 0 || records[index] != FrameAddress ||
+                frame[records[index + 1]] != SignatureTypes.CharacterSpan) return -1;
+            int size = Next(records, index, clauses);
+            if (size < 0 || !IsDirectMemberCall(records, size) ||
+                SpanMetadata.Accessor(bundle, image, layout, heaps, owner, records[size + 1],
+                    context, methodArguments, SignatureTypes.CharacterSpan, objects) != SpanLength) return -1;
+            int slice = Next(records, size, clauses);
+            return slice >= 0 && IsDirectMemberCall(records, slice) &&
+                SpanMetadata.IsSlice(bundle, image, layout, heaps, owner, records[slice + 1],
+                    context, methodArguments, SignatureTypes.WritableCharacterSpan, objects, 1) ? slice : -1;
         }
 
         // Track only values above the descriptor. Reads and integer operators

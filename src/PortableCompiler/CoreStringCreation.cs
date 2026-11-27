@@ -45,6 +45,7 @@ namespace PortableCompiler
         internal static void Lower(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
             int row, int[] contextArguments, int[] frame, int[] records, int[] objects, int[] clauses)
         {
+            LowerFreshStringSpan(bundle, image, layout, heaps, owner, frame, records, objects, clauses);
             if (contextArguments == null || contextArguments.Length != 1 || clauses.Length != 0 ||
                 records.Length != 59 * Width || frame[0] != I32 || frame[1] != Native ||
                 frame[2] != CharacterSpanCallback || frame[3] != String ||
@@ -74,6 +75,51 @@ namespace PortableCompiler
             records[5 * Width + 1] = ExceptionTagsWasm.ArgumentNullTag;
             records[25 * Width] = ThrowFrameworkArgument;
             records[25 * Width + 1] = ExceptionTagsWasm.ArgumentOutOfRangeTag;
+        }
+
+        // CoreLib constructs a writable view immediately after allocating its
+        // owner. Do not expose String's first field as a general writable byref.
+        private static void LowerFreshStringSpan(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
+            int[] frame, int[] records, int[] objects, int[] clauses)
+        {
+            for (int allocation = 0; allocation < records.Length; allocation += Width)
+            {
+                if (records[allocation] != Call || records[allocation + 3] != 0) continue;
+                int store = Next(records, allocation, Store, clauses);
+                if (store < 0) continue;
+                int local = records[store + 1];
+                if (frame[local] != String) continue;
+                int load = Next(records, store, Load, clauses);
+                if (load < 0 || records[load + 1] != local) continue;
+                int field = Next(records, load, FieldAddress, clauses);
+                if (field < 0 || records[field + 3] != 0) continue;
+                int lengthOwner = Next(records, field, Load, clauses);
+                if (lengthOwner < 0 || records[lengthOwner + 1] != local) continue;
+                int length = Next(records, lengthOwner, Call, clauses);
+                if (length < 0 || records[length + 3] != 1) continue;
+                int span = Next(records, length, MemberCall, clauses);
+                if (span < 0 || records[span + 3] != 0x73) continue;
+
+                var counts = new int[45];
+                int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+                if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts) ||
+                    !CoreStringRange.IsMethod(image, layout, heaps, counts, first, records[allocation + 1],
+                        "System", "String", "FastAllocateString", new byte[] { 0, 1, 0x0e, 0x18 }, true) ||
+                    !StringMetadata.IsFirstCodeUnitDefinition(image, heaps, layout, records[field + 1]) ||
+                    StringMetadata.AccessorDefinition(image, heaps, layout, records[length + 1]) != StringMetadata.Length ||
+                    !IsSpanConstructor(bundle, image, layout, heaps, owner, records[span + 1], objects)) continue;
+
+                records[allocation] = AllocateString;
+                records[field] = Nop;
+                records[span] = StringConstructionSpan;
+            }
+        }
+
+        private static int Next(int[] records, int slot, int kind, int[] clauses)
+        {
+            int pc = records[slot + 2], next = pc * Width;
+            return next > slot && next < records.Length && records[next] == kind &&
+                !ValueOperands.Entry(records, pc, clauses) ? next : -1;
         }
 
         private static bool IsArgumentThrow(byte[] image, int[] layout, int[] heaps, int[] counts, int first,

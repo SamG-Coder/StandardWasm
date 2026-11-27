@@ -113,7 +113,7 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int LinearAddress(byte[] code, int used, int view, int index)
+        internal static int LinearAddress(byte[] code, int used, int view, int index)
         {
             used = SpanWasm.LoadField(code, used, view, 1);
             used = Local(code, used, 0x20, index);

@@ -161,6 +161,21 @@ namespace PortableCompiler
             return at + 3;
         }
 
+        internal static bool IsCharacterCopyTo(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int member, int context, int[] methodArguments, int[] objects)
+        {
+            var reference = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadMember(image, heaps, layout, member, reference, allowClosedParent: true) < 0 ||
+                !MatchesAscii(image, heaps, (uint)reference[4], "CopyTo")) return false;
+            int parent = reference[AssemblyReferences.GenericParent];
+            if (parent == 0 || ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps, owner,
+                parent, objects, context, methodArguments) != CharacterSpan) return false;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, reference[5], 1, cursor);
+            return end >= 0 && SignatureReader.TakeElement(image, cursor, end, SignatureReader.Void) &&
+                OpenSpan(image, layout, heaps, cursor[0], end, cursor, true) == end;
+        }
+
         internal static bool IsSingleObjectConstructor(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int member, int context, int[] methodArguments, int[] objects)
         {

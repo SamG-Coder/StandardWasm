@@ -1119,6 +1119,13 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.InvalidCast;
                             else if (kind == BranchIl.NativeCharacterSpan || kind == BranchIl.SpanSlice)
                                 tags = ExceptionTypes.ArgumentOutOfRange;
+                            else if (kind == BranchIl.CopyCharacterSpan)
+                            {
+                                tags = ExceptionTypes.Argument;
+                                if ((hostFeatures & WasmImports.NativeCharacterViews) != 0) tags |= ExceptionTypes.NullReference;
+                                if (capacity > int.MaxValue - CharacterSpanCopyWasm.Capacity) return -3;
+                                capacity += CharacterSpanCopyWasm.Capacity;
+                            }
                             else if (kind == BranchIl.ArrayCopy)
                                 tags = ExceptionTypes.ArgumentNull | ExceptionTypes.ArgumentOutOfRange | ExceptionTypes.Argument;
                             else if (kind == BranchIl.ThrowFrameworkArgument)
@@ -1202,7 +1209,7 @@ namespace PortableCompiler
                         int kind = records[slot];
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
                             kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.StringFromSpan || kind == BranchIl.ConsoleWrite ||
-                            kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine) frameShape[5] |= 1;
+                            kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine || kind == BranchIl.CopyCharacterSpan) frameShape[5] |= 1;
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
@@ -1647,7 +1654,7 @@ namespace PortableCompiler
                     if (IsSpan(type))
                     {
                         int span = SpanOperands.Bind(bundle, image, layout, heaps, owner, context, methodArguments,
-                            records, slot, type, objects, clauses);
+                            records, slot, type, objects, clauses, frame, hostUse);
                         if (span < 0) return span;
                         if (span != 0) continue;
                     }
@@ -2043,7 +2050,7 @@ namespace PortableCompiler
                         if (ObjectLayouts.IsByRefLikeValue(objects, fieldOwner) && IsSpan(fieldStorage))
                         {
                             int span = SpanOperands.Bind(bundle, image, layout, heaps, owner, context, methodArguments,
-                                records, slot, fieldStorage, objects, clauses, fieldCaller: callerRow);
+                                records, slot, fieldStorage, objects, clauses, frame, hostUse, fieldCaller: callerRow);
                             if (span < 0) return span;
                             if (span != 0) continue;
                         }
@@ -2252,6 +2259,7 @@ namespace PortableCompiler
                         if (span == BranchIl.NativeCharacterSpan && opcode == 0x73)
                         {
                             records[slot] = span;
+                            records[slot + 3] = 0;
                             hostUse[0] = hostUse[0] | WasmImports.NativeCharacterViews;
                             continue;
                         }

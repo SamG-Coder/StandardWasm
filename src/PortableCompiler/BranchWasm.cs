@@ -515,6 +515,13 @@ namespace PortableCompiler
                     used = StringWasm.OpenConstructionSpan(code, used, Spill(spills, maximum, spillFlags, String, top - 1), spills + top);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, WritableCharacterSpan, top - 1));
                 }
+                else if (kind == CopyCharacterSpan)
+                {
+                    used = CharacterSpanCopyWasm.Copy(code, used,
+                        Spill(spills, maximum, spillFlags, CharacterSpan, top - 1),
+                        Spill(spills, maximum, spillFlags, WritableCharacterSpan, top),
+                        scratch + 3, scratch + 4, frameShape[25] != 0);
+                }
                 else if (kind == StringRange)
                 {
                     int source = Spill(spills, maximum, spillFlags, String, top - 2);
@@ -1197,7 +1204,9 @@ namespace PortableCompiler
                 {
                     used = NativeCharacterViewWasm.Create(code, used,
                         Spill(spills, maximum, spillFlags, Native, top - 1), Spill(spills, maximum, spillFlags, I32, top));
-                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, WritableCharacterSpan, top - 1));
+                    int destination = records[slot + 3];
+                    used = Local(code, used, 0x21, destination == 0
+                        ? Spill(spills, maximum, spillFlags, WritableCharacterSpan, top - 1) : destination - 1);
                 }
                 // A SpanAsReadOnly operation only changes the logical type.
                 // Both descriptors occupy the same Wasm spill bank.

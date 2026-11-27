@@ -311,7 +311,7 @@ namespace PortableCompiler
             }
             if (kind == NativeCharacterSpan)
                 return depth >= 2 && IsNativeInteger(stack[depth - 2]) && stack[depth - 1] == I32
-                    ? Push(stack, allocated, depth - 2, WritableCharacterSpan) : -2;
+                    ? extra == 0 ? Push(stack, allocated, depth - 2, WritableCharacterSpan) : depth - 2 : -2;
             if (kind == SpanAsReadOnly)
                 return Match(stack, depth, WritableCharacterSpan) ? Push(stack, allocated, depth - 1, CharacterSpan) : -2;
             if (kind == SpanAddress)
@@ -454,6 +454,8 @@ namespace PortableCompiler
             if (kind == JoinStrings)
                 return Match(stack, depth, String) && Match(stack, depth - 1, String)
                     ? Push(stack, allocated, depth - 2, String) : -1;
+            if (kind == CopyCharacterSpan)
+                return Match(stack, depth, WritableCharacterSpan) && Match(stack, depth - 1, CharacterSpan) ? depth - 2 : -2;
             if (kind == StringFromChars)
                 return Match(stack, depth, Chars) ? Push(stack, allocated, depth - 1, String) : -1;
             if (kind == StringFromSpan)
