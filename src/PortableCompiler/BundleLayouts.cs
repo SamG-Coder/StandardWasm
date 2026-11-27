@@ -206,6 +206,8 @@ namespace PortableCompiler
                 RuntimeTypeMetadata.Storage(image, heaps, layout, reference[0], reference[1] == 1) == RuntimeTypeMetadata.Type &&
                 RuntimeTypeFields.HasCanonicalInitializer(image, heaps, layout, readonlyInitializer, row))
                 storage = RuntimeTypeMetadata.Type;
+            else if (reference[0] != 0 && !staticField && bundle.TypeFields.UsesDescriptor(owner, row))
+                storage = RuntimeTypeMetadata.Type;
             else if (reference[0] != 0)
             {
                 bool valueType = reference[1] == 1;

@@ -167,6 +167,13 @@ namespace PortableCompiler
                     signatures, offsets, arities, objects);
                 if (next < 0)
                 {
+                    int field = records[slot + 3];
+                    if (depth > 0 && stack[depth - 1] == PeLibrary.RuntimeTypeMetadata.Type &&
+                        FieldAccess.Storage(field) >= FirstClass &&
+                        (kind == UpdateValue || kind == UpdateConstructorField ||
+                            kind == SetField && depth >= 2 &&
+                            Assignable(stack[depth - 2], FieldAccess.Owner(field), objects)))
+                        descriptorMismatch[4] = slot + 1;
                     if (kind == EqualRuntimeTypes && depth >= 2)
                     {
                         for (int index = depth - 1; index >= depth - 2; index--)
@@ -174,6 +181,11 @@ namespace PortableCompiler
                             if (stack[index] < FirstClass) continue;
                             int source = RuntimeTypeReturnDemand.Find(records, pc, index, depths, arities, frame,
                                 catchRegion, stack[index], signatures, offsets);
+                            if (source < -1)
+                            {
+                                descriptorMismatch[5] = -source - 1;
+                                break;
+                            }
                             if (source < 0) continue;
                             descriptorMismatch[2] = source + 1;
                             break;

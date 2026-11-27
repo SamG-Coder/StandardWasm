@@ -817,12 +817,26 @@ namespace PortableCompiler
                             arities, offsets, signatures, objects, functions, fixedObjects);
                         if (functions < 0) return functions;
                     }
-                    var descriptorMismatch = new int[4];
+                    var descriptorMismatch = new int[6];
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
                         result, signatures, offsets, arities, location, catchRegion, outgoingNulls, outgoingReferences, objects, virtualTypes, allocatedStates,
                         descriptorMismatch, contexts);
                     if (status < 0)
                     {
+                        int fieldSlot = descriptorMismatch[4] - 1;
+                        if (fieldSlot >= 0 && bundle.TypeFields.RequireInstance(bundle, image, heaps, layout,
+                            owner, source, objects, records[fieldSlot + 3], records[fieldSlot + 1], false))
+                        {
+                            features[0] = hostFeatures | hostUse[0];
+                            return Reemit;
+                        }
+                        int fieldRead = descriptorMismatch[5] - 1;
+                        if (fieldRead >= 0 && bundle.TypeFields.RequireInstance(bundle, image, heaps, layout,
+                            owner, source, objects, records[fieldRead + 3], records[fieldRead + 1], true))
+                        {
+                            features[0] = hostFeatures | hostUse[0];
+                            return Reemit;
+                        }
                         int virtualSlot = descriptorMismatch[3] - 1;
                         if (virtualSlot >= 0)
                         {
@@ -2201,6 +2215,9 @@ namespace PortableCompiler
                         ObjectLayouts.LayoutFieldType(objects, declaring, records[slot + 1] / ObjectLayouts.ExplicitSlotWidth) == ObjectReference)
                         return -2; // A shared reference slot has no nominal interface heap to cast to.
                     int storage = FieldAccess.Storage(descriptor);
+                    if (storage == RuntimeTypeMetadata.Type && kind == BranchIl.FieldAddress) return -2;
+                    if (storage == RuntimeTypeMetadata.Type && kind == BranchIl.SetField &&
+                        !RuntimeTypeFields.IsDeclaringConstructor(image, heaps, layout, owner, callerRow, objects, declaring)) return -2;
                     if (!ObjectLayouts.IsValueType(objects, declaring) && IsReferenceLocation(LocationFromIdentity(objects, storage)))
                     {
                         int assembly = ObjectLayouts.AssemblyOf(objects, declaring);
