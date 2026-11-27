@@ -298,11 +298,13 @@ namespace PortableCompiler
                     int import = Win32ModuleBinding.FindImport(image, heaps, layout, source, implementation);
                     if (import == 0) return -2;
                     hostUse[0] = hostUse[0] | WasmImports.Win32NativeFeature(import);
+                    if (Win32ModuleBinding.UsesLastError(import)) hostUse[0] = hostUse[0] | WasmImports.Win32Errors;
                     if (moduleCode.Length - length < Win32ModuleWasm.BodyCapacity) return -3;
                     bodyOffsets[current] = length;
                     int shape = offsets[current];
                     length = Win32ModuleWasm.WriteBody(moduleCode, length, signatures, shape, import,
-                        WasmImports.Win32NativeSlot(hostFeatures, import), hostImports, initializerPrologue);
+                        WasmImports.Win32NativeSlot(hostFeatures, import), hostImports, initializerPrologue,
+                        WasmImports.Win32ErrorBase(hostFeatures));
                     sizes[current] = length - bodyOffsets[current];
                     continue;
                 }

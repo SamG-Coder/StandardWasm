@@ -5,6 +5,12 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
+if (args.Length > 0 && args[0] == "window-long")
+{
+    Console.WriteLine(JsonSerializer.Serialize(WindowLongOracle.Run()));
+    return;
+}
+
 if (args.Length > 0 && args[0] == "dpi")
 {
     int[] contexts = [0, -1, -2, -3, -4, -5, -6];
@@ -85,6 +91,49 @@ Console.WriteLine(JsonSerializer.Serialize(new { executable, results, errors = n
 static extern nint Lookup(string? name);
 
 // Compare observable window state and the synchronous Win32 messages.
+static class WindowLongOracle
+{
+    internal static object Run()
+    {
+        const int style = unchecked((int)0x84000000); // WS_POPUP | WS_CLIPSIBLINGS
+        const int extendedStyle = 0x80;
+        var window = new System.Windows.Forms.NativeWindow();
+        window.CreateHandle(new System.Windows.Forms.CreateParams
+        {
+            ClassName = "STATIC", Style = style, ExStyle = extendedStyle, Width = 1, Height = 1
+        });
+        try
+        {
+            int[] indexes = [-16, -20, -21, -8, -12, -70, 0, -21];
+            int[][] narrow = indexes.Select(index => Query(window.Handle, index, 0)).ToArray();
+            int[][] pointer = new[] { -4, -6, -16, -70, -21 }.Select(index => Query(window.Handle, index, 1)).ToArray();
+            var child = new System.Windows.Forms.NativeWindow();
+            child.CreateHandle(new System.Windows.Forms.CreateParams
+            {
+                ClassName = "STATIC", Style = 0x40000000, Parent = window.Handle, Width = 1, Height = 1
+            });
+            int[] parent;
+            try { parent = Query(child.Handle, -8, 1); }
+            finally { child.DestroyHandle(); }
+            WindowEnabledProbe.WriteWindowEnabled(window.Handle, 0);
+            int[] disabled = Query(window.Handle, -16, 0);
+            nint destroyed = window.Handle;
+            window.DestroyHandle();
+            return new { style, extendedStyle, indexes, narrow, pointer, parent, disabled, destroyed = Query(destroyed, -16, 0) };
+        }
+        finally
+        {
+            if (window.Handle != 0) window.DestroyHandle();
+        }
+    }
+
+    private static int[] Query(nint handle, int index, int pointer)
+    {
+        int result = WindowLongProbe.ReadWindowLong(handle, index, pointer);
+        return [result, WindowLongProbe.ReadWindowLongError()];
+    }
+}
+
 static class WindowEnabledOracle
 {
     internal static object Run()

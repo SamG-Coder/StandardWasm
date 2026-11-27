@@ -74,6 +74,13 @@ notifications. The browser host keeps this state per application instance.
 [IsWindowEnabled](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-iswindowenabled)
 [EnableWindow](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enablewindow)
 
+Run `node demos/stage-74-executable-entry/verify-window-long.mjs` to compare
+`GetWindowLongW` and `GetWindowLongPtrW` with Windows. The probe covers styles,
+parent handles, zero-valued properties, invalid indices, destroyed windows, and
+the CLR's cached last-error value. It also checks zero-initialized extra window
+storage on the browser host.
+[GetWindowLongW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowlongw)
+
 The scoped-span fixture stores an array-backed `Span<char>` in a `ref struct`
 and copies the struct. Writes through the copy still reach the original array.
 The CLR, Node, and Edge compare the alias, the length of a default span, and

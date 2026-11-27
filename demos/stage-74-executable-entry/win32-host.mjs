@@ -42,6 +42,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
 
     let systemError = 0;
     let pinvokeError = 0;
+    const getWindowLong = (handle, index) => windows.getWindowLong(handle, index, value => { systemError = value; });
 
     function getModuleHandleW(pointer) {
         const address = pointer >>> 0;
@@ -81,6 +82,8 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         ...createDpiAwareness(value => { systemError = value; }),
         isWindowEnabled: handle => windows.isWindowEnabled(handle),
         enableWindow: (handle, enable) => windows.enableWindow(handle, enable),
+        getWindowLongW: getWindowLong,
+        getWindowLongPtrW: getWindowLong,
         getLastSystemError: () => systemError,
         setLastSystemError: value => { systemError = value | 0; },
         getLastPInvokeError: () => pinvokeError,

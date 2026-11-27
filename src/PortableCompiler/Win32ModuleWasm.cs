@@ -1,3 +1,4 @@
+using PeLibrary;
 using static PortableCompiler.BranchWasm;
 using static PortableCompiler.SignatureTypes;
 
@@ -36,13 +37,19 @@ namespace PortableCompiler
             return WasmBinary.Unsigned(output, cursor, type);
         }
 
-        internal static int WriteBody(byte[] code, int used, int[] types, int shape, int member, int import, int hostImports, int initializer)
+        internal static int WriteBody(byte[] code, int used, int[] types, int shape, int member, int import,
+            int hostImports, int initializer, int errorBase)
         {
             code[used++] = 0; // no declared locals
             if (initializer >= 0)
             {
                 code[used++] = 0x10;
                 used = WasmBinary.Unsigned(code, used, hostImports + initializer);
+            }
+            if (Win32ModuleBinding.UsesLastError(member))
+            {
+                used = Const(code, used, 0);
+                used = ErrorCall(code, used, errorBase, MarshalErrorMetadata.SetSystem);
             }
             int arity = Win32ModuleBinding.Arity(member);
             for (int parameter = 0; parameter < arity; parameter++)
@@ -59,10 +66,22 @@ namespace PortableCompiler
             }
             code[used++] = 0x10;
             used = WasmBinary.Unsigned(code, used, import);
+            if (Win32ModuleBinding.UsesLastError(member))
+            {
+                // The native return value stays below the error value on the stack.
+                used = ErrorCall(code, used, errorBase, MarshalErrorMetadata.GetSystem);
+                used = ErrorCall(code, used, errorBase, MarshalErrorMetadata.SetPInvoke);
+            }
             int result = types[shape];
             if (result != Void && !IsScalar(result)) used = Gc(code, used, 0, result);
             code[used++] = 0x0b;
             return used;
+        }
+
+        private static int ErrorCall(byte[] code, int used, int errorBase, int member)
+        {
+            code[used++] = 0x10;
+            return WasmBinary.Unsigned(code, used, errorBase + member - 1);
         }
     }
 }

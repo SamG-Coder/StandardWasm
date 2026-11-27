@@ -9,7 +9,8 @@ namespace PortableCompiler
             ActivateContext = 4, DeactivateContext = 5, ReleaseContext = 6,
             IsValidDpiContext = 7, SetProcessDpiContext = 8, SetLegacyDpi = 9, SetProcessAwareness = 10,
             GetThreadDpiContext = 11, EqualDpiContexts = 12, GetDpiAwareness = 13, IsProcessDpiAware = 14,
-            IsWindowEnabled = 15, EnableWindow = 16, Count = EnableWindow;
+            IsWindowEnabled = 15, EnableWindow = 16, GetWindowLong = 17, GetWindowLongPtr = 18,
+            Count = GetWindowLongPtr;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -19,14 +20,18 @@ namespace PortableCompiler
             member == SetProcessAwareness ? "SetProcessDpiAwareness" : member == GetThreadDpiContext ? "GetThreadDpiAwarenessContext" :
             member == EqualDpiContexts ? "AreDpiAwarenessContextsEqual" : member == GetDpiAwareness ? "GetAwarenessFromDpiAwarenessContext" :
             member == IsProcessDpiAware ? "IsProcessDPIAware" :
-            member == IsWindowEnabled ? "IsWindowEnabled" : "EnableWindow";
+            member == IsWindowEnabled ? "IsWindowEnabled" : member == EnableWindow ? "EnableWindow" :
+            member == GetWindowLong ? "GetWindowLongW" : "GetWindowLongPtrW";
 
         private static string Library(int member) => member <= ReleaseContext ? "KERNEL32.dll" :
             member == SetProcessAwareness ? "api-ms-win-shcore-scaling-l1-1-1.dll" : "USER32.dll";
 
         internal static int Arity(int member) =>
             member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ? 0 :
-            member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts || member == EnableWindow ? 2 : 1;
+            member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts || member == EnableWindow ||
+            UsesLastError(member) ? 2 : 1;
+
+        internal static bool UsesLastError(int member) => member == GetWindowLong || member == GetWindowLongPtr;
 
         internal static int FindImport(byte[] image, int[] heaps, int[] methods, int row, int implementation)
         {
@@ -34,15 +39,30 @@ namespace PortableCompiler
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return 0;
             for (int member = 1; member <= Count; member++)
-                if (NativeImports.Find(image, heaps, methods, counts, Library(member), EntryName(member), row, 0x101) == row)
+                if (UsesLastError(member) ? IsWindowLongImport(image, heaps, methods, counts, row, member) :
+                    NativeImports.Find(image, heaps, methods, counts, Library(member), EntryName(member), row, 0x101) == row)
                     return member;
             return 0;
+        }
+
+        private static bool IsWindowLongImport(byte[] image, int[] heaps, int[] methods, int[] counts, int row, int member)
+        {
+            // WinForms' generated declarations and ordinary exact-spelling P/Invokes
+            // use the same API and SetLastError ABI.
+            string entry = EntryName(member);
+            return NativeImports.Find(image, heaps, methods, counts, "user32.dll", entry, row, 0x140) == row ||
+                NativeImports.Find(image, heaps, methods, counts, "user32.dll", entry, row, 0x141) == row ||
+                NativeImports.Find(image, heaps, methods, counts, "USER32.dll", entry, row, 0x140) == row ||
+                NativeImports.Find(image, heaps, methods, counts, "USER32.dll", entry, row, 0x141) == row;
         }
 
         internal static bool MatchesSignature(BundleImages bundle, int[] objects, int member, int[] types, int offset, int arity)
         {
             if (arity != Arity(member)) return false;
             int result = types[offset];
+            if (UsesLastError(member))
+                return IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
+                    types[offset + 2] == I32 && (result == Native || member == GetWindowLong && result == I32);
             if (member == IsWindowEnabled || member == EnableWindow)
                 return IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
                     IsAbiShape(bundle, objects, result, I32, "BOOL") &&
