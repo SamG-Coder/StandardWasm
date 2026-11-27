@@ -292,11 +292,11 @@ namespace PortableCompiler
                     uint token = ImageBytes.U32(image, (uint)(start + pc));
                     pc += 4;
                     uint table = token >> 24;
-                    if (table != 1 && table != 2 && (table != 0x1b || op != 0x75)) return -2;
+                    if (table != 1 && table != 2 && table != 0x1b) return -2;
                     int row = (int)(token & 0xffffff);
                     if (row == 0) return -1;
                     kind = op == 0x74 ? CastClass : TestClass;
-                    operand = (row << 2) | (table == 1 ? 1 : table == 2 ? 0 : 2);
+                    operand = (row << 2) | (table == 0x1b ? 2 : table == 1 ? 1 : 0);
                 }
                 else if (op == 0x14) kind = NullLiteral;
                 else if (op == 0x7a) kind = ThrowNull; // Stack analysis verifies the operand.

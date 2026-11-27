@@ -1518,9 +1518,13 @@ namespace PortableCompiler
                     // These targets need reflection-aware casts before ordinary layout matching applies.
                     if (RuntimeTypeMetadata.RequiresReflectionCast(image, heaps, layout, records[slot + 1])) return -2;
                     int coded = records[slot + 1];
-                    int type = PlatformTypeReferences.IsString(image, heaps, layout, coded) ? String :
-                        BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
+                    int type = (coded & 3) == 2
+                        ? ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps, owner,
+                            coded >> 2, context, objects, methodArguments)
+                        : PlatformTypeReferences.IsString(image, heaps, layout, coded) ? String :
+                            BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
                     if (type < 0) return type;
+                    if (ObjectLayouts.IsValueType(objects, type)) return -2;
                     if (kind == BranchIl.CastClass && type == EventHandlerReference)
                         records[slot] = BranchIl.CastHandler;
                     else if (ObjectLayouts.IsInterface(objects, type))
