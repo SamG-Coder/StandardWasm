@@ -67,16 +67,23 @@ namespace PortableCompiler
                 new byte[] { 0x10, 1, 3, 1, 0x10, 0x1e, 0, 0x10, 0x1e, 0, 0x19 });
 
         private static bool IsCharacterMethod(byte[] image, int[] layout, int[] heaps, int[] counts, int first,
-            uint token, string space, string type, string name, byte[] signature)
+            uint token, string space, string type, string name, byte[] signature) =>
+            IsClosedMethod(image, layout, heaps, counts, first, token, space, type, name, new byte[] { 3 }, signature);
+
+        internal static bool IsClosedMethod(byte[] image, int[] layout, int[] heaps, int[] counts, int first,
+            uint token, string space, string type, string name, byte[] arguments, byte[] signature)
         {
             if (token >> 24 != 0x2b) return false;
             var spec = new int[MethodSpecifications.Width];
             if (MethodSpecifications.Read(image, heaps, layout, counts, (int)(token & 0xffffff), spec) < 0)
                 return false;
-            int target = spec[MethodSpecifications.Target], argument = spec[MethodSpecifications.Arguments];
-            return (target & 1) == 0 && spec[MethodSpecifications.Arity] == 1 &&
-                spec[MethodSpecifications.End] == argument + 1 && image[argument] == 3 &&
-                IsMethod(image, layout, heaps, counts, first, target >> 1, space, type, name, signature, true);
+            int target = spec[MethodSpecifications.Target], start = spec[MethodSpecifications.Arguments];
+            if ((target & 1) != 0 || spec[MethodSpecifications.Arity] != arguments.Length ||
+                spec[MethodSpecifications.End] - start != arguments.Length)
+                return false;
+            for (int i = 0; i < arguments.Length; i++)
+                if (image[start + i] != arguments[i]) return false;
+            return IsMethod(image, layout, heaps, counts, first, target >> 1, space, type, name, signature, true);
         }
 
         internal static bool IsMethod(byte[] image, int[] layout, int[] heaps, int[] counts, int first,

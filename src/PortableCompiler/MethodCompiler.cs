@@ -725,6 +725,8 @@ namespace PortableCompiler
                     else if (resourceOpen) status = ResourceOpenIl.Decode(image, body, records, location, parameters);
                     else if (parameters == 3 && locals == 1 && frame[parameters] == Native &&
                         CoreStringRange.Lower(image, layout, heaps, source, body, records)) status = 0;
+                    else if (parameters == 2 && locals == 0 && frame[0] == String && frame[1] == String &&
+                        CoreStringEquality.Lower(image, layout, heaps, source, body, records)) status = 0;
                     else if (parameters == 2 && locals == 0 && frame[0] == String &&
                         CoreStringSearch.Lower(image, layout, heaps, source, body, records)) status = 0;
                     else status = BranchIl.Decode(image, body[0], body[1], parameters, locals, records,
