@@ -4,4 +4,4 @@ The fixture uses an ordinary .NET executable and an independent .NET Standard de
 
 The Windows oracle expects 941 when the default identity is the entry executable from both assemblies, 947 when the dependency becomes the entry assembly and is then restored, and 953 after an explicit null override is read and restored.
 
-The unchanged standalone Blazor publish now gets through the original managed entry lookup and stops at the routing metadata attribute reader. The standalone parity fixture remains pending because the genuine CoreLib assembly type initializer reaches unrelated unsupported collection operations. It continues to require all three positive values.
+The unchanged standalone Blazor publish now gets through the original managed entry lookup and stops at the routing metadata attribute reader. The fixture follows the genuine CoreLib assembly type initializer and matches all three CLR results through StandardWasm in Node and Edge.
