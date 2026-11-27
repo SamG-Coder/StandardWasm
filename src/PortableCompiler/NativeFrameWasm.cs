@@ -50,7 +50,8 @@ namespace PortableCompiler
                 }
                 records[at] = BranchIl.LoadFrameLocation;
                 records[at + 3] = Native;
-                records[records[at + 2] * BranchIl.Width] = BranchIl.Nop;
+                int conversion = records[at + 2] * BranchIl.Width;
+                if (records[conversion] == BranchIl.ConvertInteger) records[conversion] = BranchIl.Nop;
             }
             return 0;
         }
@@ -58,9 +59,9 @@ namespace PortableCompiler
         private static bool ConvertsToPointer(int[] records, int at, int[] clauses)
         {
             int next = records[at + 2] * BranchIl.Width;
-            return next < records.Length && records[next] == BranchIl.ConvertInteger &&
-                (records[next + 1] == 0xe0 || records[next + 1] == 0xd3) &&
-                !ValueOperands.Entry(records, next / BranchIl.Width, clauses);
+            return next < records.Length && !ValueOperands.Entry(records, next / BranchIl.Width, clauses) &&
+                (records[next] == BranchIl.NativeFieldPointer || records[next] == BranchIl.ConvertInteger &&
+                (records[next + 1] == 0xe0 || records[next + 1] == 0xd3));
         }
 
         private static int At(int[] location, int record, int status)

@@ -505,7 +505,7 @@ namespace PortableCompiler
             if (kind == FunctionAddress) return Push(stack, allocated, depth, Native);
             // Unsafe.AsPointer preserves an address that already lives in memory 0.
             // A managed heap location requires separate pinning support.
-            if (kind == NativeAddressView)
+            if (kind == NativeAddressView || kind == NativeFieldPointer)
                 return depth > 0 && IsNativeInteger(stack[depth - 1]) ? depth : -2;
             if (kind == ReinterpretPacked16Location)
             {

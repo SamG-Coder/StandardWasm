@@ -6,7 +6,7 @@ namespace PortableCompiler
 {
     internal static class NativeAddressIntrinsics
     {
-        internal static int Identify(byte[] image, int[] layout, int[] heaps, int[] counts, int[] spec)
+        internal static int Identify(byte[] image, int[] layout, int[] heaps, int[] counts, int[] spec, bool readOnlyReference = false)
         {
             if (spec[MethodSpecifications.Arity] != 1) return 0;
             int target = spec[MethodSpecifications.Target], row = target >> 1;
@@ -33,6 +33,10 @@ namespace PortableCompiler
             uint at = (uint)(heaps[0] + signature);
             // Each signature includes its blob length and the generic calling convention.
             uint header = U32(image, at);
+            if (readOnlyReference)
+                return header == 0x01011009 && Fits((uint)signature, 10, (uint)heaps[1]) &&
+                    U32(image, at + 4) == 0x10001e10 && U16(image, at + 8) == 0x001e &&
+                    MatchesAscii(image, heaps, (uint)name, "AsRef") ? NativeAddressView : 0;
             if (header == 0x00011006 && U16(image, at + 4) == 0x1e10 && image[at + 6] == 0 &&
                 MatchesAscii(image, heaps, (uint)name, "NullRef")) return NullManagedLocation;
             if (header == 0x01011007 && Fits((uint)signature, 8, (uint)heaps[1]) &&

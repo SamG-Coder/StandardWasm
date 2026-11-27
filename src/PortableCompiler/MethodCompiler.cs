@@ -715,6 +715,9 @@ namespace PortableCompiler
                     virtualUsed[0] = 0;
                     var inlineLocations = new int[parameters + locals];
                     var frameCells = new int[parameters + locals];
+                    if (locals != 0)
+                        NativeAggregateFieldPointers.Lower(bundle, image, layout, heaps, owner, source, context,
+                            methodArguments, objects, globals, records, catchRegion, frame, parameters);
                     status = NativeFrameWasm.BindAddresses(bundle, objects, nativePlans, records, catchRegion,
                         frame, parameters, localElements, frameCells, location);
                     if (status < 0) return status;

@@ -1351,6 +1351,18 @@ namespace PortableCompiler
                     int source = Spill(spills, maximum, spillFlags, states[state + top], top);
                     used = ValueFieldProjectionWasm.Write(code, used, frameShape[7], address, source, operand, type, projections);
                 }
+                else if (kind == NativeFieldPointer)
+                {
+                    int address = Spill(spills, maximum, spillFlags, Native, top);
+                    used = LinearMemoryWasm.GuardNull(code, used, address);
+                    if (operand != 0)
+                    {
+                        used = Local(code, used, 0x20, address);
+                        used = Const(code, used, operand);
+                        code[used++] = 0x6a;
+                        used = Local(code, used, 0x21, address);
+                    }
+                }
                 else if (kind == LoadIndirect)
                 {
                     int type = states[state + top];
