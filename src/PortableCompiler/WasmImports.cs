@@ -21,7 +21,8 @@ namespace PortableCompiler
             (FirstNativeFeature << (Win32ModuleBinding.RegisterWindowMessage - 1)) |
             (FirstNativeFeature << (Win32ModuleBinding.GetWindowThreadProcessId - 1)) |
             (FirstNativeFeature << (Win32ModuleBinding.DuplicateHandle - 1)) |
-            (FirstNativeFeature << (Win32ModuleBinding.GetExitCodeThread - 1));
+            (FirstNativeFeature << (Win32ModuleBinding.GetExitCodeThread - 1)) |
+            (FirstNativeFeature << (Win32ModuleBinding.GetUserObjectInformation - 1));
 
         internal static long Win32NativeFeature(int member) => FirstNativeFeature << (member - 1);
 
