@@ -92,6 +92,8 @@ namespace PortableCompiler
         internal const int MathCall = 60;
         // #256 (Claude): reserved high so integration slices do not collide. Operand 1 negates.
         internal const int DelegateEquality = 401; // [Delegate, Delegate] -> [Boolean]
+        // #256 ldvirtftn (Claude): pops the dup'd object, null-checks it, pushes the thunk pointer.
+        internal const int LoadVirtualFunction = 402; // [object] -> [method pointer]
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
@@ -394,6 +396,17 @@ namespace PortableCompiler
                         if (token >> 24 != 6 && token >> 24 != 0x0a) return -2;
                         kind = LoadFunction;
                         operand = token >> 24 == 6 ? (int)(token & 0xffffff) : -(int)(token & 0xffffff);
+                    }
+                    else if (extended == 7)
+                    {
+                        // ldvirtftn: the MethodDef's override for the popped object (a MemberRef
+                        // target, a method of another assembly, stays a located diagnostic).
+                        if (length - pc < 4) return -1;
+                        uint token = ImageBytes.U32(image, (uint)(start + pc));
+                        pc += 4;
+                        if (token >> 24 != 6) return -2;
+                        kind = LoadVirtualFunction;
+                        operand = (int)(token & 0xffffff);
                     }
                     else if (extended >= 0x09 && extended <= 0x0e)
                     {

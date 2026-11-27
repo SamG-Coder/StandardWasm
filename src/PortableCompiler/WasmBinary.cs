@@ -215,7 +215,7 @@ namespace PortableCompiler
             {
                 int function = thunks[i + 1];
                 bool open = ThunkOpen(thunks, i, arities[function]);
-                int receiver = open ? 0 : types[offsets[function] + 1];
+                int receiver = open ? 0 : Representation(objects, types[offsets[function] + 1]);
                 int thunkSize = ThunkSize(receiver, hostImports + function, arities[function], open);
                 if (1 + thunkSize > output.Length - codeSize ||
                     UnsignedSize(hostImports + functions + i) > output.Length - elementSize)
@@ -582,16 +582,21 @@ namespace PortableCompiler
             {
                 int function = thunks[i + 1], arity = arities[function];
                 bool open = ThunkOpen(thunks, i, arity);
-                int receiver = open ? 0 : types[offsets[function] + 1];
+                int receiver = open ? 0 : Representation(objects, types[offsets[function] + 1]);
                 cursor = Unsigned(output, cursor, ThunkSize(receiver, hostImports + function, arity, open));
                 output[cursor++] = 0; // local declarations
                 if (!open)
                 {
                     output[cursor++] = 0x20;
                     output[cursor++] = 0;
-                    output[cursor++] = 0xfb;
-                    output[cursor++] = 22; // ref.cast to the target's concrete receiver
-                    cursor = Signed(output, cursor, HeapType(receiver));
+                    // An interface receiver is an eqref parameter (ObjectLayouts.Representation), so the
+                    // target passes as it is; a class receiver is cast to its concrete struct.
+                    if (receiver != ObjectReference)
+                    {
+                        output[cursor++] = 0xfb;
+                        output[cursor++] = 22; // ref.cast to the target's concrete receiver
+                        cursor = Signed(output, cursor, HeapType(receiver));
+                    }
                 }
                 // A static target ignores the thunk's leading target parameter.
                 for (int argument = 1; argument < (open ? arity + 1 : arity); argument++)
@@ -675,7 +680,7 @@ namespace PortableCompiler
 
         private static int ThunkSize(int receiver, int function, int arity, bool open) =>
             open ? 3 + 2 * arity + UnsignedSize(function) :
-            7 + HeapTypeSize(HeapType(receiver)) + 2 * (arity - 1) + UnsignedSize(function);
+            (receiver == ObjectReference ? 5 : 7 + HeapTypeSize(HeapType(receiver))) + 2 * (arity - 1) + UnsignedSize(function);
 
         private static int Reserve(int remaining, int size)
         {

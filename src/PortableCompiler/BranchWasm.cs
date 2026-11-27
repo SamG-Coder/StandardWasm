@@ -626,6 +626,14 @@ namespace PortableCompiler
                         text ? Spill(spills, maximum, spillFlags, states[state + top], top) : 0,
                         scratch, scratch + 3, scratch + 4);
                 }
+                else if (kind == LoadVirtualFunction)
+                {
+                    // ldvirtftn on a null object raises NullReferenceException, as on the CLR. The
+                    // thunk (linked to the method's dispatcher) selects the override at invocation.
+                    used = GuardNull(code, used, Spill(spills, maximum, spillFlags, states[state + top], top));
+                    used = Const(code, used, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, MethodPointer, top));
+                }
                 else if (kind == LoadFunction)
                 {
                     used = Const(code, used, operand);
@@ -635,7 +643,8 @@ namespace PortableCompiler
                 {
                     int receiver = records[slot + 3];
                     int closureType = operand;
-                    int target = Spill(spills, maximum, spillFlags, receiver, top - 1);
+                    // The target's own stack type may be a subclass of the receiver (StackDepths).
+                    int target = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);
                     // A static callback carries a null target. An instance callback
                     // uses the receiver validated by the delegate construction rule.
                     if (receiver != NullValue) used = GuardNull(code, used, target, ExceptionTagsWasm.ArgumentTag);

@@ -728,7 +728,7 @@ namespace PortableCompiler
                             parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                             bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
                             initializers, reflection, typeCalls, instantiations, methodArguments, inlineLocations, frameCells, parameters, signatures[signature],
-                            nativePlans, addressedFields, booleanLocals, pointers, finalizers, tracksFinalizers);
+                            nativePlans, addressedFields, booleanLocals, pointers, finalizers, tracksFinalizers, dispatch);
                         if (functions == Reemit)
                         {
                             // Allocation can precede the first reachable suppression call.
@@ -1133,6 +1133,8 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.Overflow;
                             else if (kind == BranchIl.NewDelegate)
                                 tags = ExceptionTypes.Argument;
+                            else if (kind == BranchIl.LoadVirtualFunction)
+                                tags = ExceptionTypes.NullReference;
                             else if (kind == BranchIl.UnboxValue || kind == BranchIl.UnboxAggregate || kind == BranchIl.UnboxAggregateAddress)
                                 tags = ExceptionTypes.InvalidCast | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.CastClass || kind == BranchIl.CastHandler)
@@ -1477,7 +1479,7 @@ namespace PortableCompiler
             MethodInstantiations instantiations, int[] methodArguments,
             int[] inlineLocations, int[] frameCells, int parameterCount, int result, NativeAggregatePlans nativePlans,
             AddressedFields addressedFields, byte[] booleanLocals,
-            FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers)
+            FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers, VirtualDispatch dispatch)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             bool classConstructor = context != 0 && callerReceiver == context && !ObjectLayouts.IsValueType(objects, context) &&
@@ -2354,6 +2356,68 @@ namespace PortableCompiler
                     if (linkedPointer < 0) return linkedPointer;
                     continue;
                 }
+                // #256 ldvirtftn: `dup; ldvirtftn M; newobj D::.ctor`. The delegate's target is the
+                // object ldvirtftn consumed (the dup), so the thunk can dispatch on the target. A final
+                // or non-virtual M binds directly; otherwise the thunk calls M's dispatch site for M's
+                // declaring class, whose arms VirtualDispatch.Expand fills with every allocated override,
+                // exactly as for callvirt. Generic virtual methods stay diagnosed.
+                if (kind == BranchIl.LoadVirtualFunction)
+                {
+                    int method = records[slot + 1];
+                    if (method < 1 || method > bases[owner + 1] - bases[owner]) return -1;
+                    int previous = -1;
+                    for (int at = 0, guard = 0; at < slot && guard < records.Length; at = records[at + 2] * BranchIl.Width, guard++)
+                    {
+                        if (records[at + 2] * BranchIl.Width == slot) { previous = at; break; }
+                        if (records[at + 2] * BranchIl.Width <= at) break;
+                    }
+                    if (previous < 0 || records[previous] != BranchIl.Dup) return -2;
+                    int attributes = MethodDefinitions.ReadColumn(image, layout, method, 2);
+                    if ((attributes & 0x10) != 0) return -2; // a static method is invalid ldvirtftn IL
+                    int virtualIndex;
+                    if ((attributes & 0x40) == 0 || (attributes & 0x20) != 0)
+                    {
+                        virtualIndex = Lookup(owners, rows, contexts, bases, indices, functions, owner, method, 0);
+                        if (virtualIndex < 0)
+                        {
+                            functions = Register(bundle, image, layout, heaps, owner, method, 0, owners, rows, contexts, bases, indices,
+                                arities, offsets, signatures, objects, functions, allowVirtual: true);
+                            if (functions < 0) return functions;
+                            virtualIndex = functions - 1;
+                        }
+                    }
+                    else
+                    {
+                        int staged = StageVirtualCall(bundle, image, layout, heaps, owner, method,
+                            objects, records, slot, virtualTypes, virtualUsed, typeCalls);
+                        if (staged < 0) return staged;
+                        int shape = records[slot + 1], arity = records[slot + 3];
+                        records[slot] = BranchIl.LoadVirtualFunction;
+                        int receiverClass = virtualTypes[shape + 1];
+                        if (receiverClass < ObjectLayouts.FirstClass) return -2;
+                        virtualIndex = dispatch.Add(functions, owner, method, receiverClass, receiverClass, owner, callerRow, slot / BranchIl.Width);
+                        if (virtualIndex < 0) return virtualIndex;
+                        if (virtualIndex == functions)
+                        {
+                            if (functions >= rows.Length) return -3;
+                            int offset = NextSignature(offsets, arities, functions);
+                            if (arity >= signatures.Length - offset) return -3;
+                            arities[functions] = arity;
+                            offsets[functions] = offset;
+                            for (int i = 0; i <= arity; i++) signatures[offset + i] = virtualTypes[shape + i];
+                            functions++;
+                        }
+                    }
+                    int virtualSignature = offsets[virtualIndex];
+                    bool virtualReceiver = arities[virtualIndex] > 0 &&
+                        StackType(signatures[virtualSignature + 1]) >= ObjectLayouts.FirstClass;
+                    int linkedVirtual = LinkFunctionPointer(bundle, image, heaps, layout, owner, records, slot, virtualIndex,
+                        true, virtualReceiver, virtualSignature, arities, signatures, thunks, context, methodArguments, objects, pointers);
+                    if (linkedVirtual < 0) return linkedVirtual;
+                    // A delegate needs it; a bare ldvirtftn function pointer stays diagnosed.
+                    if (records[slot] != BranchIl.LoadVirtualFunction) return -2;
+                    continue;
+                }
                 // Validate direct MethodDef operands before framework recognizers inspect their rows.
                 int target = records[slot + 1];
                 if ((kind == BranchIl.Call || kind == BranchIl.NewObject || kind == BranchIl.LoadFunction) &&
@@ -2740,14 +2804,16 @@ namespace PortableCompiler
                     }
                     int pointer = slot - 6 * BranchIl.Width;
                     if ((constructorType == Delegate && delegateMember != DelegateMetadata.Construct) || opcode != 0x73 || pointer < 0 ||
-                        records[pointer] != BranchIl.LoadFunction || records[pointer + 2] != slot / BranchIl.Width)
+                        records[pointer] != BranchIl.LoadFunction && records[pointer] != BranchIl.LoadVirtualFunction ||
+                        records[pointer + 2] != slot / BranchIl.Width)
                         return -2;
                     records[slot] = BranchIl.NewDelegate;
                     records[slot + 1] = constructorType;
                     records[slot + 3] = records[pointer + 3];
                     continue;
                 }
-                if (kind != BranchIl.Call && kind != BranchIl.NewObject && kind != BranchIl.LoadFunction)
+                if (kind != BranchIl.Call && kind != BranchIl.NewObject && kind != BranchIl.LoadFunction &&
+                    kind != BranchIl.LoadVirtualFunction)
                     continue;
                 if (kind != BranchIl.LoadFunction)
                 {
@@ -2771,7 +2837,8 @@ namespace PortableCompiler
                         // ldftn (or ldvirtftn's absence: the pointer must be an ldftn) then newobj, as for
                         // the platform delegates; the ldftn linking checked the target's signature.
                         int pointer = slot - 6 * BranchIl.Width;
-                        if (kind != BranchIl.NewObject || pointer < 0 || records[pointer] != BranchIl.LoadFunction ||
+                        if (kind != BranchIl.NewObject || pointer < 0 ||
+                            records[pointer] != BranchIl.LoadFunction && records[pointer] != BranchIl.LoadVirtualFunction ||
                             records[pointer + 2] != slot / BranchIl.Width)
                             return -2;
                         records[slot] = BranchIl.NewDelegate;
