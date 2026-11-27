@@ -147,6 +147,15 @@ namespace PortableCompiler
             }
             bool overlay = ObjectLayouts.IsExplicitValue(objects, type);
             bool byRefLike = ObjectLayouts.IsByRefLikeValue(objects, type);
+            if (overlay)
+            {
+                int size = ExplicitValueLayouts.ReadFieldlessSize(image, heaps, layout,
+                    ObjectLayouts.TypeDef(objects, type), table, first, fields);
+                if (size < 0) return size;
+                // Padding has no managed fields. Keep an empty nominal GC type
+                // and leave addressable byte storage to the separate native layout path.
+                if (size > 0) return ObjectLayouts.SetExplicitSlots(objects, type, new int[0], 0) ? type : -3;
+            }
             int[] offsets = new int[overlay ? fields : 0];
             int limit = overlay ? ExplicitValueLayouts.Read(image, heaps, layout, ObjectLayouts.TypeDef(objects, type), first, offsets) : 0;
             if (limit == -2)
