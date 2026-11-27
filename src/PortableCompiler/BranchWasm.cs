@@ -27,6 +27,7 @@ namespace PortableCompiler
             // Stage 137 (decision 0065): a frame that uses localloc owns a slice of the shadow stack.
             int stackPointer = frameShape[16] - 1, stackBase = frameShape[17] - 1, stackLimit = frameShape[18] - 1;
             int resourceFunction = frameShape[19] - 1;
+            int staticRegion = frameShape[21] - 1, staticPages = frameShape[22];
             bool hasNull = outgoingNulls.Length != 0;
             int spillFlags = 0;
             // Only verified stack types need banks. Unused view types must not
@@ -46,7 +47,7 @@ namespace PortableCompiler
             int spills = arguments + locals + (hasNull ? 1 : 0);
             int fixedLocals = spills + classes + (stringScratch ? 5 : 0) +
                 (eventScratch ? 6 : 0) + (resourceFunction >= 0 ? 7 : 0) + 1 + 2 * exceptionLocals + continuations +
-                (stackPointer >= 0 ? 1 : 0);
+                (stackPointer >= 0 ? 1 : 0) + (staticRegion >= 0 ? 1 : 0);
             if (fixedLocals > MaxLocals || maximum > (MaxLocals - fixedLocals) / spillKinds) return -2;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
@@ -59,9 +60,11 @@ namespace PortableCompiler
             int objectBase = continuationBase + continuations;
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
                 (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
-                (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0));
+                (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0) +
+                (staticRegion >= 0 ? 1 : 0));
             // The saved shadow-stack pointer follows every other local.
             int stackFrame = objectBase + exceptionLocals;
+            int staticAddress = stackFrame + (stackPointer >= 0 ? 1 : 0);
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < arguments + locals; i++)
             {
@@ -135,6 +138,11 @@ namespace PortableCompiler
                 code[used++] = ExceptionDispatchWasm.ObjectReference;
             }
             if (stackPointer >= 0)
+            {
+                code[used++] = 1;
+                code[used++] = 0x7f;
+            }
+            if (staticRegion >= 0)
             {
                 code[used++] = 1;
                 code[used++] = 0x7f;
@@ -785,6 +793,32 @@ namespace PortableCompiler
                         if (operand == 0x56 && value == F64) code[used++] = 0xb6; // f32.demote_f64
                         if (operand == 0x57 && value == F32) code[used++] = 0xbb; // f64.promote_f32
                         used = LinearMemoryWasm.Store(code, used, operand);
+                    }
+                }
+                else if (kind == StaticFieldAddress || kind == LoadNativeStatic || kind == StoreNativeStatic)
+                {
+                    int type = records[slot + 3];
+                    int plan = records[slot + Width + 1], offset = records[slot + Width + 2];
+                    used = TypeInitializerWasm.Trigger(code, used, fieldInitializers, operand, hostImports);
+                    used = NativeStaticWasm.Address(code, used, staticRegion, staticPages, offset, staticAddress);
+                    if (kind == StaticFieldAddress)
+                    {
+                        used = Local(code, used, 0x20, staticAddress);
+                        used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, Native, depth));
+                    }
+                    else if (kind == LoadNativeStatic)
+                    {
+                        used = NativeAggregates.Load(code, used, nativePlans, plan, staticAddress, 0);
+                        used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, type, depth));
+                    }
+                    else
+                    {
+                        int value = Spill(spills, maximum, spillFlags, type, top);
+                        if (states[state + top] == NullValue) used = ValueFieldsWasm.Clear(code, used, type, value);
+                        used = ValueFieldsWasm.Materialize(code, used, type, value);
+                        used = Local(code, used, 0x21, value);
+                        used = NativeAggregates.Store(code, used, nativePlans, objects, plan, staticAddress, 0,
+                            value, spills, maximum, spillFlags, top);
                     }
                 }
                 else if (kind == LoadStaticField)

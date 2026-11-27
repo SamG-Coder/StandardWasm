@@ -141,7 +141,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
 
     const fixture = upload(fixtureBytes);
     const encoder = new TextEncoder();
-    const names = ["Exchange", "Read", "LookupModule", "Create", "Lifecycle", "PointerRoundTrip"].map(name => encoder.encode(name));
+    const names = ["Exchange", "Read", "LookupModule", "Create", "Lifecycle", "PointerRoundTrip", "Alias", "Sum"].map(name => encoder.encode(name));
     const manifest = new Uint8Array(names.reduce((size, name) => size + 8 + name.length, 0));
     const view = new DataView(manifest.buffer);
     let offset = 0;
@@ -174,14 +174,15 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
         return [handle === -1 ? -1 : handle > 0 ? 1 : 0, exports.Read()];
     });
     const pointers = [0, -1, 123].flatMap(value => [exports.PointerRoundTrip(value, 0), exports.PointerRoundTrip(value, 1)]);
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers };
+    const staticPin = [exports.Sum(), exports.Alias(2), exports.Sum(), exports.Alias(9), exports.Sum()];
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin };
 }
 
 const oracle = JSON.parse(execFileSync("dotnet", ["run", "--file",
     fileURLToPath(new URL("./Win32HostOracle.cs", import.meta.url))], { encoding: "utf8" }));
 const compilerPath = process.argv[2];
 const framework = { name: basename(oracle.framework), bytes: readFileSync(oracle.framework) };
-const expectedCompiler = { legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle, pointers: oracle.compiledPointers };
+const expectedCompiler = { legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle, pointers: oracle.compiledPointers, staticPin: oracle.compiledStaticPin };
 let compilerBytes, fixtureBytes;
 if (compilerPath) {
     execFileSync("dotnet", ["build", fileURLToPath(new URL("./Win32Fixture", import.meta.url)), "-c", "Release"],
@@ -233,6 +234,7 @@ try {
         }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes],
             name: framework.name });
         assert.deepEqual(compiled, expectedCompiler);
+        console.log("Pinned static aliases matched the CLR across managed stores and separate export calls.");
         console.log("The Wasm compiler matched CLR module lookups, the activation-context lifecycle, and Marshal error exchange in Node and Edge.");
     }
     console.log("Node and Edge matched 6 CLR module lookups and both last-error slots. Memory growth and host isolation passed.");

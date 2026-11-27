@@ -54,3 +54,7 @@ dotnet run --arch x64 --file demos/stage-74-executable-entry/Win32HostOracle.cs
 The oracle selects the embedded manifest by numeric resource ID. It records
 the native structure offsets, the active context before and after
 deactivation, and the errors for a missing manifest and invalid flags.
+
+The managed probe also checks pinned addresses of blittable static structs.
+A direct managed store and a pointer store use the same stable linear-memory
+storage, including after a static initializer and across separate exports.

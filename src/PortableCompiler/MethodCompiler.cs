@@ -57,8 +57,10 @@ namespace PortableCompiler
         // Imported functions precede defined functions. Discovery can add
         // a host feature, so re-emit with its function indices reserved.
         private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location,
-            int hostFeatures)
+            int hostFeatures, NativeStaticFields nativeStatics = null)
         {
+            if (nativeStatics == null) nativeStatics = new NativeStaticFields();
+            int knownNativeStatics = nativeStatics.Count;
             int hostImports = WasmImports.FunctionCount(hostFeatures);
             CompileLocation.Clear(location);
             byte[] image = bundle.Get(0);
@@ -169,7 +171,7 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[21];
+            var frameShape = new int[23];
             var shadowStack = new int[3]; // $sp, base, limit globals + 1
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * 3];
@@ -362,7 +364,7 @@ namespace PortableCompiler
                     functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
                         parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
-                        initializers, reflection, instantiations, methodArguments, inlineLocations, parameters, nativePlans);
+                        initializers, reflection, instantiations, methodArguments, inlineLocations, parameters, nativePlans, nativeStatics);
                     if (functions < 0)
                         return functions;
 
@@ -432,6 +434,8 @@ namespace PortableCompiler
                         capacity += 320;
                     }
                     bool allocates = false;
+                    frameShape[21] = 0;
+                    frameShape[22] = nativeStatics.Pages();
                     int classBytes = objects[0] * 12;
                     if (classBytes > int.MaxValue - capacity) return -3;
                     capacity += classBytes;
@@ -492,6 +496,17 @@ namespace PortableCompiler
                             int allocationBytes = kind == BranchIl.PinString ? Utf16MemoryWasm.PinCapacity : StackAllocationWasm.Capacity;
                             if (capacity > int.MaxValue - allocationBytes) return -3;
                             capacity += allocationBytes;
+                        }
+                        if (depths[pc] != 0 && (kind == BranchIl.LoadNativeStatic || kind == BranchIl.StoreNativeStatic || kind == BranchIl.StaticFieldAddress))
+                        {
+                            linearMemory = true;
+                            int region = StaticFields.Register(globals, 0, int.MinValue + 16, I32);
+                            if (region < 0) return region;
+                            frameShape[21] = region + 1;
+                            int plan = records[slot + BranchIl.Width + 1];
+                            int bytes = 160 + 24 * (ObjectLayouts.FieldCount(objects, records[slot + 3]) + NativeAggregates.Size(nativePlans.Plans, plan));
+                            if (capacity > int.MaxValue - bytes) return -3;
+                            capacity += bytes;
                         }
                         if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField)
                         {
@@ -630,8 +645,10 @@ namespace PortableCompiler
                 bodyOffsets[current] = length;
                 length += used;
             }
-            if ((hostUse[0] & ~hostFeatures) != 0)
-                return CompileProgram(bundle, entries, output, location, hostFeatures | hostUse[0]);
+            // Earlier references to a newly discovered static need the same
+            // native backing as its address-taking use.
+            if ((hostUse[0] & ~hostFeatures) != 0 || nativeStatics.Count != knownNativeStatics)
+                return CompileProgram(bundle, entries, output, location, hostFeatures | hostUse[0], nativeStatics);
             length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, length, hostImports, location);
             if (length < 0) return length;
             if (reflection.ObjectTypes.Fixups[0] != 0)
@@ -685,7 +702,7 @@ namespace PortableCompiler
             int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, bool valueConstructor, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed,
             TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, MethodInstantiations instantiations, int[] methodArguments,
-            int[] inlineLocations, int parameterCount, NativeAggregatePlans nativePlans)
+            int[] inlineLocations, int parameterCount, NativeAggregatePlans nativePlans, NativeStaticFields nativeStatics)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
@@ -1031,11 +1048,12 @@ namespace PortableCompiler
                     records[slot + 1] = measured[0];
                     continue;
                 }
-                if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField)
+                if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField || kind == BranchIl.StaticFieldAddress)
                 {
                     var symbol = new int[5];
                     int field = records[slot + 1];
-                    bool write = kind == BranchIl.StoreStaticField;
+                    bool addressOf = kind == BranchIl.StaticFieldAddress;
+                    bool write = kind == BranchIl.StoreStaticField || addressOf;
                     bool linked = records[slot + 3] != 0;
                     if (!write && linked && EventMetadata.Member(image, heaps, layout, field) == EventMetadata.Empty)
                     {
@@ -1068,6 +1086,19 @@ namespace PortableCompiler
                             bases, indices, arities, offsets, signatures, objects, globals, functions, initializer);
                         if (functions < 0) return functions;
                         initializers.SetFieldInitializer(symbol[0], initializer[0]);
+                    }
+                    int staticOwner = StaticFields.Owner(globals, symbol[0]);
+                    int staticRow = StaticFields.Row(globals, symbol[0]);
+                    int address = nativeStatics.Find(staticOwner, staticRow);
+                    if (addressOf || address >= 0)
+                    {
+                        int plan = NativeAggregates.Plan(bundle, objects, symbol[1], nativePlans);
+                        if (plan < 0) return plan;
+                        if (address < 0) address = nativeStatics.Add(staticOwner, staticRow, NativeAggregates.Size(nativePlans.Plans, plan));
+                        if (address < 0) return address;
+                        records[slot] = addressOf ? BranchIl.StaticFieldAddress : write ? BranchIl.StoreNativeStatic : BranchIl.LoadNativeStatic;
+                        records[slot + BranchIl.Width + 1] = plan;
+                        records[slot + BranchIl.Width + 2] = address;
                     }
                     records[slot + 1] = symbol[0];
                     records[slot + 3] = symbol[1];
