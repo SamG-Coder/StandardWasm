@@ -114,7 +114,7 @@ namespace PortableCompiler
             return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.InvalidCastTag);
         }
 
-        private static int TestType(byte[] code, int used, int local, int type)
+        internal static int TestType(byte[] code, int used, int local, int type)
         {
             used = Local(code, used, 0x20, local);
             code[used++] = 0xfb;
@@ -122,7 +122,7 @@ namespace PortableCompiler
             return WasmBinary.Signed(code, used, WasmBinary.HeapType(type));
         }
 
-        private static int TestElement(byte[] code, int used, int local, int type, int element)
+        internal static int TestElement(byte[] code, int used, int local, int type, int element)
         {
             used = Field(code, used, local, type, 0);
             used = Const(code, used, element);

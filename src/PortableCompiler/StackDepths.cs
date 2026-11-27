@@ -304,8 +304,9 @@ namespace PortableCompiler
             {
                 if (depth == 0) return -1;
                 int receiver = stack[depth - 1];
-                if (receiver != NullValue && (receiver < FirstClass || receiver >= ConstructorAddress ||
-                    IsInterface(objects, receiver) || IsValueType(objects, receiver) || ArrayElement(objects, receiver) != 0)) return -2;
+                if (receiver != NullValue && receiver != ObjectReference && receiver != String &&
+                    (receiver < FirstClass || receiver >= ConstructorAddress ||
+                    IsValueType(objects, receiver) || ArrayElement(objects, receiver) != 0)) return -2;
                 return Push(stack, allocated, depth - 1, PeLibrary.RuntimeTypeMetadata.Type);
             }
             if (kind == EqualRuntimeTypes)

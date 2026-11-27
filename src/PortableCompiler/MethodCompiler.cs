@@ -889,7 +889,7 @@ namespace PortableCompiler
                 arities[functions] = 1;
                 offsets[functions] = offset;
                 bodyOffsets[functions] = length;
-                length = reflection.ObjectTypes.Write(moduleCode, length, objects, globals);
+                length = reflection.ObjectTypes.Write(bundle, moduleCode, length, objects, globals);
                 if (length < 0) return length;
                 WasmIndexFixups.Resolve(moduleCode, reflection.ObjectTypes.Fixups[0], hostImports + functions);
                 sizes[functions] = length - bodyOffsets[functions];

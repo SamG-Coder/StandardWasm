@@ -145,8 +145,13 @@ receiver in `Control.SetStyle`. A descriptor returned from the address-backed
 value getter now reaches the type comparison in `PropertyStore.AddOrRemoveValue`.
 The replay compiles the `IArrangedElement` interface test in
 `LayoutEngine.CastToArrangedElement`. The compiler resolves the test
-against the final class layouts and preserves the tested reference. It
-next stops at `Object.GetType` in the same method's error path.
+against the final class layouts and preserves the tested reference.
+`Object.GetType` in that method's error path now resolves concrete class
+identity from an object reference. Plain objects, strings and observed
+primitive boxes use their own canonical descriptors. Arrays and other
+representations without exact runtime type identity remain outside this
+lookup. The startup replay reaches the by-reference `FindValue` call in
+`Dictionary.TryGetValue`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

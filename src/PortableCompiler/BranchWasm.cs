@@ -343,7 +343,7 @@ namespace PortableCompiler
                 else if (kind == GetObjectType)
                 {
                     int type = states[state + top];
-                    reflection.ObjectTypes.Include(type);
+                    reflection.ObjectTypes.Include(objects, type);
                     int receiver = Spill(spills, maximum, spillFlags, type, top);
                     used = GuardNull(code, used, receiver);
                     used = Local(code, used, 0x20, receiver);
@@ -598,7 +598,11 @@ namespace PortableCompiler
                 {
                     int local = Spill(spills, maximum, spillFlags, states[state + top], top);
                     int type = records[slot + 3];
-                    if (kind == BoxValue) used = PrimitiveBoxing.Box(code, used, local, operand, type);
+                    if (kind == BoxValue)
+                    {
+                        reflection.ObjectTypes.IncludeBox(operand);
+                        used = PrimitiveBoxing.Box(code, used, local, operand, type);
+                    }
                     else if (kind == UnboxValue) used = PrimitiveBoxing.Unbox(code, used, local, operand, type);
                     else used = PrimitiveBoxing.Test(code, used, local, operand, type);
                     int resultType = kind == UnboxValue ? StackType(PrimitiveBoxing.Storage(operand)) : ObjectReference;
