@@ -1284,6 +1284,7 @@ namespace PortableCompiler
                                 kind == BranchIl.GetReferenceField || kind == BranchIl.SetReferenceField || kind == BranchIl.TakeReferenceFieldAddress ||
                                 kind == BranchIl.StringRange || kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection || kind == BranchIl.GetObjectType ||
+                                (kind == BranchIl.EqualRuntimeDescriptors && operation == RuntimeTypeMetadata.Assembly) ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.ReadStaticUInt16 || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
                                 kind == BranchIl.LoadManagedCell || kind == BranchIl.StoreManagedCell || kind == BranchIl.ClearManagedCell ||
                                 kind == BranchIl.SetCurrentThreadHandle ||
@@ -2703,7 +2704,8 @@ namespace PortableCompiler
                     }
                     if (objectTypeMember >= 2 && opcode == 0x28)
                     {
-                        records[slot] = BranchIl.EqualRuntimeTypes;
+                        records[slot] = BranchIl.EqualRuntimeDescriptors;
+                        records[slot + 1] = RuntimeTypeMetadata.Type;
                         records[slot + 3] = objectTypeMember == 3 ? 1 : 0;
                         continue;
                     }
@@ -3039,6 +3041,15 @@ namespace PortableCompiler
                 }
                 if (kind == BranchIl.Call)
                 {
+                    if (records[slot + 3] != 0 && ReflectionMembers.IsCoreAssemblyEqualityCall(image, heaps, layout, callerRow, target))
+                    {
+                        // Keep the operator's original reference and null branches. Only
+                        // its Equals call on canonical descriptors needs runtime semantics.
+                        records[slot] = BranchIl.EqualRuntimeDescriptors;
+                        records[slot + 1] = RuntimeTypeMetadata.Assembly;
+                        records[slot + 3] = 0;
+                        continue;
+                    }
                     if (arrayEnumerator && records[slot + 3] == 0 && SzArrayEnumeration.IsArrayLength(image, layout, heaps, target))
                     {
                         records[slot] = BranchIl.ArrayLength;

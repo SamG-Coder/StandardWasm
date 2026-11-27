@@ -407,11 +407,13 @@ namespace PortableCompiler
                         Spill(spills, maximum, spillFlags, String, top), scratch, scratch + 3, scratch + 4,
                         enumLocals, enumLocals + 1);
                 }
-                else if (kind == EqualRuntimeTypes)
+                else if (kind == EqualRuntimeDescriptors)
                 {
-                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1));
+                    int receiver = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);
+                    if (operand == PeLibrary.RuntimeTypeMetadata.Assembly) used = GuardNull(code, used, receiver);
+                    used = Local(code, used, 0x20, receiver);
                     used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
-                    code[used++] = 0xd3; // ref.eq on canonical Type descriptors
+                    code[used++] = 0xd3; // ref.eq on canonical descriptors
                     if (records[slot + 3] != 0) code[used++] = 0x45; // i32.eqz for inequality
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top - 1));
                 }

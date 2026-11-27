@@ -176,7 +176,7 @@ namespace PortableCompiler
                             kind == SetField && depth >= 2 &&
                             Assignable(stack[depth - 2], FieldAccess.Owner(field), objects)))
                         descriptorMismatch[4] = slot + 1;
-                    if (kind == EqualRuntimeTypes && depth >= 2)
+                    if (kind == EqualRuntimeDescriptors && operand == PeLibrary.RuntimeTypeMetadata.Type && depth >= 2)
                     {
                         for (int index = depth - 1; index >= depth - 2; index--)
                         {
@@ -428,9 +428,9 @@ namespace PortableCompiler
             if (kind == FormatEnum)
                 return Match(stack, depth, EnumFormatting.StackStorage(extra))
                     ? Push(stack, allocated, depth - 1, String) : -2;
-            if (kind == EqualRuntimeTypes)
-                return Match(stack, depth, PeLibrary.RuntimeTypeMetadata.Type) &&
-                    Match(stack, depth - 1, PeLibrary.RuntimeTypeMetadata.Type) ? Push(stack, allocated, depth - 2, I32) : -2;
+            if (kind == EqualRuntimeDescriptors)
+                return Match(stack, depth, operand) && Match(stack, depth - 1, operand)
+                    ? Push(stack, allocated, depth - 2, I32) : -2;
             if (kind == TypeFromHandle)
                 return depth > 0 && stack[depth - 1] == PeLibrary.RuntimeTypeMetadata.Handle
                     ? Push(stack, allocated, depth - 1, PeLibrary.RuntimeTypeMetadata.Type) : -1;
