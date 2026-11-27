@@ -283,6 +283,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [286 · Copy exact managed value vectors](stage-286-value-vector-copy/README.md) | `npm run demo -- stage-286-value-vector-copy` | Copy immutable snapshots while preserving destination aliases and overlap behavior |
 | [287 · Runtime value type classification](stage-287-runtime-value-type-kind/README.md) | `npm run demo -- stage-287-runtime-value-type-kind` | Compare canonical CLR value type identity and protected Type overrides |
 | [288 · Constrained Int32 comparison](stage-288-constrained-int32-compare/README.md) | `npm run demo -- stage-288-constrained-int32-compare` | Bind the original Int32 comparison through its exact interface slot |
+| [289 · Closed type guards and Boolean branches](stage-289-closed-type-boolean-guards/README.md) | `npm run demo -- stage-289-closed-type-boolean-guards` | Eliminate impossible generic branches and preserve operand evaluation |
 
 ## Adding a stage
 
