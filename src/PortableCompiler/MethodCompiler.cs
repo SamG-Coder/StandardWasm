@@ -2278,9 +2278,14 @@ namespace PortableCompiler
                         {
                             int status = ValueOperands.LowerClassField(image, layout, heaps, bases[owner + 1] - bases[owner],
                                 records, slot, FieldAccess.Storage(descriptor), clauses);
-                            if (status < 0 && (status != -2 || linked && readOnlyAddress ||
-                                !linked && !ValueOperands.IsWritableInteriorField(image, layout, heaps, field, false)))
-                                return status;
+                            if (status < 0)
+                            {
+                                if (status != -2) return status;
+                                bool readOnly = linked ? readOnlyAddress :
+                                    !ValueOperands.IsWritableInteriorField(image, layout, heaps, field, false);
+                                if (readOnly && !ReadOnlyAggregateCalls.ReadsFinalArgument(bundle, image, layout, heaps, owner,
+                                    bases[owner + 1] - bases[owner], records, slot, clauses, fieldStorage, objects)) return status;
+                            }
                             records[slot] = BranchIl.TakeValueFieldAddress;
                         }
                         else if (linked || !LinkExchange(image, heaps, layout, records, slot)) return -2;
