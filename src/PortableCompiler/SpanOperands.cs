@@ -27,6 +27,14 @@ namespace PortableCompiler
             if (spanType == SignatureTypes.CharacterSpan)
             {
                 int copy = records[call] == Load ? Next(records, call, clauses) : -1;
+                if (copy >= 0 && records[copy] == FieldAddress)
+                {
+                    // The destination's descriptor lives in a field. Its
+                    // load and Slice are lowered when that address is visited.
+                    int index = Next(records, copy, clauses);
+                    copy = AfterDestinationSlice(bundle, image, layout, heaps, owner, context, methodArguments,
+                        records, index, objects, clauses, fieldCaller);
+                }
                 if (records[call] == FrameAddress && frame[records[call + 1]] == SignatureTypes.WritableCharacterSpan)
                 {
                     int index = Next(records, call, clauses);
@@ -173,6 +181,22 @@ namespace PortableCompiler
                 records[lengthCall + 3] = spanType;
             }
             return 1;
+        }
+
+        private static int AfterDestinationSlice(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int context, int[] methodArguments, int[] records, int first, int[] objects,
+            int[] clauses, int caller)
+        {
+            if (first < 0 || records[first] != Load && records[first] != Constant) return -1;
+            int slice = AfterArgumentRead(image, layout, heaps, records, first, clauses, caller);
+            if (slice < 0) return -1;
+            bool explicitLength = records[slice] == Load || records[slice] == Constant;
+            if (explicitLength) slice = AfterArgumentRead(image, layout, heaps, records, slice, clauses, caller);
+            if (slice < 0 || !IsDirectMemberCall(records, slice) ||
+                !SpanMetadata.IsSlice(bundle, image, layout, heaps, owner, records[slice + 1],
+                    context, methodArguments, SignatureTypes.WritableCharacterSpan, objects, explicitLength ? 2 : 1))
+                return -1;
+            return Next(records, slice, clauses);
         }
 
         private static int SliceWithSpanLength(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
