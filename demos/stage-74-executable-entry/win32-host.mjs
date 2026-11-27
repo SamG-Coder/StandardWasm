@@ -7,6 +7,7 @@ import { createFilePathHost } from "./long-path-host.mjs";
 import { createAdjustWindowRectExForDpi } from "./window-rect.mjs";
 import { createThreadMessageQueue, createWindowMessageRegistration } from "./window-messages.mjs";
 import { createWindowEventPublisher } from "./window-events.mjs";
+import { createWindowSender } from "./window-send.mjs";
 import { createThreadHandleHost } from "./thread-handle-host.mjs";
 import { createWindowStationHost } from "./window-station-host.mjs";
 import { createDefaultWindowProcedure, createWindowClassState, createWindowCreation, createInvalidateRect, createRedrawWindow,
@@ -17,7 +18,7 @@ export const win32MemoryImports = new Set([
     "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom",
     "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "getLongPathNameW", "redrawWindow", "invalidateRect", "registerWindowMessageW",
     "adjustWindowRectExForDpi", "getWindowThreadProcessId", "duplicateHandle", "getExitCodeThread", "getUserObjectInformationW",
-    "peekMessageW", "getWindowRect", "getClientRect", "deleteFileW"
+    "peekMessageW", "getWindowRect", "getClientRect", "deleteFileW", "sendMessageTimeoutW"
 ]);
 export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, ...displayContextImportNames,
@@ -232,6 +233,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         ...createThreadHandleHost(memory, () => windows.getCurrentThreadId(), setError),
         ...createThreadMessageQueue(memory, windows, setError),
         notifyWinEvent: createWindowEventPublisher(windows, onWinEvent),
+        sendMessageTimeoutW: createWindowSender(memory, windows, setError),
         ...createWindowStationHost(memory, desktop, setError),
         registerWindowMessageW: createWindowMessageRegistration(memory, setError),
         bCryptGenRandom,

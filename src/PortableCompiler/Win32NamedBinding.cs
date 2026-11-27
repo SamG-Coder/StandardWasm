@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal const int Post = Win32ModuleBinding.Count + 1, Peek = Post + 1,
             WindowRect = Peek + 1, ClientRect = WindowRect + 1, DeleteFile = ClientRect + 1, PostWindow = DeleteFile + 1,
-            NotifyWinEvent = PostWindow + 1;
+            NotifyWinEvent = PostWindow + 1, SendMessageTimeout = NotifyWinEvent + 1;
         private const int ImportOwner = -4;
 
         internal static int Find(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int[] counts,
@@ -23,6 +23,16 @@ namespace PortableCompiler
             var cursor = new int[1];
             int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4),
                 Arity(member), cursor);
+            if (member == SendMessageTimeout)
+            {
+                return end >= 0 && Win32ModuleBinding.ReadAbiWord(image, cursor, end, 0x18) >= 0 &&
+                    Win32ModuleBinding.ReadAbiWord(image, cursor, end, 0x18) >= 0 && ReadUnsigned(image, cursor, end) &&
+                    Win32ModuleBinding.ReadAbiWord(image, cursor, end, 0x19) >= 0 &&
+                    Win32ModuleBinding.ReadAbiWord(image, cursor, end, 0x18) >= 0 &&
+                    Win32ModuleBinding.ReadAbiWord(image, cursor, end, 0x09) >= 0 && ReadUnsigned(image, cursor, end) &&
+                    SignatureReader.TakeElement(image, cursor, end, 0x0f) &&
+                    SignatureReader.TakeElement(image, cursor, end, 0x19) && cursor[0] == end ? member : 0;
+            }
             if (member == NotifyWinEvent)
             {
                 return mapping[0] == 0x101 && end >= 0 &&
@@ -67,6 +77,7 @@ namespace PortableCompiler
             return ImageBytes.MatchesAscii(image, heaps, entry, "PostThreadMessageW") ? Post :
                 ImageBytes.MatchesAscii(image, heaps, entry, "PostMessageW") ? PostWindow :
                 ImageBytes.MatchesAscii(image, heaps, entry, "NotifyWinEvent") ? NotifyWinEvent :
+                ImageBytes.MatchesAscii(image, heaps, entry, "SendMessageTimeoutW") ? SendMessageTimeout :
                 ImageBytes.MatchesAscii(image, heaps, entry, "PeekMessageW") ? Peek :
                 ImageBytes.MatchesAscii(image, heaps, entry, "GetWindowRect") ? WindowRect :
                 ImageBytes.MatchesAscii(image, heaps, entry, "GetClientRect") ? ClientRect : 0;
@@ -119,11 +130,18 @@ namespace PortableCompiler
         }
 
         internal static int Arity(int member) => member == Post || member == PostWindow || member == NotifyWinEvent ? 4 :
-            member == Peek ? 5 : member == DeleteFile ? 1 : 2;
+            member == SendMessageTimeout ? 7 : member == Peek ? 5 : member == DeleteFile ? 1 : 2;
         internal static bool NeedsMemory(int member) => member != Post && member != PostWindow && member != NotifyWinEvent;
 
         internal static bool MatchesSignature(BundleImages bundle, int[] objects, int member, int[] types, int offset)
         {
+            if (member == SendMessageTimeout)
+                return Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset], Native, "LRESULT") &&
+                    Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
+                    types[offset + 2] == I32 &&
+                    Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 3], Native, "WPARAM") &&
+                    Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 4], Native, "LPARAM") &&
+                    types[offset + 5] == I32 && types[offset + 6] == I32 && types[offset + 7] == Native;
             if (member == NotifyWinEvent)
                 return types[offset] == Void && types[offset + 1] == I32 &&
                     Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 2], Native, "HWND") &&
@@ -159,6 +177,7 @@ namespace PortableCompiler
             byte[] name = NativeImportTable.Ascii(member == Post ? "postThreadMessageW" :
                 member == PostWindow ? "postMessageW" : member == Peek ? "peekMessageW" :
                 member == NotifyWinEvent ? "notifyWinEvent" :
+                member == SendMessageTimeout ? "sendMessageTimeoutW" :
                 member == WindowRect ? "getWindowRect" : member == ClientRect ? "getClientRect" : "deleteFileW");
             var types = new byte[Arity(member)];
             for (int i = 0; i < types.Length; i++) types[i] = 0x7f;

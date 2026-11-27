@@ -323,6 +323,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [350 - Default equality comparer activation](stage-350-default-equality-comparers/README.md) | `npm run demo -- stage-350-default-equality-comparers` | Compare original generic comparer execution and track remaining dispatch gaps |
 | [351 - Canonical RuntimeType casts](stage-351-runtime-type-casts/README.md) | `npm run demo -- stage-351-runtime-type-casts` | Preserve identity, null and typed failures for casts to CoreLib RuntimeType |
 | [353 - WinForms accessibility notifications](stage-353-window-accessibility-events/README.md) | `npm run demo -- stage-353-window-accessibility-events` | Compare ordered WinEvent delivery and the void USER32 import with Windows |
+| [355 - Same-queue window sends](stage-355-send-message-timeout/README.md) | `npm run demo -- stage-355-send-message-timeout` | Compare synchronous SendMessageTimeoutW dispatch, output words, and last-error behavior |
 
 ## Adding a stage
 
