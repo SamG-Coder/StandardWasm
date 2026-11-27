@@ -112,6 +112,7 @@ namespace PortableCompiler
                     return methodArguments != null && token < methodArguments.Length ? methodArguments[token] : -2;
                 if (element == 0x13)
                 {
+                    if (substitutions == null && context == CharacterSpan && token == 0) return GenericScalar.Key(3);
                     if (substitutions == null) return ObjectLayouts.Argument(objects, context, token);
                     return token < substitutions.Length ? substitutions[token] : -2;
                 }

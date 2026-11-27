@@ -4511,7 +4511,11 @@ namespace PortableCompiler
             var initializerFlags = new int[1];
             int initialization = TypeInitializers.Find(image, layout, heaps, owner, initializerFlags);
             if (initialization < 0) return initialization;
-            if (context != 0)
+            if (context == CharacterSpan)
+            {
+                if (!CompactSpanStatics.IsDefinition(image, layout, heaps, owner, row)) return -2;
+            }
+            else if (context != 0)
             {
                 // The closed layout must instantiate this method's own definition.
                 if (ObjectLayouts.AssemblyOf(objects, context) != assembly || ObjectLayouts.TypeDef(objects, context) != owner)

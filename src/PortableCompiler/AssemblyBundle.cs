@@ -33,6 +33,8 @@ namespace PortableCompiler
                 // type accessibility and argument constraints.
                 closed = ManagedReferenceSignatures.ReadInstantiation(bundle, caller, layout, heaps,
                     owner, parent, objects, context, callerMethodArguments);
+                if (closed == SignatureTypes.CharacterSpan && opcode == 0x28 && !valueAddress && methodArity == 0)
+                    return CompactSpanStatics.Resolve(bundle, caller, layout, heaps, owner, reference, symbol);
                 if (closed < ObjectLayouts.FirstClass) return closed < 0 ? closed : -2;
                 if (ObjectLayouts.IsInterface(objects, closed) && (opcode != 0x6f || !allowVirtual || methodArity != 0)) return -2;
                 // Direct calls to closed value types can carry a managed

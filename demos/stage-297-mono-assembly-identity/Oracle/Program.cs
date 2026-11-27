@@ -18,8 +18,7 @@ var culture = metadata.TypeDefinitions.Select(metadata.GetTypeDefinition).Single
 int globalizationFrontier = MetadataTokens.GetRowNumber(culture.GetMethods().Single(handle =>
 {
     var method = metadata.GetMethodDefinition(handle);
-    return metadata.GetString(method.Name) == "InitIcuCultureDataCore" &&
-        metadata.GetBlobBytes(method.Signature).SequenceEqual(new byte[] { 0x20, 0, 2 });
+    return metadata.GetString(method.Name) == "JSGetLocaleInfo";
 }));
 Func<int>[] cases = [Probe.Default, Probe.WithFlag, Probe.Version, Probe.ManagedIdentity, Probe.CustomSlot];
 File.WriteAllText(args[0], JsonSerializer.Serialize(new
@@ -32,6 +31,6 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
         name = run.Method.Name,
         row = run.Method.MetadataToken & 0xffffff,
         expected = run(),
-        rejection = index < 3 ? new { status = -2, location = new[] { 2, globalizationFrontier, 89 } } : null
+        rejection = index < 3 ? new { status = -2, location = new[] { 2, globalizationFrontier, 92 } } : null
     })
 }));
