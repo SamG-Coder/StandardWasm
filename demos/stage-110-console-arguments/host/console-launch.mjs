@@ -1,5 +1,5 @@
 import { packEntry, readManagedCompanions } from "../../stage-74-executable-entry/companions.mjs";
-import { frameworkMissingExitCode, frameworkMissingMessage, resolveFrameworks } from "../../stage-74-executable-entry/frameworks.mjs";
+import { frameworkInventory, frameworkMissingExitCode, frameworkMissingMessage, resolveFrameworks } from "../../stage-74-executable-entry/frameworks.mjs";
 import { instantiateManagedModule } from "../../stage-74-executable-entry/resource-host.mjs";
 import { buildArguments, createConsoleHost, hex } from "./console-host.mjs";
 
@@ -24,7 +24,7 @@ export async function runConsoleEntry(compilerBytes, selection) {
         throw Error("The original runtime configuration and dependency target are required.");
     // Issue #299: as hostfxr, resolve the shared frameworks before anything is compiled. The
     // missing-framework report goes to stderr in the console encoding, and stdout stays empty.
-    const frameworks = resolveFrameworks(config, selection.frameworks);
+    const frameworks = resolveFrameworks(config, frameworkInventory(selection));
     if (!frameworks.ok) {
         const host = createConsoleHost(selection.console);
         const text = frameworkMissingMessage(frameworks, selection.entry.path);
