@@ -34,27 +34,41 @@ export async function runManagedEntry(compilerBytes, selection) {
         bytes.forEach((value, index) => compiler.SetByte(source, index, value));
         return source;
     }
-    const capacity = 1 << 20;
-    const output = compiler.CreateBytes(capacity);
     const entryToken = selection.entryToken;
     // The PE reader verified the MethodDef token. The compiler takes its row.
     const row = entryToken & 0xffffff;
     const result = { entry: selection.entry.path, entryToken, target, runtimeTarget };
     const origins = compiler.BundleModuleOrigins?.() === 1;
-    let length;
-    if (companions.length === 0 && !origins) length = compiler.Compile(upload(selection.entry.bytes), row, output);
-    else {
+    let compile, location;
+    if (companions.length === 0 && !origins) {
+        const source = upload(selection.entry.bytes);
+        compile = output => compiler.Compile(source, row, output);
+    } else {
         const [bundle, entries] = packEntry(selection.entry, companions, row, origins);
         const source = upload(bundle), manifest = upload(entries);
         if (typeof compiler.CompileBundleDetailed === "function") {
-            const location = compiler.CreateDiagnostic();
-            length = compiler.CompileBundleDetailed(source, manifest, output, location);
-            if (length < 0) result.diagnostic = [0, 1, 2].map(index => compiler.ReadDiagnostic(location, index));
+            location = compiler.CreateDiagnostic();
+            compile = output => compiler.CompileBundleDetailed(source, manifest, output, location);
         } else if (typeof compiler.CompileBundle === "function") {
-            length = compiler.CompileBundle(source, manifest, output);
+            compile = output => compiler.CompileBundle(source, manifest, output);
         } else throw Error("This compiler build does not support managed assembly bundles.");
     }
-    if (length < 0) return { ...result, state: "unsupported", compilerStatus: length };
+
+    // The compiler sizes several working tables from this capacity. Retry
+    // workspace exhaustion with the same uploaded inputs and cap browser memory use.
+    const maximumCapacity = 8 * 1024 * 1024;
+    let capacity = 1024 * 1024;
+    let output = compiler.CreateBytes(capacity);
+    let length = compile(output);
+    while (length === -3 && capacity < maximumCapacity) {
+        capacity *= 2;
+        output = compiler.CreateBytes(capacity);
+        length = compile(output);
+    }
+    if (length < 0) {
+        if (location) result.diagnostic = [0, 1, 2].map(index => compiler.ReadDiagnostic(location, index));
+        return { ...result, state: "unsupported", compilerStatus: length };
+    }
     if (!length || length > capacity) throw Error("The self-hosted compiler returned an invalid module length.");
 
     const code = Uint8Array.from({ length }, (_, i) => compiler.ReadByte(output, i));

@@ -1,16 +1,19 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { root, run } from "../../scripts/toolchain.mjs";
+import { win32DesktopRuntime } from "../../scripts/runtime-packs.mjs";
 import { openExecutable } from "../stage-73-executable-intake/loader/intake.mjs";
 import { serveLaunch } from "./launch-server.mjs";
 import { resolveFrameworks } from "./frameworks.mjs";
 import { runManagedEntry } from "./launch.mjs";
+import { verifyRetries } from "./verify-retry.mjs";
 
 const stage = "demos/stage-74-executable-entry";
-const compiler = join(root, "artifacts", "StandardWasm.Compiler.wasm");
+const compiler = process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts", "StandardWasm.Compiler.wasm");
 const serve = process.argv.includes("--serve");
 if (!serve) {
     if (process.platform !== "win32") throw Error("The executable comparison requires Windows.");
@@ -91,7 +94,9 @@ async function verify() {
 
     // Issue #299 (Codex review of 4f86a51): supplied framework assets are the inventory. The same
     // desktop publish with its original Microsoft.WindowsDesktop.App DLLs must reach the compiler.
-    const suppliedFramework = desktopFrameworkAssets();
+    const referenceReport = JSON.parse(readFileSync(join(desktop, "..", "windows.json"), "utf8"));
+    const runtime = win32DesktopRuntime(process.env.STANDARDWASM_DESKTOP_VERSION || referenceReport.runtime.split(" ").at(-1));
+    const suppliedFramework = desktopFrameworkAssets(runtime);
     const nodeDesktopSupplied = await runManagedEntry(compilerBytes, {
         ...openExecutable(desktopFiles.map(path => ({ path, bytes: readFileSync(join(desktop, path)) })), desktopExe),
         framework: suppliedFramework
@@ -160,16 +165,22 @@ async function verify() {
         const edgeDesktopSupplied = await runEdge(desktop, desktopFiles);
         await page.locator("#framework").setInputFiles([]);
         assert.notEqual(edgeDesktopSupplied.state, "framework-missing");
-        assert.equal(edgeDesktopSupplied.state, nodeDesktopSupplied.state);
-        assert.equal(edgeDesktopSupplied.compilerStatus, nodeDesktopSupplied.compilerStatus);
+        assert.deepEqual(edgeDesktopSupplied, nodeDesktopSupplied);
+        const workspaceRetries = await verifyRetries(page);
         assert.deepEqual(errors, []);
         writeFileSync(join(evidence, "results.json"), JSON.stringify({
             node: process.version, browser: browser.version(), clrExit: clr.status, nativeSingleExit: native.status,
             ordinary: nodeOrdinary, single: nodeSingle,
             winforms: { compiler: nodeDesktop, firstObjectLayoutBlocker: inspected },
-            suppliedFramework: { node: { state: nodeDesktopSupplied.state, compilerStatus: nodeDesktopSupplied.compilerStatus,
-                diagnostic: nodeDesktopSupplied.diagnostic }, edge: { state: edgeDesktopSupplied.state } },
-            disablePrerelease: { hostfxrExit: hostfxrPreview.status | 0, node: nodePreview.state }, hostfxrMatrix
+            suppliedFramework: {
+                version: runtime.version,
+                assets: suppliedFramework.map(({ path, bytes }) => ({
+                    path, sha256: createHash("sha256").update(bytes).digest("hex")
+                })),
+                node: nodeDesktopSupplied, edge: edgeDesktopSupplied
+            },
+            disablePrerelease: { hostfxrExit: hostfxrPreview.status | 0, node: nodePreview.state },
+            hostfxrMatrix, workspaceRetries
         }, null, 2) + "\n");
         console.log("Node and Edge ran both original console publishes with Windows exit parity and reported the missing Microsoft.WindowsDesktop.App framework as hostfxr does; " +
             "with its desktop framework supplied the publish reached the compiler (" + nodeDesktopSupplied.state + "), and a Disable prerelease matched hostfxr's 0x80008096.");
@@ -178,20 +189,17 @@ async function verify() {
     }
 }
 
-// The installed desktop and shared framework DLLs a host would supply, as Stage 95 selects them.
-function desktopFrameworkAssets() {
-    const installed = spawnSync("dotnet", ["--list-runtimes"], { encoding: "utf8", windowsHide: true });
-    if (installed.error || installed.status !== 0) throw Error("Could not list installed .NET runtimes.");
-    const packs = new Map(installed.stdout.split(/\r?\n/).flatMap(line => {
-        const match = /^([^ ]+) (10\.0\.[0-9]+) \[(.*)\]$/.exec(line);
-        return match ? [[match[1], join(match[3], match[2])]] : [];
-    }));
-    const desktopPack = packs.get("Microsoft.WindowsDesktop.App"), shared = packs.get("Microsoft.NETCore.App");
-    if (!desktopPack || !shared) throw Error("Install the .NET 10 desktop runtime.");
+// CoreLib interop bodies require native-width parity with Wasm32. Type
+// forwarder facades are needed even when their method bodies live in CoreLib.
+function desktopFrameworkAssets({ desktop, shared }) {
     const asset = (directory, path) => ({ path, source: join(directory, path), bytes: readFileSync(join(directory, path)) });
     return [
         ...["System.Windows.Forms.dll", "System.Windows.Forms.Primitives.dll", "System.Private.Windows.Core.dll",
-            "System.Drawing.Common.dll"].map(path => asset(desktopPack, path)),
-        ...["System.Private.CoreLib.dll", "System.Runtime.dll", "System.ComponentModel.Primitives.dll"].map(path => asset(shared, path))
+            "System.Drawing.Common.dll", "System.Private.Windows.GdiPlus.dll"].map(path => asset(desktop, path)),
+        ...["System.Private.CoreLib.dll", "System.Runtime.dll", "System.ComponentModel.Primitives.dll",
+            "Microsoft.Win32.Primitives.dll", "System.Collections.dll", "System.Threading.dll",
+            "System.Drawing.Primitives.dll", "System.ComponentModel.dll", "System.ComponentModel.TypeConverter.dll",
+            "System.Collections.Concurrent.dll", "System.Collections.Specialized.dll", "System.ObjectModel.dll"]
+            .map(path => asset(shared, path))
     ];
 }
