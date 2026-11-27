@@ -1980,10 +1980,13 @@ namespace PortableCompiler
                             records[slot + 1] = load ? locationType == Int16Location ? 0x48 : 0x49 : 0x53;
                             continue;
                         }
+                        // Roslyn emits ldobj/stobj for a closed generic scalar
+                        // byref. The resolved CLI type shares the Int32 cell.
+                        bool int32Access = locationType == Int32Location && kind != BranchIl.InitializeValue;
                         if (!IsValueLocation(locationType) && locationType != BooleanLocation &&
-                            !IsReferenceLocation(locationType)) return -2;
+                            !IsReferenceLocation(locationType) && !int32Access) return -2;
                         int vector = IsValueLocation(locationType) ? 0 :
-                            locationType == BooleanLocation ? Bytes : ObjectLayouts.RegisterArray(objects, ObjectReference);
+                            locationType == BooleanLocation ? Bytes : int32Access ? Ints : ObjectLayouts.RegisterArray(objects, ObjectReference);
                         if (vector < 0) return vector;
                         records[slot] = kind == BranchIl.LoadObject ? BranchIl.LoadManagedCell :
                             kind == BranchIl.StoreObject ? BranchIl.StoreManagedCell : BranchIl.ClearManagedCell;

@@ -204,6 +204,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [202 · Reference default interface dispatch](stage-202-reference-default-interface/README.md) | `npm run demo -- stage-202-reference-default-interface` | Execute actual default interface bodies through nominal reference dispatch |
 | [203 · Redraw requests for hidden windows](stage-203-hidden-window-redraw/README.md) | `npm run demo -- stage-203-hidden-window-redraw` | Compare compiled RedrawWindow calls, borrowed rectangles and last-error behavior against Windows |
 | [205 · Registered window messages](stage-205-register-window-message/README.md) | `npm run demo -- stage-205-register-window-message` | Compare Win32 registered message identity, UTF-16 input and last-error behavior across runtimes |
+| [206 · UInt32 managed byrefs](stage-206-uint32-managed-byrefs/README.md) | `npm run demo -- stage-206-uint32-managed-byrefs` | Match unsigned managed ref and out parameters on the CLR, Node and Edge |
 
 ## Adding a stage
 

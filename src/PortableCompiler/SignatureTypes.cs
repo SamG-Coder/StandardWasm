@@ -9,8 +9,9 @@ namespace PortableCompiler
             MethodPointer = 5, String = 6, Chars = ArrayTypeRefs.Packed16, I64 = WideStorage.Scalar, Longs = WideStorage.Array,
             F32 = FloatStorage.Single, F64 = FloatStorage.Double, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles, Native = NativeStorage.Scalar,
             NativeVector = NativeStorage.Vector;
-        // A location is a traced alias with invariant element type, outside
-        // the ordinary Object/reference conversion lattice.
+        // A location is a traced alias outside the ordinary reference
+        // conversion lattice. CLI int32& and unsigned int32& share one
+        // verification type (ECMA-335 I.8.7.2) and the same four-byte cell.
         internal const int ObjectLocation = 0x80, ObjectSpan = 0x81, CharacterSpan = 0x82;
         internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84, BooleanLocation = 0x86, StringLocation = 0x87;
         internal const int ReadOnlyByteSpan = 0x88, StaticByteLocation = 0x89, CharacterSpanCallback = 0x8a, Int32Location = 0x8b;
@@ -40,7 +41,8 @@ namespace PortableCompiler
             type == GenericScalar.Key(3) ? CharacterLocation : type == GenericScalar.Key(2) ? BooleanLocation :
             type == GenericScalar.Key(6) ? Int16Location :
             type == GenericScalar.Key(0x18) ? NativeIntLocation :
-            type == GenericScalar.Key(5) ? StaticByteLocation : type == GenericScalar.Key(8) ? Int32Location :
+            type == GenericScalar.Key(5) ? StaticByteLocation :
+            type == GenericScalar.Key(8) || type == GenericScalar.Key(9) ? Int32Location :
             ObjectLayouts.IsValueType(objects, type) ? ValueLocation(type) :
             type >= ObjectLayouts.FirstClass && type - ObjectLayouts.FirstClass < objects[0] ? ReferenceLocationBase + type : 0;
         internal static int CellValue(int location) =>
