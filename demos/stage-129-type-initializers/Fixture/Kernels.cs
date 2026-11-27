@@ -281,6 +281,17 @@ namespace TypeInitializerFixture
             lock (gate) { return 1; }
         }
 
+        private static bool GeneratedFlag { get; set; }
+
+        public static int StaticAutoProperty()
+        {
+            bool before = GeneratedFlag;
+            GeneratedFlag = true;
+            int result = GeneratedFlag && !before ? 1 : 0;
+            GeneratedFlag = false;
+            return result;
+        }
+
         public static int RuntimeTypeLock()
         {
             Type target = typeof(Kernels);

@@ -11,7 +11,8 @@ namespace PeLibrary
             if ((flags & Static) == 0 || (flags & (Literal | HasRva | HasMarshal | HasDefault)) != 0 ||
                 (write && (flags & InitOnly) != 0)) return -2;
 
-            // Nullable annotations describe flow analysis. The current runtime executes
+            // Nullable annotations and compiler-generated backing-field markers
+            // do not affect field storage. The current runtime executes
             // one managed thread per instance, so its private globals are also that
             // thread's static slots. A shared runtime would need separate TLS storage.
             var counts = new int[45];
@@ -45,19 +46,21 @@ namespace PeLibrary
             if ((type & 7) == 0)
                 return ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row,
                     "System.Runtime.CompilerServices", "NullableAttribute") ||
-                    ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row, "System", "ThreadStaticAttribute") &&
+                    (ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row, "System", "ThreadStaticAttribute") ||
+                     ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row,
+                        "System.Runtime.CompilerServices", "CompilerGeneratedAttribute")) &&
                     PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts);
 
             var reference = new int[AssemblyReferences.SymbolWidth];
             if (AssemblyReferences.ReadType(image, heaps, layout, row, reference) < 0 ||
                 reference[AssemblyReferences.Depth] != 0) return false;
             uint name = (uint)reference[2], space = (uint)reference[3];
-            return MatchesAscii(image, heaps, name, "NullableAttribute") &&
-                   MatchesAscii(image, heaps, space, "System.Runtime.CompilerServices") ||
-                   MatchesAscii(image, heaps, name, "ThreadStaticAttribute") &&
-                   MatchesAscii(image, heaps, space, "System") &&
-                   PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, layout, counts,
-                       reference[AssemblyReferences.AssemblyRow], includeRuntimeExtensions: false);
+            bool compilerServices = MatchesAscii(image, heaps, space, "System.Runtime.CompilerServices");
+            if (compilerServices && MatchesAscii(image, heaps, name, "NullableAttribute")) return true;
+            return (compilerServices && MatchesAscii(image, heaps, name, "CompilerGeneratedAttribute") ||
+                    MatchesAscii(image, heaps, space, "System") && MatchesAscii(image, heaps, name, "ThreadStaticAttribute")) &&
+                PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, layout, counts,
+                    reference[AssemblyReferences.AssemblyRow], includeRuntimeExtensions: false);
         }
     }
 }
