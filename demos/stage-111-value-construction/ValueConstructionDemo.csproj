@@ -4,7 +4,7 @@
     <LangVersion>9.0</LangVersion>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Remove="Dependency/**/*.cs" />
+    <Compile Remove="Dependency/**/*.cs;Oracle/**/*.cs" />
     <ProjectReference Include="Dependency/ValueConstructionDependency.csproj" />
     <Compile Include="../../src/AssemblyReader/*.cs" Link="%(Filename)%(Extension)" />
     <Compile Include="../../src/PortableCompiler/*.cs" Link="%(Filename)%(Extension)" />

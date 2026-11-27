@@ -7,12 +7,12 @@ namespace PortableCompiler
     internal static class VirtualSlots
     {
         internal static int SelectVirtualBody(BundleImages bundle, int[] objects,
-            int actual, bool allocated, int declared, int owner, int row, int[] symbol, bool finalizer = false)
+            int actual, bool allocated, int declared, int owner, int row, int[] symbol, bool finalizer = false, bool exactValue = false)
         {
             int receiver = actual == NullValue ? declared : actual;
             if (receiver < FirstClass || receiver - FirstClass >= objects[0] ||
                 (!allocated && !IsSealed(objects, receiver)) ||
-                IsValueType(objects, receiver) || IsInterface(objects, receiver)) return -2;
+                IsValueType(objects, receiver) != exactValue || IsInterface(objects, receiver)) return -2;
 
             if (IsInterface(objects, declared))
                 return InterfaceSlots.SelectBody(bundle, objects, receiver, declared, owner, row, symbol);

@@ -72,6 +72,22 @@ namespace ValueConstructionDemo
         }
     }
 
+    public struct CounterOverride
+    {
+        public int Value;
+
+        public override int GetHashCode()
+        {
+            Value = unchecked(Value + 3);
+            return unchecked(Value * 7);
+        }
+    }
+
+    public struct InheritedHash
+    {
+        public int Value;
+    }
+
     public static class Kernels
     {
         public static int DisposeScoped(int value)
@@ -157,6 +173,24 @@ namespace ValueConstructionDemo
             }
             return pair.First;
         }
+
+        public static int InvokeValueOverride(int value)
+        {
+            CounterOverride counter = default;
+            counter.Value = value;
+            CounterOverride copy = counter;
+            int hash = ConstrainedHash(ref counter);
+            return unchecked(hash + counter.Value * 11 + copy.Value * 13);
+        }
+
+        public static int RejectInheritedValueHash(int value)
+        {
+            InheritedHash counter = default;
+            counter.Value = value;
+            return ConstrainedHash(ref counter);
+        }
+
+        private static int ConstrainedHash<T>(ref T value) where T : struct => value.GetHashCode();
 
         public static int BorrowExtent(int value)
         {

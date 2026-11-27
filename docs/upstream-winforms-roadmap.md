@@ -117,9 +117,11 @@ definitions the same representation as their references in WinForms. The
 unchanged startup compilation gets past the `AppDomain.ProcessExit`
 subscription. Nominal enum vectors let the linker register the original
 resource manager getter, whose reachable field types include CoreLib's
-`CultureData` and its `CalendarId[]` field. The startup replay now reaches the
-constrained `ToString` call on `ValueStringBuilder` in CoreLib's
-`String.FormatHelper`.
+`CultureData` and its `CalendarId[]` field. Constrained dispatch binds the
+original `ValueStringBuilder.ToString` override in CoreLib's `String.FormatHelper`.
+Ordinary struct calls retain the managed receiver when the IL leaves it on the
+stack, including the linked padding setters. The startup replay now stops on
+the `Unsafe.As` call in WinForms `PropertyStore.AddValue`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

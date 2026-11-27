@@ -28,3 +28,9 @@ catch reads the shared state. This uses the managed value ABI. Ref-like
 types containing managed byrefs, pointers or nested values still report a
 diagnostic, as do fields, arrays and generic specializations containing a
 ref-like value.
+
+Run `node demos/stage-111-value-construction/verify-constrained.mjs` for the
+constrained override check. It uses matching .NET 10 runtimes including win-x86
+and compares the same .NET Standard DLL on the CLR, Node and Edge. The
+override updates the original location, preserves an earlier value copy, and
+checks a diagnostic when the selected method would require boxing.

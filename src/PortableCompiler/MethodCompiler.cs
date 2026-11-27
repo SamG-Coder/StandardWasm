@@ -1161,7 +1161,31 @@ namespace PortableCompiler
                     else if (lowered < 0) return ManagedObjectCopy(records, slot, location, lowered);
                     continue;
                 }
-                if (kind == BranchIl.ConstrainedInstance) return -2;
+                if (kind == BranchIl.ConstrainedInstance)
+                {
+                    var overrideSymbol = new int[3];
+                    int type = ConstrainedValueCalls.Resolve(bundle, image, layout, heaps, owner,
+                        records[slot + 1], records[slot + 3], context, methodArguments, objects, overrideSymbol);
+                    if (type < 0) return type;
+                    int targetOwner = overrideSymbol[0], row = overrideSymbol[1], overrideContext = ~overrideSymbol[2];
+                    int function = Lookup(owners, rows, contexts, bases, indices, functions, targetOwner, row, overrideContext);
+                    if (function < 0)
+                    {
+                        byte[] implementation = bundle.Get(targetOwner);
+                        var targetLayout = new int[4];
+                        var targetHeaps = new int[8];
+                        if (CompressedTables.FindWithHeaps(implementation, targetLayout, targetHeaps) < 0) return -1;
+                        functions = Register(bundle, implementation, targetLayout, targetHeaps, targetOwner, row, overrideContext,
+                            owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions, allowVirtual: true, receiverOverride: type);
+                        if (functions < 0) return functions;
+                        function = functions - 1;
+                    }
+                    if (signatures[offsets[function] + 1] != ValueLocation(type)) return -2;
+                    records[slot] = BranchIl.Call;
+                    records[slot + 1] = function;
+                    records[slot + 3] = 0;
+                    continue;
+                }
                 if (kind == BranchIl.ConstrainedStatic)
                 {
                     var symbol = new int[3];
@@ -1741,7 +1765,7 @@ namespace PortableCompiler
                     }
                     if (delegateMember == 0 && stringMember == 0 && constructorType == Delegate && bundle.Length != 0)
                     {
-                        var symbol = new int[6];
+                        var symbol = new int[7];
                         bool baseCall = opcode == 0x28 && callerReceiver >= ObjectLayouts.FirstClass &&
                             ObjectLayouts.IsConstructor(image, heaps, layout, callerRow);
                         if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
@@ -1757,6 +1781,11 @@ namespace PortableCompiler
                             continue;
                         }
                         if (address < 0) targetContext = ~targetContext;
+                        else if (opcode == 0x28 && !addressed && symbol[6] != 0)
+                        {
+                            int receiver = targetContext != 0 ? targetContext : ObjectLayouts.Find(objects, targetOwner, symbol[6], new int[0]);
+                            if (UsesLocationReceiver(objects, receiver)) targetContext = ~targetContext;
+                        }
                         int linked = Lookup(owners, rows, contexts, bases, indices, functions, targetOwner, targetRow, targetContext);
                         bool virtualMethod = (symbol[4] & 0x40) != 0;
                         // A final implementation in a closed class uses the closed method body.
@@ -1865,6 +1894,17 @@ namespace PortableCompiler
                 }
                 int fieldReceiver = kind == BranchIl.Call ? records[slot + BranchIl.Width + 1] : 0;
                 int key = fieldReceiver < 0 ? -1 : 0;
+                if (kind == BranchIl.Call && fieldReceiver == 0 && records[slot + 3] == 0 &&
+                    (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) == 0 &&
+                    !ObjectLayouts.IsConstructor(image, heaps, layout, target))
+                {
+                    int declaring = ObjectLayouts.Owner(image, heaps, layout, target, false);
+                    if (declaring < 1) return -1;
+                    int receiver = ObjectLayouts.Find(objects, owner, declaring, new int[0]);
+                    // An unrewritten IL receiver of a value method is a byref.
+                    // Address scans that substituted a snapshot mark the call separately.
+                    if (UsesLocationReceiver(objects, receiver)) key = -1;
+                }
                 int index = Lookup(owners, rows, contexts, bases, indices, functions, owner, target, key);
                 if (index < 0)
                 {
@@ -1966,6 +2006,9 @@ namespace PortableCompiler
             }
             return functions;
         }
+
+        private static bool UsesLocationReceiver(int[] objects, int receiver) =>
+            ObjectLayouts.IsValueType(objects, receiver) && !ObjectLayouts.IsExplicitValue(objects, receiver);
 
         private static bool BindLocationCall(int[] records, int slot, int function, int storage,
             int[] arities, int[] offsets, int[] signatures)
