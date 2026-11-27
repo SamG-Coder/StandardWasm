@@ -35,9 +35,14 @@ types and arrays, UTF-16 names, cached string identity, and a null receiver.
 The root dispatch cases call `Object.ToString` at the same virtual site with a
 bare object, a string, a class override, an inherited implementation, a
 runtime type descriptor, a boxed scalar and a nominal reference array.
-They also cover the null receiver. Primitive vectors share Wasm heaps across
-distinct CLI types, so the verifier accepts the located diagnostic for that
-case until those identities can be carried through dispatch.
+They also cover the null receiver and primitive vectors. Each primitive array
+allocation has a distinct Wasm GC subtype for its CLR element type. Array
+access still uses the shared storage supertype, so widening to `object` does
+not copy the array or change its identity. The tests compare `GetType` and
+`ToString` for `byte[]`, `bool[]`, `char[]` and `ushort[]`, check writes through
+the original typed aliases, and include a data-initialized vector. An export
+that accepts storage-typed primitive arrays from the Wasm host still leaves
+the runtime type unknown, so affected reflection calls report a diagnostic.
 
 The Type.Name cases share the runtime descriptor cache machinery. They
 verify simple names for nested generic types and arrays, typed null

@@ -16,7 +16,10 @@ namespace PortableCompiler
         private const int ObjectLocationHeap = ValueLocationHeap + 1;
         private const int ReadOnlySpanHeap = ObjectLocationHeap + 1;
         internal const int CharacterSpanThunkType = ReadOnlySpanHeap + 1;
-        private const int FirstClassHeap = CharacterSpanThunkType + 1;
+        private const int FirstPrimitiveArrayHeap = CharacterSpanThunkType + 1;
+        private const int FirstClassHeap = FirstPrimitiveArrayHeap + PrimitiveArrayWasm.MemberCount;
+
+        internal static int PrimitiveArrayHeap(int element) => PrimitiveArrayWasm.Heap(FirstPrimitiveArrayHeap, element);
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
@@ -95,7 +98,8 @@ namespace PortableCompiler
             // types retain individual indices for fields and function signatures.
             // The fixed recursive groups combine seven types into two entries.
             bool hasDescriptors = RuntimeTypeWasm.HasDescriptors(globals);
-            int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 5;
+            int typeEntries = (recursive ? functions + FirstClassHeap + 1 : functions + typeOffset) - 5 -
+                (PrimitiveArrayWasm.MemberCount - 1);
             if (hasRemainder) typeEntries++;
             if (tagCount != 0) typeEntries++;
             if (objectTag) typeEntries++;
@@ -103,7 +107,8 @@ namespace PortableCompiler
             if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
             if (hasDescriptors) typeEntries++;
             int prefix = UnsignedSize(typeEntries) + 70 + ManagedValueLocationWasm.TypeBytes +
-                ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + 7 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+                ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + 7 + PrimitiveArrayWasm.TypeBytes +
+                (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (tagCount != 0) prefix += 3; // () -> () exception payload
             if (objectTag) prefix += ExceptionTagsWasm.ObjectTagTypeBytes; // (eqref) -> () managed object payload
@@ -242,12 +247,8 @@ namespace PortableCompiler
             output[7] = 0;
             int cursor = Section(output, 8, 1, typeSize);
             cursor = Unsigned(output, cursor, typeEntries);
-            output[cursor++] = 0x5e; // array of packed i8
-            output[cursor++] = 0x78;
-            output[cursor++] = 1;
-            output[cursor++] = 0x5e; // array of i32
-            output[cursor++] = 0x7f;
-            output[cursor++] = 1;
+            cursor = PrimitiveArrayWasm.WriteBase(output, cursor, Bytes);
+            cursor = PrimitiveArrayWasm.WriteBase(output, cursor, Ints);
             // Thunk type: (eqref) -> i32. Its closure holds an eqref and a funcref.
             output[cursor++] = 0x60;
             output[cursor++] = 1;
@@ -260,17 +261,13 @@ namespace PortableCompiler
             output[cursor++] = 0;
             output[cursor++] = 0x70;
             output[cursor++] = 0;
-            output[cursor++] = 0x5e; // Char[] backing store
-            output[cursor++] = 0x77;
-            output[cursor++] = 1;
+            cursor = PrimitiveArrayWasm.WriteBase(output, cursor, Chars);
             output[cursor++] = 0x5f; // String: immutable reference to private Char[] storage
             output[cursor++] = 1;
             output[cursor++] = 0x63;
             output[cursor++] = 4;
             output[cursor++] = 0;
-            output[cursor++] = 0x5e; // array of i64
-            output[cursor++] = 0x7e;
-            output[cursor++] = 1;
+            cursor = PrimitiveArrayWasm.WriteBase(output, cursor, Longs);
             // The immutable marker gives EventArgs a distinct GC shape from user classes.
             output[cursor++] = 0x5f;
             output[cursor++] = 1;
@@ -304,19 +301,13 @@ namespace PortableCompiler
             output[cursor++] = 0x63;
             output[cursor++] = EventEntryHeap;
             output[cursor++] = 1;
-            output[cursor++] = 0x5e; // f32 array
-            output[cursor++] = 0x7d;
-            output[cursor++] = 1;
-            output[cursor++] = 0x5e; // f64 array
-            output[cursor++] = 0x7c;
-            output[cursor++] = 1;
+            cursor = PrimitiveArrayWasm.WriteBase(output, cursor, Singles);
+            cursor = PrimitiveArrayWasm.WriteBase(output, cursor, Doubles);
             // Give the native vector, root object and managed views private
             // type identities by placing them in their own recursive group.
             output[cursor++] = 0x4e;
             output[cursor++] = 5;
-            output[cursor++] = 0x5e;
-            output[cursor++] = 0x7f;
-            output[cursor++] = 1;
+            cursor = PrimitiveArrayWasm.WriteBase(output, cursor, NativeVector);
             output[cursor++] = 0x5f;
             output[cursor++] = 0;
             cursor = ManagedValueLocationWasm.WriteType(output, cursor);
@@ -328,6 +319,7 @@ namespace PortableCompiler
             cursor = ValueType(output, cursor, WritableCharacterSpan);
             output[cursor++] = 0x7f;
             output[cursor++] = 0;
+            cursor = PrimitiveArrayWasm.WriteIdentities(output, cursor);
             if (recursive)
             {
                 output[cursor++] = 0x4e;

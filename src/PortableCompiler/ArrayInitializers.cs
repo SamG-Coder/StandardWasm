@@ -27,8 +27,9 @@ namespace PortableCompiler
                 if (HasInteriorTarget(records, next / Width, call / Width))
                     return -2;
                 int length = records[slot + 1];
-                int type = ArrayTypeRefs.ElementType(image, heaps, methods, unchecked((uint)records[next + 1]));
-                if (type < 0) return type;
+                int element = ArrayTypeRefs.TokenElement(image, heaps, methods, unchecked((uint)records[next + 1]));
+                if (element < 0) return element;
+                int type = ArrayTypeRefs.Storage(element);
                 // A native-width RVA data blob targets the originating architecture.
                 if (type == NativeVector) return -2;
                 int width = type == Bytes ? 1 : type == Chars ? 2 : type == Longs || type == Doubles ? 8 : 4;
@@ -47,6 +48,7 @@ namespace PortableCompiler
                 records[next + 1] = type;
                 records[next + 2] = records[call + 2];
                 records[next + 3] = destination;
+                records[next + Width + 1] = element; // an operand byte, never an IL entry
                 records[dup] = 0;
                 records[token] = 0;
                 records[call] = 0;

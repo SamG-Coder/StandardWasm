@@ -16,9 +16,6 @@ internal static class Program
             throw new InvalidOperationException("The CoreLib formatting baseline changed.");
         int[] intDiagnostic = [2, digits.MetadataToken & 0xffffff, -1];
 
-        var root = typeof(Program).GetMethod(nameof(DescribeRoot), BindingFlags.Static | BindingFlags.NonPublic)!;
-        int[] primitiveVectorDiagnostic = [0, root.MetadataToken & 0xffffff, 1];
-
         var cases = new Func<int>[]
         {
             BoxedIntMatch, BoxedDoubleMatch, BoxedBooleanMiss, StringMiss, NullMiss, ReferenceMatch, BoxIdentity,
@@ -31,12 +28,12 @@ internal static class Program
             ClosedTypeDisplayName, OpenTypeDisplayName, ArrayTypeDisplayName, RepeatedTypeDisplayName, NamespacedTypeDisplayName, NullTypeDisplayName,
             ExactRootDispatch, DynamicRootDispatch, NullRootDispatch, PrimitiveVectorRootDispatch,
             TypeSimpleNames, NullTypeSimpleName, TypeNameAndDisplayName,
-            WritableSpanString, ReadOnlySpanString, EmptySpanString, NativeSpanString
+            WritableSpanString, ReadOnlySpanString, EmptySpanString, NativeSpanString,
+            PrimitiveVectorTypeIdentity, PrimitiveVectorAliases, InitializedPrimitiveVectorIdentity
         };
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
-            acceptedDiagnostic = run.Method.Name.StartsWith("OriginalInt", StringComparison.Ordinal) ? intDiagnostic :
-                run.Method.Name == nameof(PrimitiveVectorRootDispatch) ? primitiveVectorDiagnostic : null
+            acceptedDiagnostic = run.Method.Name.StartsWith("OriginalInt", StringComparison.Ordinal) ? intDiagnostic : null
         });
         File.WriteAllText(args[0], JsonSerializer.Serialize(new {
             runtime = Environment.Version.ToString(), files = new[] {
@@ -131,8 +128,46 @@ internal static class Program
         catch (NullReferenceException) { return 53; }
     }
 
-    public static int PrimitiveVectorRootDispatch() =>
-        DescribeRoot(new byte[1]) == "System.Byte[]" ? 59 : 0;
+    public static int PrimitiveVectorRootDispatch()
+    {
+        int result = DescribeRoot(new byte[1]) == "System.Byte[]" ? 1 : 0;
+        if (DescribeRoot(new bool[1]) == "System.Boolean[]") result += 2;
+        if (DescribeRoot(new char[1]) == "System.Char[]") result += 4;
+        if (DescribeRoot(new ushort[1]) == "System.UInt16[]") result += 8;
+        return result;
+    }
+
+    public static int PrimitiveVectorTypeIdentity()
+    {
+        int result = IsExactType(new byte[1], typeof(byte[])) ? 1 : 0;
+        if (IsExactType(new bool[1], typeof(bool[]))) result += 2;
+        if (IsExactType(new char[1], typeof(char[]))) result += 4;
+        if (IsExactType(new ushort[1], typeof(ushort[]))) result += 8;
+        if (!IsExactType(new bool[1], typeof(byte[]))) result += 16;
+        if (!IsExactType(new char[1], typeof(ushort[]))) result += 32;
+        return result;
+    }
+
+    public static int PrimitiveVectorAliases()
+    {
+        var bytes = new byte[1];
+        var chars = new char[1];
+        object byteOwner = bytes;
+        object charOwner = chars;
+        bytes[0] = 251;
+        chars[0] = 'Z';
+        int result = ReferenceEquals(byteOwner, bytes) && IsExactType(byteOwner, typeof(byte[])) ? bytes[0] : 0;
+        if (ReferenceEquals(charOwner, chars) && IsExactType(charOwner, typeof(char[]))) result += chars[0];
+        return result;
+    }
+
+    public static int InitializedPrimitiveVectorIdentity()
+    {
+        int[] numbers = [17, 21, 55, 61, 71, 81, 91, 101];
+        return numbers.GetType() == typeof(int[]) ? numbers[5] : -1;
+    }
+
+    private static bool IsExactType(object value, Type expected) => value.GetType() == expected;
 
     private static string DescribeRoot(object value) => value.ToString()!;
 

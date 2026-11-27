@@ -1491,7 +1491,13 @@ namespace PortableCompiler
                         used = ExceptionTagsWasm.ThrowIf(code, used);
                     }
                     used = Local(code, used, 0x20, length);
-                    used = Gc(code, used, kind == NewArray ? 7 : 9, operand); // default or passive data
+                    int element = records[slot + BranchIl.Width + 1];
+                    // The exact CLR type belongs to the allocation. Existing typed
+                    // array instructions and spills consume its storage supertype.
+                    int heap = element == 0 ? WasmBinary.HeapType(operand) : WasmBinary.PrimitiveArrayHeap(element);
+                    code[used++] = 0xfb;
+                    code[used++] = kind == NewArray ? (byte)7 : (byte)9; // default or passive data
+                    used = WasmBinary.Unsigned(code, used, heap);
                     if (kind == InitializedArray) code[used++] = 0; // shared data segment index
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, operand, top));
                 }

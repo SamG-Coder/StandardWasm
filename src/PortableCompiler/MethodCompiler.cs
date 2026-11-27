@@ -290,7 +290,7 @@ namespace PortableCompiler
             var reflection = new RuntimeReflectionPlan();
             var hostUse = new int[1];
             int functions = 0, length = 0, closedSignaturesThrough = 0;
-            bool externalObjects = false;
+            bool externalObjects = false, externalVectors = false;
             // Any reachable ldind/stind needs the host-lent memory 0 (decision 0060).
             bool linearMemory = false;
             var dispatch = new VirtualDispatch(output.Length, typeCalls);
@@ -314,7 +314,8 @@ namespace PortableCompiler
                 for (int parameter = 1; parameter <= arities[index]; parameter++)
                 {
                     int type = signatures[offsets[index] + parameter];
-                    if (CanExchangeClass(objects, type)) externalObjects = true;
+                    if (IsArray(ExchangeLeaf(objects, type))) externalVectors = true;
+                    if (externalVectors || CanExchangeClass(objects, type)) externalObjects = true;
                     if (type == NullPointer || IsManagedLocation(type) || IsValueLocation(type) || IsSpan(type) || RuntimeTypeMetadata.IsStorage(type) || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
                         return -2;
                 }
@@ -997,9 +998,29 @@ namespace PortableCompiler
                         }
                         if (depths[pc] != 0)
                         {
-                            if (depths[pc] > 1) dispatch.ObserveReceiver(states[pc * maximum + depths[pc] - 2]);
-                            if (kind == BranchIl.NewArray && ObjectLayouts.ArrayElementKey(objects, operation) != 0)
-                                dispatch.AddAllocation(operation);
+                            if (depths[pc] > 1)
+                            {
+                                int top = states[pc * maximum + depths[pc] - 2];
+                                dispatch.ObserveReceiver(top);
+                                // The public Wasm ABI exposes storage supertypes.
+                                // A foreign array can lack the managed allocation's type ID.
+                                if (externalVectors && kind == BranchIl.GetObjectType && (top == ObjectReference || IsArray(top)))
+                                {
+                                    CompileLocation.Set(location, owner, source, pc);
+                                    return -2;
+                                }
+                            }
+                            if (kind == BranchIl.NewArray || kind == BranchIl.InitializedArray)
+                            {
+                                int element = records[slot + BranchIl.Width + 1];
+                                if (element != 0)
+                                {
+                                    reflection.ObjectTypes.IncludePrimitiveArray(element);
+                                    dispatch.AddPrimitiveArray(element);
+                                }
+                                else if (ObjectLayouts.ArrayElementKey(objects, operation) != 0)
+                                    dispatch.AddAllocation(operation);
+                            }
                             if (kind == BranchIl.BoxValue) dispatch.AddBox(operation);
                             if (hasNull)
                             {
@@ -1311,8 +1332,9 @@ namespace PortableCompiler
                 if (kind == BranchIl.NewArray)
                 {
                     uint token = unchecked((uint)records[slot + 1]);
-                    int type = ArrayTypeRefs.ElementType(image, heaps, layout, token);
-                    if (type == -2)
+                    int primitive = ArrayTypeRefs.TokenElement(image, heaps, layout, token);
+                    int type = primitive;
+                    if (primitive == -2)
                     {
                         uint table = token >> 24;
                         if (table != 1 && table != 2 && table != 0x1b) return -2;
@@ -1320,11 +1342,15 @@ namespace PortableCompiler
                         int element = ArrayTokenElement(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);
                         if (element < 0) return element;
                         // Use the same representation as a closed T[] signature.
-                        type = GenericScalar.IsScalar(element)
-                            ? GenericScalar.Storage(GenericScalar.VectorKey(element))
-                            : ObjectLayouts.RegisterArray(objects, element);
+                        if (GenericScalar.IsScalar(element)) primitive = GenericScalar.Element(element);
+                        else type = ObjectLayouts.RegisterArray(objects, element);
                     }
-                    if (type < 0) return type;
+                    if (primitive > 0)
+                    {
+                        type = ArrayTypeRefs.Storage(primitive);
+                        records[slot + BranchIl.Width + 1] = primitive;
+                    }
+                    if (type <= 0) return type == 0 ? -2 : type;
                     records[slot + 1] = type;
                 }
                 if (kind == BranchIl.BoxValue || kind == BranchIl.UnboxValue || kind == BranchIl.TestClass)
@@ -2838,13 +2864,20 @@ namespace PortableCompiler
 
         private static bool CanExchangeClass(int[] objects, int type)
         {
+            type = ExchangeLeaf(objects, type);
+            if (type >= ObjectLayouts.FirstClass) return !ObjectLayouts.IsValueType(objects, type);
+            return type == ObjectLayouts.ObjectReference || type == Delegate || type == EventHandlerReference;
+        }
+
+        private static int ExchangeLeaf(int[] objects, int type)
+        {
             while (type >= ObjectLayouts.FirstClass)
             {
                 int element = ObjectLayouts.ArrayElement(objects, type);
-                if (element == 0) return !ObjectLayouts.IsValueType(objects, type);
+                if (element == 0) break;
                 type = element;
             }
-            return type == ObjectLayouts.ObjectReference || type == Delegate || type == EventHandlerReference;
+            return type;
         }
 
         // A managed address consumed by ldobj or stobj (for example `this = new S(...)`, #271)

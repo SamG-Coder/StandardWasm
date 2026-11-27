@@ -10,12 +10,13 @@ namespace PortableCompiler
         internal readonly int[] Fixups = new int[1];
         private byte[] receivers;
         private bool anyClass, stringReceiver, interfaceReceiver;
-        private int boxedElements;
+        private int boxedElements, primitiveArrays, primitiveReceivers;
 
         internal void Include(int[] objects, int type)
         {
             if (type == ObjectReference) anyClass = true;
             if (type == String) stringReceiver = true;
+            if (IsArray(type)) primitiveReceivers |= 1 << type;
             if (type < FirstClass) return;
             if (IsInterface(objects, type)) interfaceReceiver = true;
             if (receivers == null) receivers = new byte[MaxClasses];
@@ -23,6 +24,7 @@ namespace PortableCompiler
         }
 
         internal void IncludeBox(int element) => boxedElements |= 1 << element;
+        internal void IncludePrimitiveArray(int element) => primitiveArrays |= 1 << element;
 
         internal int Write(BundleImages bundle, byte[] code, int position, int[] objects, int[] globals)
         {
@@ -64,6 +66,16 @@ namespace PortableCompiler
                     position = BoxCases(bundle, code, position, objects, globals);
                     if (position < 0) return position;
                 }
+            }
+            for (int element = PrimitiveArrayWasm.FirstElement; element < PrimitiveArrayWasm.EndElement; element++)
+            {
+                if ((primitiveArrays & (1 << element)) == 0 ||
+                    (!anyClass && (primitiveReceivers & (1 << ArrayTypeRefs.Storage(element))) == 0)) continue;
+                int descriptor = RuntimeTypeTokens.BindIdentity(globals, AssemblyBundle.ObjectOwner,
+                    RuntimeTypeTokens.PrimitiveVectorKey + element);
+                if (descriptor < 0) return descriptor;
+                position = HeapCase(code, position, WasmBinary.PrimitiveArrayHeap(element), descriptor);
+                if (position < 0) return position;
             }
             // Representations without exact runtime type identity must fail
             // rather than substituting the static Object type.

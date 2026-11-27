@@ -18,6 +18,7 @@ namespace PortableCompiler
         private int[] sites = new int[0];
         private int[] cases = new int[0];
         private int allocationsCount, sitesUsed, casesUsed = CaseWidth, boxes;
+        private int primitiveArrays;
         private bool typeDescriptors, unsupportedRootReceiver;
 
         internal VirtualDispatch(int capacity, RuntimeTypeCalls typeCalls)
@@ -51,14 +52,15 @@ namespace PortableCompiler
         }
 
         internal void AddBox(int element) => boxes |= 1 << element;
+        internal void AddPrimitiveArray(int element) => primitiveArrays |= 1 << element;
 
         // Every produced evaluation-stack value is at the top on an incoming
-        // edge. Until raw vectors and special host objects carry exact runtime
-        // identities, their presence leaves the root dispatch universe open.
+        // edge. Special host objects without runtime identities leave the
+        // root dispatch universe open.
         internal void ObserveReceiver(int type)
         {
             if (type == RuntimeTypeMetadata.Type) typeDescriptors = true;
-            if (SignatureTypes.IsArray(type) || type == EventArgsReference || type == EventHandlerReference ||
+            if (type == EventArgsReference || type == EventHandlerReference ||
                 type == DelegateReference || type == SignatureTypes.Delegate || type == SignatureTypes.CharacterSpanCallback ||
                 type == RuntimeTypeMetadata.Module || type == RuntimeTypeMetadata.Assembly)
                 unsupportedRootReceiver = true;
@@ -260,8 +262,16 @@ namespace PortableCompiler
                     if (code.Length - length < 64) return -3;
                     if (typeDescriptors)
                         length = VirtualDispatchWasm.DescriptorArm(code, length, reflection);
-                    length = VirtualDispatchWasm.ArmHeap(code, length, WasmBinary.RootObjectHeap, ObjectReference,
-                        hostImports + sites[site + RootTarget] - 1, arity);
+                    int root = hostImports + sites[site + RootTarget] - 1;
+                    length = VirtualDispatchWasm.ArmHeap(code, length, WasmBinary.RootObjectHeap, ObjectReference, root, arity);
+                    for (int element = PrimitiveArrayWasm.FirstElement; element < PrimitiveArrayWasm.EndElement; element++)
+                    {
+                        if ((primitiveArrays & (1 << element)) == 0) continue;
+                        if (code.Length - length < 26) return -3;
+                        // Every CLI primitive vector inherits Object.ToString.
+                        length = VirtualDispatchWasm.ArmHeap(code, length, WasmBinary.PrimitiveArrayHeap(element),
+                            ObjectReference, root, arity);
+                    }
                 }
 
                 // The caller checked null. The fixed point covers reachable

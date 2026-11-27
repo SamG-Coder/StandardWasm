@@ -18,15 +18,12 @@ namespace PeLibrary
             return 0;
         }
 
-        internal static int ElementType(byte[] image, int[] streams, int[] methods, uint token)
+        internal static int TokenElement(byte[] image, int[] streams, int[] methods, uint token)
         {
             int row = (int)(token & 0xffffff);
             if (token >> 24 != 1 || row == 0)
                 return -2;
-            int element = PrimitiveElement(image, streams, methods, row << 2 | 1, includeRuntimeExtensions: true);
-            if (element < 0) return element;
-            int storage = Storage(element);
-            return storage != 0 ? storage : -2;
+            return PrimitiveElement(image, streams, methods, row << 2 | 1, includeRuntimeExtensions: true);
         }
 
         internal static int PrimitiveElement(byte[] image, int[] streams, int[] methods, int coded, bool includeRuntimeExtensions = false)
