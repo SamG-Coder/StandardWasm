@@ -5,7 +5,7 @@ using System.Text.Json;
 using ClosedGenericSize;
 
 if (IntPtr.Size != 4) throw new InvalidOperationException("Expected the x86 CLR.");
-Func<int>[] methods = [Probe.Narrow, Probe.WideValues, Probe.Native, Probe.EnumValues, Probe.Sequential, Probe.DeclaringType];
+Func<int>[] methods = [Probe.Narrow, Probe.WideValues, Probe.Native, Probe.EnumValues, Probe.Sequential, Probe.DeclaringType, Probe.ClosedSizeBranch];
 string runtime = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
 File.WriteAllText(args[0], JsonSerializer.Serialize(new
 {

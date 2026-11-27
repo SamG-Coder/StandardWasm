@@ -34,7 +34,7 @@ export async function verifyManagedDemo(stageName) {
         const output = tool.CreateBytes(2 << 20);
         const diagnostic = tool.CreateDiagnostic();
         const outcomes = [];
-        for (const { name, row, expected } of cases) {
+        for (const { name, row, expected, memory } of cases) {
             const manifest = Uint8Array.from([0, 0, 0, 0, 3, 0, 0, 0, 114, 117, 110]);
             new DataView(manifest.buffer).setUint32(0, row, true);
             const length = tool.CompileBundleDetailed(input, upload(manifest), output, diagnostic);
@@ -45,8 +45,13 @@ export async function verifyManagedDemo(stageName) {
             }
             const bytes = Uint8Array.from({ length }, (_, i) => tool.ReadByte(output, i));
             const module = await WebAssembly.compile(bytes);
-            if (WebAssembly.Module.imports(module).length !== 0) throw Error(name + " requires host imports");
-            const instance = await WebAssembly.instantiate(module);
+            const declarations = WebAssembly.Module.imports(module);
+            const requested = declarations[0];
+            if (memory ? declarations.length !== 1 || requested.module !== "standardwasm:resources" ||
+                requested.name !== "memory" || requested.kind !== "memory" : declarations.length !== 0)
+                throw Error(name + " has unexpected host imports");
+            const imports = memory ? { "standardwasm:resources": { memory: new WebAssembly.Memory({ initial: 1 }) } } : {};
+            const instance = await WebAssembly.instantiate(module, imports);
             outcomes.push({ name, expected, result: instance.exports.run() });
         }
         return outcomes;

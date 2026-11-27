@@ -14,13 +14,15 @@ namespace PortableCompiler
         internal const int ObjectLocation = 0x80, ObjectSpan = 0x81, CharacterSpan = 0x82;
         internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84, BooleanLocation = 0x86, StringLocation = 0x87;
         internal const int ReadOnlyByteSpan = 0x88, StaticByteLocation = 0x89, CharacterSpanCallback = 0x8a, Int32Location = 0x8b;
-        internal const int EventHandlerLocation = 0x8c;
+        internal const int EventHandlerLocation = 0x8c, Int16Location = 0x8d;
         // Reference locations retain their nominal element type in the verifier,
         // even when their Wasm representation is the shared object cell.
         private const int ReferenceLocationBase = 32768;
         internal static bool IsManagedLocation(int type) =>
-            IsReferenceLocation(type) || type == CharacterLocation || type == BooleanLocation ||
+            IsReferenceLocation(type) || IsPacked16Location(type) || type == BooleanLocation ||
             type == StaticByteLocation || type == Int32Location;
+
+        internal static bool IsPacked16Location(int type) => type == CharacterLocation || type == Int16Location;
 
         internal static bool IsReferenceLocation(int type) =>
             type == ObjectLocation || type == StringLocation || type == EventHandlerLocation ||
@@ -31,6 +33,7 @@ namespace PortableCompiler
             type == ObjectLayouts.ObjectReference ? ObjectLocation : type == String ? StringLocation :
             type == ObjectLayouts.EventHandlerReference ? EventHandlerLocation :
             type == GenericScalar.Key(3) ? CharacterLocation : type == GenericScalar.Key(2) ? BooleanLocation :
+            type == GenericScalar.Key(6) ? Int16Location :
             type == GenericScalar.Key(5) ? StaticByteLocation : type == GenericScalar.Key(8) ? Int32Location :
             ObjectLayouts.IsValueType(objects, type) ? ValueLocation(type) :
             type >= ObjectLayouts.FirstClass && type - ObjectLayouts.FirstClass < objects[0] ? ReferenceLocationBase + type : 0;

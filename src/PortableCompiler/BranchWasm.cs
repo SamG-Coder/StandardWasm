@@ -928,7 +928,7 @@ namespace PortableCompiler
                     int address = Spill(spills, maximum, spillFlags, type, top);
                     used = Local(code, used, 0x20, address);
                     code[used++] = IsNativeInteger(type) ? (byte)0x45 : (byte)0xd1; // i32.eqz or ref.is_null
-                    if (type == CharacterLocation)
+                    if (IsPacked16Location(type))
                         used = ManagedLocationWasm.TestCharacterAddress(code, used, address);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top));
                 }
@@ -1287,12 +1287,12 @@ namespace PortableCompiler
                 {
                     int type = states[state + top];
                     int address = Spill(spills, maximum, spillFlags, type, top);
-                    if (frameShape[25] != 0 && type == CharacterLocation)
+                    if (frameShape[25] != 0 && IsPacked16Location(type))
                         used = NativeCharacterViewWasm.ReadLocation(code, used, address);
-                    else if (type == CharacterLocation || type == BooleanLocation || type == StaticByteLocation || type == Int32Location)
+                    else if (IsPacked16Location(type) || type == BooleanLocation || type == StaticByteLocation || type == Int32Location)
                     {
-                        int vector = type == Int32Location ? Ints : type == CharacterLocation ? Chars : Bytes;
-                        if (type == CharacterLocation) used = GuardNull(code, used, address);
+                        int vector = type == Int32Location ? Ints : IsPacked16Location(type) ? Chars : Bytes;
+                        if (IsPacked16Location(type)) used = GuardNull(code, used, address);
                         used = ValueFieldProjectionWasm.Read(code, used, frameShape[7], address, vector, type, projections);
                     }
                     else
@@ -1301,6 +1301,7 @@ namespace PortableCompiler
                         used = Local(code, used, 0x20, address);
                         used = LinearMemoryWasm.Load(code, used, operand);
                     }
+                    if (type == Int16Location) code[used++] = 0xc1; // i32.extend16_s
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, StackDepths.IndirectType(operand), top));
                 }
                 else if (kind == StoreIndirect)
@@ -1310,12 +1311,12 @@ namespace PortableCompiler
                     int type = states[state + top - 1], value = states[state + top];
                     int address = Spill(spills, maximum, spillFlags, type, top - 1);
                     int source = Spill(spills, maximum, spillFlags, value, top);
-                    if (frameShape[25] != 0 && type == CharacterLocation)
+                    if (frameShape[25] != 0 && IsPacked16Location(type))
                         used = NativeCharacterViewWasm.WriteLocation(code, used, address, source);
-                    else if (type == CharacterLocation || type == BooleanLocation || type == Int32Location)
+                    else if (IsPacked16Location(type) || type == BooleanLocation || type == Int32Location)
                     {
-                        int vector = type == Int32Location ? Ints : type == CharacterLocation ? Chars : Bytes;
-                        if (type == CharacterLocation) used = GuardNull(code, used, address);
+                        int vector = type == Int32Location ? Ints : IsPacked16Location(type) ? Chars : Bytes;
+                        if (IsPacked16Location(type)) used = GuardNull(code, used, address);
                         used = ValueFieldProjectionWasm.Write(code, used, frameShape[7], address, source, vector, type, projections);
                     }
                     else
@@ -1864,6 +1865,8 @@ namespace PortableCompiler
             // Both types have the same physical storage but distinct CLI stack identities.
             type == DelegateReference ? EventHandlerReference - 1 :
             type == CharacterSpanCallback ? Delegate - 1 :
+            // ReinterpretPacked16Location is verifier-only. Both nominal
+            // views keep the same reference in the shared location bank.
             IsManagedLocation(type) ? LastScalarBank :
             IsSpan(type) ? LastScalarBank + (flags & LocationSpill) :
             type >= FirstClass ? LastScalarBank + ExtraSpillBanks(flags) + type - FirstClass :

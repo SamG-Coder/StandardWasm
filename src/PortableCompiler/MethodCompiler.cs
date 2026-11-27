@@ -665,6 +665,8 @@ namespace PortableCompiler
                         frame, records, objects, catchRegion);
                     RuntimeTypeBranches.FoldClosedTypeBranches(bundle, image, layout, heaps, owner, context,
                         methodArguments, objects, records, catchRegion, count);
+                    RuntimeTypeBranches.FoldClosedSizeBranches(bundle, image, layout, heaps, owner,
+                        context, methodArguments, objects, records, catchRegion);
                     EnumFlagTests.Lower(bundle, image, layout, heaps, owner, objects, records, catchRegion);
                     ExactManagedReads.FoldExactManagedReads(bundle, image, layout, heaps, owner, context,
                         methodArguments, objects, frame, records, catchRegion);
@@ -1743,6 +1745,23 @@ namespace PortableCompiler
                             records[slot + 3] = reference;
                             continue;
                         }
+                        if (spec[MethodSpecifications.Arity] == 2 &&
+                            ExactManagedReads.IsPlatformAs(image, heaps, layout, counts, spec[MethodSpecifications.Target]))
+                        {
+                            var elements = new int[2];
+                            status = MethodInstantiations.ReadArguments(bundle, image, layout, heaps, owner,
+                                context, objects, methodArguments, spec, elements);
+                            if (status < 0) return status;
+                            int sourceLocation = ManagedReferenceSignatures.ElementLocation(objects, elements[0]);
+                            int targetLocation = ManagedReferenceSignatures.ElementLocation(objects, elements[1]);
+                            if (IsPacked16Location(sourceLocation) && IsPacked16Location(targetLocation))
+                            {
+                                records[slot] = BranchIl.ReinterpretPacked16Location;
+                                records[slot + 1] = sourceLocation;
+                                records[slot + 3] = targetLocation;
+                                continue;
+                            }
+                        }
                         int intrinsic = StaticByteIntrinsics.Identify(image, layout, heaps, counts, spec, methodArguments);
                         if (intrinsic != 0)
                         {
@@ -1844,12 +1863,12 @@ namespace PortableCompiler
                         int locationType = ManagedReferenceSignatures.TypeSpecLocation(bundle, image, layout, heaps,
                             owner, row, context, objects, methodArguments);
                         if (locationType < 0) return locationType;
-                        if (locationType == CharacterLocation && kind != BranchIl.InitializeValue)
+                        if (IsPacked16Location(locationType) && kind != BranchIl.InitializeValue)
                         {
-                            // Closed generic char ldobj/stobj has the same storage as ldind.u2/stind.i2.
+                            // Closed packed 16-bit ldobj/stobj uses the nominal signedness.
                             bool load = kind == BranchIl.LoadObject;
                             records[slot] = load ? BranchIl.LoadIndirect : BranchIl.StoreIndirect;
-                            records[slot + 1] = load ? 0x49 : 0x53;
+                            records[slot + 1] = load ? locationType == Int16Location ? 0x48 : 0x49 : 0x53;
                             continue;
                         }
                         if (!IsValueLocation(locationType) && locationType != BooleanLocation &&

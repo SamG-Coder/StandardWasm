@@ -70,14 +70,14 @@ namespace PortableCompiler
             records[call] = Nop;
         }
 
-        private static bool IsPlatformAs(byte[] image, int[] heaps, int[] layout, int[] counts, int target)
+        internal static bool IsPlatformAs(byte[] image, int[] heaps, int[] layout, int[] counts, int target)
         {
             int row = target >> 1;
             int signature, name;
             if ((target & 1) == 0)
             {
                 int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
-                if (owner < 1 || !SpanMetadata.IsPlatformType(image, layout, heaps, owner << 2,
+                if (owner < 1 || (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x10) == 0 || !SpanMetadata.IsPlatformType(image, layout, heaps, owner << 2,
                     "System.Runtime.CompilerServices", "Unsafe")) return false;
                 signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
                 name = MethodDefinitions.ReadColumn(image, layout, row, 3);

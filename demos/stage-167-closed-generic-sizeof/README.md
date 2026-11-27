@@ -10,3 +10,7 @@ measuring it. In particular, Boolean, Byte, Char, and Int16 can all use a
 Wasm i32 evaluation slot and still have different CLI storage sizes.
 The fixture also covers wide values, native integers, enum storage,
 alignment padding, and an empty struct.
+
+A closed character specialization also eliminates an impossible size arm
+before linking. The fixture's unused arm calls a math operation outside the
+compiler's supported surface.

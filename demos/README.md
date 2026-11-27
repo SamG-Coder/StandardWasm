@@ -170,6 +170,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [165 · Dynamic native calls](stage-165-dynamic-native-calls/README.md) | `npm run demo -- stage-165-dynamic-native-calls` | Compare typed calls through resolved export tokens, UTF-16 writes and diagnostics in Node and Edge |
 | [166 · Span field reader arguments](stage-166-span-field-reader-arguments/README.md) | `npm run demo -- stage-166-span-field-reader-arguments` | Verify indexed and sliced span fields with ordinary argument helpers and a located diagnostic for a mutating helper |
 | [167 · Closed generic sizeof](stage-167-closed-generic-sizeof/README.md) | `npm run demo -- stage-167-closed-generic-sizeof` | Compare nominal CLI sizes for closed method and declaring type arguments |
+| [168 · Packed 16-bit managed references](stage-168-packed16-managed-references/README.md) | `npm run demo -- stage-168-packed16-managed-references` | Compare aliased character and signed short reads, writes and nulls in Node and Edge |
 
 ## Adding a stage
 

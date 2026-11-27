@@ -63,6 +63,40 @@ namespace PortableCompiler
             if (changed) RemoveUnreachable(records);
         }
 
+        // A closed sizeof is a literal CLI size. Fold only an independent
+        // two-operand equality branch so it cannot retain an impossible
+        // machine-width arm or change an incoming evaluation stack.
+        internal static void FoldClosedSizeBranches(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int context, int[] methodArguments, int[] objects, int[] records, int[] clauses)
+        {
+            if ((context == 0 && methodArguments == null) || clauses.Length != 0) return;
+            bool changed = false;
+            for (int source = 0; source < records.Length; source += Width)
+            {
+                if (records[source] != SizeOf) continue;
+                int literal = Next(records, source);
+                if (literal >= records.Length || records[literal] != Constant) continue;
+                int branch = Next(records, literal);
+                if (branch >= records.Length || records[branch] != Conditional) continue;
+                int comparison = records[branch + 3];
+                if ((comparison != 0x46 && comparison != 0x47) ||
+                    ValueOperands.Entry(records, literal / Width, clauses) ||
+                    ValueOperands.Entry(records, branch / Width, clauses)) continue;
+                int size = ManagedSizeOf.Read(bundle, image, layout, heaps, owner,
+                    records[source + 1], context, objects, methodArguments);
+                if (size < 0) continue;
+
+                bool equal = size == records[literal + 1];
+                bool taken = comparison == 0x46 ? equal : !equal;
+                records[source] = Nop;
+                records[literal] = Nop;
+                records[branch] = taken ? Branch : Nop;
+                records[branch + 3] = 0;
+                changed = true;
+            }
+            if (changed) RemoveUnreachable(records);
+        }
+
         private static void FoldReferenceContainment(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int context, int[] methodArguments, int[] objects, int[] records, int[] clauses)
         {

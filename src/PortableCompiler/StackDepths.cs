@@ -358,6 +358,7 @@ namespace PortableCompiler
                 if (depth < 1) return -2;
                 int address = stack[depth - 1];
                 if (!IsNativeInteger(address) && (address != CharacterLocation || operand != 0x49) &&
+                    (address != Int16Location || operand != 0x48) &&
                     (address != BooleanLocation && address != StaticByteLocation || operand != 0x47) &&
                     (address != Int32Location || operand != 0x4a && operand != 0x4b)) return -2;
                 return Push(stack, allocated, depth - 1, IndirectType(operand));
@@ -366,7 +367,7 @@ namespace PortableCompiler
             {
                 if (depth < 2 || !IndirectValue(operand, stack[depth - 1])) return -2;
                 int address = stack[depth - 2];
-                if (!IsNativeInteger(address) && (address != CharacterLocation || operand != 0x53) &&
+                if (!IsNativeInteger(address) && (!IsPacked16Location(address) || operand != 0x53) &&
                     (address != BooleanLocation || operand != 0x52) && (address != Int32Location || operand != 0x54)) return -2;
                 return depth - 2;
             }
@@ -475,6 +476,8 @@ namespace PortableCompiler
             // A managed heap location requires separate pinning support.
             if (kind == NativeAddressView)
                 return depth > 0 && IsNativeInteger(stack[depth - 1]) ? depth : -2;
+            if (kind == ReinterpretPacked16Location)
+                return Match(stack, depth, operand) ? Push(stack, allocated, depth - 1, extra) : -2;
             if (kind == NullManagedLocation) return Push(stack, allocated, depth, extra);
             if (kind == TestNullLocation)
             {

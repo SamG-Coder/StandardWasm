@@ -23,7 +23,15 @@ namespace ClosedGenericSize
         public static int Sequential() => Size<Aligned>() * 10 + Size<Empty>();
         public static int DeclaringType() => new Cell<char>().Read() * 10 + new Cell<long>().Read();
 
+        public static int ClosedSizeBranch() => ProbeSize<char>();
+
         private static int Size<T>() where T : unmanaged => sizeof(T);
+
+        private static int ProbeSize<T>() where T : unmanaged
+        {
+            if (sizeof(T) == 2) return 71;
+            return (int)System.Math.Pow(3, 11);
+        }
 
         private struct Cell<T> where T : unmanaged
         {
