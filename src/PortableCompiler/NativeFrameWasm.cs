@@ -15,11 +15,14 @@ namespace PortableCompiler
         internal static bool IsCell(int storage) => storage == Native || storage < 0;
 
         internal static int BindAddresses(BundleImages bundle, int[] objects, NativeAggregatePlans plans,
-            int[] records, int[] clauses, int[] frame, int parameters, byte[] localElements, int[] cells, int[] location)
+            int[] records, int[] clauses, int[] frame, int parameters, byte[] localElements, int[] cells, int[] location,
+            int[] scopedCalls)
         {
             for (int at = 0; at < records.Length; at += BranchIl.Width)
             {
-                if (records[at] != BranchIl.FrameAddress || !ConvertsToPointer(records, at, clauses)) continue;
+                if (records[at] != BranchIl.FrameAddress) continue;
+                bool scopedCall = ScopedCall(records, at, scopedCalls);
+                if (!scopedCall && !ConvertsToPointer(records, at, clauses)) continue;
                 int local = records[at + 1], type = frame[local];
                 if (cells[local] != 0) continue;
                 int element = local >= parameters ? localElements[local - parameters] : 0;
@@ -29,7 +32,7 @@ namespace PortableCompiler
                 else if (local >= parameters && ObjectLayouts.IsValueType(objects, type))
                 {
                     int next = records[at + 2] * BranchIl.Width;
-                    bool scopedFrame = records[next] == BranchIl.NativeFieldPointer;
+                    bool scopedFrame = scopedCall || records[next] == BranchIl.NativeFieldPointer;
                     int plan = NativeAggregates.Plan(bundle, objects, type, plans, scopedFrame: scopedFrame);
                     if (plan < 0) return At(location, at, plan);
                     if (NativeAggregates.Size(plans.Plans, plan) <= 0) return At(location, at, -2);
@@ -42,7 +45,8 @@ namespace PortableCompiler
                 // Immediate initialization and field reads name the local
                 // without exposing a managed carrier. The ordinary lowerer
                 // still verifies the operand and folds the address.
-                if (!ConvertsToPointer(records, at, clauses))
+                bool scopedCall = ScopedCall(records, at, scopedCalls);
+                if (!scopedCall && !ConvertsToPointer(records, at, clauses))
                 {
                     int next = records[at + 2] * BranchIl.Width;
                     if (cells[records[at + 1]] < 0 && next < records.Length &&
@@ -52,13 +56,19 @@ namespace PortableCompiler
                 }
                 int conversion = records[at + 2] * BranchIl.Width;
                 // A general conv.u may not expose the entire scoped frame value.
-                if (records[conversion] != BranchIl.NativeFieldPointer &&
+                if (!scopedCall && records[conversion] != BranchIl.NativeFieldPointer &&
                     ObjectLayouts.IsByRefLikeValue(objects, frame[records[at + 1]])) return At(location, at, -2);
                 records[at] = BranchIl.LoadFrameLocation;
                 records[at + 3] = Native;
                 if (records[conversion] == BranchIl.ConvertInteger) records[conversion] = BranchIl.Nop;
             }
             return 0;
+        }
+
+        internal static bool ScopedCall(int[] records, int at, int[] calls)
+        {
+            int next = records[at + 2];
+            return calls != null && next < calls.Length && calls[next] == records[at + 1] + 1;
         }
 
         private static bool ConvertsToPointer(int[] records, int at, int[] clauses)

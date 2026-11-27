@@ -715,15 +715,34 @@ namespace PortableCompiler
                     virtualUsed[0] = 0;
                     var inlineLocations = new int[parameters + locals];
                     var frameCells = new int[parameters + locals];
+                    int[] scopedCalls = null;
+                    int scopedReceiver = 0;
+                    if (NativeReceiverCalls.IsNativeKey(contexts[current]))
+                    {
+                        int type = context;
+                        if (type == 0)
+                        {
+                            int definition = ObjectLayouts.Owner(image, heaps, layout, source, false);
+                            type = ObjectLayouts.Find(objects, owner, definition, new int[0]);
+                        }
+                        if (ObjectLayouts.IsByRefLikeValue(objects, type))
+                        {
+                            scopedReceiver = type;
+                            ScopedNativeReceivers.LowerThisBorrow(bundle, image, layout, heaps, owner, type, context,
+                                methodArguments, objects, globals, records, catchRegion);
+                        }
+                    }
                     if (locals != 0)
                     {
                         NativeAggregateFieldPointers.Lower(bundle, image, layout, heaps, owner, source, context,
                             methodArguments, objects, globals, records, catchRegion, frame, parameters);
+                        scopedCalls = ScopedNativeReceivers.FindCalls(bundle, image, layout, heaps, owner, source,
+                            context, methodArguments, objects, globals, records, catchRegion, frame, parameters);
                         NativeAggregateConstructors.Lower(bundle, image, layout, heaps, owner, source, context,
-                            methodArguments, objects, globals, records, catchRegion, frame);
+                            methodArguments, objects, globals, records, catchRegion, frame, scopedCalls);
                     }
                     status = NativeFrameWasm.BindAddresses(bundle, objects, nativePlans, records, catchRegion,
-                        frame, parameters, localElements, frameCells, location);
+                        frame, parameters, localElements, frameCells, location, scopedCalls);
                     if (status < 0) return status;
                     if (frameRoots != null) NativeFrameWasm.ExcludeNativeRoots(frameRoots, frameCells);
                     if (stub < 0 && nativeKind == NativeThunks.None)
@@ -732,7 +751,7 @@ namespace PortableCompiler
                             parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                             bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
                             initializers, reflection, typeCalls, instantiations, methodArguments, inlineLocations, frameCells, parameters, signatures[signature],
-                            nativePlans, addressedFields, localElements, pointers, finalizers, tracksFinalizers);
+                            nativePlans, addressedFields, localElements, pointers, finalizers, tracksFinalizers, scopedReceiver);
                         if (functions == Reemit)
                         {
                             // Allocation can precede the first reachable suppression call.
@@ -834,7 +853,7 @@ namespace PortableCompiler
                         exceptionTags |= ExceptionTypes.Argument | ExceptionTypes.ArgumentNull;
                     }
                     functions = NativeReceiverCalls.Bind(bundle, records, depths, states, maximum, owners, rows,
-                        contexts, bases, indices, arities, offsets, signatures, objects, functions, location, instantiations);
+                        contexts, bases, indices, arities, offsets, signatures, objects, functions, location, instantiations, scopedCalls);
                     if (functions < 0) return functions;
                     if (virtualUsed[0] != 0)
                     {
@@ -1470,7 +1489,7 @@ namespace PortableCompiler
             MethodInstantiations instantiations, int[] methodArguments,
             int[] inlineLocations, int[] frameCells, int parameterCount, int result, NativeAggregatePlans nativePlans,
             AddressedFields addressedFields, byte[] localElements,
-            FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers)
+            FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers, int scopedReceiver)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             bool classConstructor = context != 0 && callerReceiver == context && !ObjectLayouts.IsValueType(objects, context) &&
@@ -2063,6 +2082,9 @@ namespace PortableCompiler
                         records[slot + 3] = linkedField[1];
                         field = linkedField[2];
                         readOnlyAddress = (linkedField[3] & 0x20) != 0;
+                        if (kind == BranchIl.GetField && scopedReceiver != 0 &&
+                            FieldAccess.Owner(linkedField[1]) == scopedReceiver && FieldAccess.Storage(linkedField[1]) == Native)
+                            RecordScopedNativeField(bundle, objects, records, slot, scopedReceiver, field);
                     }
                     else
                     {
@@ -2085,7 +2107,7 @@ namespace PortableCompiler
                         {
                             // Stage 143 (decision 0071): the same field through an S* address in memory 0.
                             var native = new int[2];
-                            if (NativeValueLayouts.Field(bundle, owner, fieldOwner, field, native) == 0)
+                            if (NativeValueLayouts.Field(bundle, owner, fieldOwner, field, native, scopedFrame: type == scopedReceiver) == 0)
                             {
                                 records[slot + 2 * BranchIl.Width + 2] = native[0] + 1;
                                 records[slot + 2 * BranchIl.Width + 3] = native[1];
@@ -2913,6 +2935,18 @@ namespace PortableCompiler
                 case Doubles: return load ? 0x99 : 0xa1;
                 default: return 0;
             }
+        }
+
+        private static void RecordScopedNativeField(BundleImages bundle, int[] objects, int[] records, int slot,
+            int type, int field)
+        {
+            if (records.Length <= slot + 2 * BranchIl.Width + 3) return;
+            var native = new int[2];
+            int owner = ObjectLayouts.AssemblyOf(objects, type);
+            int definition = ObjectLayouts.TypeDef(objects, type);
+            if (NativeValueLayouts.Field(bundle, owner, definition, field, native, scopedFrame: true) != 0) return;
+            records[slot + 2 * BranchIl.Width + 2] = native[0] + 1;
+            records[slot + 2 * BranchIl.Width + 3] = native[1];
         }
 
         private static bool UsesLocationReceiver(int[] objects, int receiver) =>

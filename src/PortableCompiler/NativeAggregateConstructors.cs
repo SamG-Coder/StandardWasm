@@ -9,14 +9,15 @@ namespace PortableCompiler
     {
         internal static void Lower(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
             int caller, int context, int[] methodArguments, int[] objects, int[] globals, int[] records,
-            int[] clauses, int[] frame)
+            int[] clauses, int[] frame, int[] scopedCalls)
         {
             bool[] native = null;
             for (int at = 0; at < records.Length; at += Width)
             {
                 if (records[at] != FrameAddress) continue;
                 int next = records[at + 2] * Width;
-                if (next >= records.Length || records[next] != NativeFieldPointer) continue;
+                if (next >= records.Length || records[next] != NativeFieldPointer &&
+                    !NativeFrameWasm.ScopedCall(records, at, scopedCalls)) continue;
                 if (native == null) native = new bool[frame.Length];
                 native[records[at + 1]] = true;
             }

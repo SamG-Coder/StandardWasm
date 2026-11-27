@@ -21,39 +21,47 @@ namespace PortableCompiler
                 if (!ObjectLayouts.IsValueType(objects, type)) continue;
                 int call = records[at + 2] * Width;
                 if (call >= records.Length || ValueOperands.Entry(records, call / Width, clauses)) continue;
-
-                int row = records[call + 1], targetOwner = owner, targetContext = 0;
-                byte[] target = image;
-                int[] targetLayout = layout, targetHeaps = heaps;
-                if (records[call] == MemberCall && records[call + 3] == 0x28)
-                {
-                    var reference = new int[AssemblyReferences.SymbolWidth];
-                    if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference, allowClosedParent: true) < 0 ||
-                        !ReturnsPointer(image, heaps, reference[5])) continue;
-                    if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, caller, false);
-                    if (callerType < 1) continue;
-                    var symbol = new int[7];
-                    if (AssemblyBundle.Resolve(bundle, image, layout, heaps, owner, row, 0x28, false,
-                        objects, symbol, context, callerType, callerMethodArguments: methodArguments) < 0) continue;
-                    targetOwner = symbol[0];
-                    row = symbol[1];
-                    targetContext = symbol[3];
-                    target = bundle.Get(targetOwner);
-                    targetLayout = new int[4];
-                    targetHeaps = new int[8];
-                    if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) continue;
-                }
-                else if (records[call] == Call && records[call + 3] == 0)
-                    targetContext = ObjectLayouts.HasArguments(objects, type) ? type : 0;
-                else continue;
-
-                int offset = FieldOffset(bundle, target, targetLayout, targetHeaps, targetOwner, row, targetContext,
-                    type, objects, globals);
-                if (offset < 0) continue;
-                records[call] = NativeFieldPointer;
-                records[call + 1] = offset;
-                records[call + 3] = 0;
+                if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, caller, false);
+                if (callerType < 1) continue;
+                int offset = BorrowOffset(bundle, image, layout, heaps, owner, callerType, context, methodArguments,
+                    objects, globals, records, call, type);
+                if (offset >= 0) LowerCall(records, call, offset);
             }
+        }
+
+        internal static void LowerCall(int[] records, int call, int offset)
+        {
+            records[call] = NativeFieldPointer;
+            records[call + 1] = offset;
+            records[call + 3] = 0;
+        }
+
+        internal static int BorrowOffset(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
+            int callerType, int context, int[] methodArguments, int[] objects, int[] globals, int[] records, int call,
+            int type)
+        {
+            int row = records[call + 1], targetOwner = owner, targetContext = 0;
+            if (records[call] == MemberCall && records[call + 3] == 0x28)
+            {
+                var reference = new int[AssemblyReferences.SymbolWidth];
+                if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference, allowClosedParent: true) < 0 ||
+                    !ReturnsPointer(image, heaps, reference[5])) return -2;
+                var symbol = new int[7];
+                if (AssemblyBundle.Resolve(bundle, image, layout, heaps, owner, row, 0x28, false,
+                    objects, symbol, context, callerType, callerMethodArguments: methodArguments) < 0) return -2;
+                targetOwner = symbol[0];
+                row = symbol[1];
+                targetContext = symbol[3];
+                image = bundle.Get(targetOwner);
+                layout = new int[4];
+                heaps = new int[8];
+                if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -2;
+            }
+            else if (records[call] == Call && records[call + 3] == 0)
+                targetContext = ObjectLayouts.HasArguments(objects, type) ? type : 0;
+            else return -2;
+
+            return FieldOffset(bundle, image, layout, heaps, targetOwner, row, targetContext, type, objects, globals);
         }
 
         private static bool ReturnsPointer(byte[] image, int[] heaps, int signature)
