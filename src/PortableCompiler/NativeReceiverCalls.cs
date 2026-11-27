@@ -19,7 +19,7 @@ namespace PortableCompiler
 
         internal static int Bind(BundleImages bundle, int[] records, int[] depths, int[] states, int maximum,
             int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets,
-            int[] signatures, int[] objects, int functions, int[] location)
+            int[] signatures, int[] objects, int functions, int[] location, MethodInstantiations instantiations)
         {
             for (int pc = 0; pc < depths.Length; pc++)
             {
@@ -30,7 +30,10 @@ namespace PortableCompiler
                 if (location.Length != 0) location[2] = pc;
                 int type = LocatedValue(signatures[offsets[target] + 1]);
                 int owner = owners[target], row = rows[target], key = KeyBase + ~contexts[target];
-                int native = MethodCompiler.Lookup(owners, rows, contexts, bases, indices, functions, owner, row, key);
+                int[] methodArguments = instantiations.Arguments(target);
+                int native = methodArguments == null
+                    ? MethodCompiler.Lookup(owners, rows, contexts, bases, indices, functions, owner, row, key)
+                    : instantiations.Find(owners, rows, contexts, functions, owner, row, key, methodArguments);
                 if (native < 0)
                 {
                     int measured = NativeValueLayouts.Measure(bundle, ObjectLayouts.AssemblyOf(objects, type),
@@ -42,12 +45,17 @@ namespace PortableCompiler
                     if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
                     native = functions;
                     functions = MethodCompiler.Register(bundle, image, layout, heaps, owner, row, key,
-                        owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions);
+                        owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions,
+                        methodArguments: methodArguments);
                     if (functions < 0) return functions;
+                    if (methodArguments != null) instantiations.Record(native, owners.Length, methodArguments);
                 }
-                // The verifier already checked the arguments and result against
-                // the traced shape. Only the receiver changes representation.
-                if (signatures[offsets[target]] != signatures[offsets[native]]) return -2;
+                // The verifier already checked the CLI operands. Preserve all
+                // of their types when changing the receiver's representation.
+                if (arities[target] != arities[native]) return -2;
+                for (int operand = 0; operand <= arities[target]; operand++)
+                    if (operand != 1 && signatures[offsets[target] + operand] != signatures[offsets[native] + operand])
+                        return -2;
                 records[slot + 1] = native;
             }
             return functions;

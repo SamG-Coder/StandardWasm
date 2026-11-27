@@ -356,6 +356,7 @@ namespace PortableCompiler
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
             var nativePlans = new NativeAggregatePlans();
             var pointers = new FunctionPointerPlan();
+            var receiverDemand = new ReceiverBodyDemand(functionCapacity);
             // Reuse local pin metadata across methods. Signature decoding resets each slot.
             var pinned = new int[frame.Length];
             var booleanLocals = new byte[frame.Length];
@@ -377,10 +378,20 @@ namespace PortableCompiler
                     int expanded = dispatch.Expand(bundle, objects, owners, rows, contexts, bases, indices,
                         arities, offsets, signatures, functions, location);
                     if (expanded < 0) return expanded;
-                    if (expanded == functions) break;
-                    functions = expanded;
+                    dispatch.ObserveReceiverDemand(receiverDemand, contexts);
+                    for (int i = 0; i < exports.Length; i++) receiverDemand.Require(exports[i], contexts);
+                    for (int i = 0; i < thunks[0]; i++) receiverDemand.Require(thunks[i + 1], contexts);
+                    for (int i = 0; i < pointers.TargetCount; i++) receiverDemand.Require(pointers.Targets[i], contexts);
+                    if (expanded == functions)
+                    {
+                        // A later caller may retain the traced ABI of an earlier
+                        // signature slot. Revisit it before finalizing the module.
+                        current = receiverDemand.Revisit(functions, contexts, sizes);
+                        if (current < 0) break;
+                    }
+                    else functions = expanded;
                 }
-                if (rows[current] == 0) continue; // Synthetic dispatcher, emitted after discovery.
+                if (rows[current] == 0 || sizes[current] != 0 || !receiverDemand.Needed(current, contexts)) continue;
                 int owner = owners[current], source = rows[current], context = contexts[current];
                 context = NativeReceiverCalls.DeclaringContext(context);
                 int[] methodArguments = instantiations.Arguments(current);
@@ -786,7 +797,7 @@ namespace PortableCompiler
                         exceptionTags |= ExceptionTypes.Argument | ExceptionTypes.ArgumentNull;
                     }
                     functions = NativeReceiverCalls.Bind(bundle, records, depths, states, maximum, owners, rows,
-                        contexts, bases, indices, arities, offsets, signatures, objects, functions, location);
+                        contexts, bases, indices, arities, offsets, signatures, objects, functions, location, instantiations);
                     if (functions < 0) return functions;
                     if (virtualUsed[0] != 0)
                     {
@@ -796,6 +807,7 @@ namespace PortableCompiler
                         if (functions < 0) return functions;
                     }
 
+                    receiverDemand.ObserveCalls(records, depths, contexts);
                     if (location.Length != 0) location[2] = -1;
                     int capacity = body[1] * 64 + 32;
                     if (tracksFinalizers)
@@ -1203,6 +1215,8 @@ namespace PortableCompiler
                 features[2] |= projections.Kinds;
                 return Reemit;
             }
+            length = receiverDemand.WriteCarriers(moduleCode, length, functions, contexts, sizes, bodyOffsets);
+            if (length < 0) return length;
             length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, objects, length,
                 hostImports, location, reflection, primitiveArrays);
             if (length < 0) return length;

@@ -150,6 +150,14 @@ namespace PortableCompiler
             return functions;
         }
 
+        internal void ObserveReceiverDemand(ReceiverBodyDemand demand, int[] contexts)
+        {
+            for (int site = 0; site < sitesUsed; site += SiteWidth)
+                if (sites[site + RootTarget] != 0) demand.Require(sites[site + RootTarget] - 1, contexts);
+            for (int entry = CaseWidth; entry < casesUsed; entry += CaseWidth)
+                demand.Require(cases[entry + Target], contexts);
+        }
+
         private int ExpandBoxes(BundleImages bundle, int[] objects, int[] owners, int[] rows, int[] contexts,
             int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int functions, int[] location, int site)
         {
