@@ -1058,8 +1058,16 @@ namespace PortableCompiler
                 {
                     int array = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);
                     int index = Spill(spills, maximum, spillFlags, states[state + top], top);
-                    int resultSpill = Spill(spills, maximum, spillFlags, operand == Ints ? Int32Location : ObjectLocation, top - 1);
-                    used = ManagedLocationWasm.TakeElement(code, used, array, index, resultSpill);
+                    int resultSpill = Spill(spills, maximum, spillFlags, records[slot + 3] >= FirstClass ? ValueLocation(records[slot + 3]) :
+                        operand == Ints ? Int32Location : ObjectLocation, top - 1);
+                    if (records[slot + 3] >= FirstClass)
+                    {
+                        used = GuardNull(code, used, array);
+                        used = GuardArrayIndex(code, used, array, index, false);
+                        used = ValueArrayWasm.Take(code, used, operand, array, index);
+                        used = Local(code, used, 0x21, resultSpill);
+                    }
+                    else used = ManagedLocationWasm.TakeElement(code, used, array, index, resultSpill);
                 }
                 else if (kind == LoadObjectIndirect)
                 {
@@ -1352,6 +1360,11 @@ namespace PortableCompiler
                     code[used++] = 0xfb;
                     code[used++] = 0x0f;
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, Native, top));
+                }
+                else if ((kind == ArrayGet || kind == ArraySet) && records[slot + 3] != 0)
+                {
+                    used = ValueArrayWasm.EmitAccess(code, used, kind == ArrayGet, operand, records[slot + 3], state, top, states,
+                        spills, maximum, spillFlags);
                 }
                 else if (kind == ArrayGet)
                 {

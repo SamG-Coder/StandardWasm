@@ -69,7 +69,8 @@ namespace PortableCompiler
                 int element = ArrayElement(objects, classType);
                 if (element != 0)
                 {
-                    classBytes += 2 + (IsNarrow(element) ? 1 : ValueWidth(Representation(objects, element)));
+                    int storage = IsValueType(objects, element) ? ValueLocation(element) : Representation(objects, element);
+                    classBytes += 2 + (IsNarrow(element) ? 1 : ValueWidth(storage));
                     if (classBytes > output.Length) return -3;
                     continue;
                 }
@@ -345,6 +346,8 @@ namespace PortableCompiler
                     output[cursor++] = 0x5e; // mutable vector
                     if (IsNarrow(element))
                         output[cursor++] = element == Signed8 || element == Unsigned8 ? (byte)0x78 : (byte)0x77;
+                    else if (IsValueType(objects, element))
+                        cursor = ManagedValueLocationWasm.WriteFieldType(output, cursor);
                     else
                         cursor = ValueType(output, cursor, Representation(objects, element));
                     output[cursor++] = 1;

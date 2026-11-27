@@ -1002,17 +1002,13 @@ namespace PortableCompiler
                     if (type == -2)
                     {
                         uint table = token >> 24;
-                        if (table != 1 && table != 2) return -2;
-                        int coded = (int)((token & 0xffffff) << 2) | (table == 1 ? 1 : 0);
-                        // A String vector holds references to the immutable String struct.
-                        int element = PlatformTypeReferences.IsString(image, heaps, layout, coded) ? String :
-                            BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
-                        if (element == -2)
-                        {
-                            element = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true, true);
-                            if (element > 0 && !ObjectLayouts.IsEnumKey(element)) return -2;
-                        }
+                        if (table != 1 && table != 2 && table != 0x1b) return -2;
+                        int coded = (int)((token & 0xffffff) << 2) | (table == 1 ? 1 : table == 2 ? 0 : 2);
+                        int element = ArrayTokenElement(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);
                         if (element < 0) return element;
+                        // Generic primitive vectors have their own built-in array type.
+                        // Keep the newly linked TypeSpec path on nominal layouts.
+                        if (GenericScalar.IsScalar(element)) return -2;
                         type = ObjectLayouts.RegisterArray(objects, element);
                     }
                     if (type < 0) return type;
@@ -1052,6 +1048,20 @@ namespace PortableCompiler
                     }
                     if (kind != BranchIl.TestClass || element != -2) return element;
                 }
+                if ((kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet) && records[slot + 3] != 0)
+                {
+                    int token = records[slot + 3], table = token >> 24;
+                    if (table != 1 && table != 2 && table != 0x1b) return -2;
+                    int coded = (token & 0xffffff) << 2 | (table == 1 ? 1 : table == 2 ? 0 : 2);
+                    int type = ArrayTokenElement(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);
+                    if (type < 0) return type;
+                    if (!ObjectLayouts.IsValueType(objects, type)) return -2;
+                    int vector = ObjectLayouts.RegisterArray(objects, type);
+                    if (vector < 0) return vector;
+                    records[slot + 1] = vector;
+                    records[slot + 3] = type;
+                    continue;
+                }
                 if (kind == BranchIl.ObjectElementAddress || kind == BranchIl.LoadObjectIndirect || kind == BranchIl.StoreObjectIndirect)
                 {
                     if (kind == BranchIl.ObjectElementAddress && records[slot + 3] == BranchIl.BoundObjectElement)
@@ -1065,8 +1075,16 @@ namespace PortableCompiler
                             records[slot + 1] = Ints;
                             continue;
                         }
-                        if (BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, coded, objects) != ObjectReference)
-                            return -2;
+                        int type = ArrayTokenElement(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);
+                        if (ObjectLayouts.IsValueType(objects, type) && !ObjectLayouts.IsExplicitValue(objects, type))
+                        {
+                            int vector = ObjectLayouts.RegisterArray(objects, type);
+                            if (vector < 0) return vector;
+                            records[slot + 1] = vector;
+                            records[slot + 3] = type;
+                            continue;
+                        }
+                        if (type != ObjectReference) return -2;
                     }
                     int array = ObjectLayouts.RegisterArray(objects, ObjectReference);
                     if (array < 0) return array;
@@ -2028,6 +2046,17 @@ namespace PortableCompiler
                 }
             }
             return functions;
+        }
+
+        private static int ArrayTokenElement(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
+            int context, int[] methodArguments, int[] objects, int coded)
+        {
+            if ((coded & 3) == 2)
+                return ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps, owner,
+                    coded >> 2, context, objects, methodArguments);
+            if (PlatformTypeReferences.IsString(image, heaps, layout, coded)) return String;
+            int type = BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
+            return type == -2 ? BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true, true) : type;
         }
 
         private static bool UsesLocationReceiver(int[] objects, int receiver) =>

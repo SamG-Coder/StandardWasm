@@ -269,7 +269,8 @@ namespace PortableCompiler
                 if (depth < 2 || !ArrayIndex(stack, depth)) return -1;
                 int array = stack[depth - 2];
                 if (array != operand && array != NullValue) return -2;
-                return Push(stack, allocated, depth - 2, operand == Ints ? Int32Location : ObjectLocation);
+                int location = extra >= FirstClass ? ValueLocation(extra) : operand == Ints ? Int32Location : ObjectLocation;
+                return Push(stack, allocated, depth - 2, location);
             }
             if (kind == LoadObjectIndirect)
             {
@@ -594,6 +595,9 @@ namespace PortableCompiler
             }
             else if (kind == ArrayGet)
             {
+                if (extra != 0)
+                    return depth >= 2 && ArrayIndex(stack, depth) && Match(stack, depth - 1, operand)
+                        ? Push(stack, allocated, depth - 2, extra) : -1;
                 if (operand == 0x9a)
                 {
                     if (depth < 2 || !ArrayIndex(stack, depth)) return -1;
@@ -609,6 +613,9 @@ namespace PortableCompiler
             }
             else if (kind == ArraySet)
             {
+                if (extra != 0)
+                    return depth >= 3 && ArrayIndex(stack, depth - 1) && Match(stack, depth - 2, operand) &&
+                        Assignable(stack[depth - 1], extra, objects) ? depth - 3 : -1;
                 if (operand == 0xa2)
                 {
                     if (depth < 3 || !ArrayIndex(stack, depth - 1)) return -1;

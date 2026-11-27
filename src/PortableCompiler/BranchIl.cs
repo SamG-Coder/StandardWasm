@@ -326,10 +326,10 @@ namespace PortableCompiler
                     uint token = ImageBytes.U32(image, (uint)(start + pc));
                     pc += 4;
                     uint table = token >> 24;
-                    if (table != 1 && table != 2) return -2;
+                    if (table != 1 && table != 2 && table != 0x1b) return -2;
                     int row = (int)(token & 0xffffff);
                     if (row == 0) return -1;
-                    operand = row << 2 | (table == 1 ? 1 : 0);
+                    operand = row << 2 | (table == 1 ? 1 : table == 2 ? 0 : 2);
                     kind = ObjectElementAddress;
                 }
                 else if (op >= 0x90 && op <= 0x9a)
@@ -341,6 +341,14 @@ namespace PortableCompiler
                 {
                     kind = ArraySet;
                     operand = op;
+                }
+                else if (op == 0xa3 || op == 0xa4)
+                {
+                    if (length - pc < 4) return -1;
+                    comparison = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                    pc += 4;
+                    if (comparison == 0) return -1;
+                    kind = op == 0xa3 ? ArrayGet : ArraySet;
                 }
                 else if (op == 0xd2 || op == 0xd1 || op == 0x67 || op == 0x68)
                 {

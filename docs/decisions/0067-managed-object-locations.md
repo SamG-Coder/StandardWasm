@@ -13,3 +13,9 @@ location type. `ldelema` checks null and bounds, and `ldind.i4` and `stind.i4`
 read and write the full-width element. Compiled callers can pass, store and
 return this location across assembly boundaries. Exports reject managed
 location signatures at the Wasm host boundary.
+
+A vector of supported structs stores a nullable cell at each index. Taking
+an address creates the cell on first use. Direct reads return immutable
+snapshots, and direct stores update the same cell so existing aliases see the
+assignment. The element layout, including closed generic arguments, determines
+the vector and location types.
