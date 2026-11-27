@@ -1304,7 +1304,7 @@ namespace PortableCompiler
             var projectionHelpers = new int[ValueFieldProjectionWasm.HelperCount];
             for (int helper = 0; helper < projectionHelpers.Length; helper++)
             {
-                bool snapshot = helper >= ValueFieldProjectionWasm.FirstSnapshotHelper;
+                bool snapshot = ValueFieldProjectionWasm.IsSnapshotHelper(helper);
                 if (projections.Fixups[helper] == 0 && !(snapshot && projections.Aggregates)) continue;
                 int offset = NextSignature(offsets, arities, functions);
                 bool write = (helper & 1) != 0;
