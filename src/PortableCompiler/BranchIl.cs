@@ -41,7 +41,7 @@ namespace PortableCompiler
         internal const int NewObjectSpan = 104, SpanLength = 105, SpanRead = 106, StringAsSpan = 108;
         internal const int CharacterArrayAsSpan = 109, SpanAddress = 110, SpanAsReadOnly = 111;
         // sizeof <type>: lowered to an int32 Constant once the layout is measured.
-        internal const int GetObjectType = 116, EqualRuntimeTypes = 117, Win32Error = 119;
+        internal const int GetObjectType = 116, EqualRuntimeTypes = 117, Win32Error = 119, NativePointerConstructor = 120;
         internal const int SizeOf = 112; // clear of the reflection kinds 73–75 (Stage 131)
         // ldobj / stobj / initobj of a blittable struct through a native address (decision 0073).
         // Operand: the registry value type; auxiliary: native plan index + 1.

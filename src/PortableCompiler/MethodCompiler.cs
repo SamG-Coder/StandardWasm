@@ -1190,6 +1190,12 @@ namespace PortableCompiler
                         records[slot + 1] = intrinsic;
                         continue;
                     }
+                    if (opcode == 0x73 && !addressed && NativePointerMetadata.IsPointerConstructor(image, heaps, layout, member))
+                    {
+                        // A native address and IntPtr/UIntPtr share the native stack representation.
+                        records[slot] = BranchIl.NativePointerConstructor;
+                        continue;
+                    }
                     int constructorType = Delegate;
                     // Platform event members are bound by identity in every bundled assembly.
                     if (!addressed)

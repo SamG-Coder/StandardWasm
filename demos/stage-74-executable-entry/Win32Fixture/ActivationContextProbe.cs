@@ -45,6 +45,12 @@ public static unsafe class ActivationContextProbe
     [DllImport("KERNEL32.dll", ExactSpelling = true)]
     private static extern void ReleaseActCtx(HANDLE handle);
 
+    public static int PointerRoundTrip(int value, int unsigned)
+    {
+        void* pointer = (void*)(nint)value;
+        return unsigned == 0 ? (int)new nint(pointer) : unchecked((int)new nuint(pointer));
+    }
+
     public static int Lifecycle()
     {
         nint created = Create(0);
