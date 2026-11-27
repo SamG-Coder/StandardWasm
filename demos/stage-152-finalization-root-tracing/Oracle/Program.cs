@@ -35,6 +35,7 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     runtime = Environment.Version.ToString(),
     nativeBytes = IntPtr.Size,
     actualClrCases = 3,
+    frameRootCases = FrameRootCases.Verify(),
 }));
 
 [MethodImpl(MethodImplOptions.NoInlining)]

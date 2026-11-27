@@ -69,6 +69,11 @@ oracle shows that suppression and registration multiplicity need separate
 state: a re-registration can clear suppression or add a queue entry. The next
 step is to make generated code supply roots and field traversal at collection
 points so the queue can work with the unchanged upstream classes.
+The frame-slot analysis in Stage 152 uses decoded IL to identify later uses.
+At the real `ApplicationContext` constructor's suppression call, both `this`
+and `mainForm` remain live in the frame. `this` is also the call argument.
+The collector must include evaluation-stack references even when the slot
+that provided a reference has no later uses.
 JavaScript cleanup notifications can release independent host resources, but
 notification timing and delivery alone cannot satisfy the managed queue and
 resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)

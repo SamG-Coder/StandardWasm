@@ -26,3 +26,10 @@ integration needs compiler-emitted roots for live frames, statics and host
 references, and type-specific traversal covering object fields, reference
 arrays and managed interior references. Scheduling callbacks and binding the
 original CoreLib APIs remain part of the WinForms startup milestone.
+
+The host oracle also checks the compiler's frame-slot analysis on the same
+fixture DLL. It covers straight-line uses, branches, switches, back edges and
+overwriting an argument. An address-exposed slot or an exception region needs
+additional analysis. The live bits describe frame slots before a given IL
+instruction. Values already loaded onto the evaluation stack are handled
+separately as part of runtime integration.
