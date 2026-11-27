@@ -58,14 +58,12 @@ function assertUnsupported(dll, type, diagnostic) {
     assert.equal(existsSync(output), false);
 }
 
-// Unsupported members, non-platform identities and managed element addresses remain diagnostics.
+// Unsupported members, non-platform identities and unsupported address forms remain diagnostics.
 assertUnsupported(mathDemo.dll, "MathIntrinsics.UnmappedMath", /UnmappedMath::Power at IL_[0-9a-f]+ returned compiler status -2/);
 const identityProbe = "demos/stage-29-math-intrinsics/identity/IdentityProbe";
 run("dotnet", ["build", "-c", "Release", identityProbe]);
 assertUnsupported(identityProbe + "/bin/Release/netstandard2.0/IdentityProbe.dll", "IdentityProbe.Probe",
     /Probe::Compute at IL_[0-9a-f]+ returned compiler status -2/);
-assertUnsupported(arraysDemo.dll, "PrimitiveArrays.CompoundElement",
-    /CompoundElement::Increment at IL_[0-9a-f]+ returned compiler status -2/);
 const inlineArrays = demos.find(d => d.assembly === "InlineArrayLayouts");
 assertUnsupported(inlineArrays.dll, "InlineArrayLayouts.LayoutBoundary",
     /LayoutBoundary::Read returned compiler status -2/);
