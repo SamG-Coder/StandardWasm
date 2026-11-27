@@ -42,10 +42,11 @@ namespace GeneralDelegateFixture
         public static int CustomClassResult() { Factory f = Make; return f(6).Apply(7); }
         public static int CustomNull() { Combine c = null; try { return (int)c(1, 1); } catch (NullReferenceException) { return 9; } }
         public static int RejectSelfReference() { Chain c = (n, x) => x + 1; return c(c, 41); }
-        public static int RejectCast() { object o = (Combine)Mix; return (int)((Combine)o)(4, 2); }
-        public static int RejectMulticast() { Combine c = Mix; c += Mix; return (int)c(4, 2); }
-        public static int RejectIsType() { object o = (Combine)Mix; return o is Sink ? 1 : 2; }
-        public static int RejectFuncCast() { object o = (Func<int, int>)Twice; return ((Func<int, int>)o)(21); }
+        // Diagnosed in Stage 204; Stage 221 (decision 0092) gives delegates nominal invocation lists.
+        public static int CastFromObject() { object o = (Combine)Mix; return (int)((Combine)o)(4, 2); }
+        public static int MulticastLastResult() { Combine c = Mix; c += Mix; return (int)c(4, 2); }
+        public static int IsTypeByNominal() { object o = (Combine)Mix; return o is Sink ? 1 : 2; }
+        public static int FuncCastFromObject() { object o = (Func<int, int>)Twice; return ((Func<int, int>)o)(21); }
         public static int WideTypeIndices() => WideDelegates.Run();
         static int Distinct<T, U>() => typeof(T) == typeof(U) ? 1 : 2;
         // Action<int> and Action<uint> share an Invoke shape but are different types.

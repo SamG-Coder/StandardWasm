@@ -29,7 +29,7 @@ and Edge must return the CLR's value for every kernel:
 - 80 distinct delegate types in one method, so the module's type count and thunk type indices
   need multi-byte LEB encodings
 
-The `Reject*` kernels must be diagnosed, not approximated: the shared closure has no type identity,
-so casts from `object`, `is` tests and `Delegate.Combine` (`+=`) on these delegates stay
-unsupported. So does a delegate whose `Invoke` takes its own type (`RejectSelfReference`). The design
-is decision 0091.
+Stage 204 diagnosed casts from `object`, `is` tests and `Delegate.Combine` (`+=`) on these
+delegates, because the closure had no type identity. Stage 221 (decision 0092) adds that identity,
+so those four kernels now return the CLR's values. `RejectSelfReference`, a delegate whose
+`Invoke` takes its own type, must still be diagnosed. The design is decision 0091.

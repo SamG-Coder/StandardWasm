@@ -58,6 +58,10 @@ or ordinary classes. Their runtime-provided `.ctor` and `Invoke` have no IL, so 
 
 ## Semantics
 
+Stage 221 (decision 0092) replaces this decision's heap-3 storage for keys with nominal
+invocation lists. That lifts the type-identity and multicast limits below.
+
+
 - **Type identity.** The shared closure carries no delegate type, so a run-time cast or type test
   can't tell `Combine` from `Sink`. `castclass`, `isinst` and `is` on these delegates stay -2, even
   from `object` back to the same type, and so does `Delegate.Combine` (`+=`) on them. `EventHandler`
@@ -71,5 +75,5 @@ or ordinary classes. Their runtime-provided `.ctor` and `Invoke` have no IL, so 
 ## Verification
 
 `npm run demo -- stage-204-general-delegates` runs the fixture on the x86 CLR 10.0.10 and compares
-Node and Edge with it. The fixture has 20 value kernels and 5 `Reject*` kernels that must be
+Node and Edge with it. The fixture has 20 value kernels and 5 `Reject*` kernels (24 and 1 after Stage 221) that must be
 diagnosed.
