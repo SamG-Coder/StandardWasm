@@ -15,6 +15,13 @@ public struct Container<T>
     public int Marker;
 }
 
+public struct EntryWithStatic<T>
+{
+    public static int Shared;
+    public T Flag;
+    public int Stamp;
+}
+
 public static class Probe
 {
     public static int ClosedArrayAliases()
@@ -61,6 +68,17 @@ public static class Probe
         bool before = projected;
         Reset(ref projected);
         return before && !inner.Flag && entries[0].Item.Stamp == 31 && entries[0].Marker == 41 ? 499 : 0;
+    }
+
+    public static int StaticFieldBeforeFlag()
+    {
+        var entries = new EntryWithStatic<bool>[1];
+        EntryWithStatic<bool>.Shared = 71;
+        entries[0] = new EntryWithStatic<bool> { Flag = true, Stamp = 73 };
+        ref bool flag = ref entries[0].Flag;
+        bool before = Exchange(ref flag, false);
+        return before && !flag && !entries[0].Flag && entries[0].Stamp == 73 &&
+            EntryWithStatic<bool>.Shared == 71 ? 509 : 0;
     }
 
     public static int NullArray()

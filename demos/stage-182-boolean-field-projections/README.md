@@ -12,6 +12,6 @@ Boolean frame location.
 
 The cases cover two references to the same struct-array field, separate
 elements, whole-value replacement, independent copies, and a generic
-reset through a nested Boolean alias. They also check a typed null-array
-failure. Results go to
+reset through a nested Boolean alias. They also cover a preceding static
+field and a typed null-array failure. Results go to
 `artifacts/stage-182-boolean-field-projections/results.json`.

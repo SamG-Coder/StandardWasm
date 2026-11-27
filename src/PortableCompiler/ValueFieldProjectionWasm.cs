@@ -145,8 +145,9 @@ namespace PortableCompiler
                     used = ManagedValueLocationWasm.ReadLocation(code, used, parent, owner, projections);
                     used = Local(code, used, 0x21, snapshot);
                     used = ValueFieldsWasm.Materialize(code, used, owner, snapshot);
-                    // Boolean fields are packed bytes and need unsigned extension.
-                    used = Gc(code, used, FieldAccess.LoadInstruction(FieldTypeAt(objects, owner, field)), owner);
+                    // The ordinal is physical. Boolean projections have already
+                    // proved packed storage and require struct.get_u.
+                    used = Gc(code, used, kind == BooleanScalar ? 4 : 2, owner);
                     used = WasmBinary.Unsigned(code, used, field);
                 }
                 code[used++] = 0x0f; // return

@@ -5,7 +5,8 @@ using System.Text.Json;
 using BooleanFieldProjections;
 
 if (IntPtr.Size != 4) throw new InvalidOperationException("Expected the x86 CLR.");
-Func<int>[] cases = [Probe.ClosedArrayAliases, Probe.MixedStorage, Probe.NestedGenericReset, Probe.NullArray];
+Func<int>[] cases = [Probe.ClosedArrayAliases, Probe.MixedStorage, Probe.NestedGenericReset,
+    Probe.StaticFieldBeforeFlag, Probe.NullArray];
 File.WriteAllText(args[0], JsonSerializer.Serialize(new
 {
     runtime = Environment.Version.ToString(),
