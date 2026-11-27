@@ -1802,7 +1802,8 @@ namespace PortableCompiler
         {
             int declaring = ObjectLayouts.Owner(image, heaps, layout, row, false);
             if (declaring < 1) return -1;
-            int receiver = BundleLayouts.Register(bundle, image, layout, heaps, owner, declaring, objects);
+            int receiver = ObjectLayouts.IsCoreObjectType(image, heaps, layout, declaring << 2) ? ObjectReference :
+                BundleLayouts.Register(bundle, image, layout, heaps, owner, declaring, objects);
             if (receiver < 0) return receiver;
             if (ObjectLayouts.IsValueType(objects, receiver)) return -2;
             int shape = used[0];
@@ -2066,6 +2067,8 @@ namespace PortableCompiler
             int receiver = isStatic ? 0 : receiverOverride != 0 ? receiverOverride : context;
             if (!isStatic && receiver == 0 && PlatformTypeReferences.IsString(image, heaps, layout, owner << 2))
                 receiver = String;
+            if (!isStatic && receiver == 0 && ObjectLayouts.IsCoreObjectType(image, heaps, layout, owner << 2))
+                receiver = ObjectReference;
             if (!isStatic && receiver == 0)
             {
                 receiver = BundleLayouts.Register(bundle, image, layout, heaps, assembly, owner, objects);

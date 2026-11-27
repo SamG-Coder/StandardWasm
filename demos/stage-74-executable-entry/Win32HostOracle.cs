@@ -45,6 +45,7 @@ Console.WriteLine(JsonSerializer.Serialize(new { executable, results, errors = n
         ObjectCellSpanProbe.ObjectSpanBounds(-1), ObjectCellSpanProbe.ObjectSpanBounds(0), ObjectCellSpanProbe.ObjectSpanBounds(1) },
     compiledBooleanLocations = Enumerable.Range(0, 3).Select(BooleanLocationProbe.BooleanAliases)
         .Concat(Enumerable.Range(0, 2).Select(BooleanLocationProbe.BooleanWithMonitor)).ToArray(),
+    compiledRootDispatch = Enumerable.Range(0, 4).Select(RootDispatchProbe.CompareThroughRoot).ToArray(),
     compiledValueAliases = Enumerable.Range(0, 3).Select(ValueAliasProbe.CheckValueAlias).ToArray(),
     compiledGenericDescriptors = Enumerable.Range(0, 3).Select(GenericDescriptorProbe.CheckGenericDescriptors).ToArray(),
     compiledConstrainedReferences = Enumerable.Range(0, 3).Select(ConstrainedReferenceProbe.InvokeConstrainedReceiver)

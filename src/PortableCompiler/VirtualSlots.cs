@@ -17,9 +17,12 @@ namespace PortableCompiler
             if (IsInterface(objects, declared))
                 return InterfaceSlots.SelectBody(bundle, objects, receiver, declared, owner, row, symbol);
 
+            // The canonical System.Object has no nominal layout in the class chain.
+            bool rootDeclaration = declared == ObjectReference;
+            int stop = rootDeclaration ? 0 : declared;
             var ancestors = new int[objects[0]];
             int count = 0;
-            for (int type = receiver; type != declared; type = Parent(objects, type))
+            for (int type = receiver; type != stop; type = Parent(objects, type))
             {
                 if (type < FirstClass || count >= ancestors.Length) return -2;
                 ancestors[count++] = type;
@@ -31,8 +34,8 @@ namespace PortableCompiler
             if (CompressedTables.FindWithHeaps(source, sourceLayout, sourceHeaps) < 0) return -1;
             int name = MethodDefinitions.ReadColumn(source, sourceLayout, row, 3);
             int signature = MethodDefinitions.ReadColumn(source, sourceLayout, row, 4);
-            int explicitSlot = HasClassMethodImpl(bundle, objects, declared, owner, source, sourceHeaps,
-                sourceLayout, source, sourceHeaps, name);
+            int explicitSlot = rootDeclaration ? 0 : HasClassMethodImpl(bundle, objects, declared, owner, source, sourceHeaps,
+                sourceLayout, source, sourceHeaps, name, false);
             if (explicitSlot != 0) return explicitSlot < 0 ? explicitSlot : -2;
 
             symbol[0] = owner;
@@ -52,7 +55,7 @@ namespace PortableCompiler
                 byte[] image = bundle.Get(targetOwner);
                 if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
                 explicitSlot = HasClassMethodImpl(bundle, objects, type, targetOwner, image, heaps, layout,
-                    source, sourceHeaps, name);
+                    source, sourceHeaps, name, rootDeclaration);
                 if (explicitSlot != 0) return explicitSlot < 0 ? explicitSlot : -2;
 
                 if (hidden) continue;
@@ -93,7 +96,8 @@ namespace PortableCompiler
         }
 
         private static int HasClassMethodImpl(BundleImages bundle, int[] objects, int type, int owner,
-            byte[] image, int[] heaps, int[] layout, byte[] declaration, int[] declarationHeaps, int name)
+            byte[] image, int[] heaps, int[] layout, byte[] declaration, int[] declarationHeaps, int name,
+            bool rootDeclaration)
         {
             var cursor = new int[1];
             var parent = new int[2];
@@ -105,6 +109,8 @@ namespace PortableCompiler
                 if (coded <= 0) return coded;
                 int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, coded, parent);
                 if (status < 0) return status == -1 ? -1 : -2;
+
+                if (rootDeclaration && parent[0] == AssemblyBundle.ObjectOwner) return 1;
 
                 // An interface MethodImpl can share a name with this virtual
                 // slot. Only a declaration on the class chain can remap it.

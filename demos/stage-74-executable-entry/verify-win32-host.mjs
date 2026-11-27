@@ -1,8 +1,9 @@
+import { wasm32Runtime } from "../../scripts/runtime-packs.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import { chromium } from "playwright-core";
 import { instantiateManagedModule } from "./resource-host.mjs";
 
@@ -131,7 +132,7 @@ async function exercise(instantiate, bytes, executable, framework) {
         embeddedFramework: [embedded, second.getLastSystemError()] };
 }
 
-async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framework, dpiScenarios) {
+async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framework, dpiScenarios, runtimeAssets) {
     const { instance: { exports: compiler } } = await WebAssembly.instantiate(new Uint8Array(compilerBytes));
     function upload(bytes) {
         const result = compiler.CreateBytes(bytes.length);
@@ -140,7 +141,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
     }
 
     const fixture = upload(fixtureBytes);
-    async function compile(exportNames, bundled = false) {
+    async function compile(exportNames, companions = null) {
         const encoder = new TextEncoder();
         const names = exportNames.map(name => encoder.encode(name));
         const manifest = new Uint8Array(names.reduce((size, name) => size + 8 + name.length, 0));
@@ -155,13 +156,19 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
             offset += 8 + name.length;
         }
 
-        const output = compiler.CreateBytes(65536);
+        const output = compiler.CreateBytes(companions?.length ? 1 << 20 : 65536);
         const location = compiler.CreateDiagnostic();
         let length;
-        if (bundled) {
-            const bundle = new Uint8Array(fixtureBytes.length + 4);
-            new DataView(bundle.buffer).setUint32(0, fixtureBytes.length, true);
-            bundle.set(fixtureBytes, 4);
+        if (companions !== null) {
+            const images = [fixtureBytes, ...companions];
+            const bundle = new Uint8Array(images.reduce((size, image) => size + 4 + image.length, 0));
+            const lengths = new DataView(bundle.buffer);
+            let cursor = 0;
+            for (const image of images) {
+                lengths.setUint32(cursor, image.length, true);
+                bundle.set(image, cursor + 4);
+                cursor += 4 + image.length;
+            }
             length = compiler.CompileBundleDetailed(upload(bundle), upload(manifest), output, location);
         } else {
             length = compiler.CompileModuleDetailed(fixture, upload(manifest), output, location);
@@ -198,7 +205,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
     const genericLocations = [0, 1, 2].map(exports.GenericBooleanLocations)
         .concat([0, 1, 2].map(exports.GenericStringLocations));
     const bundledModule = await compile(["InvokeFinalWriter", "ReadGenericValue",
-        "InvokeConstrainedReceiver", "CheckWidenedIdentity", "CheckGenericDescriptors", "CheckValueAlias"], true);
+        "InvokeConstrainedReceiver", "CheckWidenedIdentity", "CheckGenericDescriptors", "CheckValueAlias"], []);
     const { exports: bundledExports } = await instantiate(bundledModule, compiler, []);
     const finalWriter = [0, 1].map(bundledExports.InvokeFinalWriter);
     const genericValues = [-1, 0, 1].map(bundledExports.ReadGenericValue);
@@ -206,6 +213,9 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
         .concat([0, 1, 2].map(bundledExports.CheckWidenedIdentity));
     const genericDescriptors = [0, 1, 2].map(bundledExports.CheckGenericDescriptors);
     const valueAliases = [0, 1, 2].map(bundledExports.CheckValueAlias);
+    const rootModule = await compile(["CompareThroughRoot"], runtimeAssets);
+    const { exports: rootExports } = await instantiate(rootModule, compiler, []);
+    const rootDispatch = [0, 1, 2, 3].map(rootExports.CompareThroughRoot);
     const dpi = [];
     // Each Windows oracle invocation starts a fresh process.
     for (const scenario of dpiScenarios) {
@@ -217,7 +227,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, rootDispatch, dpi };
 }
 
 function readOracle(...args) {
@@ -229,13 +239,17 @@ const oracle = readOracle();
 const dpiScenarios = [[0, -4, -2, 98], [98, -4], [99, 102, 101, 103], [-5, -4]];
 const compilerPath = process.argv[2];
 const framework = { name: basename(oracle.framework), bytes: readFileSync(oracle.framework) };
+const runtime = compilerPath ? wasm32Runtime() : null;
+const runtimeAssets = runtime ? ["System.Private.CoreLib.dll", "System.Runtime.dll"]
+    .map(name => readFileSync(join(runtime.directory, name))) : [];
+const runtimePaths = runtimeAssets.map((_, index) => "/test-runtime-" + index);
 const expectedCompiler = {
     legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle,
     pointers: oracle.compiledPointers, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor,
     filter: oracle.compiledFilter, objectSpans: oracle.compiledObjectSpans, booleanLocations: oracle.compiledBooleanLocations,
     genericLocations: oracle.compiledGenericLocations, finalWriter: oracle.compiledFinalWriter,
     genericValues: oracle.compiledGenericValues, constrainedReferences: oracle.compiledConstrainedReferences,
-    genericDescriptors: oracle.compiledGenericDescriptors, valueAliases: oracle.compiledValueAliases
+    genericDescriptors: oracle.compiledGenericDescriptors, valueAliases: oracle.compiledValueAliases, rootDispatch: oracle.compiledRootDispatch
 };
 let compilerBytes, fixtureBytes;
 if (compilerPath) {
@@ -244,7 +258,7 @@ if (compilerPath) {
     compilerBytes = readFileSync(compilerPath);
     fixtureBytes = readFileSync(new URL("./Win32Fixture/bin/Release/net10.0/Win32Fixture.dll", import.meta.url));
     expectedCompiler.dpi = dpiScenarios.map(scenario => readOracle("dpi", ...scenario.map(String)));
-    assert.deepEqual(await exerciseCompiler(instantiateManagedModule, compilerBytes, fixtureBytes, framework, dpiScenarios), expectedCompiler);
+    assert.deepEqual(await exerciseCompiler(instantiateManagedModule, compilerBytes, fixtureBytes, framework, dpiScenarios, runtimeAssets), expectedCompiler);
 }
 const bytes = probeModule();
 const node = await exercise(instantiateManagedModule, bytes, oracle.executable, framework);
@@ -264,6 +278,9 @@ try {
     await page.route(base + "/**", route => {
         const path = new URL(route.request().url()).pathname;
         if (path === "/") return route.fulfill({ contentType: "text/html", body: "<!doctype html>" });
+        const runtimeIndex = runtimePaths.indexOf(path);
+        if (runtimeIndex >= 0 && runtimeAssets[runtimeIndex])
+            return route.fulfill({ contentType: "application/octet-stream", body: runtimeAssets[runtimeIndex] });
         if (path === "/test-framework")
             return route.fulfill({ contentType: "application/octet-stream", body: framework.bytes });
         if (path === "/stage-73-executable-intake/loader/pe.mjs")
@@ -282,13 +299,17 @@ try {
     }, { source: exercise.toString(), bytes: [...bytes], executable: oracle.executable, frameworkName: framework.name });
     assert.deepEqual(edge, node);
     if (compilerBytes) {
-        const compiled = await page.evaluate(async ({ source, compilerBytes, fixtureBytes, name, dpiScenarios }) => {
+        const compiled = await page.evaluate(async ({ source, compilerBytes, fixtureBytes, name, dpiScenarios, runtimePaths }) => {
             const { instantiateManagedModule } = await import("/resource-host.mjs");
             const bytes = await (await fetch("/test-framework")).arrayBuffer();
-            return (0, eval)("(" + source + ")")(instantiateManagedModule, compilerBytes, fixtureBytes, { name, bytes }, dpiScenarios);
+            const runtimeAssets = await Promise.all(runtimePaths.map(async path =>
+                new Uint8Array(await (await fetch(path)).arrayBuffer())));
+            return (0, eval)("(" + source + ")")(instantiateManagedModule, compilerBytes, fixtureBytes, { name, bytes },
+                dpiScenarios, runtimeAssets);
         }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes],
-            name: framework.name, dpiScenarios });
+            name: framework.name, dpiScenarios, runtimePaths });
         assert.deepEqual(compiled, expectedCompiler);
+        console.log("Four original CoreLib virtual dispatch cases matched the CLR in Node and Edge.");
         console.log("Three struct alias, copy, and reset cases matched the CLR in Node and Edge.");
         console.log("Three closed generic type identity cases matched the CLR in Node and Edge.");
         console.log("Six constrained reference dispatch and identity cases matched the CLR in Node and Edge.");

@@ -82,7 +82,10 @@ specialization. The type-descriptor probe checks that `typeof` and `GetType`
 share one descriptor per closed generic type and that different type
 arguments produce distinct descriptors. The bundled struct-alias probe also
 copies and replaces a struct through generic `ref T` and `out T`, including
-resetting the original slot to its default value.
+resetting the original slot to its default value. The CoreLib dispatch probe links
+Microsoft's `System.Object.Equals` body and compares inherited equality,
+a managed override, and the null-receiver exception. This probe uses the
+matching installed win-x86 .NET 10 runtime pack (decision 0044).
 
 The monitor probe checks the CLR's reentrant lock behavior on the launch
 worker's single managed execution agent. It verifies lockTaken and typed
