@@ -63,7 +63,15 @@ namespace PortableCompiler
             if ((uint)index >= (uint)FieldCount(objects, type) || value < 0 ||
                 records[value] != Load && records[value] != NullLiteral) return -2;
             int store = Next(records, value, clauses);
-            if (store < 0 || records[store] != StoreObjectIndirect) return -2;
+            if (store < 0) return -2;
+            if (records[store] == StoreObject)
+            {
+                // Open generic IL uses stobj !0. Verify its closed type as well.
+                int storage = ValueOperands.CheckInitialization(bundle, image, layout, heaps, owner, objects,
+                    context, callerArguments, records[store + 1], ObjectReference);
+                if (storage < 0) return storage;
+            }
+            else if (records[store] != StoreObjectIndirect) return -2;
 
             // The verified helper computes a location inside this constructor's
             // current snapshot. The reference is consumed by one field update.
