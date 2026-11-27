@@ -553,9 +553,12 @@ namespace PortableCompiler
                 }
                 else if (kind == AllocateString)
                 {
-                    used = StringWasm.AllocateForConstruction(code, used, Spill(spills, maximum, spillFlags, Native, top));
+                    used = StringWasm.AllocateForConstruction(code, used, Spill(spills, maximum, spillFlags, states[state + top], top));
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, String, top));
                 }
+                else if (kind == CopyConstructionString)
+                    used = StringWasm.CopyForConstruction(code, used, Spill(spills, maximum, spillFlags, String, top - 2),
+                        Spill(spills, maximum, spillFlags, I32, top - 1), Spill(spills, maximum, spillFlags, String, top), scratch);
                 else if (kind == StringConstructionSpan)
                 {
                     used = StringWasm.OpenConstructionSpan(code, used, Spill(spills, maximum, spillFlags, String, top - 1), spills + top);

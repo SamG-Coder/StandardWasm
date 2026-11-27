@@ -380,6 +380,15 @@ namespace PortableCompiler
             return used;
         }
 
+        internal static int CopyForConstruction(byte[] code, int used, int destination, int offset, int source, int scratch)
+        {
+            int targetArray = scratch, sourceArray = scratch + 1, count = scratch + 3;
+            used = Local(code, Unwrap(code, Local(code, used, 0x20, destination)), 0x21, targetArray);
+            used = Local(code, Unwrap(code, Local(code, used, 0x20, source)), 0x21, sourceArray);
+            used = Local(code, Length(code, used, sourceArray), 0x21, count);
+            return CopyArray(code, used, targetArray, offset, sourceArray, count);
+        }
+
         private static int Zero(byte[] code, int used)
         {
             code[used++] = 0x41;
