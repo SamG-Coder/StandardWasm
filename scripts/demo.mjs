@@ -11,7 +11,8 @@ if (!demo) {
     process.exit(process.argv[2] ? 1 : 0);
 }
 if (demo.runner) {
-    run(process.execPath, [demo.runner]);
+    // Extra arguments reach the runner: npm run demo -- <stage> --no-rebuild
+    run(process.execPath, [demo.runner, ...process.argv.slice(3)]);
     process.exit(0);
 }
 
