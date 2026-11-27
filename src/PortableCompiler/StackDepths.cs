@@ -204,6 +204,9 @@ namespace PortableCompiler
                             break;
                         }
                     }
+                    if (kind == Store && depth > 0 && frame[operand] == CharacterLocation &&
+                        stack[depth - 1] == ReadOnlyCharacterLocation)
+                        descriptorMismatch[ReadOnlyCharacterCalls.Local] = operand + 1;
                     if (kind == Call || kind == NewObject)
                     {
                         int first = kind == NewObject ? 1 : 0;
@@ -213,6 +216,13 @@ namespace PortableCompiler
                             for (int i = first; i < count; i++)
                             {
                                 int expected = signatures[offsets[operand] + 1 + i];
+                                if (kind == Call && records[slot + 3] == 0 && expected == CharacterLocation &&
+                                    stack[start + i] == ReadOnlyCharacterLocation)
+                                {
+                                    descriptorMismatch[ReadOnlyCharacterCalls.Target] = operand + 1;
+                                    descriptorMismatch[ReadOnlyCharacterCalls.Argument] = i;
+                                    break;
+                                }
                                 if (stack[start + i] == PeLibrary.RuntimeTypeMetadata.Type && expected >= FirstClass)
                                 {
                                     descriptorMismatch[0] = operand + 1;
@@ -286,8 +296,13 @@ namespace PortableCompiler
                 return Match(stack, depth, CharacterSpan) ? Push(stack, allocated, depth - 1, ReadOnlyCharacterLocation) : -2;
             if (kind == OffsetStaticByteLocation || kind == OffsetCharacterLocation)
             {
+                if (depth < 2) return -2;
+                int source = stack[depth - 2];
+                if (kind == OffsetCharacterLocation && extra == StaticByteIntrinsics.CharacterElementOffset)
+                    return (source == CharacterLocation || source == ReadOnlyCharacterLocation) && stack[depth - 1] == I32
+                        ? depth - 1 : -2;
                 int location = kind == OffsetCharacterLocation ? CharacterLocation : StaticByteLocation;
-                return depth >= 2 && Match(stack, depth - 1, location) && IsNativeInteger(stack[depth - 1]) ? depth - 1 : -2;
+                return source == location && IsNativeInteger(stack[depth - 1]) ? depth - 1 : -2;
             }
             if (kind == ReadStaticUInt16)
                 return Match(stack, depth, StaticByteLocation) ? Push(stack, allocated, depth - 1, I32) : -2;
@@ -641,7 +656,8 @@ namespace PortableCompiler
                 // A pinned char& local can already hold an address produced by
                 // a string copy. A general managed UTF-16 alias still needs
                 // pinning semantics before it can be exposed to memory 0.
-                if (source == ReadOnlyCharacterLocation || extra == PinnedLocals.Character && source == CharacterLocation) return -2;
+                if (extra == PinnedLocals.Character && (source == CharacterLocation || source == ReadOnlyCharacterLocation)) return -2;
+                if (source == ReadOnlyCharacterLocation && frame[operand] != ReadOnlyCharacterLocation) return -2;
                 return Assignable(source, frame[operand], objects) ? depth - 1 : -1;
             }
             if (kind == CheckedConversion)

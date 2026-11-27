@@ -482,11 +482,13 @@ namespace PortableCompiler
                 else if (kind == OffsetStaticByteLocation || kind == OffsetCharacterLocation)
                 {
                     bool characters = kind == OffsetCharacterLocation;
-                    int locationType = characters ? CharacterLocation : StaticByteLocation;
+                    int locationType = states[state + top - 1];
                     int target = Spill(spills, maximum, spillFlags, locationType, top - 1);
                     int offset = Spill(spills, maximum, spillFlags, states[state + top], top);
-                    used = characters ? ManagedLocationWasm.OffsetCharacter(code, used, target, offset)
-                        : ManagedLocationWasm.OffsetStaticByte(code, used, target, offset);
+                    used = !characters ? ManagedLocationWasm.OffsetStaticByte(code, used, target, offset) :
+                        records[slot + 3] == StaticByteIntrinsics.CharacterElementOffset
+                            ? ManagedLocationWasm.OffsetCharacterElements(code, used, target, offset)
+                            : ManagedLocationWasm.OffsetCharacter(code, used, target, offset);
                     used = Local(code, used, 0x21, target);
                 }
                 else if (kind == ReadStaticUInt16)
