@@ -26,7 +26,7 @@ export const win32ImportNames = new Set([
     "callWindowProcW", "setClassLongW", "deactivateActCtx", "releaseActCtx",
     "getCurrentProcess", "getCurrentThread", "getCurrentThreadId", "closeHandle", "getProcessWindowStation",
     "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError", "postThreadMessageW", "postMessageW",
-    "notifyWinEvent"
+    "notifyWinEvent", "enumThreadWindows"
 ]);
 
 const moduleNotFound = 126;
@@ -237,6 +237,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         ...createThreadHandleHost(memory, () => windows.getCurrentThreadId(), setError),
         ...createThreadMessageQueue(memory, windows, setError, paint.nextPaint),
         notifyWinEvent: createWindowEventPublisher(windows, onWinEvent),
+        enumThreadWindows: createThreadWindowEnumerator(windows),
         sendMessageTimeoutW: createWindowSender(memory, windows, setError),
         ...createWindowStationHost(memory, desktop, setError),
         registerWindowMessageW: createWindowMessageRegistration(memory, setError),
@@ -245,5 +246,19 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         setLastSystemError: value => { errors.system = value | 0; },
         getLastPInvokeError: () => errors.pinvoke,
         setLastPInvokeError: value => { errors.pinvoke = value | 0; }
+    };
+}
+
+// Stage 361: EnumThreadWindows. The callback arrives as a decision 0098 token: the
+// guest's table-2 target slot and the compiled entry for its signature. The entry is
+// called synchronously, before this import returns, so the token is never retained.
+function createThreadWindowEnumerator(windows) {
+    return (thread, target, entry, payload) => {
+        const next = windows.openThreadWindows(thread);
+        // WNDENUMPROC returns BOOL: zero stops the enumeration, and the API then
+        // reports FALSE. The tested Windows build reports TRUE for an empty thread.
+        for (let window = next(); window !== 0; window = next())
+            if (entry(target, window, payload) === 0) return 0;
+        return 1;
     };
 }

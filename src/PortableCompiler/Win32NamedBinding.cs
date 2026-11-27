@@ -11,7 +11,7 @@ namespace PortableCompiler
             NotifyWinEvent = PostWindow + 1, SendMessageTimeout = NotifyWinEvent + 1,
             BeginPaint = SendMessageTimeout + 1, EndPaint = BeginPaint + 1,
             UpdateRect = EndPaint + 1, ValidateRect = UpdateRect + 1, CoCreateInstance = ValidateRect + 1,
-            IsWindowVisible = CoCreateInstance + 1;
+            IsWindowVisible = CoCreateInstance + 1, EnumThreadWindows = IsWindowVisible + 1;
         private const int ImportOwner = -4;
 
         internal static int Find(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int[] counts,
@@ -25,6 +25,8 @@ namespace PortableCompiler
                     ? CoCreateInstance : 0;
             int member = FindEntry(image, heaps, (uint)mapping[2], (uint)mapping[1]);
             if (member == 0) return 0;
+            if (member == EnumThreadWindows)
+                return mapping[0] == 0x101 && EnumThreadWindowsWasm.MatchesSignature(image, heaps, methods, row) ? member : 0;
             if (member == IsWindowVisible)
                 return mapping[0] == 0x101 && Win32ModuleBinding.MatchesIsWindow(image, heaps, methods, row) ? member : 0;
 
@@ -153,7 +155,8 @@ namespace PortableCompiler
                 ImageBytes.MatchesAscii(image, heaps, entry, "EndPaint") ? EndPaint :
                 ImageBytes.MatchesAscii(image, heaps, entry, "GetUpdateRect") ? UpdateRect :
                 ImageBytes.MatchesAscii(image, heaps, entry, "ValidateRect") ? ValidateRect :
-                ImageBytes.MatchesAscii(image, heaps, entry, "IsWindowVisible") ? IsWindowVisible : 0;
+                ImageBytes.MatchesAscii(image, heaps, entry, "IsWindowVisible") ? IsWindowVisible :
+                ImageBytes.MatchesAscii(image, heaps, entry, "EnumThreadWindows") ? EnumThreadWindows : 0;
         }
 
         private static bool ReadUnsigned(byte[] image, int[] cursor, int end) =>
@@ -204,7 +207,7 @@ namespace PortableCompiler
 
         internal static int Arity(int member) => member == Post || member == PostWindow || member == NotifyWinEvent ? 4 :
             member == SendMessageTimeout ? 7 : member == Peek || member == CoCreateInstance ? 5 :
-            member == DeleteFile || member == IsWindowVisible ? 1 : member == UpdateRect ? 3 : 2;
+            member == DeleteFile || member == IsWindowVisible ? 1 : member == UpdateRect || member == EnumThreadWindows ? 3 : 2;
         internal static bool NeedsMemory(int member) => member != Post && member != PostWindow &&
             member != NotifyWinEvent && member != IsWindowVisible;
 
@@ -230,6 +233,9 @@ namespace PortableCompiler
                 return Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset], Native, "HDC", "Windows.Win32.Graphics.Gdi") &&
                     Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") && types[offset + 2] == Native;
             if (!Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset], I32, "BOOL")) return false;
+            if (member == EnumThreadWindows)
+                return types[offset + 1] == I32 && types[offset + 2] == Native &&
+                    Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 3], Native, "LPARAM");
             if (member == IsWindowVisible)
                 return Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND");
             if (member == UpdateRect)

@@ -363,6 +363,7 @@ namespace PortableCompiler
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
             var nativePlans = new NativeAggregatePlans();
             var pointers = new FunctionPointerPlan();
+            var callbacks = new UnmanagedCallbackPlan(); // decision 0098 entries
             var receiverDemand = new ReceiverBodyDemand(functionCapacity);
             // Reuse local pin metadata across methods. Signature decoding resets each slot.
             var pinned = new int[frame.Length];
@@ -523,6 +524,29 @@ namespace PortableCompiler
                         continue;
                     }
                     int import = Win32ModuleBinding.FindImport(image, heaps, layout, source, implementation, bundle, owner);
+                    if (import == Win32NamedBinding.EnumThreadWindows)
+                    {
+                        // Stage 361: the callback crosses as a decision 0098 host-callable token.
+                        var callback = new int[EnumThreadWindowsWasm.CallbackParameters + 1];
+                        if (!EnumThreadWindowsWasm.ReadCallbackTypes(bundle, image, layout, heaps, owner, source, objects, callback))
+                            return -2;
+                        var emission = new int[2];
+                        emission[0] = functions;
+                        emission[1] = length;
+                        int entry = RegisterUnmanagedCallback(callbacks, pointers, objects, callback,
+                            EnumThreadWindowsWasm.CallbackParameters, owner, context, owners, rows, contexts, arities, offsets,
+                            signatures, bodyOffsets, sizes, moduleCode, emission);
+                        if (entry < 0) return entry;
+                        functions = emission[0];
+                        length = emission[1];
+                        if (moduleCode.Length - length < EnumThreadWindowsWasm.Capacity) return -3;
+                        bodyOffsets[current] = length;
+                        length = EnumThreadWindowsWasm.WriteBody(moduleCode, length, signatures, offsets[current],
+                            nativeBase + EnumThreadWindowsWasm.Register(natives, import), callbacks.Slots[entry],
+                            initializerPrologue < 0 ? -1 : hostImports + initializerPrologue);
+                        sizes[current] = length - bodyOffsets[current];
+                        continue;
+                    }
                     if (import != 0)
                     {
                         // New Win32 leaves use the typed import table so they do not consume fixed feature bits.
@@ -4361,25 +4385,72 @@ namespace PortableCompiler
                 var types = new int[256];
                 int arity = SignatureTypes.Read(bundle, image, heaps, blob, types, 0, 0, layout, objects, owner, context);
                 if (arity < 0) return arity;
-                int chain = pointers.FindCarrier(arities, offsets, signatures, types, 0, arity);
-                if (chain < 0)
-                {
-                    if (functions >= owners.Length) return -3;
-                    int offset = NextSignature(offsets, arities, functions);
-                    if (arity >= signatures.Length - offset) return -3;
-                    for (int i = 0; i <= arity; i++) signatures[offset + i] = types[i];
-                    owners[functions] = owner;
-                    rows[functions] = 0; // synthetic carrier, never compiled from IL
-                    contexts[functions] = context;
-                    arities[functions] = arity;
-                    offsets[functions] = offset;
-                    chain = pointers.AddCarrier(functions++);
-                }
+                int chain = RegisterPointerCarrier(pointers, types, arity, owner, context, owners, rows, contexts,
+                    arities, offsets, signatures, functions);
+                if (chain < 0) return chain;
+                if (pointers.Carriers[chain] == functions) functions++;
                 records[slot + 1] = pointers.Carriers[chain];
                 records[slot + 3] = chain;
             }
             if (location.Length != 0) location[2] = -1;
             return functions;
+        }
+
+        private static int RegisterPointerCarrier(FunctionPointerPlan pointers, int[] types, int arity, int owner,
+            int context, int[] owners, int[] rows, int[] contexts, int[] arities, int[] offsets, int[] signatures, int functions)
+        {
+            int chain = pointers.FindCarrier(arities, offsets, signatures, types, 0, arity);
+            if (chain >= 0) return chain;
+            if (functions >= owners.Length) return -3;
+            int offset = NextSignature(offsets, arities, functions);
+            if (arity >= signatures.Length - offset) return -3;
+            for (int i = 0; i <= arity; i++) signatures[offset + i] = types[i];
+            owners[functions] = owner;
+            rows[functions] = 0; // synthetic carrier, never compiled from IL
+            contexts[functions] = context;
+            arities[functions] = arity;
+            offsets[functions] = offset;
+            return pointers.AddCarrier(functions);
+        }
+
+        // Decision 0098: the host-callable entry for one unmanaged callback signature,
+        // created once per carrier. emission holds [functions, code length] and is advanced.
+        private static int RegisterUnmanagedCallback(UnmanagedCallbackPlan callbacks, FunctionPointerPlan pointers,
+            int[] objects, int[] callback, int parameters, int owner, int context, int[] owners, int[] rows, int[] contexts,
+            int[] arities, int[] offsets, int[] signatures, int[] bodyOffsets, int[] sizes, byte[] moduleCode, int[] emission)
+        {
+            int functions = emission[0];
+            int carrier = RegisterPointerCarrier(pointers, callback, parameters, owner, context, owners, rows, contexts,
+                arities, offsets, signatures, functions);
+            if (carrier < 0) return carrier;
+            if (pointers.Carriers[carrier] == functions) functions++;
+            int existing = callbacks.Find(carrier);
+            if (existing >= 0)
+            {
+                emission[0] = functions;
+                return existing;
+            }
+            if (functions >= owners.Length) return -3;
+            int arity = parameters + 1;
+            int offset = NextSignature(offsets, arities, functions);
+            if (arity >= signatures.Length - offset) return -3;
+            var entrySignature = new int[arity + 1];
+            UnmanagedCallbackWasm.EntrySignature(objects, callback, parameters, entrySignature);
+            for (int i = 0; i <= arity; i++) signatures[offset + i] = entrySignature[i];
+            owners[functions] = owner;
+            rows[functions] = 0; // synthetic entry, never compiled from IL
+            contexts[functions] = context;
+            arities[functions] = arity;
+            offsets[functions] = offset;
+            int length = emission[1];
+            if (moduleCode.Length - length < UnmanagedCallbackWasm.EntryCapacity) return -3;
+            bodyOffsets[functions] = length;
+            length = UnmanagedCallbackWasm.WriteEntry(moduleCode, length, objects, callback, parameters, pointers, carrier);
+            sizes[functions] = length - bodyOffsets[functions];
+            int index = callbacks.Add(carrier, functions, pointers.Slot(functions));
+            emission[0] = functions + 1;
+            emission[1] = length;
+            return index;
         }
 
         internal static int NextSignature(int[] offsets, int[] arities, int functions) =>
