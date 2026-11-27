@@ -30,6 +30,9 @@ export function createWindowState() {
         hasWindow(handle) {
             return windows.has(handle >>> 0);
         },
+        getCurrentThreadId() {
+            return owner.threadId;
+        },
         getWindowOwner(handle) {
             return windows.has(handle >>> 0) ? owner : undefined;
         },

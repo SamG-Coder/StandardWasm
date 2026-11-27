@@ -9,7 +9,7 @@ namespace PortableCompiler
         internal const int DpiQueryBodyCapacity = 112;
 
         internal static int BodyCapacity(int member) => member == Win32ModuleBinding.CreateWindow ? 160 :
-            member == Win32ModuleBinding.CallWindowProcedure ? 96 : 64;
+            member == Win32ModuleBinding.DuplicateHandle ? 112 : member == Win32ModuleBinding.CallWindowProcedure ? 96 : 64;
 
         private static int ResultCount(int member) => member == Win32ModuleBinding.ReleaseContext ? 0 :
             member == Win32ModuleBinding.GetProcessAwareness ? 2 : 1;

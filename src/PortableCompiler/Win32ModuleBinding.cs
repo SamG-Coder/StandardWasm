@@ -14,7 +14,8 @@ namespace PortableCompiler
             CallWindowProcedure = 23, RegisterClass = 24, GetClassInfo = 25,
             SetWindowLong = 26, SetWindowLongPtr = 27, CreateWindow = 28,
             GetFullPathName = 29, RedrawWindow = 30, RegisterWindowMessage = 31,
-            GetWindowThreadProcessId = 32, Count = GetWindowThreadProcessId;
+            GetWindowThreadProcessId = 32, GetCurrentProcess = 33, GetCurrentThread = 34, GetCurrentThreadId = 35,
+            DuplicateHandle = 36, GetExitCodeThread = 37, CloseHandle = 38, Count = CloseHandle;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -34,20 +35,24 @@ namespace PortableCompiler
             member == CreateWindow ? "CreateWindowExW" :
             member == GetFullPathName ? "GetFullPathNameW" : member == RedrawWindow ? "RedrawWindow" :
             member == RegisterWindowMessage ? "RegisterWindowMessageW" :
-            member == GetWindowThreadProcessId ? "GetWindowThreadProcessId" : "BCryptGenRandom";
+            member == GetWindowThreadProcessId ? "GetWindowThreadProcessId" :
+            member == GetCurrentProcess ? "GetCurrentProcess" : member == GetCurrentThread ? "GetCurrentThread" :
+            member == GetCurrentThreadId ? "GetCurrentThreadId" : member == DuplicateHandle ? "DuplicateHandle" :
+            member == GetExitCodeThread ? "GetExitCodeThread" : member == CloseHandle ? "CloseHandle" : "BCryptGenRandom";
 
         private static string Library(int member) => member == LoadLibrary || member == GetFullPathName ? "kernel32.dll" :
-            member <= ReleaseContext || member == GetProcedure ? "KERNEL32.dll" :
+            member <= ReleaseContext || member == GetProcedure || member >= GetCurrentProcess ? "KERNEL32.dll" :
             member == SetProcessAwareness ? "api-ms-win-shcore-scaling-l1-1-1.dll" :
             member == BCryptGenRandom ? "BCrypt.dll" : "USER32.dll";
 
         internal static int Arity(int member) =>
-            member == CreateWindow ? 12 : member == CallWindowProcedure ? 5 :
+            member == CreateWindow ? 12 : member == DuplicateHandle ? 7 : member == CallWindowProcedure ? 5 :
             member == BCryptGenRandom || member == GetFullPathName || member == RedrawWindow ? 4 :
             member == LoadLibrary || member == GetClassInfo || IsWindowLongSetter(member) ? 3 :
-            member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ? 0 :
+            member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ||
+            member == GetCurrentProcess || member == GetCurrentThread || member == GetCurrentThreadId ? 0 :
             member == GetProcedure || member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts ||
-            member == EnableWindow || member == GetWindowThreadProcessId ||
+            member == EnableWindow || member == GetWindowThreadProcessId || member == GetExitCodeThread ||
             UsesLastError(member) ? 2 : 1;
 
         internal static bool UsesLastError(int member) =>
@@ -63,7 +68,12 @@ namespace PortableCompiler
             for (int member = 1; member <= Count; member++)
                 if (member != GetProcessAwareness && (UsesLastError(member) ? IsWindowLongImport(image, heaps, methods, counts, row, member) :
                     NativeImports.Find(image, heaps, methods, counts, Library(member), EntryName(member), row, 0x101) == row))
-                    return member != GetWindowThreadProcessId || IsWindowOwnerSignature(image, heaps, methods, row) ? member : 0;
+                {
+                    if (member == GetWindowThreadProcessId && !IsWindowOwnerSignature(image, heaps, methods, row)) return 0;
+                    if ((member == DuplicateHandle || member == GetExitCodeThread) &&
+                        !MatchesThreadOutputPointer(image, heaps, methods, row, member)) return 0;
+                    return member;
+                }
             return 0;
         }
 
@@ -79,6 +89,34 @@ namespace PortableCompiler
                 ImageBytes.CompressedUnsigned(image, cursor[0], end, cursor) > 0 &&
                 SignatureReader.TakeElement(image, cursor, end, pointer) &&
                 SignatureReader.TakeElement(image, cursor, end, unsignedInt32) && cursor[0] == end;
+        }
+
+        private static bool MatchesThreadOutputPointer(byte[] image, int[] heaps, int[] methods, int row, int member)
+        {
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4),
+                Arity(member), cursor);
+            if (end < 0 || ReadAbiWord(image, cursor, end, 0x08) < 0) return false;
+            int handle = ReadAbiWord(image, cursor, end, 0x18);
+            if (handle < 0) return false;
+            if (member == GetExitCodeThread)
+                return SignatureReader.TakeElement(image, cursor, end, 0x0f) &&
+                    SignatureReader.TakeElement(image, cursor, end, 0x09) && cursor[0] == end;
+
+            // The duplicate output points to the same HANDLE type as the
+            // source process argument. A smaller pointer target cannot hold it.
+            return ReadAbiWord(image, cursor, end, 0x18) >= 0 &&
+                ReadAbiWord(image, cursor, end, 0x18) >= 0 &&
+                SignatureReader.TakeElement(image, cursor, end, 0x0f) &&
+                ReadAbiWord(image, cursor, end, 0x18) == handle;
+        }
+
+        private static int ReadAbiWord(byte[] image, int[] cursor, int end, int scalar)
+        {
+            if (SignatureReader.TakeElement(image, cursor, end, scalar)) return 0;
+            if (!SignatureReader.TakeElement(image, cursor, end, 0x11)) return -1;
+            int token = ImageBytes.CompressedUnsigned(image, cursor[0], end, cursor);
+            return token > 0 ? token : -1;
         }
 
         private static bool IsWindowLongImport(byte[] image, int[] heaps, int[] methods, int[] counts, int row, int member)
@@ -99,6 +137,7 @@ namespace PortableCompiler
                 return arity == 2 && IsAbiShape(bundle, objects, types[offset + 1], Native, "HANDLE") &&
                     types[offset + 2] == Int32Location && IsAbiShape(bundle, objects, result, I32, "HRESULT");
             if (arity != Arity(member)) return false;
+            if (member >= GetCurrentProcess) return MatchesThreadSignature(bundle, objects, member, types, offset);
             // CoreLib's generated P/Invoke is the raw UTF-16 form. Its
             // managed wrapper pins the string and captures last error.
             if (member == LoadLibrary)
@@ -167,6 +206,22 @@ namespace PortableCompiler
             if (member == CurrentContext) return input == Native;
             if (types[offset + 2] != Native) return false;
             return member == ActivateContext ? IsAbiShape(bundle, objects, input, Native, "HANDLE") : input == I32;
+        }
+
+        private static bool MatchesThreadSignature(BundleImages bundle, int[] objects, int member, int[] types, int offset)
+        {
+            int result = types[offset];
+            if (member == GetCurrentProcess || member == GetCurrentThread)
+                return IsAbiShape(bundle, objects, result, Native, "HANDLE");
+            if (member == GetCurrentThreadId) return result == I32;
+            if (!IsAbiShape(bundle, objects, result, I32, "BOOL") ||
+                !IsAbiShape(bundle, objects, types[offset + 1], Native, "HANDLE")) return false;
+            if (member == CloseHandle) return true;
+            if (member == GetExitCodeThread) return types[offset + 2] == Native;
+            return IsAbiShape(bundle, objects, types[offset + 2], Native, "HANDLE") &&
+                IsAbiShape(bundle, objects, types[offset + 3], Native, "HANDLE") &&
+                types[offset + 4] == Native && types[offset + 5] == I32 &&
+                IsAbiShape(bundle, objects, types[offset + 6], I32, "BOOL") && types[offset + 7] == I32;
         }
 
         private static bool MatchesCreateWindowSignature(BundleImages bundle, int[] objects, int[] types, int offset)

@@ -22,6 +22,7 @@ export function serveInteractiveConsole(port, compiler) {
         script("stage-74-executable-entry/full-path-host.mjs"),
         script("stage-74-executable-entry/window-state.mjs"),
         script("stage-74-executable-entry/window-messages.mjs"),
+        script("stage-74-executable-entry/thread-handle-host.mjs"),
         script("stage-74-executable-entry/activation-context.mjs"),
         script("stage-74-executable-entry/dpi-awareness.mjs"),
         script("stage-74-executable-entry/frameworks.mjs"),

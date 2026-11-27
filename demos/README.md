@@ -207,6 +207,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [206 · UInt32 managed byrefs](stage-206-uint32-managed-byrefs/README.md) | `npm run demo -- stage-206-uint32-managed-byrefs` | Match unsigned managed ref and out parameters on the CLR, Node and Edge |
 | [207 · Window owner identity](stage-207-window-owner/README.md) | `npm run demo -- stage-207-window-owner` | Compare owning process and thread, optional PID storage, and invalid HWND errors |
 | [208 · Int32 native frame locals](stage-208-int32-native-frame-locals/README.md) | `npm run demo -- stage-208-int32-native-frame-locals` | Compare typed local access and native pointer aliases over stable frame cells |
+| [209 · GUI thread handle lifecycle](stage-209-thread-handle-lifecycle/README.md) | `npm run demo -- stage-209-thread-handle-lifecycle` | Compare the launch thread identity, duplicate handles, exit status and errors against Windows |
 | [210 · Unboxing a closed generic reference](stage-210-generic-reference-unbox/README.md) | `npm run demo -- stage-210-generic-reference-unbox` | Match generic reference casts, identity and typed failures across runtimes |
 
 ## Adding a stage
