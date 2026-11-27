@@ -31,17 +31,19 @@ internal static class ValueMethodCases
             }
         Check(nameof(Kernels.DefaultReceiver), [], Kernels.DefaultReceiver());
 
-        // A field store through the receiver must be visible to its caller.
-        foreach (int value in samples)
-            Check(nameof(Kernels.RejectStore), [value], Kernels.RejectStore(value));
-
-        // Keep coverage of unsupported whole-receiver updates separately.
-        if (Kernels.RejectStore(5) != 5 || Kernels.RejectReset(5) != 0 || Kernels.RejectReplace(5) != 5)
-            throw new InvalidOperationException("CLR did not run the mutating value methods.");
+        // Ensure the reset case exercises the value-at-address initialization instruction.
         byte[] reset = typeof(Counter).GetMethod(nameof(Counter.Reset))!.GetMethodBody()!.GetILAsByteArray()!;
-        int resetOffset = IlOffsets.Find(reset, OpCodes.Initobj);
-        if (resetOffset < 0) throw new InvalidOperationException("Counter.Reset did not emit initobj.");
-        Reject(nameof(Kernels.RejectReset), nameof(Counter.Reset), resetOffset);
+        if (IlOffsets.Find(reset, OpCodes.Initobj) < 0)
+            throw new InvalidOperationException("Counter.Reset did not emit initobj.");
+        foreach (int value in samples)
+        {
+            Check(nameof(Kernels.RejectStore), [value], Kernels.RejectStore(value));
+            Check(nameof(Kernels.ResetReceiver), [value], Kernels.ResetReceiver(value));
+        }
+
+        // Whole-receiver replacement still requires a supported storage operation.
+        if (Kernels.RejectReplace(5) != 5)
+            throw new InvalidOperationException("CLR did not replace the value receiver.");
         Reject(nameof(Kernels.RejectReplace), nameof(Counter.Replace), 7);
 
         void Check(string name, object[] arguments, object expected)
