@@ -3,6 +3,15 @@ namespace HandleConstraintDependency
     public interface IShape<T> { }
     public interface IInherited<T> : IShape<T> { }
     public interface IOtherShape<T> { }
+    public interface IUnmanagedShape<T> where T : unmanaged { }
+
+    public class ShapeProvider : IUnmanagedShape<Handle> { }
+    public sealed class DerivedShapeProvider : ShapeProvider { }
+
+    public static class ShapeMethods
+    {
+        public static int Request<TProvider>(int value) where TProvider : IUnmanagedShape<Handle> => value;
+    }
 
     public struct Handle : IInherited<Handle>
     {

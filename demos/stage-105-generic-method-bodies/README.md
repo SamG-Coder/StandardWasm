@@ -16,9 +16,10 @@ pass between the app and the consumer DLL. Calls cover instance, static,
 private same-definition, constructor-inside-body and local-of-type-`T` paths.
 The verifier compares every case with the CLR in Node and Edge.
 
-Generic methods (`Echo<U>`) and virtual members (`Describe`) report -2 at
-the calling instruction. Generic method parameters, virtual dispatch,
-generic value-type declaring types and static fields on generic types need
-separate work.
+Direct calls to a closed nonvirtual generic instance method (`Echo<U>`)
+compile on reference receivers. The verifier checks that `callvirt`
+evaluates the arguments before raising `NullReferenceException` on a null
+receiver. The verifier also compares the virtual member `Describe` on a
+closed generic class. Static fields on generic types still report a diagnostic.
 
 See the [closed generic method body decision](../../docs/decisions/0037-closed-generic-method-bodies.md).

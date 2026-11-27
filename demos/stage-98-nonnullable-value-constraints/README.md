@@ -2,9 +2,10 @@
 
 Run `npm run demo -- stage-98-nonnullable-value-constraints` and
 `npm test`. The .NET Standard example uses linked scalar and aggregate
-arguments under `where T : struct` and returns 24. The CLR oracle checks
-the rejection of a reference argument. A standalone constructor constraint
-and arbitrary nominal constraints still produce explicit diagnostics.
+arguments under `where T : struct`, including a value type constrained by a
+named interface, and returns 24. The CLR oracle checks the rejection of a
+reference argument. A standalone constructor constraint and a nominal class
+constraint produce explicit diagnostics.
 
 After building the self-hosted compiler, run
 `node demos/stage-98-nonnullable-value-constraints/verify-corelib.mjs`

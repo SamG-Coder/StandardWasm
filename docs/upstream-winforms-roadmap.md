@@ -38,6 +38,186 @@ The first implementation issue should produce a machine-readable inventory from 
 
 The [Windows reference fixture](../demos/stage-72-winforms-windows-reference/README.md) captures the stock-control baseline and static dependency inventory. The [executable intake fixture](../demos/stage-73-executable-intake/README.md) recovers the original managed entry from a supported apphost publish or single-file bundle. The [entry execution fixture](../demos/stage-74-executable-entry/README.md) runs a parameterless console entry in Edge and matches Windows exit status for both publish formats. The [managed companions fixture](../demos/stage-95-managed-companions/README.md) reads the original publish manifest, compiles its managed companions, and reproduces exit code 61 in Windows, Node and Edge. It sends the original WinForms entry and installed framework assemblies through the same browser worker. WinForms stops at a compiler diagnostic before creating a window. The [blocker census](../demos/stage-117-winforms-census/README.md) walks the same entry's static call graph through `Application.Run` and records the portable compiler's verdict for every reached method. It ranks the remaining compiler features and the reached Win32 import surface.
 
+### Managed finalization
+
+Both unchanged WinForms launch forms reach CoreLib's `GC.SuppressFinalize`
+while the compiler resolves the startup closure. CoreLib validates the argument,
+checks the concrete runtime type for a finalizer, and delegates suppression to the
+collector. The reference framework includes finalizer declarations in
+`System.ComponentModel.Component`, WinForms and System.Drawing.Common. Inherited
+finalizers matter when the concrete type comes from an ordinary application DLL.
+See the [.NET 10 CoreLib implementation](https://github.com/dotnet/runtime/blob/v10.0.10/src/coreclr/System.Private.CoreLib/src/System/GC.CoreCLR.cs).
+
+The startup census for the .NET 10.0.10 reference finds a call chain from
+`Program.Main` through `Application.Run` and the `ApplicationContext`
+constructor to `GC.SuppressFinalize`. The constructor suppresses finalization
+for the exact stock application context and stock modal context types. Its
+finalizer calls virtual `Dispose(false)` on derived instances. A Windows
+CLR probe with two derived instances observed one explicit disposal and
+one finalizer disposal on both x86 and x64. Preserve that distinction
+when adding the browser runtime path.
+
+Before claiming finalization support, compare an ordinary library on the CLR,
+Node and Edge. Cover the null argument exception, repeated suppression, two
+instances of the same type, inherited finalizers, re-registration and
+resurrection. A collector design needs to keep the finalizable object and its
+fields available to its managed finalizer after the last ordinary root is gone.
+Evaluate explicit managed root tracing and a finalization queue for that contract.
+The [Stage 152 experiment](../demos/stage-152-finalization-root-tracing/README.md)
+exercises that queue on Wasm GC references with explicit roots. A live CLR
+oracle shows that suppression and registration multiplicity need separate
+state: a re-registration can clear suppression or add a queue entry. The next
+step is to make generated code supply roots and field traversal at collection
+points so the queue can work with the unchanged upstream classes.
+The frame-slot analysis in Stage 152 uses decoded IL to identify later uses.
+At the real `ApplicationContext` constructor's suppression call, both `this`
+and `mainForm` remain live in the frame. `this` is also the call argument.
+The collector must include evaluation-stack references even when the slot
+that provided a reference has no later uses.
+Stage 152 also verifies compiler-emitted root publication around direct calls.
+It preserves the caller's live future uses and the surviving stack prefix,
+then clears its entries on return and managed exception unwind. The test
+table is available only in the internal probe compilation mode.
+The typed edge readers use the emitted Wasm layouts to enumerate inherited
+reference fields and reference-array elements. A CLR comparison verifies a
+cyclic object graph starting with a single published root. A Wasm mark pass
+consumes those edges from live frames and managed statics, and releases its
+snapshot when cleared. The queue discovery pass uses the resulting mark set
+to select registered receivers and includes previously pending receivers when
+tracing. The probe registers new objects before their constructors when the
+allocated type overrides the trusted `Object.Finalize` slot. The remaining
+queue work includes re-registration and scheduling collection. The probe
+already dispatches the managed destructor, executes its base call chain,
+and binds the trusted suppression method for registered and pending receivers.
+Addressed value slots and reference cells are now traced through `finally`.
+The mark pass includes active pin owners, and one unwind path releases the
+frame's managed roots and native pin storage. The unchanged sample's
+experimental compile proceeds past `Control.Dock` and the pinned Win32
+`GetModuleHandle` wrapper to CoreLib's `RuntimeAssembly.GetManifestResourceStream`.
+The verified resource prelude now publishes both the assembly descriptor
+and name across the host lookup. The probe also retains the original managed
+exception across calls in `finally` and supported type-filtered catch handlers.
+Compilation of the unchanged sample in probe mode gets past
+`ThemingScope.CreateActivationContext` and `System.Windows.Forms.Application..cctor`.
+`ThemingScope..ctor` now compiles its activation-context out parameters through
+stable native frame slots. The linker validates `Form`'s inherited
+`IHandle<HWND>` constraint and binds the original `PInvokeCore.GetWindowLong`
+call in `ThreadContext.RunMessageLoopInner`. The original window-state calls
+now bind to the browser host's per-instance HWND table. The unchanged bundle
+gets past both calls and reaches CoreLib's `System.IO.Path.GetTempPath`.
+The compiler resolves its `ValueStringBuilder` local, whose `Span<char>` field
+uses the existing owner-carrying Wasm representation. The pointer-based
+`Span<char>` constructor now produces a view over the Wasm shadow stack.
+The compiler passes the scoped `ValueStringBuilder` by reference to the
+original `Path.GetTempPath` helper. The callback in CoreLib's
+`Path.GetRandomFileName` now binds as `SpanAction<char, nint>`, and the
+`NativeWindow` type initializer constructs its static shutdown handler.
+The linker now gives the original CoreLib `EventHandler` and `EventArgs`
+definitions the same representation as their references in WinForms. The
+unchanged startup compilation gets past the `AppDomain.ProcessExit`
+subscription. Nominal enum vectors let the linker register the original
+resource manager getter, whose reachable field types include CoreLib's
+`CultureData` and its `CalendarId[]` field. Constrained dispatch binds the
+original `ValueStringBuilder.ToString` override in CoreLib's `String.FormatHelper`.
+Ordinary struct calls retain the managed receiver when the IL leaves it on the
+stack, including the linked padding setters. In `PropertyStore.AddValue`, a
+closed type selects the matching branch of the original `typeof` checks. The
+immediate same-type managed read preserves the value copy used by the original
+`ldobj`. The original `Debugger.IsAttached` getter calls the browser's managed
+runtime host for attachment state. Array-backed `Int32` references now use
+the same traced owner and index as existing managed array locations, including
+when passed to another assembly or returned to a compiled caller. The startup
+replay decodes the generic `Entry` array element address in CoreLib's
+`Dictionary<TKey,TValue>.Remove`. Its primitive `TKey` now resolves to the
+canonical CoreLib type descriptor. The linker binds the comparer call through
+`IEqualityComparer<TKey>.GetHashCode` with the closed interface signature. The
+compiler also lowers the original primitive `GetHashCode` overrides when
+CoreLib's method body returns the receiver bits unchanged. Closed generic
+class slots bind `EqualityComparer<TKey>.Equals`. The compiler uses each
+closed type's instance layout to evaluate
+`RuntimeHelpers.IsReferenceOrContainsReferences<T>()`. The startup replay
+prunes the `Int32` key cleanup in `Dictionary.Remove`. The live
+value cleanup initializes a field by replacing the containing value at its
+managed location, preserving alias and copy semantics. Value constructors
+use the same field initialization against their current value. The startup
+replay compiles through `BitVector32.set_Item` and the closed nullable
+receiver in `Control.SetStyle`. A descriptor returned from the address-backed
+value getter now reaches the type comparison in `PropertyStore.AddOrRemoveValue`.
+The replay compiles the `IArrangedElement` interface test in
+`LayoutEngine.CastToArrangedElement`. The compiler resolves the test
+against the final class layouts and preserves the tested reference.
+`Object.GetType` in that method's error path now resolves concrete class
+identity from an object reference. Plain objects, strings and observed
+primitive boxes use their own canonical descriptors. Array tokens retain
+the exact CLR element type, and arrays with registered nominal layouts
+can participate in `Object.GetType`. Runtime lookup for primitive arrays
+that share a Wasm heap still needs exact allocation identity. Internal calls
+now carry supported managed locations as results,
+which lets the replay bind the by-reference `FindValue` return in
+`Dictionary.TryGetValue`. The replay binds the `Byte[]` token in the
+original `Value.get_Type` and carries the descriptor through its local and
+return. The `TypeFlag.get_Type` dispatch and its resolved overrides now
+share the descriptor result representation. The linker now binds the
+generic `get_Value` call in `ActiveXImpl.UpdateAccelTable` by resolving
+`T*` in the closed declaring type. The following
+`IOleControlSite.OnControlInfoChanged` call receives a native address.
+The compiler gives that receiver a separate body from the one it uses
+for a traced value location. Stage 143 verifies writes through both
+receiver forms. CoreLib's base finalizer call binds the original
+`Object.Finalize` body through the canonical object receiver. The static
+switch cache in `LocalAppContextSwitches.get_EnableMsoComponentManager`
+now has one managed location shared by direct access and byref callers.
+The native storage planner now ignores static fields when mapping the
+instance layout of the `USEROBJECTFLAGS` local. Initializing or resetting a
+native-backed local clears the same bytes its pointer aliases use. The
+replay binds the internal `HWINSTA.Value` field under its declaring
+assembly's existing friend grant. Field access uses the same verified
+assembly identity as method access. The browser window host now binds
+`GetWindowLongW` and `GetWindowLongPtrW` to registered window state and
+preserves the managed P/Invoke error slot. The original `HWND.op_Explicit`
+now reads its native argument through `IntPtr.ToPointer()`. The startup
+bundle includes the original `System.ComponentModel.EventBasedAsync`
+assembly for `AsyncOperationManager`. `ValueStringBuilder.Dispose` now
+clears its receiver through the caller's managed location. CoreLib's
+`Interop.GetRandomBytes` continues to run its original managed body and
+uses Web Crypto through the system-preferred `BCryptGenRandom` import.
+The compiler now supplies a writable span over the newly allocated string
+for the verified CoreLib `String.Create` body with native-integer callback
+state. The original branches and delegate invocation remain in the compiled
+body. The compiler now preserves the duplicated span receiver in CoreLib's
+`Path.JoinInternal` when the method computes the element index from the span
+length. The normal compiler entry point now activates private finalizer
+registration and suppression when it links CoreLib's `GC.SuppressFinalize`.
+Stage 152 compares five cases through the normal entry point, including
+the null argument exception. The launcher retries compiler workspace
+exhaustion with a larger buffer. CoreLib's `Path.GetFullPath` now uses the
+Wasm UTF-16 string backing array for the original ordinal code-unit search
+in `String.Contains(char)`. Addressed static reference fields now share a
+traced cell across direct reads, writes and byrefs. This clears the startup
+diagnostic on the static address in `AppDomain.get_CurrentDomain`.
+Reference `Interlocked.CompareExchange` now compares object identity and
+conditionally updates the same managed cell within its Wasm agent. The
+desktop compiler replay accepts the original CoreLib
+`System.Threading.Lock.Scope` layout by allowing its ordinary nested
+`ThreadId` value. `NativeWindow.OnShutdown` now reaches `IL_00d0`,
+the constrained call to `IDisposable.Dispose` on a generic list enumerator.
+Production collection scheduling, host roots, and re-registration remain
+open.
+Node and Edge verify that static initialization preserves live managed arguments
+and field operands, and that a cached failure clears abandoned frame roots.
+Browser startup remains unverified.
+JavaScript cleanup notifications can release independent host resources, but
+notification timing and delivery alone cannot satisfy the managed queue and
+resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)
+and the [.NET Wasm GC design discussion](https://github.com/dotnet/runtime/issues/94420).
+
+A Node and Edge probe observed that a cleanup registration holding a strong
+Wasm reference kept its target alive. Once that reference was cleared, cleanup
+ran after the target was gone. A compatible collector must instead queue the
+managed object while its state is available. In the upstream single-threaded
+Wasm runtime, a browser background job schedules the drain of managed GC work.
+See the [.NET 10 Mono GC implementation](https://github.com/dotnet/runtime/blob/v10.0.10/src/mono/mono/metadata/gc.c).
+
 ## Additional application hosts
 
 Share W1 assembly loading and the compiled entry-point path. Keep app-specific services behind host boundaries.

@@ -4,12 +4,12 @@ import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { decode, invoke, invokeGenerated, managedExceptionType } from "./invoke.mjs";
 import { demoInputs, listDemos } from "./demos.mjs";
-import { chromium } from "playwright-core";
 import { oracleCases } from "./oracle.mjs";
-import { blobPath, readOracle } from "./oracle-store.mjs";
+import { readOracle } from "./oracle-store.mjs";
 import { compileAll, compile, invokeCompiler, root, run } from "./toolchain.mjs";
 import { planJobs, verifyConcurrently } from "./verify-jobs.mjs";
 import { startNodePool } from "./verify-node.mjs";
+import { verifyBrowserSuite } from "./verify-browser-suite.mjs";
 import { compareRuntimeVersions } from "./runtime-packs.mjs";
 
 process.chdir(root);
@@ -87,14 +87,20 @@ if (!verifyOnly) await phase("CLI checks", async () => {
         assert.equal(existsSync(output), false);
     }
 
-    // Unsupported members, non-platform identities and managed element addresses remain diagnostics.
+    // Unsupported members, non-platform identities and unsupported address forms remain diagnostics.
     assertUnsupported(mathDemo.dll, "MathIntrinsics.UnmappedMath", /UnmappedMath::Power at IL_[0-9a-f]+ returned compiler status -2/);
     const identityProbe = "demos/stage-29-math-intrinsics/identity/IdentityProbe";
     run("dotnet", ["build", "-c", "Release", identityProbe]);
     assertUnsupported(identityProbe + "/bin/Release/netstandard2.0/IdentityProbe.dll", "IdentityProbe.Probe",
         /Probe::Compute at IL_[0-9a-f]+ returned compiler status -2/);
-    assertUnsupported(arraysDemo.dll, "PrimitiveArrays.CompoundElement",
-        /CompoundElement::Increment at IL_[0-9a-f]+ returned compiler status -2/);
+    const inlineArrays = demos.find(d => d.assembly === "InlineArrayLayouts");
+    assertUnsupported(inlineArrays.dll, "InlineArrayLayouts.LayoutBoundary",
+        /LayoutBoundary::Read returned compiler status -2/);
+    const objectLocations = demos.find(d => d.assembly === "ManagedObjectByrefs");
+    assertUnsupported(objectLocations.dll, "ManagedObjectByrefs.HostBoundary",
+        /HostBoundary::HostAlias returned compiler status -2/);
+    assertUnsupported(objectLocations.dll, "ManagedObjectByrefs.TypedBoundary",
+        /TypedBoundary::TypedElement at IL_[0-9a-f]+ returned compiler status -2/);
     const arrayIdentityProbe = "demos/stage-37-primitive-arrays/identity/ArrayIdentityProbe";
     run("dotnet", ["build", "-c", "Release", arrayIdentityProbe]);
     assertUnsupported(arrayIdentityProbe + "/bin/Release/netstandard2.0/ArrayIdentityProbe.dll", "ArrayIdentityProbe.Probe",
@@ -130,69 +136,8 @@ async function verifyNode() {
 }
 
 async function verifyBrowser() {
-    const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
-    // Node worker threads default to a 4 MB stack. Give each renderer's V8 the same limit:
-    // with every core busy, tier-up lags and the compiler's recursion over a 236-deep type
-    // argument (BootstrapLibrary RecursiveTypeArgument) still runs in Liftoff frames, which
-    // overflow the default ~1 MB limit (#316, #318). The renderer thread stack is larger.
-    const browser = await chromium.launch({
-        executablePath: process.env.BROWSER_PATH || (existsSync(edge) ? edge : undefined),
-        args: ["--js-flags=--stack-size=3800"]
-    });
-    try {
-        // Serve only these fixture assets to the isolated test pages.
-        const assets = new Map([
-            ["/oracle.json", ["application/json", readFileSync(oraclePath)]],
-            ["/blobs.bin", ["application/octet-stream", readFileSync(blobPath(oraclePath))]],
-            ["/oracle.mjs", ["text/javascript", readFileSync("scripts/oracle.mjs")]],
-            ["/invoke.mjs", ["text/javascript", readFileSync("scripts/invoke.mjs")]],
-            ["/verify-jobs.mjs", ["text/javascript", readFileSync("scripts/verify-jobs.mjs")]],
-            ...demos.map(d => ["/" + d.assembly, ["application/wasm", readFileSync(d.wasm)]])
-        ]);
-        const serve = async route => {
-            const path = new URL(route.request().url()).pathname;
-            const [contentType, body] = assets.get(path) || ["text/html", "<title>StandardWasm verification</title>"];
-            await route.fulfill({ contentType, body });
-        };
-        // One browser context per lane gives each its own renderer process and main thread.
-        const pages = await Promise.all(Array.from({ length: lanes }, async () => {
-            const context = await browser.newContext();
-            await context.route("http://standardwasm.test/**", serve);
-            const page = await context.newPage();
-            await page.goto("http://standardwasm.test/");
-            await page.evaluate(async () => {
-                const { oracleCases } = await import("/oracle.mjs");
-                const oracle = await (await fetch("/oracle.json")).json();
-                const bytes = new Uint8Array(await (await fetch("/blobs.bin")).arrayBuffer());
-                let offset = 0;
-                oracle.blobs = oracle.blobLengths.map(length => bytes.subarray(offset, offset += length));
-                globalThis.verificationCases = oracleCases(oracle);
-                globalThis.verificationJobs = await import("/verify-jobs.mjs");
-            });
-            return page;
-        }));
-        const idle = [...pages], waiting = [];
-        const log = jobLog("Edge");
-        const execute = async job => {
-            const page = idle.pop() ?? await new Promise(resume => waiting.push(resume));
-            const started = performance.now();
-            try {
-                const result = await page.evaluate(job => globalThis.verificationJobs.runJob(job,
-                    async name => (await fetch("/" + name)).arrayBuffer(), globalThis.verificationCases), job);
-                log(job, (performance.now() - started) / 1000);
-                return result;
-            } catch (error) {
-                log(job, (performance.now() - started) / 1000, error);
-                throw error;
-            } finally {
-                const next = waiting.shift();
-                if (next) next(page); else idle.push(page);
-            }
-        };
-        return "Chromium " + browser.version() + ": " + await verifyConcurrently(cases, jobs, execute);
-    } finally {
-        await browser.close();
-    }
+    const { result, version } = await verifyBrowserSuite(demos, oraclePath, cases, jobs, lanes, jobLog("Edge"));
+    return "Chromium " + version + ": " + result;
 }
 
 // Node and Edge verify the same jobs at the same time. Either failure fails the suite.

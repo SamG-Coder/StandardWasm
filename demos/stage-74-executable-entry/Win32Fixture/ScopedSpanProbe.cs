@@ -1,0 +1,239 @@
+using System;
+
+public static class ScopedSpanProbe
+{
+    private readonly ref struct CharacterView
+    {
+        internal readonly Span<char> Characters;
+
+        internal CharacterView(Span<char> characters) => Characters = characters;
+    }
+
+    private ref struct MutableCharacterView
+    {
+        internal Span<char> Characters;
+        internal int Count;
+
+        internal MutableCharacterView(Span<char> characters, int count)
+        {
+            Characters = characters;
+            Count = count;
+        }
+
+        internal void Reset() => this = default;
+
+        internal Span<char> SliceFromPosition() => Characters.Slice(Count);
+
+        internal Span<char> SliceFromPositionWithLength() => Characters.Slice(Count, Count);
+    }
+
+    public static int CheckScopedReference(int seed)
+    {
+        var left = new char[2];
+        var right = new char[2];
+        left[1] = 'a';
+        var view = new MutableCharacterView(new Span<char>(left), seed);
+        var copy = view;
+        ReplaceView(ref view, new Span<char>(right));
+        var before = copy.Characters;
+        var after = view.Characters;
+        return before[1] + after[1] + right[1] + copy.Count + view.Count;
+    }
+
+    private static void ReplaceView(ref MutableCharacterView view, Span<char> replacement)
+    {
+        view.Count++;
+        view.Characters = replacement;
+        int index = view.Characters.Length - 1;
+        view.Characters[index] = (char)view.Count;
+    }
+
+    public static int CheckScopedReceiverReset(int seed)
+    {
+        var owner = new char[2];
+        owner[0] = (char)seed;
+        var view = new MutableCharacterView(new Span<char>(owner), seed);
+        var snapshot = view;
+        var direct = view;
+        ResetView(ref view);
+        direct.Reset();
+        Span<char> prior = snapshot.Characters;
+        return view.Count + view.Characters.Length + direct.Count + direct.Characters.Length +
+            snapshot.Count + prior.Length + prior[0];
+    }
+
+    private static void ResetView(ref MutableCharacterView view) => view.Reset();
+
+    private readonly struct ScopeState
+    {
+        internal readonly int Value;
+
+        internal ScopeState(int value) => Value = value;
+    }
+
+    private readonly ref struct NestedScope
+    {
+        internal readonly ScopeState State;
+
+        internal NestedScope(ScopeState state) => State = state;
+    }
+
+    public static int CheckScopedNestedValue(int seed)
+    {
+        var scope = new NestedScope(new ScopeState(seed));
+        ScopeState original = scope.State;
+        scope = new NestedScope(new ScopeState(unchecked(seed + 1)));
+        ScopeState replacement = scope.State;
+        return original.Value ^ replacement.Value;
+    }
+
+    public static unsafe int CheckSpanFromEnd(int length)
+    {
+        if (length < 0 || length > 3) return -101;
+        char* storage = stackalloc char[3];
+        storage[0] = 'a';
+        storage[1] = '\u2000';
+        storage[2] = '\ud800';
+        ReadOnlySpan<char> view = new Span<char>(storage, length);
+        try { return ReadLast(view); }
+        catch (IndexOutOfRangeException) { return -102; }
+    }
+
+    private static int ReadLast(ReadOnlySpan<char> view) => view[^1];
+
+    public static unsafe int CheckStringFromSpan(int scenario)
+    {
+        if (scenario == 0)
+        {
+            ReadOnlySpan<char> empty = default;
+            return ReferenceEquals(new string(empty), string.Empty) ? 17 : -1;
+        }
+        if (scenario == 1)
+        {
+            var storage = new char[3];
+            storage[1] = '\ud800';
+            storage[2] = '\u2000';
+            ReadOnlySpan<char> view = new Span<char>(storage);
+            string snapshot = new string(view.Slice(1, 2));
+            storage[1] = 'x';
+            return snapshot.Length * 100 + snapshot[0] + snapshot[1];
+        }
+        char* native = stackalloc char[3];
+        native[0] = 'a';
+        native[1] = '\udfff';
+        native[2] = 'c';
+        ReadOnlySpan<char> pointer = new Span<char>(native, 3);
+        ReadOnlySpan<char> tail = pointer.Slice(1);
+        string first = new string(tail);
+        string second = new string(tail);
+        native[1] = 'x';
+        return !ReferenceEquals(first, second) && first == second ? first[0] + first[1] : -2;
+    }
+
+    public static unsafe int CheckSpanSlices(int scenario)
+    {
+        if (scenario >= 9)
+        {
+            var array = new[] { 'a', 'b', 'c' };
+            int position = scenario == 11 ? 3 : scenario == 12 ? -1 : scenario == 13 ? 2 : 1;
+            var view = new MutableCharacterView(new Span<char>(array), position);
+            try
+            {
+                Span<char> slice = scenario == 10 || scenario == 13
+                    ? view.SliceFromPositionWithLength() : view.SliceFromPosition();
+                if (slice.IsEmpty) return slice.Length;
+                slice[0] = 'x';
+                return array[0] + 100 * array[1] + 10_000 * slice.Length;
+            }
+            catch (ArgumentOutOfRangeException) { return -103; }
+        }
+        if (scenario == 5)
+        {
+            ReadOnlySpan<char> empty = default;
+            ReadOnlySpan<char> slice = empty.Slice(0, 0);
+            return slice.IsEmpty ? slice.Length : -104;
+        }
+        if (scenario == 6)
+        {
+            char* memory = stackalloc char[3];
+            memory[0] = 'a';
+            memory[1] = 'b';
+            memory[2] = 'c';
+            ReadOnlySpan<char> view = new Span<char>(memory, 3);
+            ReadOnlySpan<char> tail = view.Slice(1);
+            ReadOnlySpan<char> last = tail.Slice(1, 1);
+            return tail.IsEmpty || last.IsEmpty ? -104 : tail[0] * 100 + last[0];
+        }
+        if (scenario == 8)
+        {
+            ReadOnlySpan<char> view = "abc".AsSpan();
+            ReadOnlySpan<char> framework = view.Slice(1, 1);
+            ReadOnlySpan<char> extension = ScopedSpanExtensions.Slice(view, 1, 1);
+            return framework[0] * 100 + extension.ReadAt(0);
+        }
+
+        var owner = new char[3];
+        owner[1] = 'b';
+        var span = new Span<char>(owner);
+        int start = scenario == 1 ? -1 : scenario == 2 ? 4 : scenario == 7 ? 3 : 1;
+        int length = scenario == 3 ? 3 : scenario == 4 ? -1 : scenario == 7 ? 0 : 2;
+        try
+        {
+            Span<char> slice = span.Slice(start, length);
+            Span<char> tail = span.Slice(start);
+            if (length == 0) return slice.IsEmpty && tail.IsEmpty ? slice.Length + tail.Length : -104;
+            slice[0] = 'x';
+            return tail[0] * 100 + owner[1] + slice.Length;
+        }
+        catch (ArgumentOutOfRangeException) { return -103; }
+    }
+
+    public static unsafe int CheckStackBackedSpan(int scenario)
+    {
+        char* storage = stackalloc char[3];
+        storage[0] = 'a';
+        storage[1] = 'b';
+        storage[2] = '\u2000';
+        try
+        {
+            int length = scenario == 1 ? -1 : scenario == 4 ? 0 : 3;
+            return ReadAndUpdate(new Span<char>(storage, length), storage, scenario);
+        }
+        catch (ArgumentOutOfRangeException) { return -101; }
+        catch (IndexOutOfRangeException) { return -102; }
+    }
+
+    private static unsafe int ReadAndUpdate(Span<char> span, char* storage, int scenario)
+    {
+        var scope = new CharacterView(span);
+        Span<char> writable = scope.Characters;
+        writable[1] = '\ud800';
+        ReadOnlySpan<char> readOnly = writable;
+        int index = scenario == 2 ? -1 : scenario == 3 ? 3 : scenario == 5 ? 2 : 1;
+        return readOnly[index] + storage[1] + writable[0] + writable.Length;
+    }
+
+    public static int ScopedWritableSpan(int value)
+    {
+        var owner = new char[2];
+        owner[0] = (char)value;
+        var scope = new CharacterView(new Span<char>(owner));
+        var copy = scope;
+        Span<char> alias = copy.Characters;
+        alias[1] = (char)(value + 1);
+        CharacterView zero = default;
+        Span<char> empty = zero.Characters;
+        return alias[0] + owner[1] + empty.Length;
+    }
+}
+
+internal static class ScopedSpanExtensions
+{
+    internal static ReadOnlySpan<char> Slice(this ReadOnlySpan<char> span, int start, int length)
+    {
+        int shifted = start + 1;
+        return span.Slice(shifted, length);
+    }
+
+    internal static int ReadAt(this ReadOnlySpan<char> span, int index) => span[index];
+}

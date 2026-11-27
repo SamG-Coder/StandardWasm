@@ -1,0 +1,428 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { chromium } from "playwright-core";
+import { root, run } from "../../scripts/toolchain.mjs";
+import { wasm32Runtime } from "../../scripts/runtime-packs.mjs";
+import { packEntry } from "../stage-74-executable-entry/companions.mjs";
+
+const stage = join(root, "demos", "stage-152-finalization-root-tracing");
+const artifacts = join(root, "artifacts", "finalization-root-tracing");
+mkdirSync(artifacts, { recursive: true });
+const evidence = mkdtempSync(join(artifacts, "run-"));
+const oraclePath = join(evidence, "oracle.json");
+const runtime = wasm32Runtime();
+run("dotnet", ["run", "-c", "Release", "--project", join(stage, "Oracle"), "--", oraclePath,
+    join(runtime.directory, "System.Private.CoreLib.dll")]);
+const oracle = JSON.parse(readFileSync(oraclePath, "utf8"));
+const fixture = readFileSync(join(stage, "Fixture", "bin", "Release", "netstandard2.0", "Fixture.dll"));
+const framework = ["System.Private.CoreLib.dll", "netstandard.dll", "System.Runtime.dll", "System.Threading.dll"]
+    .map(path => ({ path, bytes: readFileSync(join(runtime.directory, path)) }));
+const assets = {
+    compiler: readFileSync(process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts", "StandardWasm.Compiler.wasm")),
+    basicBundle: Buffer.from(packEntry({ bytes: fixture }, [], oracle.row)[0]),
+    frameworkBundle: Buffer.from(packEntry({ bytes: fixture }, framework, oracle.suppressionRow)[0]),
+    rootProbe: readFileSync(join(evidence, "root-probe.wasm"))
+};
+
+async function probe({ compiler, bundle, row, count }) {
+    const { instance: { exports: tool } } = await WebAssembly.instantiate(compiler);
+    function upload(bytes) {
+        const data = tool.CreateBytes(bytes.length);
+        for (let i = 0; i < bytes.length; i++) tool.SetByte(data, i, bytes[i]);
+        return data;
+    }
+    const entries = new Uint8Array(11);
+    new DataView(entries.buffer).setUint32(0, row, true);
+    entries[4] = 3;
+    entries.set([114, 117, 110], 8);
+    const bytes = tool.CreateBytes(1 << 20);
+    const diagnostic = tool.CreateDiagnostic();
+    const size = tool.CompileBundleDetailed(upload(bundle), upload(entries), bytes, diagnostic);
+    if (size < 1) throw new Error("Compiler status " + size + " at " +
+        [0, 1, 2].map(i => tool.ReadDiagnostic(diagnostic, i)));
+    const module = await WebAssembly.compile(Uint8Array.from({ length: size }, (_, i) => tool.ReadByte(bytes, i)));
+    if (WebAssembly.Module.imports(module).length !== 0) throw new Error("The experiment must run without host imports");
+    if (WebAssembly.Module.exports(module).some(entry => entry.name.startsWith("__root_probe_")))
+        throw new Error("Ordinary compilation exposed the diagnostic root stack");
+    const instance = await WebAssembly.instantiate(module);
+    return Array.from({ length: count }, (_, i) => instance.exports.run(i));
+}
+
+async function observeRoots(bytes) {
+    const snapshots = [];
+    const addressedSnapshots = [];
+    let exceptionSnapshots = null;
+    let initializerSnapshots = null;
+    let observeInterior = null;
+    let inspectAddress = false;
+    let inspectCell = false;
+    let pinnedOwner = null;
+    let pinObservations = 0;
+    let published;
+    let inspectGraph = false;
+    let reachable;
+    const { instance } = await WebAssembly.instantiate(bytes, {
+        "standardwasm:resources": { memory: new WebAssembly.Memory({ initial: 1 }) },
+        "standardwasm:console": {
+            write() { throw new Error("The probe emits only line breaks"); },
+            newLine() {
+                const { __root_probe_count: count, __root_probe_table: table } = instance.exports;
+                // Fixed-tag exceptions and normal finally entries have no managed payload.
+                const roots = Array.from({ length: count.value }, (_, index) => table.get(index)).filter(value => value !== null);
+                if (observeInterior !== null) {
+                    observeInterior(roots);
+                    return;
+                }
+                if (initializerSnapshots !== null) {
+                    const { __root_probe_mark: mark, __root_probe_contains: contains } = instance.exports;
+                    mark();
+                    if (roots.some(root => contains(root) !== 1))
+                        throw new Error("An initializer argument or operand was absent from the marked graph");
+                    initializerSnapshots.push(roots.length);
+                    return;
+                }
+                if (exceptionSnapshots !== null) {
+                    instance.exports.__root_probe_mark();
+                    if (roots.some(root => instance.exports.__root_probe_contains(root) !== 1))
+                        throw new Error("An exception payload was published but absent from the marked graph");
+                    exceptionSnapshots.push(roots);
+                    return;
+                }
+                published = roots;
+                if (inspectGraph) reachable = instance.exports.__root_probe_mark();
+                if (pinnedOwner !== null) {
+                    const { __root_probe_mark: mark, __root_probe_contains: contains } = instance.exports;
+                    if (roots.length !== 0 || mark() !== 1 || contains(pinnedOwner) !== 1)
+                        throw new Error("The pin registry did not retain the sole managed owner");
+                    pinObservations++;
+                }
+                if (inspectAddress || inspectCell) {
+                    const { __root_probe_mark: mark, __root_probe_edge_read: read, __root_probe_contains: contains } = instance.exports;
+                    mark();
+                    const target = read(roots[0], 0);
+                    if (target === null || contains(target) !== 1) throw new Error("The reference reachable through the addressed frame was lost");
+                    if (inspectCell && roots.length === 2 && read(roots[1], 0) !== roots[0])
+                        throw new Error("The managed address did not retain its backing cell");
+                    addressedSnapshots.push(target);
+                }
+                snapshots.push({ count: roots.length, unique: new Set(roots).size });
+            }
+        }
+    });
+    const { __root_probe_table: table, __root_probe_count: count, __root_probe_edge_count: edges,
+        __root_probe_edge_read: read, __root_probe_mark: mark, __root_probe_contains: contains,
+        __root_probe_clear: clear, __root_probe_register: register, __root_probe_discover: discover,
+        __root_probe_pop: pop, ObserveFrames, ObserveConstructor, ConstructValue, ObserveAddressedFrame, ObserveReferenceCell,
+        ThrowWithRoot, BuildGraph, SetStaticRoot, ObserveProtectedException,
+        ObserveInitializerEntry, ObserveInitializerField, ObserveInitializerFailure,
+        __root_probe_run_next: runNext, Allocate, ValueOf, Suppress, get_Finalized, get_Total, get_OverridesRan,
+        TakeResurrected, MakePinOwner, ObservePinned,
+        ObserveArrayInterior, ObserveClassInterior, ObserveProjectedArrayInterior, ReadInteriorFinalizations } = instance.exports;
+    function assertEmpty() {
+        if (count.value !== 0) throw new Error("Root scope was not restored");
+        for (let i = 0; i < table.length; i++)
+            if (table.get(i) !== null) throw new Error("Root slot was not cleared");
+    }
+    const value = ObserveFrames(11);
+    assertEmpty();
+    const constructed = ObserveConstructor(11);
+    assertEmpty();
+    const constructedValue = ConstructValue(11);
+    if (discover() !== 0) throw new Error("Value construction must not register a finalizer");
+    pinnedOwner = MakePinOwner(0x6f22);
+    const codeUnit = ObservePinned(pinnedOwner, 0);
+    if (mark() !== 0 || contains(pinnedOwner) !== 0) throw new Error("The pin survived a normal return");
+    let pinError;
+    try { ObservePinned(pinnedOwner, 1); }
+    catch (error) { pinError = error; }
+    if (!(pinError instanceof WebAssembly.Exception) || !pinError.is(instance.exports["\0nullReference"]) ||
+        mark() !== 0 || contains(pinnedOwner) !== 0 || pinObservations !== 2)
+        throw new Error("The pin survived exceptional unwind or the managed exception changed");
+    pinnedOwner = null;
+    clear();
+    assertEmpty();
+    const pin = { codeUnit, exceptional: true };
+    inspectAddress = true;
+    const addressedValue = ObserveAddressedFrame(23);
+    inspectAddress = false;
+    assertEmpty();
+    if (addressedSnapshots.length !== 2 || addressedSnapshots[0] !== addressedSnapshots[1] || mark() !== 0)
+        throw new Error("The addressed reference changed during finally or remained rooted after the frame returned");
+    clear();
+    addressedSnapshots.length = 0;
+    inspectCell = true;
+    const cellValue = ObserveReferenceCell(31);
+    inspectCell = false;
+    assertEmpty();
+    if (addressedSnapshots.length !== 2 || addressedSnapshots[0] !== addressedSnapshots[1] || mark() !== 0)
+        throw new Error("The frame cell lost the updated reference or remained rooted after return");
+    clear();
+    const protectedExceptions = [0, 1].map(divisor => {
+        exceptionSnapshots = [];
+        let error;
+        try { ObserveProtectedException(divisor); }
+        catch (caught) { error = caught; }
+        if (!(error instanceof WebAssembly.Exception) || exceptionSnapshots.length !== 2)
+            throw new Error("The finally and filtered catch must run before the rethrow");
+        const objectTag = instance.exports["\0object"];
+        if (divisor === 0) {
+            if (!error.is(instance.exports["\0divideByZero"]) || exceptionSnapshots.some(roots => roots.length !== 0))
+                throw new Error("A fixed exception must rethrow its tag without a managed payload");
+        } else {
+            if (!error.is(objectTag)) throw new Error("Expected the original managed exception");
+            const payload = error.getArg(objectTag, 0);
+            if (payload === null || exceptionSnapshots.some(roots => roots.length !== 1 || roots[0] !== payload))
+                throw new Error("The finally or filtered catch lost the original exception payload");
+        }
+        exceptionSnapshots = null;
+        assertEmpty();
+        if (mark() !== 0) throw new Error("The unwound exception remained rooted");
+        clear();
+        return divisor === 0 ? "DivideByZeroException" : "ProbeException";
+    });
+    let exception;
+    try { ThrowWithRoot(11); }
+    catch (error) { exception = error; }
+    if (!(exception instanceof WebAssembly.Exception) || !exception.is(instance.exports["\0nullReference"]))
+        throw new Error("Expected the managed NullReferenceException tag");
+    assertEmpty();
+    if (ObserveFrames(11) !== value) throw new Error("Failed to reuse the module after unwinding");
+    assertEmpty();
+    inspectGraph = true;
+    const root = BuildGraph(11);
+    inspectGraph = false;
+    assertEmpty();
+    if (published.length !== 1 || published[0] !== root)
+        throw new Error("The graph root was missing during the call");
+    const inherited = read(root, 0);
+    const next = read(root, 1);
+    const array = read(root, 2);
+    const payload = read(root, 4);
+    if (edges(null) !== 0 || read(null, 0) !== null || read(array, -1) !== null ||
+        read(array, edges(array)) !== null || read(root, edges(root)) !== null ||
+        payload === null || edges(payload) !== 0 || read(payload, 0) !== null)
+        throw new Error("Unexpected edge read for a missing reference or a payload without references");
+    if ([root, inherited, next, array, payload].some(item => contains(item) !== 1) || contains(null) !== 0)
+        throw new Error("The marked snapshot lost a node or included null");
+    clear();
+    if (contains(root) !== 0 || mark() !== 0) throw new Error("A released frame still appears in the mark set");
+    if (SetStaticRoot(root) !== null || mark() !== reachable || contains(next) !== 1)
+        throw new Error("The static root did not keep its graph reachable");
+    if (SetStaticRoot(null) !== root || mark() !== 0 || contains(next) !== 0)
+        throw new Error("The removed static still appears in the mark set");
+    clear();
+    const graph = { fields: edges(root), arrayLength: edges(array), inherited: inherited !== null,
+        cycle: read(next, 1) === root, arrayAliases: read(array, 0) === next && read(array, 2) === root,
+        nullEdges: Number(read(array, 1) === null) + Number(read(root, 3) === null), reachable };
+    const discovered = [];
+    register(root);
+    SetStaticRoot(root);
+    discovered.push(discover());
+    if (pop() !== null) throw new Error("A rooted registration became pending");
+    SetStaticRoot(null);
+    discovered.push(discover());
+    register(next);
+    discovered.push(discover());
+    const pendingRoot = pop();
+    if (pendingRoot !== root || read(pendingRoot, 1) !== next || pop() !== null)
+        throw new Error("The pending receiver lost its identity or fields, or its child was selected early");
+    discovered.push(discover());
+    if (pop() !== next || pop() !== null) throw new Error("The child was not selected after its pending parent left");
+    register(next);
+    register(next);
+    discovered.push(discover());
+    if (pop() !== next || pop() !== next || pop() !== null || mark() !== 0)
+        throw new Error("Duplicate registrations were lost or a retired entry remained rooted");
+    clear();
+    const notFinalizable = Allocate(0, 0);
+    if (notFinalizable === null || discover() !== 0) throw new Error("A method named Finalize introduced an unrelated slot");
+    const direct = Allocate(1, 13);
+    const inheritedReceiver = Allocate(2, 17);
+    const overridingReceiver = Allocate(3, 19);
+    let allocationError;
+    try { Allocate(2, -9); }
+    catch (error) { allocationError = error; }
+    if (!(allocationError instanceof WebAssembly.Exception) || !allocationError.is(instance.exports["\0nullReference"]))
+        throw new Error("Expected NullReferenceException from the constructor");
+    assertEmpty();
+    const finalized = discover();
+    const receivers = Array.from({ length: finalized }, () => pop());
+    if (!receivers.includes(direct) || !receivers.includes(inheritedReceiver) || !receivers.includes(overridingReceiver) ||
+        receivers.includes(notFinalizable) || pop() !== null)
+        throw new Error("The pending queue did not preserve the allocated receiver identities");
+    const allocationReceivers = { count: finalized, total: receivers.reduce((sum, item) => sum + ValueOf(item), 0) };
+    Allocate(1, 13);
+    Allocate(2, 17);
+    const expectedResurrection = Allocate(3, 19);
+    try { Allocate(2, -9); }
+    catch (error) {
+        if (!(error instanceof WebAssembly.Exception) || !error.is(instance.exports["\0nullReference"])) throw error;
+    }
+    if (get_Finalized() !== 0 || discover() !== finalized) throw new Error("Callbacks ran before dequeue or discovery missed an allocation");
+    for (let index = 0; index < finalized; index++) {
+        if (runNext() !== 1) throw new Error("The pending callback was not dispatched");
+        assertEmpty();
+    }
+    if (runNext() !== 0 || mark() !== 1 || contains(expectedResurrection) !== 1)
+        throw new Error("Expected only the resurrected receiver to stay rooted");
+    const resurrected = TakeResurrected();
+    if (resurrected !== expectedResurrection || TakeResurrected() !== null || discover() !== 0 || runNext() !== 0)
+        throw new Error("The resurrected instance lost its identity or finalized twice");
+    const allocationFinalizers = { count: get_Finalized(), total: get_Total(), overrides: get_OverridesRan(),
+        resurrected: ValueOf(resurrected) };
+    let nullException = "none";
+    try { Suppress(null); }
+    catch (error) {
+        if (!(error instanceof WebAssembly.Exception) || !error.is(instance.exports["\0argumentNull"])) throw error;
+        nullException = "ArgumentNullException";
+    }
+    const suppressed = Allocate(1, 31);
+    Suppress(suppressed);
+    Suppress(suppressed);
+    Suppress(Allocate(0, 0));
+    Allocate(2, 37);
+    const registered = discover();
+    if (registered !== 1 || runNext() !== 1 || runNext() !== 0) throw new Error("Registered suppression selected the wrong receiver");
+
+    const alreadyPending = Allocate(1, 41);
+    if (discover() !== 1) throw new Error("Expected the receiver to be pending before suppression");
+    Suppress(alreadyPending);
+    if (runNext() !== 0 || discover() !== 0) throw new Error("A suppressed pending callback ran or became pending again");
+    const pending = get_Finalized() - allocationFinalizers.count - registered;
+
+    const duplicated = Allocate(1, 43);
+    register(duplicated);
+    Suppress(duplicated);
+    Suppress(duplicated);
+    const duplicate = discover();
+    if (duplicate !== 1 || runNext() !== 1 || runNext() !== 0 || mark() !== 0)
+        throw new Error("Suppression should consume one registration and leave no root afterward");
+    const suppression = { nullException, registered, pending, duplicate, total: get_Total() - allocationFinalizers.total };
+    initializerSnapshots = [];
+    const entry = ObserveInitializerEntry(41);
+    assertEmpty();
+    const field = ObserveInitializerField(43);
+    assertEmpty();
+    // A failed type keeps the exception globally reachable after its callers unwind.
+    const initializationTag = instance.exports["\0object"];
+    let cachedFailure = null;
+    let failures = 0;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try { ObserveInitializerFailure(47); }
+        catch (error) {
+            if (!(error instanceof WebAssembly.Exception) || !error.is(initializationTag)) throw error;
+            const failure = error.getArg(initializationTag, 0);
+            if (failure === null || (cachedFailure !== null && cachedFailure !== failure))
+                throw new Error("The initializer did not rethrow the same managed exception");
+            cachedFailure = failure;
+            failures++;
+        }
+        assertEmpty();
+        mark();
+        if (contains(cachedFailure) !== 1)
+            throw new Error("The cached initialization exception was not marked");
+        const children = Array.from({ length: edges(cachedFailure) }, (_, index) => read(cachedFailure, index))
+            .filter(child => child !== null);
+        if (children.length === 0 || children.some(child => contains(child) !== 1))
+            throw new Error("The cached initialization exception lost a referenced object");
+        clear();
+    }
+    if (failures !== 2 || initializerSnapshots.join(",") !== "1,1,2")
+        throw new Error("Type initialization changed its live arguments, field operand, or failure caching");
+    initializerSnapshots = null;
+    const initializerResults = { entry, field, failures };
+
+    const interiorOwners = [];
+    for (const [run, seed] of [[ObserveArrayInterior, 0], [ObserveArrayInterior, 23],
+        [ObserveClassInterior, 0], [ObserveClassInterior, 47], [ObserveProjectedArrayInterior, 71]]) {
+        const before = ReadInteriorFinalizations();
+        let during;
+        observeInterior = roots => {
+            if (during !== undefined || roots.length !== 1 || edges(roots[0]) !== 2)
+                throw new Error("Expected one live value location with a snapshot and owner edge");
+            let cell = roots[0];
+            if (run === ObserveProjectedArrayInterior) {
+                const projection = read(cell, 0);
+                if (read(cell, 1) !== null || edges(projection) !== 1)
+                    throw new Error("Expected a projected alias with its parent in the descriptor");
+                cell = read(projection, 0);
+            }
+            const owner = read(cell, 1);
+            mark();
+            if (owner === null || contains(cell) !== 1 || contains(owner) !== 1)
+                throw new Error("The active interior alias did not retain its owner");
+            if (discover() !== 0 || runNext() !== 0)
+                throw new Error("The owner or its child was eligible during the borrow");
+            during = ReadInteriorFinalizations() - before;
+        };
+        const value = run(seed);
+        observeInterior = null;
+        assertEmpty();
+        if (discover() !== 1 || runNext() !== 1 || runNext() !== 0)
+            throw new Error("The owner or its child did not become eligible after the borrow");
+        interiorOwners.push({ value, during, after: ReadInteriorFinalizations() - before });
+    }
+    return { values: [value, constructed, constructedValue, addressedValue, cellValue], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph, staticRoot: true,
+        discovered, allocationReceivers, allocationFinalizers, suppression, pin, protectedExceptions, initializerResults, interiorOwners };
+}
+
+const expectedRoots = { values: oracle.rootProbeResult,
+    snapshots: [{ count: 3, unique: 2 }, { count: 2, unique: 1 }, { count: 0, unique: 0 }, { count: 0, unique: 0 },
+        { count: 1, unique: 1 }, { count: 2, unique: 1 },
+        { count: 1, unique: 1 }, { count: 2, unique: 2 }, { count: 1, unique: 1 }, { count: 3, unique: 2 }, { count: 1, unique: 1 }],
+    clearedOnReturn: true, clearedOnUnwind: true, graph: oracle.graph, staticRoot: true, discovered: [0, 1, 0, 1, 2],
+    allocationReceivers: { count: oracle.allocationFinalizers.count, total: oracle.allocationFinalizers.total },
+    allocationFinalizers: oracle.allocationFinalizers, suppression: oracle.suppression, pin: oracle.pin, protectedExceptions: oracle.protectedExceptions, initializerResults: oracle.initializerResults,
+    interiorOwners: oracle.interiorOwners };
+const node = await probe({ compiler: assets.compiler, bundle: assets.basicBundle, row: oracle.row, count: oracle.result.length });
+assert.deepEqual(node, oracle.result);
+const nodeSuppression = await probe({ compiler: assets.compiler, bundle: assets.frameworkBundle,
+    row: oracle.suppressionRow, count: oracle.publicSuppression.length });
+assert.deepEqual(nodeSuppression, oracle.publicSuppression);
+const nodeExchange = await probe({ compiler: assets.compiler, bundle: assets.frameworkBundle,
+    row: oracle.exchangeRow, count: oracle.referenceExchange.length });
+assert.deepEqual(nodeExchange, oracle.referenceExchange);
+const nodeRoots = await observeRoots(assets.rootProbe);
+assert.deepEqual(nodeRoots, expectedRoots);
+const browser = await chromium.launch({ channel: "msedge" });
+try {
+    const page = await browser.newPage();
+    await page.route("http://127.0.0.1/**", route => {
+        const name = new URL(route.request().url()).pathname.slice(1);
+        return name ? route.fulfill({ body: assets[name], contentType: "application/octet-stream" }) :
+            route.fulfill({ body: "<!doctype html>", contentType: "text/html" });
+    });
+    await page.goto("http://127.0.0.1/");
+    const [edge, edgeSuppression, edgeExchange] = await page.evaluate(async ({ source, cases }) => {
+        const compiler = new Uint8Array(await (await fetch("/compiler")).arrayBuffer());
+        const probe = (0, eval)("(" + source + ")");
+        const results = [];
+        for (const { name, row, count } of cases) {
+            const bundle = new Uint8Array(await (await fetch("/" + name)).arrayBuffer());
+            results.push(await probe({ compiler, bundle, row, count }));
+        }
+        return results;
+    }, { source: probe.toString(), cases: [
+        { name: "basicBundle", row: oracle.row, count: oracle.result.length },
+        { name: "frameworkBundle", row: oracle.suppressionRow, count: oracle.publicSuppression.length },
+        { name: "frameworkBundle", row: oracle.exchangeRow, count: oracle.referenceExchange.length } ] });
+    assert.deepEqual(edge, oracle.result);
+    assert.deepEqual(edgeSuppression, oracle.publicSuppression);
+    assert.deepEqual(edgeExchange, oracle.referenceExchange);
+    const edgeRoots = await page.evaluate(async source => {
+        const bytes = await (await fetch("/rootProbe")).arrayBuffer();
+        return (0, eval)("(" + source + ")")(bytes);
+    }, observeRoots.toString());
+    assert.deepEqual(edgeRoots, expectedRoots);
+    const result = { nodeVersion: process.version, edgeVersion: browser.version(), oracle, node, edge,
+        nodeSuppression, edgeSuppression, nodeExchange, edgeExchange, nodeRoots, edgeRoots,
+        compilerSha256: createHash("sha256").update(assets.compiler).digest("hex"),
+        fixtureSha256: createHash("sha256").update(fixture).digest("hex"),
+        rootProbeSha256: createHash("sha256").update(assets.rootProbe).digest("hex") };
+    writeFileSync(join(evidence, "results.json"), JSON.stringify(result, null, 2) + "\n");
+    console.log(JSON.stringify(result));
+} finally {
+    await browser.close();
+}

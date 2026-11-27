@@ -13,7 +13,7 @@ namespace PortableCompiler
         internal const int FieldToken = 46, InitializedArray = 47;
         internal const int CheckedInteger = 48, CheckedConversion = 49, Leave = 50, Rethrow = 51, EndFinally = 52;
         internal const int CastClass = 53, TestClass = 54, ThrowNull = 55;
-        internal const int LocalAddress = 56, InitializeValue = 57, UpdateValue = 58, ClearValue = 59;
+        internal const int FrameAddress = 56, InitializeValue = 57, UpdateValue = 58, ClearValue = 59;
         // Console.Out/Error push a host stream; the operand is the stream number.
         // ConsoleWrite consumes a stream and, unless writing an empty line, a String.
         internal const int ConsoleWriter = 61, ConsoleWrite = 62;
@@ -32,7 +32,16 @@ namespace PortableCompiler
         // localloc: [size] -> [address] on the shadow stack in memory 0.
         internal const int LocalAllocate = 72;
         internal const int ReadReflection = 73, StringEquals = 74, ResourceLookup = 75;
+        internal const int TakeValueFieldAddress = 76;
+        internal const int LoadConstructorAddress = 78, UpdateConstructorField = 79;
+        internal const int BoxValue = 80, UnboxValue = 81, TestBox = 82, ConstrainedStatic = 83;
+        // A traced address is different from a native linear-memory address.
+        internal const int ObjectElementAddress = 100, LoadObjectIndirect = 101, StoreObjectIndirect = 102;
+        internal const int LoadInlineStorage = 103, BoundObjectElement = 1;
+        internal const int NewObjectSpan = 104, SpanLength = 105, SpanRead = 106, StringAsSpan = 108;
+        internal const int CharacterArrayAsSpan = 109, SpanAddress = 110, SpanAsReadOnly = 111;
         // sizeof <type>: lowered to an int32 Constant once the layout is measured.
+        internal const int GetObjectType = 116, EqualRuntimeTypes = 117, Win32Error = 119, NativePointerConstructor = 120;
         internal const int SizeOf = 112; // clear of the reflection kinds 73–75 (Stage 131)
         // ldobj / stobj / initobj of a blittable struct through a native address (decision 0073).
         // Operand: the registry value type; auxiliary: native plan index + 1.
@@ -41,41 +50,74 @@ namespace PortableCompiler
         // copy with a NUL terminator, or 0 for null. Auxiliary 1: null raises NullReferenceException.
         // 118 matches the integration line, where 116 and 117 are runtime-type kinds.
         internal const int PinString = 118;
+        internal const int StaticFieldAddress = 121, LoadNativeStatic = 122, StoreNativeStatic = 123, Monitor = 124, FilterSkip = 125, LoadSingleFrameSpan = 126;
+        internal const int LoadFrameLocation = 127;
+        internal const int LoadManagedCell = 128, StoreManagedCell = 129, ClearManagedCell = 130;
+        internal const int WidenReference = 131, ConstrainedInstance = 132;
+        internal const int StringFirstCodeUnit = 133, LoadStaticByteSpan = 134;
+        internal const int TakeStaticByteLocation = 135, OffsetStaticByteLocation = 136, ReadStaticUInt16 = 137;
         // Managed function pointers (decision 0078). CallIndirect: calli, operand the
         // StandAloneSig row, then linked to a carrier function index. FunctionAddress:
         // ldftn into a pointer, operand the table-2 slot. [] -> [Native].
-        internal const int CallIndirect = 119, FunctionAddress = 120;
-        // Console.ReadLine() (decision 0079): [] -> [String or null at EOF].
-        internal const int ConsoleReadLine = 121;
-        // Stage 156 (decision 0083): native thunk records (NativeThunks). NativePresent calls the
-        // host's present import (operand, absolute) with entry (extra) and pushes i32; NativeHelper
-        // calls a () -> () host import (operand); CallNative forwards the method's own arguments
-        // (operand: its function, for the signature) to the typed import (extra, absolute).
-        internal const int NativePresent = 122, NativeHelper = 123, CallNative = 124;
+        internal const int CallIndirect = 138, FunctionAddress = 139;
+        internal const int StringRange = 140;
+        internal const int SuppressFinalizer = 141; // [object] -> []
+        internal const int NativeCharacterSpan = 142, BoundScopedFieldLoad = 143, BoundScopedFieldStore = 144;
+        // [managed address of the containing struct] -> []; replace one field with its CLI default.
+        internal const int ClearInteriorField = 145;
+        // Console.ReadLine: [] -> [String or null at EOF].
+        internal const int ConsoleReadLine = 146;
+        internal const int StaticInt32 = 147;
+        internal const int AllocateString = 148, StringConstructionSpan = 149, ThrowFrameworkArgument = 150;
+        internal const int StringContainsCodeUnit = 151;
+        internal const int StaticReference = 152;
+        internal const int GetReferenceField = 153, SetReferenceField = 154, TakeReferenceFieldAddress = 155;
+        internal const int SpanSlice = 156;
+        internal const int SpanIsEmpty = 157;
+        internal const int ArrayCopy = 158;
+        internal const int StringFromSpan = 159;
+        internal const int ByteArrayAsSpan = 160, TakeCharacterSpanLocation = 161, RuntimeTypeDisplayName = 162;
+        // Synthetic native thunks use absolute imports. The message is a UTF-16 data range.
+        internal const int NativePresent = 163, NativeHelper = 164, CallNative = 165, LoadNativeMessage = 166;
+        internal const int EnumHasFlag = 169, TakeProjectedFieldAddress = 170, CallNativeIndirect = 171;
+        internal const int NativeAddressView = 172, NullManagedLocation = 173, TestNullLocation = 174;
+        internal const int BoxAggregate = 175, UnboxAggregate = 176, TestAggregateBox = 177, UnboxAggregateAddress = 178;
+        internal const int CallDynamicNative = 179, CallPinnedCharacterNative = 180, ReinterpretPacked16Location = 181, CopyCharacterSpan = 182, PinStaticBytes = 183, ArrayClear = 184;
+        // [ReadOnlySpan<char>, char, char] -> [first matching index or -1].
+        internal const int FindCharacterInSpan = 186, EqualCharacterSpans = 187, TakeReadOnlyCharacterLocation = 188;
+        internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
+        internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
         internal static int Decode(byte[] image, int start, int length, int arguments, int locals,
-            int[] records, int[] location, bool hasCatches, int first = 0)
+            int[] records, int[] location, bool hasCatches, int first = 0, int[] filterEnds = null)
         {
             int pc = first;
             while (pc < length)
             {
                 if (location.Length != 0) location[2] = pc;
                 int slot = pc * Width;
+                if (filterEnds != null && filterEnds[pc] != 0)
+                {
+                    pc = filterEnds[pc];
+                    records[slot] = FilterSkip;
+                    records[slot + 2] = pc;
+                    continue;
+                }
                 int op = image[start + pc++];
                 if (op == 0xfe && pc < length && image[start + pc] == 0x13)
                 {
                     pc++;
                     if (pc >= length) return -1;
                     op = image[start + pc++];
-                    // This module owns its GC fields on one Wasm agent.
-                    // Keep each field operation in sequence. Shared or
-                    // address-based accesses need their own memory model.
-                    if (op != 0x7b && op != 0x7d) return -2;
+                    // GC fields and Wasm globals belong to one execution agent.
+                    // Keep these accesses in sequence. Indirect and shared
+                    // memory accesses need their own memory model.
+                    if (op != 0x7b && op != 0x7d && op != 0x7e && op != 0x80) return -2;
                 }
                 int kind, operand = 0, comparison = 0;
                 if (op >= 2 && op <= 5 || op == 0x0e)
@@ -89,9 +131,9 @@ namespace PortableCompiler
                     }
                     if (operand >= arguments) return -1;
                 }
-                else if (op == 0x10)
+                else if (op == 0x0f || op == 0x10)
                 {
-                    kind = Store;
+                    kind = op == 0x0f ? FrameAddress : Store;
                     if (pc >= length) return -1;
                     operand = image[start + pc++];
                     if (operand >= arguments) return -1;
@@ -99,7 +141,7 @@ namespace PortableCompiler
                 else if (op >= 6 && op <= 13 || op >= 0x11 && op <= 0x13)
                 {
                     bool store = op == 0x13 || (op >= 10 && op <= 13);
-                    kind = op == 0x12 ? LocalAddress : store ? Store : Load;
+                    kind = op == 0x12 ? FrameAddress : store ? Store : Load;
                     if (op >= 0x11)
                     {
                         if (pc >= length) return -1;
@@ -201,7 +243,7 @@ namespace PortableCompiler
                     operand = pc + delta;
                     kind = Leave;
                 }
-                else if (op == 0x28 || op == 0x6f || op == 0x73 || op == 0x7b || op == 0x7c || op == 0x7d || op == 0x7e || op == 0x80)
+                else if (op == 0x28 || op == 0x6f || op == 0x73 || op == 0x7b || op == 0x7c || op == 0x7d || op == 0x7e || op == 0x7f || op == 0x80)
                 {
                     if (length - pc < 4) return -1;
                     uint token = ImageBytes.U32(image, (uint)(start + pc));
@@ -215,15 +257,16 @@ namespace PortableCompiler
                         kind = op == 0x7b ? GetField : op == 0x7c ? FieldAddress : SetField;
                         comparison = table == 0x0a ? 1 : 0;
                     }
-                    else if (op == 0x7e || op == 0x80)
+                    else if (op == 0x7e || op == 0x7f || op == 0x80)
                     {
                         if (table != 4 && table != 0x0a) return -2;
-                        kind = op == 0x7e ? LoadStaticField : StoreStaticField;
+                        kind = op == 0x7e ? LoadStaticField : op == 0x7f ? StaticFieldAddress : StoreStaticField;
                         comparison = table == 0x0a ? 1 : 0;
                     }
-                    else if (table == 0x2b && op == 0x28)
+                    else if (table == 0x2b && (op == 0x28 || op == 0x6f))
                     {
                         kind = MethodSpecCall;
+                        comparison = op == 0x6f ? MethodSpecCallvirt : 0;
                     }
                     else if (table == 0x0a)
                     {
@@ -252,11 +295,11 @@ namespace PortableCompiler
                     uint token = ImageBytes.U32(image, (uint)(start + pc));
                     pc += 4;
                     uint table = token >> 24;
-                    if (table != 1 && table != 2) return -2;
+                    if (table != 1 && table != 2 && table != 0x1b) return -2;
                     int row = (int)(token & 0xffffff);
                     if (row == 0) return -1;
                     kind = op == 0x74 ? CastClass : TestClass;
-                    operand = (row << 2) | (table == 1 ? 1 : 0);
+                    operand = (row << 2) | (table == 0x1b ? 2 : table == 1 ? 1 : 0);
                 }
                 else if (op == 0x14) kind = NullLiteral;
                 else if (op == 0x7a) kind = ThrowNull; // Stack analysis verifies the operand.
@@ -268,6 +311,13 @@ namespace PortableCompiler
                     if ((token >> 24) != 0x70) return -1;
                     kind = LoadString;
                     operand = (int)(token & 0xffffff);
+                }
+                else if (op == 0x8c || op == 0xa5 || op == 0x79)
+                {
+                    if (length - pc < 4) return -1;
+                    operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                    pc += 4;
+                    kind = op == 0x8c ? BoxValue : op == 0xa5 ? UnboxValue : UnboxAggregateAddress;
                 }
                 else if (op == 0x8d)
                 {
@@ -284,15 +334,27 @@ namespace PortableCompiler
                     operand = (int)(token & 0xffffff);
                     uint table = token >> 24;
                     if (table == 4) kind = FieldToken;
-                    else if (table == 1 || table == 2)
+                    else if (table == 1 || table == 2 || table == 0x1b)
                     {
                         if (operand == 0) return -1;
                         kind = LoadTypeToken;
-                        operand = (operand << 2) | (table == 1 ? 1 : 0);
+                        operand = (operand << 2) | (table == 2 ? 0 : table == 1 ? 1 : 2);
                     }
                     else return -2;
                 }
                 else if (op == 0x8e) kind = ArrayLength;
+                else if (op == 0x8f)
+                {
+                    if (length - pc < 4) return -1;
+                    uint token = ImageBytes.U32(image, (uint)(start + pc));
+                    pc += 4;
+                    uint table = token >> 24;
+                    if (table != 1 && table != 2 && table != 0x1b) return -2;
+                    int row = (int)(token & 0xffffff);
+                    if (row == 0) return -1;
+                    operand = row << 2 | (table == 1 ? 1 : table == 2 ? 0 : 2);
+                    kind = ObjectElementAddress;
+                }
                 else if (op >= 0x90 && op <= 0x9a)
                 {
                     kind = ArrayGet;
@@ -302,6 +364,14 @@ namespace PortableCompiler
                 {
                     kind = ArraySet;
                     operand = op;
+                }
+                else if (op == 0xa3 || op == 0xa4)
+                {
+                    if (length - pc < 4) return -1;
+                    comparison = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                    pc += 4;
+                    if (comparison == 0) return -1;
+                    kind = op == 0xa3 ? ArrayGet : ArraySet;
                 }
                 else if (op == 0xd2 || op == 0xd1 || op == 0x67 || op == 0x68)
                 {
@@ -321,14 +391,18 @@ namespace PortableCompiler
                         kind = LoadFunction;
                         operand = (int)(token & 0xffffff);
                     }
-                    else if (extended == 0x0d)
+                    else if (extended >= 0x09 && extended <= 0x0e)
                     {
                         if (length - pc < 2) return -1;
                         operand = (int)ImageBytes.U16(image, (uint)(start + pc));
                         pc += 2;
-                        if (operand >= locals) return -1;
-                        kind = LocalAddress;
-                        operand += arguments;
+                        bool argument = extended <= 0x0b;
+                        if (operand >= (argument ? arguments : locals)) return -1;
+                        // The wide forms use the same frame slots as their
+                        // short counterparts, with an unsigned 16-bit index.
+                        kind = extended == 0x09 || extended == 0x0c ? Load :
+                            extended == 0x0a || extended == 0x0d ? FrameAddress : Store;
+                        if (!argument) operand += arguments;
                     }
                     else if (extended == 0x15)
                     {
@@ -339,6 +413,20 @@ namespace PortableCompiler
                     }
                     else if (extended == 0x0f)
                         kind = LocalAllocate;
+                    else if (extended == 0x16)
+                    {
+                        if (length - pc < 9) return -1;
+                        operand = unchecked((int)ImageBytes.U32(image, (uint)(start + pc)));
+                        pc += 4;
+                        int call = image[start + pc++];
+                        if (call != 0x28 && call != 0x6f) return -2;
+                        uint member = ImageBytes.U32(image, (uint)(start + pc));
+                        pc += 4;
+                        uint table = member >> 24;
+                        if ((member & 0xffffff) == 0 || (table != 0x0a && (call != 0x6f || table != 6))) return -2;
+                        kind = call == 0x28 ? ConstrainedStatic : ConstrainedInstance;
+                        comparison = kind == ConstrainedStatic ? (int)(member & 0xffffff) : (int)member;
+                    }
                     else if (extended == 0x1c)
                     {
                         if (length - pc < 4) return -1;
@@ -384,10 +472,10 @@ namespace PortableCompiler
                     kind = ConvertFloat;
                     operand = op;
                 }
+                else if (op == 0x50 || op == 0x51)
+                    kind = op == 0x50 ? LoadObjectIndirect : StoreObjectIndirect;
                 else if (op >= 0x46 && op <= 0x4f || op >= 0x52 && op <= 0x57 || op == 0xdf)
                 {
-                    // ldind.ref and stind.ref (0x50, 0x51) move managed references
-                    // through an address and stay unsupported.
                     kind = op <= 0x4f ? LoadIndirect : StoreIndirect;
                     operand = op;
                 }
@@ -437,9 +525,11 @@ namespace PortableCompiler
         {
             int slot = offset * Width;
             int kind = records[slot];
-            if (kind == ConvertFloat || kind == ConvertInteger || kind == Load || kind == MethodSpecCall)
+            if (kind == MethodSpecCall)
+                records[slot + 3] = records[slot + 3] | 1;
+            else if (kind == ConvertFloat || kind == ConvertInteger || kind == Load)
                 records[slot + 3] = 1;
-            return records[slot] != 0;
+            return kind != 0 && kind != FilterSkip;
         }
 
         private static void MarkNativeZero(int[] records, int length)

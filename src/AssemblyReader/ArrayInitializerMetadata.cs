@@ -15,6 +15,19 @@ namespace PeLibrary
             if (!IsInitializeArray(image, heaps, methods, counts, first, member))
                 return -2;
 
+            return FindStaticData(image, heaps, methods, counts, first, field, byteCount, null);
+        }
+
+        internal static int FindStaticData(byte[] image, int[] heaps, int[] methods, int field, int byteCount, int[] backingSize)
+        {
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0 || field < 1 || field > counts[4] || byteCount < 0) return -1;
+            return FindStaticData(image, heaps, methods, counts, first, field, byteCount, backingSize);
+        }
+
+        private static int FindStaticData(byte[] image, int[] heaps, int[] methods, int[] counts, int first, int field, int byteCount, int[] backingSize)
+        {
             int strings = methods[2], blobs = methods[3];
             int fieldWidth = 2 + strings + blobs;
             uint at = (uint)(methods[0] - (counts[4] - field + 1) * fieldWidth);
@@ -35,7 +48,9 @@ namespace PeLibrary
                 rva = U32(image, entry);
                 if (rva == 0) return -1;
             }
-            return rva == 0 ? -1 : PeLocator.MapImageRange(image, rva, (uint)size);
+            int source = rva == 0 ? -1 : PeLocator.MapImageRange(image, rva, (uint)size);
+            if (source >= 0 && backingSize != null) backingSize[0] = size;
+            return source;
         }
 
         private static bool IsInitializeArray(byte[] image, int[] heaps, int[] methods, int[] counts, int first, int row)
@@ -97,8 +112,11 @@ namespace PeLibrary
             uint def = (uint)(TypeRefs(image, heaps, methods, first, counts[0]) + counts[1] * (ScopeWidth(counts) + 2 * strings) +
                 (row - 1) * defWidth);
             int baseType = Index(image, def + (uint)(4 + 2 * strings), codedWidth);
-            if ((U32(image, def) & 0x18) != 0x10 || (baseType & 3) != 1 ||
-                !IsSystemType(image, heaps, methods, counts, first, baseType >> 2, ValueType)) return -1;
+            bool platformValue = (baseType & 3) == 1 ?
+                IsSystemType(image, heaps, methods, counts, first, baseType >> 2, ValueType) :
+                (baseType & 3) == 0 && PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, methods, counts) &&
+                ObjectLayouts.NamedDefinition(image, heaps, methods, counts, first, baseType >> 2, "System", "ValueType");
+            if ((U32(image, def) & 0x18) != 0x10 || !platformValue) return -1;
             int fieldStart = Index(image, def + (uint)defFields, fieldWidth);
             int fieldEnd = row == counts[2] ? counts[4] + 1 : Index(image, def + (uint)(defWidth + defFields), fieldWidth);
             // Roslyn's explicit-layout holder has no instance fields or references.

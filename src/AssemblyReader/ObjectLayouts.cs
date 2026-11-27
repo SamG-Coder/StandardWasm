@@ -5,12 +5,13 @@ namespace PeLibrary
     internal static class ObjectLayouts
     {
         internal const byte ObjectReference = 12, EventArgsReference = 13, EventHandlerReference = 14;
+        internal const int DelegateReference = 0x85;
         // Keep layout IDs above primitive, packed storage and generic scalar keys.
         internal const int FirstClass = 0x400, MaxClasses = 4096, MaxTypeDepth = 236;
         private const int Header = 4, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         private const int Arguments = 10, Arity = 11, Element = 12;
-        private const int ValueShape = 0x40000000, NullableShape = 0x20000000, InlineArrayShape = 0x10000000;
+        private const int ValueShape = 0x40000000, NullableShape = 0x20000000, InlineArrayShape = 0x10000000, ByRefLikeShape = 0x08000000;
         private const int FieldStorageBits = 16, FieldStorageMask = (1 << FieldStorageBits) - 1;
         private const int EnumHead = 3, EnumKeyBase = 0x100000;
         internal const int FieldMapStart = Header + MaxClasses * Width;
@@ -39,6 +40,13 @@ namespace PeLibrary
         // Enum keys never become heap types or evaluation-stack tags. Their
         // defining identity survives substitution until storage is requested.
         internal static bool IsEnumKey(int key) => key >= EnumKeyBase;
+
+        internal static void EnumIdentity(int[] registry, int key, int[] identity)
+        {
+            int slot = key - EnumKeyBase;
+            identity[0] = registry[slot];
+            identity[1] = registry[slot + 1];
+        }
 
         internal static int SignatureStorage(int[] registry, int key) =>
             IsEnumKey(key) ? registry[key - EnumKeyBase + 2] : GenericScalar.Storage(key);
@@ -111,9 +119,17 @@ namespace PeLibrary
                 if ((flags & 0x120) != 0x100 || valueBase != 1)
                     return -2;
                 int attributed = ValueTypeAttributes.ReadInlineArrayLength(image, streams, methods, counts,
-                    row, refs, refWidth, defs, defWidth);
-                if (attributed < 0) return attributed;
-                inlineLength = attributed;
+                    row, refs, refWidth, defs, defWidth, allowByRefLike: true);
+                if (attributed == ValueTypeAttributes.ByRefLike)
+                {
+                    if (layout == 0x10) return -2;
+                    flags |= ByRefLikeShape;
+                }
+                else
+                {
+                    if (attributed < 0) return attributed;
+                    inlineLength = attributed;
+                }
                 if (inlineLength != 0)
                 {
                     // Supported V8 engines accept at most 10,000 fields in
@@ -179,6 +195,7 @@ namespace PeLibrary
 
         internal static int RegisterArray(int[] registry, int element)
         {
+            if (IsByRefLikeValue(registry, element)) return -2;
             for (int i = 0; i < registry[0]; i++)
                 if (registry[Slot(FirstClass + i) + Element] == element) return FirstClass + i;
             if (registry[0] >= MaxClasses) return -2;
@@ -188,8 +205,19 @@ namespace PeLibrary
             return type;
         }
 
-        internal static int ArrayElement(int[] registry, int type) =>
-            type >= FirstClass && type - FirstClass < registry[0] ? GenericScalar.Storage(registry[Slot(type) + Element]) : 0;
+        // Key the vector by the enum's defining identity and lower its cells
+        // using the declared underlying storage.
+        internal static int ArrayElement(int[] registry, int type) => SignatureStorage(registry, ArrayElementKey(registry, type));
+
+        internal static bool IsEnumArray(int[] registry, int type) => IsEnumKey(ArrayElementKey(registry, type));
+
+        internal static int ArrayElementKey(int[] registry, int type) =>
+            type >= FirstClass && type - FirstClass < registry[0] ? registry[Slot(type) + Element] : 0;
+
+        internal static int ArgumentCount(int[] registry, int type) =>
+            type >= FirstClass && type - FirstClass < registry[0] ? registry[Slot(type) + Arity] : 0;
+
+        internal static bool HasArguments(int[] registry, int type) => ArgumentCount(registry, type) != 0;
 
         internal static int Argument(int[] registry, int type, int index)
         {
@@ -223,6 +251,7 @@ namespace PeLibrary
             size = end - blob;
             reference[0] = 0;
             byte element = image[blob + 1];
+            if (reference.Length > 2) reference[2] = element;
             if (size == 2 && (element == 8 || element == 9)) return 1;
             if (size == 2 && element >= 2 && element <= 7) return NarrowStorage.FromElement(element);
             if (size == 2 && element == 0x0e) return 6;
@@ -421,12 +450,16 @@ namespace PeLibrary
         private static int Slot(int type) => Header + (type - FirstClass) * Width;
 
         internal static int Parent(int[] registry, int type) => registry[Slot(type) + Base];
-        internal static bool IsSealed(int[] registry, int type) => (registry[Slot(type) + ShapeFlags] & 0x100) != 0;
+        internal static bool IsSealed(int[] registry, int type) =>
+            type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & 0x100) != 0;
         internal static bool IsAbstract(int[] registry, int type) => (registry[Slot(type) + ShapeFlags] & 0x80) != 0;
         internal static bool IsInterface(int[] registry, int type) =>
             type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & 0x20) != 0;
         internal static bool IsValueType(int[] registry, int type) =>
             type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & ValueShape) != 0;
+        internal static bool IsByRefLikeValue(int[] registry, int type) =>
+            IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & ByRefLikeShape) != 0;
+
         internal static bool IsExplicitValue(int[] registry, int type) =>
             IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & 0x18) == 0x10;
 
@@ -525,7 +558,13 @@ namespace PeLibrary
             return count;
         }
 
-        internal static int LayoutFieldType(int[] registry, int type, int index)
+        internal static int LayoutFieldType(int[] registry, int type, int index) =>
+            LayoutFieldStorage(registry, type, index) & FieldStorageMask;
+
+        internal static int LayoutReferenceFieldVector(int[] registry, int type, int index) =>
+            LayoutFieldStorage(registry, type, index) >> FieldStorageBits;
+
+        private static int LayoutFieldStorage(int[] registry, int type, int index)
         {
             // The GC type stores shared bytes in one immutable i64. Its CLI
             // field metadata and bit offsets remain independently addressable.
@@ -536,7 +575,8 @@ namespace PeLibrary
             {
                 int parent = Parent(registry, current);
                 int prefix = LayoutFieldCount(registry, parent);
-                if (index >= prefix) return FieldTypeAt(registry, current, index - prefix);
+                if (index >= prefix)
+                    return registry[registry[Slot(current) + Storage] + index - prefix];
                 current = parent;
             }
         }
@@ -557,6 +597,14 @@ namespace PeLibrary
 
         internal static void SetExplicitField(int[] registry, int type, int index, int storage, int offset) =>
             SetFieldType(registry, type, index, storage | ((offset + 1) << FieldStorageBits));
+
+        // Class fields retain their CLI type in the low bits. Marked fields
+        // physically hold an array so ordinary loads and byrefs share storage.
+        internal static void SetReferenceFieldVector(int[] registry, int type, int row, int vector)
+        {
+            int entry = registry[Slot(type) + Storage] + row - FirstRow(registry, type);
+            registry[entry] = (registry[entry] & FieldStorageMask) | (vector << FieldStorageBits);
+        }
 
         internal static int FieldType(int[] registry, int type, int row) =>
             FieldTypeAt(registry, type, row - registry[Slot(type) + FirstField]);

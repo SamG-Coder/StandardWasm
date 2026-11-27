@@ -23,8 +23,9 @@ foreach (string name in new[]
 {
     "ReachedOnce", "CallAfterArgument", "StoreAfterRightHand", "BeforeFieldInitOnce", "ConstructorTriggers",
     "InheritedField", "Recursion", "CatchInsideInitializer", "BundledDependency", "RelaxedGenericCall",
-    "DistinctObjects", "StaticFieldAlias", "NotNominalClass", "ObjectFailureCaught", "NestedObjectFailure",
-    "NonAsciiNameFailure"
+    "DistinctObjects", "StaticFieldAlias", "NotNominalClass", "Locked", "RuntimeTypeLock", "StaticAutoProperty",
+    "LinkedRuntimeTypeArgument", "RootGetType", "RootToString", "PreciseGenericCall",
+    "ObjectFailureCaught", "NestedObjectFailure", "NonAsciiNameFailure"
 })
 {
     var (kernels, context) = Load(name);
@@ -62,11 +63,12 @@ foreach (string name in new[]
 
 // An exception escaping an initializer. The CLR makes one attempt and raises the same
 // TypeInitializationException (with the same inner exception) on every later trigger.
-// The compiler cannot construct that exception yet, so each trigger must trap instead,
-// on the same instance, without a second attempt and without partial success.
+// A closed generic initializer owns a separate exception for each instantiation.
 Failure("ReadFailing", [("run", "ReadFailing"), ("trace", "ReadTrace"), ("run", "ReadFailing"), ("trace", "ReadTrace")]);
 Failure("ReadOuterFailing", [("run", "ReadOuterFailing"), ("inner", "ReadFailing"), ("trace", "ReadTrace"),
     ("run", "ReadOuterFailing"), ("trace", "ReadTrace")]);
+Failure("ReadGenericFailures", [("int", "ReadIntFailure"), ("string", "ReadStringFailure"),
+    ("int", "ReadIntFailure"), ("string", "ReadStringFailure"), ("steady", "PreciseGenericCall")]);
 
 // A raw engine trap (Wasm stack exhaustion) inside an initializer. No CLR comparison:
 // the CLR ends the process on stack overflow. The next host entry must retire the
@@ -83,16 +85,14 @@ Failure("ReadOuterFailing", [("run", "ReadOuterFailing"), ("inner", "ReadFailing
     context.Unload();
 }
 
-// Object members on a root object, Monitor (lock) and a precise generic
-// initializer stay located diagnostics.
-foreach (string name in new[] { "RootHashCode", "RootToString", "RootGetType", "RootEquals", "Locked", "PreciseGenericCall" })
+// Object members without a supported root layout still report the original call.
+foreach (string name in new[] { "RootHashCode", "RootEquals" })
 {
     var (kernels, context) = Load(name);
     MethodInfo method = kernels.GetMethod(name)!;
     string clr = ((int)method.Invoke(null, null)!).ToString();
     byte[] il = method.GetMethodBody()!.GetILAsByteArray()!;
-    // lock passes its taken flag by address: the ldloca of Monitor.Enter(object, ref bool).
-    int offset = IlOffset(il, name == "Locked" ? OpCodes.Ldloca_S : name == "PreciseGenericCall" ? OpCodes.Call : OpCodes.Callvirt);
+    int offset = IlOffset(il, OpCodes.Callvirt);
     cases.Add(new { name, row = Row(method), images, clr, status = -2, diagnostic = new[] { 0, Row(method), offset } });
     context.Unload();
 }
@@ -107,6 +107,8 @@ void Failure(string name, (string export, string method)[] calls)
     var (kernels, context) = Load(name);
     var thrown = new Dictionary<string, Exception>();
     var sequence = new List<string[]>();
+    var distinctFailures = new List<Exception>();
+    var exceptionIdentities = new List<int>();
     foreach (var (export, methodName) in calls)
     {
         MethodInfo method = kernels.GetMethod(methodName)!;
@@ -120,16 +122,23 @@ void Failure(string name, (string export, string method)[] calls)
             // Every later trigger of one type raises the identical exception object.
             if (thrown.TryGetValue(methodName, out Exception? first) && !ReferenceEquals(first, initialization))
                 throw new InvalidOperationException(name + ": the CLR raised a different TypeInitializationException.");
-            if (initialization.InnerException is not (DivideByZeroException or TypeInitializationException))
+            if (initialization.InnerException is not (DivideByZeroException or TypeInitializationException or InvalidOperationException))
                 throw new InvalidOperationException(name + ": unexpected inner exception " + initialization.InnerException);
             thrown[methodName] = initialization;
+            int index = distinctFailures.FindIndex(failure => ReferenceEquals(failure, initialization));
+            if (index < 0)
+            {
+                index = distinctFailures.Count;
+                distinctFailures.Add(initialization);
+            }
+            exceptionIdentities.Add(index);
             sequence.Add([export, "TypeInitializationException"]);
         }
     }
     var exports = calls.Select(call => call.export).Distinct()
         .Select(export => new { name = export, row = Row(kernels.GetMethod(calls.First(call => call.export == export).method)!) })
         .ToArray();
-    cases.Add(new { name, row = exports[0].row, images, exports, sequence });
+    cases.Add(new { name, row = exports[0].row, images, exports, sequence, exceptionIdentities });
     context.Unload();
 }
 

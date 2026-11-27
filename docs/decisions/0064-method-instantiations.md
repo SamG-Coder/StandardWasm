@@ -16,8 +16,10 @@ Read the MethodDefOrRef target and bounded instantiation arguments from
 the MethodSpec table. Resolve the method within the caller's assembly
 bundle and apply the target's access and generic constraint rules.
 A compiled body is identified by its assembly, MethodDef, closed
-declaring type and exact method type argument vector. Reserve the body
-before lowering calls so recursion reuses the same specialization.
+declaring type and exact method type argument vector. Bind open MemberRef
+signatures by generic arity, variable ordinal and nominal type identity
+before substituting slot storage. Reserve the body before lowering calls
+so recursion reuses the same specialization.
 Two instantiations can share a storage type and still require distinct
 CLR type identities.
 
@@ -33,5 +35,34 @@ The first checkpoint compares MethodSpec targets, arities and argument
 bytes with the CLR metadata reader for ordinary .NET Standard DLLs
 and the installed CoreLib images in Node and Edge. This covers both
 MethodDef and MemberRef targets, and argument slices containing the
-declaring and method parameter encodings. Subsequent checkpoints will
-test execution, including recursion and type-argument-dependent locals.
+declaring and method parameter encodings. The compiler also executes
+static MethodDef and MemberRef calls with closed arguments, including
+recursive calls, method-typed locals, overload selection and fields of
+constructed generic types. Method interface constraints use the actual
+implementation edges. Primitive arguments keep scalar storage and use
+their nominal CoreLib definitions to verify those edges. A bound that
+recurs on the same closed interface requires proof of that exact edge.
+A constrained static call binds its closed interface declaration by
+nominal identity and exact signature. The compiler selects an explicit
+MethodImpl on the concrete type, then checks the implementation's
+signature against the declaration after substitution. The resulting
+call targets the original managed body. Default interface implementations
+and unresolved targets stay diagnosed.
+
+The .NET 10 fixture verifies original Int64 numeric dispatch and two
+user-defined implementations.
+
+## Primitive boxes
+
+Each boxing instruction creates a fresh managed object. Its private GC
+layout stores the exact CLI primitive element and the payload bits.
+A function-reference field distinguishes the private layout from user
+aggregates. Exact identity survives even when two primitive types have
+the same Wasm storage. The type test returns the same object on a match.
+Unboxing checks the type tag and returns a typed CLR-compatible exception
+for a wrong type or a null reference. Floating-point payloads use
+bitwise reinterpretation so signed zero survives the round trip.
+
+Boxed primitives currently support object identity, primitive type
+tests and value extraction. User-defined struct and enum boxes,
+nullable boxing and virtual dispatch on boxed values require more work.

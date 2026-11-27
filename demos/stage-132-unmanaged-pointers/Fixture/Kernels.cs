@@ -45,6 +45,23 @@ namespace UnmanagedPointerFixture
 
     public static unsafe class Kernels
     {
+        public static int RoundTripPointerAccessor(byte* data, int value)
+        {
+            var signed = SignedPointer(data);
+            *(byte*)signed.ToPointer() = unchecked((byte)value);
+            return ReadUnsigned(new System.UIntPtr(data));
+        }
+
+        private static int ReadUnsigned(System.UIntPtr address) => *(byte*)address.ToPointer();
+
+        private static System.IntPtr SignedPointer(byte* data) => new System.IntPtr(data);
+
+        public static int ReadNullablePointerAccessor(byte* data, int useAddress)
+        {
+            var pointer = SignedPointer(useAddress == 0 ? null : data);
+            return pointer.ToPointer() == null ? -1 : *(byte*)pointer.ToPointer();
+        }
+
         // Sum count bytes through a Reader: ldind.u1 via a byte* field.
         public static int SumBytes(byte* data, int count)
         {

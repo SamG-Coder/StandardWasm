@@ -131,16 +131,20 @@ namespace PortableCompiler
             return 0;
         }
 
-        // Pre-linked records for the stub body at IL offsets 0-3:
-        //   LoadString message; LoadString fileName; NewObject ctor; Throw.  [] -> (throws)
-        internal static void Records(int[] records, int messageStart, int messageLength,
-            int nameStart, int nameLength, int constructor)
+        // Leave a non-instruction slot after each string load for its
+        // intern-cache index, just as the operand bytes do for ordinary IL.
+        internal static void Records(int[] records, int constructor)
         {
             int w = BranchIl.Width;
-            records[0] = BranchIl.LoadString; records[1] = messageStart; records[2] = 1; records[3] = messageLength;
-            records[w] = BranchIl.LoadString; records[w + 1] = nameStart; records[w + 2] = 2; records[w + 3] = nameLength;
-            records[2 * w] = BranchIl.NewObject; records[2 * w + 1] = constructor; records[2 * w + 2] = 3; records[2 * w + 3] = 0;
-            records[3 * w] = BranchIl.ThrowNull; records[3 * w + 1] = 0; records[3 * w + 2] = 4; records[3 * w + 3] = 0;
+            records[0] = BranchIl.LoadString;
+            records[2] = 2;
+            records[2 * w] = BranchIl.LoadString;
+            records[2 * w + 2] = 4;
+            records[4 * w] = BranchIl.NewObject;
+            records[4 * w + 1] = constructor;
+            records[4 * w + 2] = 5;
+            records[5 * w] = BranchIl.ThrowNull;
+            records[5 * w + 2] = 6;
         }
 
         private void Text(string text)

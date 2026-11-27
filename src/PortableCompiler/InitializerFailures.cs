@@ -12,6 +12,13 @@ namespace PortableCompiler
     // Stage 129 trap (decision 0057).
     internal static class InitializerFailures
     {
+        private const int CacheStart = int.MinValue + 4096, CacheEnd = CacheStart + (1 << 30);
+
+        internal static int CacheRow(int owner, int method) =>
+            owner < 0 || owner > 255 || method < 1 || method >= 1 << 22 ? 0 : CacheStart + (owner << 22) + method;
+
+        internal static bool IsCacheRow(int owner, int row) => owner == 0 && row >= CacheStart && row < CacheEnd;
+
         // found = (bundle index, MethodDef row) of that constructor, or (-1, 0).
         // found[0] is the bundle index of the CoreLib definition, or -1 when the bundle has none.
         internal static int FindCoreLib(BundleImages bundle, int[] found)

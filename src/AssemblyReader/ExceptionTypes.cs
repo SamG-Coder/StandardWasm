@@ -7,12 +7,12 @@ namespace PeLibrary
         internal const int Overflow = 1, DivideByZero = 2, Arithmetic = Overflow | DivideByZero;
 
         internal const int IndexOutOfRange = 4, NullReference = 8, InvalidCast = 16, Argument = 32;
-        internal const int ArgumentNull = 128;
-        internal const int Supported = Arithmetic | IndexOutOfRange | NullReference | InvalidCast | Argument | ArgumentNull;
+        internal const int ArgumentNull = 128, SynchronizationLock = 256, ArgumentOutOfRange = 512;
+        internal const int Supported = Arithmetic | IndexOutOfRange | NullReference | InvalidCast | Argument | ArgumentNull | SynchronizationLock | ArgumentOutOfRange;
 
         // A thrown managed object (Stage 126, decision 0054) travels on its own tag.
         // A clause that can receive it also carries its class type above the tag bits.
-        internal const int Object = 64, ClassShift = 8;
+        internal const int Object = 64, ClassShift = 10;
 
         internal static int CatchMask(byte[] image, int[] heaps, int[] methods, int token)
         {
@@ -26,13 +26,16 @@ namespace PeLibrary
             int width = counts[0] < 16384 && counts[1] < 16384 && counts[26] < 16384 && counts[35] < 16384 ? 2 : 4;
             int refs = first + counts[0] * (2 + strings + 3 * guids);
             uint name, ns;
+            bool platform = true;
             if (table == 1)
             {
                 // A platform TypeRef names the authentic System exception type.
                 uint type = (uint)(refs + (row - 1) * (width + 2 * strings));
                 uint scope = Index(image, type, width);
-                if ((scope & 3) != 2 || !PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, (int)(scope >> 2)))
-                    return 0;
+                if ((scope & 3) != 2) return 0;
+                int assembly = (int)(scope >> 2);
+                platform = PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, assembly);
+                if (!platform && !PlatformAssemblyIdentity.IsThreadingAssembly(image, heaps, methods, counts, assembly)) return 0;
                 name = Index(image, type + (uint)width, strings);
                 ns = Index(image, type + (uint)(width + strings), strings);
             }
@@ -47,7 +50,9 @@ namespace PeLibrary
                 name = Index(image, type + 4, strings);
                 ns = Index(image, type + (uint)(4 + strings), strings);
             }
-            if (!Fits(ns, 7, (uint)heaps[3])) return 0;
+            if (MatchesAscii(image, heaps, ns, "System.Threading") &&
+                MatchesAscii(image, heaps, name, "SynchronizationLockException")) return SynchronizationLock;
+            if (!platform || !Fits(ns, 7, (uint)heaps[3])) return 0;
             uint n = (uint)heaps[2] + name, s = (uint)heaps[2] + ns, limit = (uint)heaps[3];
             if (U32(image, s) != 0x74737953 || U16(image, s + 4) != 0x6d65 || image[s + 6] != 0)
                 return 0;
@@ -68,9 +73,11 @@ namespace PeLibrary
                 return Supported;
             if (MatchesAscii(image, heaps, name, "ArgumentNullException"))
                 return ArgumentNull;
+            if (MatchesAscii(image, heaps, name, "ArgumentOutOfRangeException"))
+                return ArgumentOutOfRange;
             if (Fits(name, 18, limit) && U32(image, n) == 0x75677241 && U32(image, n + 4) == 0x746e656d &&
                 U32(image, n + 8) == 0x65637845 && U32(image, n + 12) == 0x6f697470 && U16(image, n + 16) == 0x006e)
-                return Argument | ArgumentNull;
+                return Argument | ArgumentNull | ArgumentOutOfRange;
             if (Fits(name, 18, limit) && U32(image, n) == 0x7265764f && U32(image, n + 4) == 0x776f6c66 &&
                 U32(image, n + 8) == 0x65637845 && U32(image, n + 12) == 0x6f697470 && U16(image, n + 16) == 0x006e)
                 return Overflow;

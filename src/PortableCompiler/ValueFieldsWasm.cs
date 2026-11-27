@@ -1,5 +1,6 @@
 using static PeLibrary.ObjectLayouts;
 using static PortableCompiler.BranchWasm;
+using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
@@ -50,8 +51,16 @@ namespace PortableCompiler
         }
 
         internal static int Update(byte[] code, int used, int[] objects, int type, int local, int temporary,
-            int field, int replacement, int replacementType)
+            int field, int replacement, int replacementType, bool location = false, bool widenedReplacement = false,
+            ValueFieldProjections projections = null, int start = 0)
         {
+            if (location)
+            {
+                used = ManagedValueLocationWasm.ReadLocation(code, used, local, type, projections, start);
+                used = Local(code, used, 0x21, temporary);
+                used = LoadOperand(code, used, local, SignatureTypes.ValueLocation(type), SignatureTypes.ValueLocation(type));
+                local = temporary;
+            }
             used = Materialize(code, used, type, local);
             used = Local(code, used, 0x21, temporary);
             int ordinal = 0;
@@ -60,7 +69,12 @@ namespace PortableCompiler
                 int storage = FieldTypeAt(objects, type, i);
                 if (storage == 0) continue;
                 if (ordinal == field)
-                    used = LoadOperand(code, used, replacement, replacementType, storage);
+                {
+                    used = replacement < 0 ? FieldDefault(code, used, storage) :
+                        LoadOperand(code, used, replacement, replacementType, storage);
+                    if (widenedReplacement)
+                        used = ManagedLocationWasm.CastCellValue(code, used, Representation(objects, storage));
+                }
                 else
                 {
                     used = Local(code, used, 0x20, temporary);
@@ -72,7 +86,39 @@ namespace PortableCompiler
             // Publish a fresh immutable aggregate to the addressed local.
             // Existing copies keep the original value.
             used = Gc(code, used, 0, type);
-            return Local(code, used, 0x21, local);
+            return location ? ManagedValueLocationWasm.WriteSnapshot(code, used, projections, start) :
+                Local(code, used, 0x21, local);
+        }
+
+        internal static int ClearAtLocation(byte[] code, int used, int[] objects, int field, int type, int reference,
+            int temporaries, bool constructorReceiver, ValueFieldProjections projections, int start)
+        {
+            // A value constructor carries its current snapshot in parameter zero.
+            // Other managed receivers carry a cell shared by all aliases.
+            if (!constructorReceiver) used = GuardNull(code, used, reference);
+            return Update(code, used, objects, type, constructorReceiver ? 0 : reference,
+                temporaries + type - FirstClass, field, -1, 0, !constructorReceiver, projections: projections, start: start);
+        }
+
+        private static int FieldDefault(byte[] code, int used, int storage)
+        {
+            if (IsObjectReference(storage))
+            {
+                code[used++] = 0xd0; // ref.null none, valid for any managed field type.
+                code[used++] = NullSpillWasm.NullRef;
+            }
+            else if (storage == F32 || storage == F64)
+            {
+                code[used++] = storage == F32 ? (byte)0x43 : (byte)0x44;
+                int length = storage == F32 ? 4 : 8;
+                for (int i = 0; i < length; i++) code[used++] = 0;
+            }
+            else
+            {
+                code[used++] = storage == I64 ? (byte)0x42 : (byte)0x41;
+                code[used++] = 0;
+            }
+            return used;
         }
     }
 }

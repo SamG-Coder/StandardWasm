@@ -83,6 +83,7 @@ internal sealed class AssemblySet
     }
 
     public readonly SortedSet<string> UnresolvedAssemblies = new(StringComparer.Ordinal);
+    public readonly HashSet<LoadedAssembly> ForwardingAssemblies = new();
 
     private LoadedAssembly? ByReference(LoadedAssembly from, AssemblyReferenceHandle handle)
     {
@@ -103,7 +104,9 @@ internal sealed class AssemblySet
             if (implementation.Kind == HandleKind.AssemblyReference)
             {
                 LoadedAssembly? target = ByReference(assembly, (AssemblyReferenceHandle)implementation);
-                return target is null ? null : FindType(target, ns, name, depth + 1);
+                TypeId? resolved = target is null ? null : FindType(target, ns, name, depth + 1);
+                if (resolved is not null) ForwardingAssemblies.Add(assembly);
+                return resolved;
             }
         }
         return null;

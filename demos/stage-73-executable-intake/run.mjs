@@ -1,11 +1,13 @@
 import { chromium } from "playwright-core";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { serveIntake } from "./server.mjs";
 import { join } from "node:path";
 import { root, run } from "../../scripts/toolchain.mjs";
 import { openExecutable } from "./loader/intake.mjs";
+import { readPeResource } from "./loader/pe.mjs";
 
 const serve = process.argv.includes("--serve");
 if (!serve && process.platform !== "win32") throw Error("The Stage 72 fixture requires Windows.");
@@ -63,6 +65,19 @@ async function verify() {
     const truncated = { path: exe, bytes: single[0].bytes.subarray(0, single[0].bytes.length - 10) };
     assert.throws(() => openExecutable([truncated], exe), /Truncated/);
 
+    const oracle = JSON.parse(execFileSync("dotnet", ["run", "--file",
+        join(root, "demos/stage-73-executable-intake/NativeResourceOracle.cs"), join(ordinaryDir, exe), join(singleDir, exe)
+    ], { encoding: "utf8" }));
+    const files = oracle.map(({ path }) => readFileSync(path));
+    const manifests = oracle.map(({ type, id, language, size, sha256 }, index) => {
+        const resource = readPeResource(files[index], type, id, language);
+        assert.ok(resource, "Missing native manifest in the PE file");
+        assert.equal(resource.length, size);
+        assert.equal(hash(resource), sha256);
+        assert.equal(readPeResource(files[index], type, 0xffff, language), null);
+        return { type, id, language, size, sha256 };
+    });
+
     const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
     const browser = await chromium.launch({
         executablePath: process.env.BROWSER_PATH || (existsSync(edge) ? edge : undefined)
@@ -97,11 +112,29 @@ async function verify() {
         await page.locator("#folder").setInputFiles(ordinaryDir);
         await page.waitForFunction(() => document.querySelector("#status").dataset.state === "ready");
         assert.deepEqual(JSON.parse(await page.locator("#status").textContent()), normal);
+        await page.route(url + "/test-native-manifest/*", route => {
+            const index = Number(new URL(route.request().url()).pathname.split("/").pop());
+            return route.fulfill({ contentType: "application/octet-stream", body: files[index] });
+        });
+        const browserManifests = await page.evaluate(async tests => {
+            const { readPeResource } = await import("/loader/pe.mjs");
+            return Promise.all(tests.map(async ({ type, id, language }, index) => {
+                const bytes = new Uint8Array(await (await fetch("/test-native-manifest/" + index)).arrayBuffer());
+                const resource = readPeResource(bytes, type, id, language);
+                if (!resource || readPeResource(bytes, type, 0xffff, language) !== null)
+                    throw Error("Unexpected PE resource lookup result.");
+                const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", resource));
+                const sha256 = Array.from(digest, unit => unit.toString(16).padStart(2, "0")).join("");
+                return { type, id, language, size: resource.length, sha256 };
+            }));
+        }, manifests);
+        assert.deepEqual(browserManifests, manifests);
+        writeFileSync(join(referenceDir, "native-manifests.json"), JSON.stringify(manifests, null, 2) + "\n");
         assert.deepEqual(methodErrors, []);
         assert.ok(requests.every(method => method === "GET"), "The drop UI must not upload application bytes.");
         writeFileSync(join(referenceDir, "intake.json"), JSON.stringify({ node: process.version,
             browser: browser.version(), ordinary: normal, single: bundle }, null, 2) + "\n");
-        console.log("Node and Edge matched the original entry DLL and manifests for ordinary and single-file .NET executables.");
+        console.log("Node and Edge matched the original entry DLL and manifests for ordinary and single-file .NET executables, plus three Win32 PE manifests.");
     } finally {
         await browser.close();
     }

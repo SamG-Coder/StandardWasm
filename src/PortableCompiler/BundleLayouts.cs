@@ -138,6 +138,7 @@ namespace PortableCompiler
                 return type;
             }
             bool overlay = ObjectLayouts.IsExplicitValue(objects, type);
+            bool byRefLike = ObjectLayouts.IsByRefLikeValue(objects, type);
             int[] offsets = new int[overlay ? fields : 0];
             int limit = overlay ? ExplicitValueLayouts.Read(image, heaps, layout, ObjectLayouts.TypeDef(objects, type), first, offsets) : 0;
             if (limit < 0) return limit;
@@ -146,6 +147,12 @@ namespace PortableCompiler
                 int storage = ReadFieldStorage(bundle, image, layout, heaps, owner,
                     table, first + offset, type, objects, reference, false);
                 if (storage < 0) return storage;
+                // A supported span carries its owner in the span descriptor.
+                // Ordinary nested values use the existing copy representation.
+                // The field reader rejects other nested scoped values before this point.
+                if (byRefLike && storage != 0 &&
+                    !SignatureTypes.IsScalar(storage) && !SignatureTypes.IsReference(storage) &&
+                    !SignatureTypes.IsSpan(storage)) return -2;
                 if (overlay && storage != 0)
                 {
                     int width = ExplicitValueLayouts.ViewWidth(objects, storage);
@@ -161,7 +168,7 @@ namespace PortableCompiler
 
         internal static int ReadFieldStorage(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int table, int row, int receiver, int[] objects,
-            int[] reference, bool staticField)
+            int[] reference, bool staticField, int readonlyInitializer = 0)
         {
             int storage = ObjectLayouts.ReadStorage(image, heaps, layout, table, row, reference, staticField);
             if (storage < 0) return storage;
@@ -180,13 +187,22 @@ namespace PortableCompiler
                     storage = delegateStorage;
                 }
                 else if (image[reference[0]] == PointerStorage.Element)
+                {
+                    // Native integers are scalar handles. Pointer signatures
+                    // can carry an address whose lifetime a scope must preserve.
+                    if (ObjectLayouts.IsByRefLikeValue(objects, receiver)) return -2;
                     storage = PointerSignatures.ReadStorage(bundle, image, layout, heaps,
                         owner, reference[0] + 1, end, reference);
+                }
                 else
                     storage = ManagedReferenceSignatures.ReadStorage(bundle, image, layout, heaps,
                         owner, reference, end, receiver, objects);
                 if (storage >= 0 && reference[0] != end) return -1;
             }
+            else if (reference[0] != 0 && readonlyInitializer != 0 &&
+                RuntimeTypeMetadata.Storage(image, heaps, layout, reference[0], reference[1] == 1) == RuntimeTypeMetadata.Type &&
+                RuntimeTypeFields.HasCanonicalInitializer(image, heaps, layout, readonlyInitializer, row))
+                storage = RuntimeTypeMetadata.Type;
             else if (reference[0] != 0)
             {
                 bool valueType = reference[1] == 1;
@@ -195,10 +211,12 @@ namespace PortableCompiler
                 // A value-type field needs its layout, so it keeps the -4 (CLR probe 3).
                 if (storage == -4 && !valueType && bundle.DeferMissing) storage = ObjectLayouts.ObjectReference;
             }
-            return storage;
+            if (SignatureTypes.IsSpan(storage))
+                return !staticField && ObjectLayouts.IsByRefLikeValue(objects, receiver) ? storage : -2;
+            return ObjectLayouts.IsByRefLikeValue(objects, storage) ? -2 : storage;
         }
 
-        private static int RegisterInterfaces(BundleImages bundle, byte[] image,
+        internal static int RegisterInterfaces(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int type, int[] objects)
         {
             var table = new int[3];
@@ -209,14 +227,17 @@ namespace PortableCompiler
             {
                 int coded = InterfaceImplementations.Read(image, table, index, row);
                 if (coded < 0) return coded;
-                // Generic interface instantiations need TypeSpec support.
-                // Missing optional assemblies cannot establish an assignment.
-                if (coded == 0 || (coded & 3) == 2 || (coded & 3) == 1 && bundle.Length == 0) continue;
-                int target = RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
-                if (target == -4 || target == -6) continue;
+                // Missing or unsupported closed interface metadata cannot
+                // establish an assignment. Ordinary TypeRef checks are unchanged.
+                if (coded == 0 || (coded & 3) != 0 && bundle.Length == 0) continue;
+                bool closed = (coded & 3) == 2;
+                int target = closed ? ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps,
+                    owner, coded >> 2, type, objects, null) : RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
+                if (target == -4 || target == -6 || closed && target == -2) continue;
                 if (target < 0) return target;
                 if (!ObjectLayouts.IsInterface(objects, target)) return -2;
-                if (!ObjectLayouts.AddInterface(objects, type, target)) return -3;
+                if (!ObjectLayouts.DeclaresInterface(objects, type, target) &&
+                    !ObjectLayouts.AddInterface(objects, type, target)) return -3;
             }
             return 0;
         }
@@ -244,7 +265,7 @@ namespace PortableCompiler
         internal static int RegisterType(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int coded, int[] objects, bool valueType, bool enumIdentity = false)
         {
-            if (!valueType && RuntimeTypeMetadata.IsRuntimeAssemblyDefinition(image, heaps, layout, coded))
+            if (!valueType && RuntimeTypeMetadata.IsAssemblyDefinition(image, heaps, layout, coded))
                 return RuntimeTypeMetadata.Assembly;
             int platformType = valueType ? 0 : EventMetadata.Reference(image, heaps, layout, coded);
             if (platformType != 0) return platformType;

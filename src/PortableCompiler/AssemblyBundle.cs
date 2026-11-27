@@ -8,11 +8,13 @@ namespace PortableCompiler
         // Friend access has not been evaluated yet; distinct from every FriendAssemblies.Allows result.
         private const int FriendUnknown = int.MinValue;
         // symbol receives [owner, MethodDef, constructor declaring TypeDef or 0,
-        // closed declaring layout or 0]. context is the caller's own closed
+        // closed declaring layout or 0, dispatch flags, protected receiver,
+        // optional non-constructor instance declaring TypeDef]. context is the caller's own closed
         // declaring layout, which substitutes VAR in a TypeSpec parent.
         internal static int Resolve(BundleImages bundle, byte[] caller,
             int[] layout, int[] heaps, int owner, int member, int opcode, bool baseCall, int[] objects, int[] symbol, int context, int callerType,
-            bool allowVirtual = false, bool valueAddress = false)
+            bool allowVirtual = false, bool valueAddress = false,
+            int methodArity = 0, int[] callerMethodArguments = null, int callerReceiver = 0)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedParent: true);
@@ -29,11 +31,12 @@ namespace PortableCompiler
                 // The closed layout already proved the definition's identity,
                 // type accessibility and argument constraints.
                 closed = ManagedReferenceSignatures.ReadInstantiation(bundle, caller, layout, heaps,
-                    owner, parent, objects, context);
+                    owner, parent, objects, context, callerMethodArguments);
                 if (closed < ObjectLayouts.FirstClass) return closed < 0 ? closed : -2;
-                // Value receivers are managed pointers, and interface members
-                // need dispatch. Both are outside direct specialization.
-                if (ObjectLayouts.IsValueType(objects, closed) || ObjectLayouts.IsInterface(objects, closed)) return -2;
+                if (ObjectLayouts.IsInterface(objects, closed) && (opcode != 0x6f || !allowVirtual || methodArity != 0)) return -2;
+                // Direct calls to closed value types can carry a managed
+                // receiver. The linked signature proves its exact stack type.
+                if (ObjectLayouts.IsValueType(objects, closed) && opcode != 0x73 && opcode != 0x28) return -2;
                 matched = ObjectLayouts.AssemblyOf(objects, closed);
                 declaring = ObjectLayouts.TypeDef(objects, closed);
                 target = bundle.Get(matched);
@@ -63,29 +66,51 @@ namespace PortableCompiler
                 if (!AssemblyReferences.SameString(caller, heaps, reference[4], target, targetHeaps, name))
                     continue;
                 // A closed parent in the caller's own assembly may name assembly
-                // members, and private members of the caller's own definition.
-                // Nested-type access is not modeled and stays unbound.
+                // members and private members of the caller or an enclosing type.
                 bool local = closed != 0 && matched == owner &&
-                    (access == 3 || access == 5 || access == 1 && callerType == declaring);
+                    (access == 3 || access == 5 || access == 1 &&
+                        HasPrivateAccess(target, targetHeaps, targetLayout, callerType, declaring));
                 // Assembly (internal) and FamORAssem (protected internal) members of another
                 // bundle assembly are accessible when it names the caller in InternalsVisibleTo,
-                // with the identity rules of decision 0028 (decision 0055). Private, FamANDAssem
-                // and Family-only access stay rejected here; Family keeps the base-call rule below.
+                // with the identity rules of decision 0028 (decision 0055). Access through
+                // inheritance is checked separately below.
                 if (!local && matched >= 0 && matched != owner && (access == 3 || access == 5))
                 {
                     if (friend == FriendUnknown)
                     {
-                        var counts = new int[45];
-                        if (MetadataTableRows.ReadCounts(target, targetHeaps[4], targetHeaps[5], counts) < 0) return -1;
-                        friend = FriendAssemblies.Allows(target, targetHeaps, targetLayout, counts, caller, heaps, layout);
+                        friend = FriendAccess(target, targetHeaps, targetLayout, caller, heaps, layout);
                     }
                     if (friend < 0) return friend;
                     local = friend != 0;
                 }
-                if (access != 6 && !local && !(baseCall && opcode == 0x28 && (access == 4 || access == 5))) continue;
+                bool familyAccess = !isStatic && (access == 4 || access == 5);
+                bool family = false;
+                if (access != 6 && !local)
+                {
+                    if (!familyAccess) continue;
+                    // A nonvirtual call can carry the protected receiver constraint to stack analysis.
+                    // A virtual dispatch requires its own proof, and base constructors have a separate check.
+                    if (callerReceiver >= ObjectLayouts.FirstClass &&
+                        (opcode == 0x28 || opcode == 0x6f && (flags & 0x40) == 0) &&
+                        ObjectLayouts.AssemblyOf(objects, callerReceiver) == owner &&
+                        ObjectLayouts.TypeDef(objects, callerReceiver) == callerType)
+                    {
+                        int declaringLayout = closed;
+                        if (declaringLayout == 0)
+                            declaringLayout = ObjectLayouts.Find(objects, matched, declaring, new int[0]);
+                        // The trusted System.Object has no nominal layout to walk.
+                        family = ObjectLayouts.Inherits(objects, callerReceiver, declaringLayout) ||
+                            declaringLayout == 0 && !ObjectLayouts.IsValueType(objects, callerReceiver) &&
+                            ObjectLayouts.IsCoreObjectType(target, targetHeaps, targetLayout, declaring << 2);
+                    }
+                    if (!family && !(baseCall && opcode == 0x28)) continue;
+                }
                 int signature = MethodDefinitions.ReadColumn(target, targetLayout, candidate, 4);
-                int match = BundleSignatures.Match(bundle, caller, layout, heaps, owner, reference[5],
-                    target, targetLayout, targetHeaps, matched, signature, false, objects, closed);
+                int match = methodArity == 0
+                    ? BundleSignatures.Match(bundle, caller, layout, heaps, owner, reference[5],
+                        target, targetLayout, targetHeaps, matched, signature, false, objects, closed)
+                    : GenericMethodSignatures.Match(bundle, caller, layout, heaps, owner, reference[5],
+                        target, targetLayout, targetHeaps, matched, signature, methodArity, !isStatic);
                 if (match < 0) return match;
                 if (match == 0) continue;
                 // Bind the declaration. The caller may defer virtual slot
@@ -97,12 +122,14 @@ namespace PortableCompiler
                 }
                 // call .ctor runs a base constructor, or constructs a value on a
                 // location's address. The linker then requires a value receiver.
-                else if (constructor ? !baseCall && !valueAddress || opcode != 0x28 : access != 6 && !local) return -2;
+                else if (constructor ? !baseCall && !valueAddress || opcode != 0x28 : access != 6 && !local && !family) return -2;
                 if (opcode == 0x6f && (flags & 0x40) != 0 && !allowVirtual) return -2;
                 if (row != 0) return -5;
                 row = candidate;
                 symbol[2] = constructor ? declaring : 0;
-                if (allowVirtual) symbol[4] = flags & 0x40;
+                if (symbol.Length > 6 && !isStatic && !constructor) symbol[6] = declaring;
+                if (allowVirtual) symbol[4] = flags & 0x60; // Virtual and Final
+                if (family && !constructor) symbol[5] = callerReceiver;
             }
             if (row == 0) return -6;
             symbol[0] = matched;
@@ -112,7 +139,8 @@ namespace PortableCompiler
         }
 
         internal static int ResolveField(BundleImages bundle, byte[] caller,
-            int[] layout, int[] heaps, int owner, int member, bool write, bool staticField, int[] objects, int[] globals, int[] field, int context, int callerType)
+            int[] layout, int[] heaps, int owner, int member, bool write, bool staticField, int[] objects, int[] globals, int[] field, int context, int callerType, int[] methodArguments = null, bool constructorFieldWrite = false,
+            bool callerInitializer = false)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedParent: true);
@@ -126,9 +154,8 @@ namespace PortableCompiler
             int parent = reference[AssemblyReferences.GenericParent];
             if (parent != 0)
             {
-                if (staticField) return -2;
                 type = ManagedReferenceSignatures.ReadInstantiation(bundle, caller, layout, heaps,
-                    owner, parent, objects, context);
+                    owner, parent, objects, context, methodArguments);
                 if (type < ObjectLayouts.FirstClass) return type < 0 ? type : -2;
                 matched = ObjectLayouts.AssemblyOf(objects, type);
                 declaringType = ObjectLayouts.TypeDef(objects, type);
@@ -160,21 +187,34 @@ namespace PortableCompiler
                 if (match < 0) return match;
                 if (match == 0) continue;
                 // Closed parents in the caller's assembly follow the same rule
-                // as methods: assembly members, and private members of the
-                // caller's own definition.
+                // as methods: assembly members and private members of the
+                // caller or an enclosing type.
                 flags = definition[0];
                 int access = flags & 7;
                 bool local = parent != 0 && matched == owner &&
-                    (access == 3 || access == 5 || access == 1 && callerType == declaringType);
+                    (access == 3 || access == 5 || access == 1 &&
+                        HasPrivateAccess(target, targetHeaps, targetLayout, callerType, declaringType));
+                if (!local && matched >= 0 && matched != owner && (access == 3 || access == 5))
+                {
+                    int friend = FriendAccess(target, targetHeaps, targetLayout, caller, heaps, layout);
+                    if (friend < 0) return friend;
+                    local = friend != 0;
+                }
+                // A linked initonly field may be written in a constructor of its own closed declaring type.
+                bool initializesReceiver = constructorFieldWrite && type == context &&
+                    matched == owner && declaringType == callerType;
+                bool initializesStatic = staticField && callerInitializer && type == context &&
+                    matched == owner && declaringType == callerType;
                 if (((flags & 0x10) != 0) != staticField || (access != 6 && !local) ||
-                    (write && (flags & 0x20) != 0)) return -2;
+                    (write && (flags & 0x20) != 0 && !initializesReceiver && !initializesStatic)) return -2;
+                if (initializesStatic) write = false;
                 if (row != 0) return -5;
                 row = candidate;
             }
             if (row == 0) return -6;
             if (staticField)
                 return StaticFields.Bind(bundle, target, targetLayout, targetHeaps, matched, declaringType,
-                    row, table, flags, write, objects, globals, field);
+                    row, table, flags, write, objects, globals, field, type);
             if (type == 0) type = ObjectLayouts.Find(objects, matched, declaringType, new int[0]);
             if (type == 0)
                 type = BundleLayouts.Register(bundle, target, targetLayout, targetHeaps, matched, declaringType, objects);
@@ -184,7 +224,38 @@ namespace PortableCompiler
             field[0] = index;
             // The receiver layout and value type come from the same owning DLL.
             field[1] = FieldAccess.Encode(type, ObjectLayouts.FieldType(objects, type, row));
+            field[2] = row;
+            field[3] = flags;
             return 0;
+        }
+
+        private static bool HasPrivateAccess(byte[] image, int[] heaps, int[] layout,
+            int callerType, int declaringType)
+        {
+            if (callerType < 1 || declaringType < 1) return false;
+            if (callerType == declaringType) return true;
+            var counts = new int[45];
+            if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0 ||
+                callerType > counts[2] || declaringType > counts[2]) return false;
+
+            // TypeDef rows here share one module. The enclosing chain must finish
+            // at a top-level type within the number of recorded nesting relations.
+            bool found = false;
+            for (int depth = 0; depth <= counts[41]; depth++)
+            {
+                callerType = NestedTypes.Enclosing(image, heaps, layout, counts, callerType);
+                if (callerType <= 0) return callerType == 0 && found;
+                if (callerType == declaringType) found = true;
+            }
+            return false;
+        }
+
+        private static int FriendAccess(byte[] target, int[] targetHeaps, int[] targetLayout,
+            byte[] caller, int[] callerHeaps, int[] callerLayout)
+        {
+            var counts = new int[45];
+            if (MetadataTableRows.ReadCounts(target, targetHeaps[4], targetHeaps[5], counts) < 0) return -1;
+            return FriendAssemblies.Allows(target, targetHeaps, targetLayout, counts, caller, callerHeaps, callerLayout);
         }
 
         internal static int ClassIdentity(BundleImages bundle, byte[] image,

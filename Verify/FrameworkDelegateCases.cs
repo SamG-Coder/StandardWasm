@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Reflection;
-using System.Reflection.Emit;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
@@ -25,6 +24,7 @@ internal static class FrameworkDelegateCases
         Check(nameof(Kernels.Combine), Kernels.Combine);
         Check(nameof(Kernels.Unsubscribe), Kernels.Unsubscribe);
         Check(nameof(Kernels.Identity), Kernels.Identity);
+        Check(nameof(Kernels.StaticTarget), Kernels.StaticTarget);
 
         // The facade assembly exists but cannot resolve this TypeRef on the CLR.
         if (Assembly.Load("System.Runtime.Extensions").GetType("System.EventHandler") != null ||
@@ -32,11 +32,6 @@ internal static class FrameworkDelegateCases
             throw new InvalidOperationException("The installed CLR unexpectedly forwards a negative fixture's type.");
         RejectFacade("event through Runtime.Extensions", "System.Runtime", "System.Runtime.Extensions");
         RejectFacade("Interlocked through Runtime", "System.Threading", "System.Runtime");
-
-        // Stage 164 (decision 0088): an open static EventHandler target now binds a null target
-        // through a thunk that ignores it, so this former rejection is compared with the CLR.
-        // (The kernel keeps its Stage 119 name.)
-        Check(nameof(Kernels.RejectStatic), Kernels.RejectStatic);
 
         void Check(string name, Func<int, int> expectedResult)
         {
@@ -72,21 +67,6 @@ internal static class FrameworkDelegateCases
             });
         }
 
-        void Reject(MethodBase method, int[] diagnostic)
-        {
-            byte[] entries = Manifest(method);
-            Array.Fill(output, (byte)0xa5);
-            int status = CompilerExports.CompileBundleDetailed(bundle, entries, output, location);
-            if (status != -2 || !location.SequenceEqual(diagnostic) || output.Any(value => value != 0xa5))
-                throw new InvalidOperationException($"{method.Name} returned {status} at [{string.Join(", ", location)}].");
-            cases.Add(new
-            {
-                module = "BootstrapLibrary", method = "CompileBundle", fixture = "framework delegates " + method.Name,
-                inputs = new[] { Encode(bundle), Encode(entries) },
-                generated = new { capacity, bundle = true, arguments = Array.Empty<int>(), reject = true, diagnostic },
-                expected = status
-            });
-        }
     }
 
     private static byte[] RedirectAssemblyName(byte[] image, string from, string to)
@@ -113,13 +93,6 @@ internal static class FrameworkDelegateCases
 
     private static MethodInfo Method(string name) => typeof(Kernels).GetMethod(name)!;
     private static int Row(MethodBase method) => method.MetadataToken & 0xffffff;
-
-    private static int Offset(MethodBase method, OpCode opcode, int skip = 0)
-    {
-        int offset = IlOffsets.Find(method.GetMethodBody()!.GetILAsByteArray()!, opcode, skip);
-        if (offset < 0) throw new InvalidOperationException($"{method.Name} lacks {opcode}.");
-        return offset;
-    }
 
     private static byte[] Manifest(MethodBase method)
     {

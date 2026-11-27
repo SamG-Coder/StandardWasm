@@ -11,11 +11,10 @@ Run `npm run demo -- stage-121-value-instance-methods`. The demo compiles
 `LinkedChain(3, 5)` with the compiler running as Wasm and returns 61.
 `npm test` compares every kernel against the CLR in Node and Edge.
 
-The receiver is passed as the location's current immutable aggregate. That
-is exact because the callee cannot write through `this`. A method that
-does is diagnosed at its own write, so `Store` (a field write), `Reset`
-(`this = default`) and `Replace` (`this = new Counter(value)`) each return
-`-2` located in the dependency. Mutating methods, virtual and interface
-methods on structs and primitive receivers remain future work.
+Read-only calls pass the location's current immutable aggregate. Supported
+mutating calls keep the managed receiver location so `Store` (a field
+write), `Reset` (`this = default`) and `Replace` (`this = new Counter(value)`)
+update the caller's value. The cross-assembly replacement case exercises
+a named `stobj` through the managed receiver.
 
 See [decision 0049](../../docs/decisions/0049-read-only-value-methods.md).

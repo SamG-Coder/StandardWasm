@@ -51,15 +51,18 @@ namespace EmbeddedValueDemo
             return values;
         }
 
-        public static int RejectBorrow(int value)
+        public static int BorrowValue(int value)
         {
             Values local = default;
-            Set(ref local, value);
-            return local.First;
+            local.First = 3;
+            Values copy = local;
+            Update(ref local, value);
+            return unchecked(local.First * 7 + copy.First);
         }
 
-        private static void Set(ref Values local, int value) => local.First = value;
+        private static void Update(ref Values local, int value) => local.First = unchecked(local.First + value);
         public static Values RejectExport() => default;
+        public static ref Values RejectExportedAddress(ref Values value) => ref value;
     }
 
     public static class Demo

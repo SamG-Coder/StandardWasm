@@ -13,5 +13,13 @@ operations and conversions operate on the backing representation. This
 decision covers unboxed enum values. Enum reflection, boxing and native ABI
 layout retain separate semantics.
 
+One-dimensional enum vectors retain the enum definition as part of the
+vector's Wasm type. Their mutable elements use the declared backing width,
+including packed i8 and i16 cells, and ordinary integer element operations
+use the same signed and unsigned loads as primitive vectors. Typed element
+addresses and reflection require separate support. The [executable-entry
+regression](../../demos/stage-74-executable-entry/README.md) compares allocation,
+zero defaults, element reads and writes, and typed failures against the CLR.
+
 See [Stage 92](../../demos/stage-92-nominal-enums/README.md) and
 [ECMA-335, Partitions I and II](https://www.ecma-international.org/wp-content/uploads/ECMA-335_6th_edition_june_2012.pdf).

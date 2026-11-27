@@ -85,6 +85,14 @@ namespace PeLibrary
                 U32(image, at + 26) == 0x160de016 && U16(image, at + 30) == 0x0be0 && image[at + 32] == 0x2a;
         }
 
+        internal static bool IsTrustedUtf16PinnableReference(byte[] image, int[] heaps, int[] methods, int row)
+        {
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            return first >= 0 && PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, methods, counts) &&
+                IsPinnableReference(image, heaps, methods, counts, first, (uint)(0x06000000 | row));
+        }
+
         private static bool IsPinnableReference(byte[] image, int[] heaps, int[] methods, int[] counts, int first, uint token)
         {
             int row = (int)(token & 0xffffff);

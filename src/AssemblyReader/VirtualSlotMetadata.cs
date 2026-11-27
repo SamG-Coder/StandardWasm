@@ -29,7 +29,7 @@ namespace PeLibrary
         // Return the TypeDefOrRef of the next MethodImpl declaration with
         // this name. Zero ends the scan; an unmodeled parent returns -2.
         internal static int NextNamedMethodImplParent(byte[] image, int[] heaps, int[] layout, int type,
-            byte[] declaration, int[] declarationHeaps, int slotName, int[] cursor)
+            byte[] declaration, int[] declarationHeaps, int slotName, int[] cursor, int[] implementation = null)
         {
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;
@@ -49,11 +49,12 @@ namespace PeLibrary
                 int token = Index(image, at + (uint)(classWidth + methodWidth), methodWidth);
                 int row = token >> 1;
                 if (row < 1) return -1;
-                int name, parent = 0;
+                int name, signature, parent = 0;
                 if ((token & 1) == 0)
                 {
                     if (row > counts[6]) return -1;
                     name = MethodDefinitions.ReadColumn(image, layout, row, 3);
+                    signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
                 }
                 else
                 {
@@ -62,11 +63,17 @@ namespace PeLibrary
                     uint member = (uint)(memberTable + (row - 1) * memberWidth);
                     parent = Index(image, member, parentWidth);
                     name = Index(image, member + (uint)parentWidth, strings);
+                    signature = Index(image, member + (uint)(parentWidth + strings), blobs);
                 }
                 if (!AssemblyReferences.SameString(declaration, declarationHeaps, slotName, image, heaps, name))
                     continue;
 
                 cursor[0] = i + 1;
+                if (implementation != null)
+                {
+                    implementation[0] = Index(image, at + (uint)classWidth, methodWidth);
+                    implementation[1] = signature;
+                }
                 if ((token & 1) == 0)
                 {
                     int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
@@ -76,10 +83,10 @@ namespace PeLibrary
                 // TypeDef and TypeRef use the same first two tags in
                 // MemberRefParent and TypeDefOrRef, with different widths.
                 int parentTag = parent & 7;
-                if (parentTag > 1) return -2;
+                if (parentTag > 1 && parentTag != 4) return -2;
                 int parentRow = parent >> 3;
-                if (parentRow < 1 || parentRow > counts[parentTag == 0 ? 2 : 1]) return -1;
-                return (parentRow << 2) | parentTag;
+                if (parentRow < 1 || parentRow > counts[parentTag == 4 ? 27 : parentTag == 0 ? 2 : 1]) return -1;
+                return (parentRow << 2) | (parentTag == 4 ? 2 : parentTag);
             }
             return 0;
         }

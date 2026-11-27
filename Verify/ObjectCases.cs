@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Reflection.Emit;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
@@ -34,10 +35,10 @@ internal static class ObjectCases
 
         AddThirdPartyBaseCase(cases, output);
 
-        Reject("wrong field owner", read, 0x7b, field);
-        Reject("wrong direct call signature", isolated, 0x6f, wrongMethod);
+        Reject("wrong field owner", read, OpCodes.Ldfld, field);
+        Reject("wrong direct call signature", isolated, OpCodes.Callvirt, wrongMethod);
 
-        void Reject(string fixture, int row, byte operation, int token)
+        void Reject(string fixture, int row, OpCode operation, int token)
         {
             var definition = metadata.GetMethodDefinition(MetadataTokens.MethodDefinitionHandle(row));
             int rva = definition.RelativeVirtualAddress;
@@ -45,8 +46,8 @@ internal static class ObjectCases
             int header = section.PointerToRawData + rva - section.VirtualAddress;
             int ilStart = header + ((image[header] & 3) == 2 ? 1 : (image[header + 1] >> 4) * 4);
             byte[] il = pe.GetMethodBody(rva).GetILBytes()!;
-            int at = Array.IndexOf(il, operation);
-            if (at < 0) throw new InvalidOperationException($"Fixture lacks opcode {operation:x2}.");
+            int at = IlOffsets.Find(il, operation);
+            if (at < 0) throw new InvalidOperationException($"Fixture lacks opcode {operation.Name}.");
             var invalid = (byte[])image.Clone();
             BinaryPrimitives.WriteInt32LittleEndian(invalid.AsSpan(ilStart + at + 1), token);
             Array.Fill(output, (byte)0xa5);

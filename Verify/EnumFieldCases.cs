@@ -30,6 +30,8 @@ internal static class EnumFieldCases
         Compare(nameof(Kernels.RoundTripWide), new[] { long.MinValue, -4294967297L, -1, 0, 1, 4294967297L, long.MaxValue },
             Wide, value => Wide(Kernels.RoundTripWide(value)));
 
+        Compare(nameof(Kernels.EnumVectors), new[] { 0, 1, 2, 3, 4 }, value => value, value => Kernels.EnumVectors(value));
+
         string read = nameof(Kernels.Read);
         var (readInputs, readHex) = Compile(read);
         try

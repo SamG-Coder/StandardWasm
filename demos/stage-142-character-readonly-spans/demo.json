@@ -1,0 +1,8 @@
+{
+  "assembly": "CharacterReadOnlySpansFixture",
+  "targetFramework": "net10.0",
+  "exportType": "CharacterReadOnlySpansFixture.Kernels",
+  "method": "CodeUnit",
+  "inputs": [4],
+  "expected": 65535
+}

@@ -1,8 +1,9 @@
 # 0083 · Native imports for blittable P/Invokes and InternalCalls
 
 Status is proposed in #274 (Stage 156), the first milestone of that issue. Codex agreed the
-import interface (handoff codex-274-import-interface-ack) and keeps #232's own Win32 adapters
-separate. This builds on decision 0024, where the managed/native boundary stopped at the compiler.
+import interface (handoff codex-274-import-interface-ack). The executable loader keeps the fixed
+Win32 and typed native import namespaces separate and shares the two last-error slots within each
+instance. This builds on decision 0024, where the managed/native boundary stopped at the compiler.
 
 ## Problem
 

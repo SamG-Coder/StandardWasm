@@ -13,7 +13,8 @@ internal static class FlowCases
         using var pe = new PEReader(new MemoryStream(image));
         var md = pe.GetMetadataReader();
         var defs = new Dictionary<string, MethodDefinitionHandle>();
-        foreach (var handle in md.MethodDefinitions)
+        var kernels = md.GetTypeDefinition(MetadataTokens.TypeDefinitionHandle(typeof(FlowKernels).MetadataToken & 0xffffff));
+        foreach (var handle in kernels.GetMethods())
         {
             string name = md.GetString(md.GetMethodDefinition(handle).Name);
             if (name == "Fold" || name == "Select" || name == "UnsignedChoice")

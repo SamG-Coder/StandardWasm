@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>netstandard2.0</TargetFramework></PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+  </PropertyGroup>
   <ItemGroup>
-    <Compile Remove="Dependency/**/*.cs" />
+    <Compile Remove="Dependency/**/*.cs;Oracle/**/*.cs;Containment/**/*.cs" />
     <ProjectReference Include="Dependency/ValueConstructionDependency.csproj" />
     <Compile Include="../../src/AssemblyReader/*.cs" Link="%(Filename)%(Extension)" />
     <Compile Include="../../src/PortableCompiler/*.cs" Link="%(Filename)%(Extension)" />

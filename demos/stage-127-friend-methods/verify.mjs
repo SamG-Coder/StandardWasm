@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { root, run } from "../../scripts/toolchain.mjs";
 
-// Stage 127 (decision 0055): bind internal and protected internal methods across friend
+// Stage 127 (decision 0055): bind internal and protected internal members across friend
 // assemblies. The CLR loads each caller with the provider under test and is the oracle.
 const stage = join(root, "demos", "stage-127-friend-methods");
 const compiler = process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts", "StandardWasm.Compiler.wasm");
@@ -56,7 +56,7 @@ async function runCases(compiler, images, cases) {
         const diagnostic = [0, 1, 2].map(index => build.ReadDiagnostic(location, index));
 
         if (test.status !== undefined) {
-            // The CLR refused this friend call; the compiler must refuse it at the same call.
+            // A CLR access denial must be diagnosed at the corresponding IL instruction.
             if (status !== test.status || diagnostic.join(",") !== test.diagnostic.join(","))
                 throw Error(label + " returned " + status + " at " + diagnostic + ", expected " + test.status + " at " + test.diagnostic);
             for (let i = 0; i < 4096; i++)
@@ -93,7 +93,8 @@ try {
     }, { count: files.length, cases: oracle.cases, source: runCases.toString() });
     assert.deepEqual(edge, node);
     writeFileSync(join(evidence, "results.json"), JSON.stringify({ node: process.version, edge: browser.version(), results: node }, null, 2) + "\n");
-    const accepted = node.filter(result => result.values).length;
-    console.log("Node " + process.version + " and Edge " + browser.version() + " matched " + accepted +
-        " granted friend calls and " + (node.length - accepted) + " CLR access denials.");
+    const accepted = node.filter(result => result.values);
+    const comparisons = accepted.reduce((count, result) => count + result.values.length, 0);
+    console.log("Node " + process.version + " and Edge " + browser.version() + " matched " + comparisons +
+        " CLR results and " + (node.length - accepted.length) + " CLR access denials.");
 } finally { await browser.close(); }

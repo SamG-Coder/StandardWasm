@@ -4,9 +4,7 @@ namespace PeLibrary
 {
     internal static class StringMetadata
     {
-        internal const int Length = 1, Character = 2, Concat = 3, FromChars = 4, OrdinalEquals = 5;
-        // Stage 149 (decision 0077): 7 matches the integration line, where Empty is 6.
-        internal const int PinnableReference = 7;
+        internal const int Length = 1, Character = 2, Concat = 3, FromChars = 4, OrdinalEquals = 5, Empty = 6, PinnableReference = 7;
 
         internal static int CopyLiteral(byte[] image, int[] streams, int tokenOffset, byte[] bytes, int used)
         {
@@ -65,12 +63,16 @@ namespace PeLibrary
 
             uint name = Index(image, at + (uint)parentWidth, strings);
             uint sig = Index(image, at + (uint)(parentWidth + strings), blobs);
-            if (!Fits(name, 6, (uint)streams[3]) || !Fits(sig, 4, (uint)streams[1])) return 0;
+            if (!Fits(name, 6, (uint)streams[3]) || !Fits(sig, 3, (uint)streams[1])) return 0;
+            uint signature = (uint)streams[0] + sig;
+            if (PlatformTypeReferences.Named(image, (uint)streams[2], (uint)streams[3], name, 5,
+                0x74706d45, 0x79, 0) && U16(image, signature) == 0x0602 && image[signature + 2] == 0x0e)
+                return Empty;
+            if (!Fits(sig, 4, (uint)streams[1])) return 0;
             if (MatchesAscii(image, streams, name, "GetPinnableReference") &&
-                PinnableSignature(image, streams, methods, counts, (int)(streams[0] + sig)))
+                PinnableSignature(image, streams, methods, counts, (int)signature))
                 return PinnableReference;
             n = (uint)streams[2] + name;
-            uint signature = (uint)streams[0] + sig;
             if (Fits(name, 7, (uint)streams[3]) && U32(image, n) == 0x636e6f43 &&
                 U16(image, n + 4) == 0x7461 && image[n + 6] == 0 &&
                 Fits(sig, 6, (uint)streams[1]) && U32(image, signature) == 0x0e020005 &&
@@ -145,5 +147,47 @@ namespace PeLibrary
         }
 
         private static uint Index(byte[] image, uint at, int width) => width == 2 ? U16(image, at) : U32(image, at);
+
+        internal static int AccessorDefinition(byte[] image, int[] streams, int[] methods, int row)
+        {
+            uint name = (uint)MethodDefinitions.ReadColumn(image, methods, row, 3);
+            bool length = MatchesAscii(image, streams, name, "get_Length");
+            if (!length && !MatchesAscii(image, streams, name, "get_Chars")) return 0;
+            int owner = ObjectLayouts.Owner(image, streams, methods, row, false);
+            if (owner < 1 || !PlatformTypeReferences.IsString(image, streams, methods, owner << 2)) return 0;
+            uint signature = (uint)MethodDefinitions.ReadColumn(image, methods, row, 4);
+            uint at = (uint)streams[0] + signature;
+            if (!Fits(signature, length ? 4u : 5u, (uint)streams[1])) return 0;
+            if (length) return U32(image, at) == 0x08002003 ? Length : 0;
+            return U32(image, at) == 0x03012004 && image[at + 4] == 8 ? Character : 0;
+        }
+
+        internal static bool IsFirstCodeUnitDefinition(byte[] image, int[] streams, int[] methods, int row)
+        {
+            int owner = ObjectLayouts.Owner(image, streams, methods, row, true);
+            if (owner < 1 || !PlatformTypeReferences.IsString(image, streams, methods, owner << 2)) return false;
+            int table = AssemblyReferences.FieldTable(image, streams, methods);
+            if (table < 0) return false;
+            var field = new int[3];
+            AssemblyReferences.ReadField(image, methods, table, row, field);
+            if ((field[0] & 0x10) != 0 || !MatchesAscii(image, streams, (uint)field[1], "_firstChar") ||
+                !Fits((uint)field[2], 3, (uint)streams[1])) return false;
+            uint at = (uint)(streams[0] + field[2]);
+            return U16(image, at) == 0x0602 && image[at + 2] == 3; // FIELD CHAR
+        }
+
+        internal static bool IsEmptyDefinition(byte[] image, int[] streams, int[] methods, int row)
+        {
+            int owner = ObjectLayouts.Owner(image, streams, methods, row, true);
+            if (owner < 1 || !PlatformTypeReferences.IsString(image, streams, methods, owner << 2)) return false;
+            int table = AssemblyReferences.FieldTable(image, streams, methods);
+            if (table < 0) return false;
+            var field = new int[3];
+            AssemblyReferences.ReadField(image, methods, table, row, field);
+            if ((field[0] & 0x10) == 0 || !MatchesAscii(image, streams, (uint)field[1], "Empty") ||
+                !Fits((uint)field[2], 3, (uint)streams[1])) return false;
+            uint at = (uint)(streams[0] + field[2]);
+            return U16(image, at) == 0x0602 && image[at + 2] == 0x0e;
+        }
     }
 }

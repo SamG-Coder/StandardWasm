@@ -40,17 +40,9 @@ internal static class EmbeddedValueCases
             });
         }
 
-        string borrow = nameof(Kernels.RejectBorrow);
-        byte[] borrowIl = IL(borrow);
-        int afterInitAddress = Offset(borrow, OpCodes.Ldloca_S) + 2;
-        int borrowed = IlOffsets.Find(borrowIl[afterInitAddress..], OpCodes.Ldloca_S);
-        if (borrowed < 0) throw new InvalidOperationException("No escaping local address in the fixture.");
-        // The address scan hands a call on the address to the linker (stage 111),
-        // which rejects every target except a value constructor at the call.
-        int escape = IlOffsets.Find(borrowIl[(afterInitAddress + borrowed)..], OpCodes.Call);
-        if (escape < 0) throw new InvalidOperationException("No escaping call in the fixture.");
-        Reject("escaping borrow", bundle, borrow, afterInitAddress + borrowed + escape, -2);
+        Compare(nameof(Kernels.BorrowValue), Kernels.BorrowValue);
         Reject("exported value", bundle, nameof(Kernels.RejectExport), -1, -2);
+        Reject("exported managed address", bundle, nameof(Kernels.RejectExportedAddress), -1, -2);
 
         string assign = nameof(Kernels.Assign);
         using var pe = new PEReader(new MemoryStream(image));

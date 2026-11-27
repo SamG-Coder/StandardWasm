@@ -30,6 +30,14 @@ namespace VolatileFieldDemo
 
         public static int Read(Mailbox mailbox) => mailbox.State;
         public static int ReadStatic() => Mailbox.Shared;
+
+        public static int RunStatic(int value)
+        {
+            Mailbox.Shared = value;
+            int before = ReadStatic();
+            Mailbox.Shared = unchecked(value + 3);
+            return unchecked(before * 7 + ReadStatic());
+        }
     }
 
     public static class Demo

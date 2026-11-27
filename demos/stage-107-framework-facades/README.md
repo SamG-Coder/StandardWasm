@@ -9,10 +9,10 @@ original CoreLib bodies that must come from a 32-bit CoreLib
 directory. The runner otherwise uses the x86 CLR's runtime directory.
 
 The test builds unchanged C# as .NET Standard 2.0 and 2.1 DLLs. It runs the same
-DLLs on the CLR and compiles their Double.IsNaN and Char.IsHighSurrogate calls in
-Node and Edge through the installed netstandard 2.1 facade. It expects 20
-matching values and six matching diagnostics. The original List<int> passes the constructor's deferred
-initialization check and still reports an unsupported call at List.Add.
+DLLs on the CLR and compiles their `Double.IsNaN`, `Char.IsHighSurrogate`, and
+`List<int>` calls in Node and Edge through the installed netstandard 2.1 facade.
+The list fixture covers first use, repeated capacity growth, and reads after
+resizing. Both target frameworks contribute to 32 CLR comparisons.
 
 The tests reject a missing or duplicate facade, an unlisted version, a changed
 key, and a non-neutral culture. The caller is responsible for choosing the

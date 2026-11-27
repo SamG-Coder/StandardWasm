@@ -5,22 +5,76 @@ namespace PeLibrary
 {
     internal static class ReflectionMembers
     {
-        internal const int TypeModule = 1, TypeAssembly = 2, ModuleAssembly = 3, ModuleName = 4, ResourceStream = 5;
+        internal const int TypeModule = 1, TypeAssembly = 2, ModuleAssembly = 3, ModuleName = 4,
+            ResourceStream = 5, ExecutingAssembly = 6, TypeName = 7, TypeNamespace = 8;
 
-        internal static int Identify(byte[] image, int[] heaps, int[] layout, int row)
+        internal static bool IsTypeText(int member) => member == TypeName || member == TypeNamespace;
+
+        internal static bool IsCoreTypeAssemblyGetter(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            if (!IsAbstractGetter(image, heaps, layout, row, "get_Assembly")) return false;
+            var counts = new int[45];
+            int first = CoreGetter(image, heaps, layout, row, counts, "System", "Type");
+            if (first < 0) return false;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), 0, cursor);
+            if (end < 0 || !SignatureReader.TakeElement(image, cursor, end, 0x12)) return false;
+            int result = CompressedUnsigned(image, cursor[0], end, cursor);
+            return result > 0 && (result & 3) == 0 && cursor[0] == end &&
+                ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, result >> 2, "System.Reflection", "Assembly");
+        }
+
+        internal static int CoreTypeTextGetter(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x450) != 0x440) return 0;
+            uint name = (uint)MethodDefinitions.ReadColumn(image, layout, row, 3);
+            int kind = MatchesAscii(image, heaps, name, "get_Namespace") ? TypeNamespace :
+                MatchesAscii(image, heaps, name, "get_Name") ? TypeName : 0;
+            if (kind == 0) return 0;
+            var counts = new int[45];
+            bool simpleName = kind == TypeName;
+            if (CoreGetter(image, heaps, layout, row, counts, simpleName ? "System.Reflection" : "System",
+                simpleName ? "MemberInfo" : "Type") < 0) return 0;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), 0, cursor);
+            return end >= 0 && SignatureReader.TakeElement(image, cursor, end, 0x0e) && cursor[0] == end ? kind : 0;
+        }
+
+        private static bool IsAbstractGetter(byte[] image, int[] heaps, int[] layout, int row, string name) =>
+            (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x450) == 0x440 &&
+            MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), name);
+
+        private static int CoreGetter(byte[] image, int[] heaps, int[] layout, int row, int[] counts, string space, string type)
+        {
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return -1;
+            int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+            return owner >= 1 && ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, owner, space, type) ? first : -1;
+        }
+
+        internal static int Identify(byte[] image, int[] heaps, int[] layout, int row, bool staticCall)
         {
             var member = new int[AssemblyReferences.SymbolWidth];
             if (AssemblyReferences.ReadMember(image, heaps, layout, row, member) < 0 ||
                 member[AssemblyReferences.Depth] != 0) return 0;
+            if (staticCall && !MatchesAscii(image, heaps, (uint)member[4], "GetExecutingAssembly")) return 0;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
             if (first < 0) return 0;
             int owner = PlatformTypeReferences.Identify(image, heaps, layout, counts, first, member[AssemblyReferences.Leaf]);
-            if (owner != Type && owner != Module && owner != Assembly) return 0;
+            bool typeName = !staticCall && (owner == Type || owner == TypeBase) &&
+                MatchesAscii(image, heaps, (uint)member[4], "get_Name");
+            if (owner != Type && owner != Module && owner != Assembly && !typeName) return 0;
 
             uint heap = (uint)heaps[2], length = (uint)heaps[3], name = (uint)member[4];
             int kind = 0, result = 0;
-            if (owner == Assembly)
+            if (staticCall)
+            {
+                if (owner != Assembly) return 0;
+                kind = ExecutingAssembly;
+                result = Assembly;
+            }
+            else if (owner == Assembly)
             {
                 if (!MatchesAscii(image, heaps, name, "GetManifestResourceStream")) return 0;
                 kind = ResourceStream;
@@ -36,6 +90,16 @@ namespace PeLibrary
                 kind = owner == Type ? TypeAssembly : ModuleAssembly;
                 result = Assembly;
             }
+            else if (typeName)
+            {
+                kind = TypeName;
+                result = String;
+            }
+            else if (owner == Type && MatchesAscii(image, heaps, name, "get_Namespace"))
+            {
+                kind = TypeNamespace;
+                result = String;
+            }
             else if (owner == Module && Named(image, heap, length, name, 8, 0x5f746567, 0x656d614e, 0)) // get_Name
             {
                 kind = ModuleName;
@@ -49,7 +113,8 @@ namespace PeLibrary
             int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
             int start = next[0];
             int parameters = kind == ResourceStream ? 1 : 0;
-            if (size < 3 || size > limit - start || image[start] != 0x20 || image[start + 1] != parameters) return 0;
+            int convention = staticCall ? 0 : 0x20;
+            if (size < 3 || size > limit - start || image[start] != convention || image[start + 1] != parameters) return 0;
             if (result == String) return size == 3 && image[start + 2] == 0x0e ? kind : 0;
             if (image[start + 2] != 0x12) return 0;
             int end = start + size;

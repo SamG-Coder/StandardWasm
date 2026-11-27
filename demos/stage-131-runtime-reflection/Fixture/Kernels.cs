@@ -36,6 +36,13 @@ namespace ReflectionFixture
             return (own == moduleOwner ? 4 : 0) + (own == other ? 8 : 0);
         }
 
+        public static int NullTypeAssembly()
+        {
+            Type type = null;
+            try { return (object)type.Assembly == null ? 0 : 1; }
+            catch (NullReferenceException) { return 16; }
+        }
+
         public static int ResourceBufferIdentity()
         {
             var bytes = new byte[3];

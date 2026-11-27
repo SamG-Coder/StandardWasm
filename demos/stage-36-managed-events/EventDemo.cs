@@ -13,8 +13,43 @@ namespace EventLibrary
             PortableCompiler.MethodCompiler.Compile(image, row, output);
     }
 
+    internal sealed class DelegateSlot
+    {
+        private Delegate handler;
+
+        internal Delegate Update(Delegate next, bool remove)
+        {
+            handler = remove ? Delegate.Remove(handler, next) : Delegate.Combine(handler, next);
+            return handler;
+        }
+    }
+
     public static class EventCases
     {
+        public static int BaseDelegateStorage(int scenario)
+        {
+            var sender = new EventSource();
+            var log = new EventLog(sender);
+            var slot = new DelegateSlot();
+            EventHandler first = log.First;
+            EventHandler second = log.Second;
+            Delegate original = slot.Update(first, false);
+            if ((object)original != first) return -1;
+            Delegate combined = slot.Update(second, false);
+            if (scenario == 0)
+                ((EventHandler)combined)(sender, EventArgs.Empty);
+            else if (scenario == 1)
+                ((EventHandler)slot.Update(first, true))(sender, EventArgs.Empty);
+            else if (scenario == 2)
+                return slot.Update(null, true) == null ? -2 : 1;
+            else
+            {
+                slot.Update(first, true);
+                return slot.Update(second, true) == null ? 1 : -3;
+            }
+            return log.Value;
+        }
+
         public static int CompareHandlerField()
         {
             var sender = new EventSource();

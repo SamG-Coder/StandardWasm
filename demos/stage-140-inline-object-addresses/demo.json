@@ -1,0 +1,8 @@
+{
+  "assembly": "InlineObjectAddressesFixture",
+  "targetFramework": "net10.0",
+  "exportType": "InlineObjectAddressesFixture.Kernels",
+  "method": "DefaultKeepsAlias",
+  "inputs": [],
+  "expected": 17
+}

@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Reflection;
-using System.Reflection.Emit;
 using BootstrapLibrary;
 using ValueConstructionDemo;
 using ValueConstructionDependency;
@@ -22,14 +21,32 @@ internal static class ValueConstructionCases
         Check(nameof(Kernels.Chained), Kernels.Chained);
         Check(nameof(Kernels.Argument), Kernels.Argument);
         Check(nameof(Kernels.Guarded), Kernels.Guarded);
+        Check(nameof(Kernels.DisposeScoped), Kernels.DisposeScoped);
 
-        // A receiver method that writes through this needs copy-out (decision
-        // 0049), and a byref argument needs general managed byrefs. The write
-        // is diagnosed in the callee at its stfld.
+        Check(nameof(Kernels.BorrowExtent), Kernels.BorrowExtent);
+        Check(nameof(ClosedClassProbe.CheckClosedClassSlots), ClosedClassProbe.CheckClosedClassSlots);
+        Check(nameof(ClosedClassProbe.CheckClosedClassNull), ClosedClassProbe.CheckClosedClassNull);
+        Check(nameof(ClosedInterfaceProbe.CheckClosedInterface), ClosedInterfaceProbe.CheckClosedInterface);
+        Check(nameof(ClosedInterfaceProbe.CheckClosedInterfaceNull), ClosedInterfaceProbe.CheckClosedInterfaceNull);
+        Check(nameof(InterfaceCastProbe.CheckInterfaceCasts), InterfaceCastProbe.CheckInterfaceCasts);
+        Check(nameof(EntryArrayProbe.UpdateEntryArray), EntryArrayProbe.UpdateEntryArray);
+        Check(nameof(EntryArrayProbe.ClearInteriorFields), EntryArrayProbe.ClearInteriorFields);
+        Check(nameof(MutableReceiverProbe.CheckMutableReceiver), MutableReceiverProbe.CheckMutableReceiver);
+        Check(nameof(MutableReceiverProbe.CheckExceptionalMutation), MutableReceiverProbe.CheckExceptionalMutation);
+        Check(nameof(EntryArrayProbe.CheckEntryArrayFailure), EntryArrayProbe.CheckEntryArrayFailure);
+        Check(nameof(BucketProbe.ReadManagedBuckets), BucketProbe.ReadManagedBuckets);
+        Check(nameof(BucketProbe.CheckBucketFailure), BucketProbe.CheckBucketFailure);
+        Check(nameof(ByRefReturnProbe.CheckReturnedLocations), ByRefReturnProbe.CheckReturnedLocations);
+        Check(nameof(ByRefReturnProbe.CheckReturnedLocationFailure), ByRefReturnProbe.CheckReturnedLocationFailure);
+        MethodInfo exportedLocation = Method(nameof(ByRefReturnProbe.RejectExportedLocation));
+        Reject(exportedLocation, [0, Row(exportedLocation), -1]);
+        MethodInfo exportedBucket = Method(nameof(BucketProbe.RejectExportedBucket));
+        Reject(exportedBucket, [0, Row(exportedBucket), -1]);
+
+        // A call using the read-only receiver ABI still diagnoses a write
+        // through this at the callee's stfld (decision 0049).
         MethodInfo assign = typeof(Rejected).GetMethod("Assign", BindingFlags.NonPublic | BindingFlags.Instance)!;
         Reject(Method(nameof(Kernels.RejectReceiverCall)), [0, Row(assign), 0]);
-        MethodInfo borrow = Method(nameof(Kernels.RejectBorrow));
-        Reject(borrow, [0, Row(borrow), Offset(borrow, OpCodes.Call, 1)]);
 
         void Check(string name, Func<int, int> expectedResult)
         {
@@ -65,15 +82,12 @@ internal static class ValueConstructionCases
         }
     }
 
-    private static MethodInfo Method(string name) => typeof(Kernels).GetMethod(name)!;
+    private static MethodInfo Method(string name) =>
+        typeof(Kernels).GetMethod(name) ?? typeof(BucketProbe).GetMethod(name) ??
+        typeof(EntryArrayProbe).GetMethod(name) ?? typeof(ClosedInterfaceProbe).GetMethod(name) ??
+        typeof(ClosedClassProbe).GetMethod(name) ?? typeof(MutableReceiverProbe).GetMethod(name) ??
+        typeof(InterfaceCastProbe).GetMethod(name) ?? typeof(ByRefReturnProbe).GetMethod(name)!;
     private static int Row(MethodBase method) => method.MetadataToken & 0xffffff;
-
-    private static int Offset(MethodBase method, OpCode opcode, int skip = 0)
-    {
-        int offset = IlOffsets.Find(method.GetMethodBody()!.GetILAsByteArray()!, opcode, skip);
-        if (offset < 0) throw new InvalidOperationException($"{method.Name} lacks {opcode}.");
-        return offset;
-    }
 
     private static byte[] Manifest(MethodBase method)
     {

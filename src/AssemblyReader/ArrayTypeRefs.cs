@@ -18,15 +18,15 @@ namespace PeLibrary
             return 0;
         }
 
-        internal static int ElementType(byte[] image, int[] streams, int[] methods, uint token)
+        internal static int TokenElement(byte[] image, int[] streams, int[] methods, uint token)
         {
             int row = (int)(token & 0xffffff);
-            if (token >> 24 != 1 || row == 0)
-                return -2;
-            int element = PrimitiveElement(image, streams, methods, row << 2 | 1, includeRuntimeExtensions: true);
-            if (element < 0) return element;
-            int storage = Storage(element);
-            return storage != 0 ? storage : -2;
+            uint table = token >> 24;
+            if ((table != 1 && table != 2) || row == 0) return -2;
+            // CoreLib names its own primitives with TypeDef tokens. Resolve them
+            // through the same platform-identity check as signature binding.
+            int coded = row << 2 | (table == 1 ? 1 : 0);
+            return PrimitiveElement(image, streams, methods, coded, includeRuntimeExtensions: true);
         }
 
         internal static int PrimitiveElement(byte[] image, int[] streams, int[] methods, int coded, bool includeRuntimeExtensions = false)
@@ -57,13 +57,48 @@ namespace PeLibrary
             else
             {
                 if (!PlatformAssemblyIdentity.IsCoreLibDefinition(image, streams, methods, counts)) return -2;
-                int extends = counts[1] < 16384 && counts[2] < 16384 && counts[27] < 16384 ? 2 : 4;
-                int width = 4 + 2 * strings + extends + Width(counts[4]) + Width(counts[6]);
-                uint type = (uint)(refs + counts[1] * refWidth + (row - 1) * width);
-                if ((U32(image, type) & 7) != 1) return -2; // Top-level public primitive.
-                name = Index(image, type + 4, strings);
-                ns = Index(image, type + (uint)(4 + strings), strings);
+                int table = refs + counts[1] * refWidth;
+                return DefinitionElement(image, streams, methods, counts, table, row);
             }
+            return NamedElement(image, streams, name, ns);
+        }
+
+        // Find the nominal CoreLib definition behind a CLI primitive element.
+        // The caller can use its InterfaceImpl rows without registering a GC layout.
+        internal static int CoreDefinition(byte[] image, int[] streams, int[] methods, int element)
+        {
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
+            if (first < 0) return first;
+            if (!PlatformAssemblyIdentity.IsCoreLibDefinition(image, streams, methods, counts)) return 0;
+            int strings = methods[2];
+            int guid = (image[streams[4] + 6] & 2) == 0 ? 2 : 4;
+            int scope = counts[0] < 16384 && counts[26] < 16384 && counts[35] < 16384 && counts[1] < 16384 ? 2 : 4;
+            int table = first + counts[0] * (2 + strings + 3 * guid) + counts[1] * (scope + 2 * strings);
+            int found = 0;
+            for (int row = 1; row <= counts[2]; row++)
+            {
+                if (DefinitionElement(image, streams, methods, counts, table, row) != element) continue;
+                if (found != 0) return -1;
+                found = row;
+            }
+            return found;
+        }
+
+        private static int DefinitionElement(byte[] image, int[] streams, int[] methods, int[] counts, int table, int row)
+        {
+            int strings = methods[2];
+            int extends = counts[1] < 16384 && counts[2] < 16384 && counts[27] < 16384 ? 2 : 4;
+            int width = 4 + 2 * strings + extends + Width(counts[4]) + Width(counts[6]);
+            uint type = (uint)(table + (row - 1) * width);
+            if ((U32(image, type) & 7) != 1) return -2; // Top-level public primitive.
+            uint name = Index(image, type + 4, strings);
+            uint ns = Index(image, type + (uint)(4 + strings), strings);
+            return ns == 0 ? -2 : NamedElement(image, streams, name, ns);
+        }
+
+        private static int NamedElement(byte[] image, int[] streams, uint name, uint ns)
+        {
             uint heapSize = (uint)streams[3];
             if (ns == 0 || name == 0 || !Fits(ns, 7, heapSize) || !Fits(name, 1, heapSize))
                 return -1;

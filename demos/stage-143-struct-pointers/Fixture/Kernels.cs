@@ -19,12 +19,52 @@ namespace StructPointerFixture
     public struct WithStatic { public static long Shared; public byte B; }
     public struct Mixed { public byte B; public long L; public short S; public double D; }
 
+    public unsafe struct ConstructorPair
+    {
+        public int Value;
+
+        public ConstructorPair(ConstructorPair* other, int value)
+        {
+            other->Value = value + 2;
+            Value = value + 5;
+        }
+    }
+
+    public struct MethodCounter
+    {
+        private int value;
+
+        public MethodCounter(int value) => this.value = value;
+
+        public int Add(int delta)
+        {
+            value = unchecked(value + delta);
+            return value;
+        }
+    }
+
+    public struct LocalFlags
+    {
+        public static int Shared;
+        public int First;
+        public int Second;
+    }
+
     // Pack and Size change the CLR byte layout: sizeof stays a located diagnostic (x86 CLR: 5, 12).
     [StructLayout(LayoutKind.Sequential, Pack = 1)] public struct Packed { public byte B; public int I; }
     [StructLayout(LayoutKind.Sequential, Size = 12)] public struct Sized { public int I; }
 
     public static unsafe class Kernels
     {
+        private struct Address<T> where T : unmanaged
+        {
+            private void* address;
+
+            public Address(void* address) => this.address = address;
+
+            public T* Value => (T*)address;
+        }
+
         public static int PackedSize() => sizeof(Packed);
         public static int SizedSize() => sizeof(Sized);
         public static int ByteLongSize() => sizeof(ByteLong);
@@ -46,5 +86,39 @@ namespace StructPointerFixture
         public static int FieldAddress(Rect* r) { int* p = &r->Bottom; *p = 99; return (int)((byte*)p - (byte*)r) * 1000 + r->Bottom; }
         public static int NullRect() { try { return ((Rect*)null)->Top; } catch (System.NullReferenceException) { return -5; } }
         public static int Walk(Rect* rs, int n) { int s = 0; for (int i = 0; i < n; i++) s += rs[i].Left * 3 + rs[i].Bottom; return s; }
+
+        public static int ReadGenericAddresses(Rect* rectangle, int* number)
+        {
+            var rectangleAddress = new Address<Rect>(rectangle);
+            var numberAddress = new Address<int>(number);
+            return rectangleAddress.Value->Bottom + *numberAddress.Value;
+        }
+
+        public static int MutateNativeReceiver(MethodCounter* incoming, int value)
+        {
+            return unchecked(incoming->Add(value) + incoming->Add(1));
+        }
+
+        public static int MutateBothReceivers(MethodCounter* incoming, int value)
+        {
+            var local = new MethodCounter(17);
+            return unchecked(incoming->Add(value) + local.Add(value) + local.Add(1));
+        }
+
+        public static int InitializeAddressedLocal(int value)
+        {
+            LocalFlags flags = default(LocalFlags);
+            LocalFlags* address = &flags;
+            address->First = value;
+            int first = flags.First;
+            flags = default(LocalFlags);
+            return unchecked(first * 13 + address->First + address->Second);
+        }
+
+        public static int ConstructorFieldStores(ConstructorPair* other, int value)
+        {
+            var current = new ConstructorPair(other, value);
+            return current.Value * 100 + other->Value;
+        }
     }
 }

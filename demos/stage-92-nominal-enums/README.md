@@ -5,7 +5,9 @@ Two compiled .NET Standard assemblies exercise nominal enum field and
 method signatures. The eight C# backing types use their integer CLR
 stack behavior and the corresponding Wasm field storage. The fixture
 checks flag masks, unnamed values, exact overload selection and packed
-loads across an inherited layout.
+loads across an inherited layout. Enum vectors cover default initialization,
+packed and full-width element access, separate same-width enum types, and
+typed null and index failures.
 
 Enum storage does not implement boxing, reflection or native ABI behavior.
 
