@@ -7,13 +7,16 @@ namespace PortableCompiler
     internal sealed class FinalizerSlots
     {
         internal readonly int[] RegistrationFixups = new int[1];
+        internal readonly int[] SuppressionFixups = new int[1];
         private readonly byte[] cached = new byte[MaxClasses];
         private readonly int[] callbacks = new int[MaxClasses];
         private readonly int[] root = new int[2];
+        private int suppressRow;
 
         internal bool Registers(int type) => type >= FirstClass && cached[type - FirstClass] == 2;
         internal int Callback(int type) => callbacks[type - FirstClass] - 1;
         internal void BindCallback(int type, int function) => callbacks[type - FirstClass] = function + 1;
+        internal bool IsSuppression(int owner, int row) => owner == root[0] && row == suppressRow && row != 0;
 
         internal int ReadRoot(BundleImages bundle)
         {
@@ -41,12 +44,30 @@ namespace PortableCompiler
                         if ((flags & 0x157) != 0x144 || !Signature(image, heaps, blob)) return -2;
                         root[0] = owner;
                         root[1] = row;
+                        suppressRow = FindSuppression(image, heaps, layout, counts, first);
                         return 0;
                     }
                 }
                 return -2;
             }
             return -2;
+        }
+
+        private static int FindSuppression(byte[] image, int[] heaps, int[] layout, int[] counts, int first)
+        {
+            for (int row = 1; row <= counts[6]; row++)
+            {
+                if (!MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "SuppressFinalize")) continue;
+                int type = Owner(image, heaps, layout, row, false);
+                if (!NamedDefinition(image, heaps, layout, counts, first, type, "System", "GC")) continue;
+                int flags = MethodDefinitions.ReadColumn(image, layout, row, 2);
+                int blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
+                if ((flags & 0x57) != 0x16 || blob <= 0 || !Fits((uint)blob, 5, (uint)heaps[1])) continue;
+                int at = heaps[0] + blob;
+                if (image[at] == 4 && image[at + 1] == 0 && image[at + 2] == 1 && image[at + 3] == 1 && image[at + 4] == 0x1c)
+                    return row;
+            }
+            return 0;
         }
 
         internal int Includes(BundleImages bundle, int[] objects, int type, int[] target)

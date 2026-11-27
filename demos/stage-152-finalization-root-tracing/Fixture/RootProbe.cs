@@ -31,6 +31,13 @@ namespace ManagedFinalizationExperiment
         private static void Notify() => Console.Out.WriteLine();
 
         public static int ObserveConstructor(int seed) => new ConstructorReceiver(seed).Value;
+        public static int ConstructValue(int seed) => new ValueBox(seed).Value;
+
+        private struct ValueBox
+        {
+            internal readonly int Value;
+            internal ValueBox(int value) { Value = value; }
+        }
 
         public static object BuildGraph(int seed)
         {

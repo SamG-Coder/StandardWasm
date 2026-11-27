@@ -77,8 +77,16 @@ match the CLR's destructor and base-call effects. The overriding destructor
 resurrects the same receiver through a managed static. Clearing that static
 and discovering again never schedules another callback unless registered again.
 
-Binding the original CoreLib suppression APIs and collection scheduling
-remain open, along with host roots,
+Ordinary `GC.SuppressFinalize` calls in this fixture resolve through the
+trusted CoreLib definition to the probe's suppression operation. Repeated
+calls are idempotent, and a suppression marker can suppress one registered
+or already pending entry. The tests include the null exception tag,
+non-finalizable objects, and multiple registrations for one receiver. The
+tag carries the exception kind. The probe does not expose the CLR exception
+object or `ParamName`.
+[CoreLib suppression implementation](https://github.com/dotnet/runtime/blob/v10.0.10/src/coreclr/System.Private.CoreLib/src/System/GC.CoreCLR.cs#L317-L330)
+
+Binding re-registration and scheduling collection remain open, along with host roots,
 traversal of runtime wrappers such as view owners and event delegates,
 managed addresses, catch and filter roots, indirect calls and a cleanup policy for
 raw Wasm traps. JavaScript invokes the pass at a probe observation point and

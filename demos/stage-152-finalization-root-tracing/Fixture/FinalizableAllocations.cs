@@ -16,6 +16,7 @@ namespace ManagedFinalizationExperiment
         }
 
         public static int ValueOf(object value) => ((Registered)value).Value;
+        public static void Suppress(object value) => System.GC.SuppressFinalize(value);
 
         public static int Finalized => finalized;
         public static int Total => total;

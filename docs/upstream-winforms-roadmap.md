@@ -86,10 +86,11 @@ snapshot when cleared. The queue discovery pass uses the resulting mark set
 to select registered receivers and includes previously pending receivers when
 tracing. The probe registers new objects before their constructors when the
 allocated type overrides the trusted `Object.Finalize` slot. The remaining
-queue work includes binding suppression and scheduling collection. The probe
-already dispatches the managed destructor and executes its base call chain,
-including resurrection through a static field. Runtime wrappers still need
-explicit tracing.
+queue work includes re-registration and scheduling collection. The probe
+already dispatches the managed destructor, executes its base call chain,
+and binds the trusted suppression method for registered and pending receivers.
+Runtime wrappers still need explicit tracing before integrating this mode with
+the full WinForms application path.
 JavaScript cleanup notifications can release independent host resources, but
 notification timing and delivery alone cannot satisfy the managed queue and
 resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)

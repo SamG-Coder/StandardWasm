@@ -70,8 +70,9 @@ async function observeRoots(bytes) {
     const { __root_probe_table: table, __root_probe_count: count, __root_probe_edge_count: edges,
         __root_probe_edge_read: read, __root_probe_mark: mark, __root_probe_contains: contains,
         __root_probe_clear: clear, __root_probe_register: register, __root_probe_discover: discover,
-        __root_probe_pop: pop, ObserveFrames, ObserveConstructor, ThrowWithRoot, BuildGraph, SetStaticRoot,
-        __root_probe_run_next: runNext, Allocate, ValueOf, get_Finalized, get_Total, get_OverridesRan, TakeResurrected } = instance.exports;
+        __root_probe_pop: pop, ObserveFrames, ObserveConstructor, ConstructValue, ThrowWithRoot, BuildGraph, SetStaticRoot,
+        __root_probe_run_next: runNext, Allocate, ValueOf, Suppress, get_Finalized, get_Total, get_OverridesRan,
+        TakeResurrected } = instance.exports;
     function assertEmpty() {
         if (count.value !== 0) throw new Error("Root scope was not restored");
         for (let i = 0; i < table.length; i++)
@@ -81,6 +82,8 @@ async function observeRoots(bytes) {
     assertEmpty();
     const constructed = ObserveConstructor(11);
     assertEmpty();
+    const constructedValue = ConstructValue(11);
+    if (discover() !== 0) throw new Error("Value construction must not register a finalizer");
     let exception;
     try { ThrowWithRoot(11); }
     catch (error) { exception = error; }
@@ -171,15 +174,43 @@ async function observeRoots(bytes) {
         throw new Error("The resurrected instance lost its identity or finalized twice");
     const allocationFinalizers = { count: get_Finalized(), total: get_Total(), overrides: get_OverridesRan(),
         resurrected: ValueOf(resurrected) };
-    return { values: [value, constructed], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph, staticRoot: true,
-        discovered, allocationReceivers, allocationFinalizers };
+    let nullException = "none";
+    try { Suppress(null); }
+    catch (error) {
+        if (!(error instanceof WebAssembly.Exception) || !error.is(instance.exports["\0argumentNull"])) throw error;
+        nullException = "ArgumentNullException";
+    }
+    const suppressed = Allocate(1, 31);
+    Suppress(suppressed);
+    Suppress(suppressed);
+    Suppress(Allocate(0, 0));
+    Allocate(2, 37);
+    const registered = discover();
+    if (registered !== 1 || runNext() !== 1 || runNext() !== 0) throw new Error("Registered suppression selected the wrong receiver");
+
+    const alreadyPending = Allocate(1, 41);
+    if (discover() !== 1) throw new Error("Expected the receiver to be pending before suppression");
+    Suppress(alreadyPending);
+    if (runNext() !== 0 || discover() !== 0) throw new Error("A suppressed pending callback ran or became pending again");
+    const pending = get_Finalized() - allocationFinalizers.count - registered;
+
+    const duplicated = Allocate(1, 43);
+    register(duplicated);
+    Suppress(duplicated);
+    Suppress(duplicated);
+    const duplicate = discover();
+    if (duplicate !== 1 || runNext() !== 1 || runNext() !== 0 || mark() !== 0)
+        throw new Error("Suppression should consume one registration and leave no root afterward");
+    const suppression = { nullException, registered, pending, duplicate, total: get_Total() - allocationFinalizers.total };
+    return { values: [value, constructed, constructedValue], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph, staticRoot: true,
+        discovered, allocationReceivers, allocationFinalizers, suppression };
 }
 
 const expectedRoots = { values: oracle.rootProbeResult,
     snapshots: [{ count: 3, unique: 2 }, { count: 2, unique: 1 }, { count: 1, unique: 1 }, { count: 3, unique: 2 }, { count: 1, unique: 1 }],
     clearedOnReturn: true, clearedOnUnwind: true, graph: oracle.graph, staticRoot: true, discovered: [0, 1, 0, 1, 2],
     allocationReceivers: { count: oracle.allocationFinalizers.count, total: oracle.allocationFinalizers.total },
-    allocationFinalizers: oracle.allocationFinalizers };
+    allocationFinalizers: oracle.allocationFinalizers, suppression: oracle.suppression };
 const node = await probe(assets);
 assert.deepEqual(node, oracle.result);
 const nodeRoots = await observeRoots(assets.rootProbe);

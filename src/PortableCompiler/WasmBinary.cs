@@ -175,7 +175,8 @@ namespace PortableCompiler
             bool pinTable = PinRegistryWasm.Present(globals) || pointerTable;
             bool tables = thunks[0] != 0 || pinTable;
             int tableSize = 3 + UnsignedSize(thunks[0]) + (pinTable ? 3 : 0) +
-                (pointerTable ? 2 + UnsignedSize(pointers.TargetCount + 1) : 0) + (rootCount >= 0 ? 12 : 0);
+                (pointerTable ? 2 + UnsignedSize(pointers.TargetCount + 1) : 0) +
+                (rootCount >= 0 ? (FinalizerSuppressionWasm.Table - RootStackWasm.Table + 1) * 3 : 0);
             bool elements = thunks[0] != 0 || pointers.TargetCount != 0;
             int elementSize = 5 + UnsignedSize(thunks[0]);
             for (int i = 0; i < thunks[0]; i++)
@@ -409,7 +410,7 @@ namespace PortableCompiler
                 // Table 0 holds delegate thunks (possibly none); table 1 is the
                 // live-pin registry of decision 0077, which starts empty and grows.
                 cursor = Section(output, cursor, 4, tableSize);
-                output[cursor++] = (byte)(rootCount >= 0 ? FinalizerQueueWasm.PendingTable + 1 : pointerTable ? 3 : pinTable ? 2 : 1);
+                output[cursor++] = (byte)(rootCount >= 0 ? FinalizerSuppressionWasm.Table + 1 : pointerTable ? 3 : pinTable ? 2 : 1);
                 output[cursor++] = 0x70;
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, thunks[0]);
@@ -427,8 +428,8 @@ namespace PortableCompiler
                 }
                 if (rootCount >= 0)
                 {
-                    // Frame roots, mark worklist, registered receivers and pending receivers.
-                    for (int table = RootStackWasm.Table; table <= FinalizerQueueWasm.PendingTable; table++)
+                    // Frame roots, mark worklist, registered receivers, pending receivers and suppression markers.
+                    for (int table = RootStackWasm.Table; table <= FinalizerSuppressionWasm.Table; table++)
                     {
                         output[cursor++] = 0x6d;
                         output[cursor++] = 0;

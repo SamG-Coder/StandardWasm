@@ -22,11 +22,12 @@ internal static class EmitRootProbe
         }
         using var manifest = new MemoryStream();
         using var entries = new BinaryWriter(manifest);
-        foreach (string name in new[] { nameof(RootProbe.ObserveFrames), nameof(RootProbe.ObserveConstructor),
+        foreach (string name in new[] { nameof(RootProbe.ObserveFrames), nameof(RootProbe.ObserveConstructor), nameof(RootProbe.ConstructValue),
             nameof(RootProbe.ThrowWithRoot), nameof(RootProbe.BuildGraph), nameof(RootProbe.SetStaticRoot) })
             Export(typeof(RootProbe), name);
         Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.Allocate));
         Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.ValueOf));
+        Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.Suppress));
         Export(typeof(FinalizableAllocations), "get_Finalized");
         Export(typeof(FinalizableAllocations), "get_Total");
         Export(typeof(FinalizableAllocations), "get_OverridesRan");
@@ -54,7 +55,7 @@ internal static class EmitRootProbe
         {
             Console.SetOut(TextWriter.Null);
             try { RootProbe.ThrowWithRoot(11); }
-            catch (NullReferenceException) { return [RootProbe.ObserveFrames(11), RootProbe.ObserveConstructor(11)]; }
+            catch (NullReferenceException) { return [RootProbe.ObserveFrames(11), RootProbe.ObserveConstructor(11), RootProbe.ConstructValue(11)]; }
             throw new Exception("The CLR root probe did not throw NullReferenceException");
         }
         finally { Console.SetOut(original); }

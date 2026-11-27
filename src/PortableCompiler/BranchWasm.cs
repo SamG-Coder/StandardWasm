@@ -638,6 +638,13 @@ namespace PortableCompiler
                     used = CheckedIntegerWasm.Emit(code, used, operand, native ? I32 : type, left, right);
                     used = Local(code, used, 0x21, native ? Spill(spills, maximum, spillFlags, Native, top - 1) : left);
                 }
+                else if (kind == SuppressFinalizer)
+                {
+                    int source = states[state + top];
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, source, top));
+                    code[used++] = 0x10;
+                    used = WasmIndexFixups.Write(code, used, frameShape[7], finalizers.SuppressionFixups);
+                }
                 else if (kind == Call || kind == NewObject)
                 {
                     int arity = arities[operand], shape = offsets[operand];
@@ -648,7 +655,6 @@ namespace PortableCompiler
                     int tracked = 0;
                     if (tracksRoots)
                     {
-                        if (valueObject) return -2;
                         int frameStart = pc * (arguments + locals);
                         for (int local = 0; local < arguments + locals; local++) tracked += frameRoots[frameStart + local];
                         for (int index = 0; index < first; index++)
@@ -657,7 +663,7 @@ namespace PortableCompiler
                             if (IsManagedLocation(type) || IsValueLocation(type) || IsSpan(type)) return -2;
                             if (IsObjectReference(type)) tracked++;
                         }
-                        if (kind == NewObject) tracked++;
+                        if (kind == NewObject && !valueObject) tracked++;
                         if (tracked != 0)
                         {
                             used = RootStackWasm.Enter(code, used, rootCount, rootFrame, tracked);

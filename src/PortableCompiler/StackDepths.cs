@@ -529,6 +529,8 @@ namespace PortableCompiler
                         return -1;
                 return start;
             }
+            if (kind == SuppressFinalizer)
+                return depth != 0 && Assignable(stack[depth - 1], ObjectReference, objects) ? depth - 1 : -2;
             if (kind == BaseCtor)
                 return depth > 0 && stack[depth - 1] >= FirstClass && !IsInterface(objects, stack[depth - 1]) &&
                     !IsValueType(objects, stack[depth - 1]) ? depth - 1 : -1;

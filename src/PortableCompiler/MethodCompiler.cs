@@ -202,7 +202,8 @@ namespace PortableCompiler
             int markedCount = rootProbe ? StaticFields.Register(globals, 0, ReachabilityWasm.GlobalKey, I32) : -1;
             int registeredCount = rootProbe ? StaticFields.Register(globals, 0, FinalizerQueueWasm.RegisteredKey, I32) : -1;
             int pendingCount = rootProbe ? StaticFields.Register(globals, 0, FinalizerQueueWasm.PendingKey, I32) : -1;
-            if (rootProbe && (rootCount < 0 || markedCount < 0 || registeredCount < 0 || pendingCount < 0)) return -3;
+            int suppressedCount = rootProbe ? StaticFields.Register(globals, 0, FinalizerSuppressionWasm.GlobalKey, I32) : -1;
+            if (rootProbe && (rootCount < 0 || markedCount < 0 || registeredCount < 0 || pendingCount < 0 || suppressedCount < 0)) return -3;
             FinalizerSlots finalizers = null;
             if (rootProbe)
             {
@@ -217,7 +218,7 @@ namespace PortableCompiler
             var pinned = new int[frame.Length];
             var booleanLocals = new byte[frame.Length];
             var initializerSlot = new int[1];
-            int exceptionTags = 0;
+            int exceptionTags = rootProbe ? ExceptionTypes.ArgumentNull : 0;
             var noCatch = new int[0];
             var sizingBuffer = new byte[0];
 
@@ -415,6 +416,7 @@ namespace PortableCompiler
                     byte[] frameRoots = null;
                     if (rootProbe)
                     {
+                        if (location.Length != 0) location[2] = -1;
                         if (resourceOpen || initializerPrologue >= 0 || filterEnds != null) return -2;
                         for (int clause = 0; clause < catchRegion.Length; clause += ExceptionClauses.Width)
                             if (!ExceptionClauses.IsFinally(catchRegion, clause)) return -2;
@@ -444,7 +446,7 @@ namespace PortableCompiler
                         parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
                         initializers, reflection, instantiations, methodArguments, inlineLocations, frameCells, parameters,
-                        nativePlans, nativeStatics, booleanLocals, pointers);
+                        nativePlans, nativeStatics, booleanLocals, pointers, finalizers);
                     if (functions < 0)
                         return functions;
                     functions = LinkCallIndirect(bundle, image, heaps, layout, count, owner, context, records, owners, rows,
@@ -552,6 +554,7 @@ namespace PortableCompiler
                                 callback = functions - 1;
                             }
                             finalizers.BindCallback(type, callback);
+                            if (location.Length != 0) location[2] = -1;
                         }
                         long extra = (long)body[1] * (96L + 20L * (parameters + locals + maximum));
                         if (extra > int.MaxValue - capacity) return -3;
@@ -888,16 +891,18 @@ namespace PortableCompiler
             {
                 rootWalker = hostImports + functions;
                 WasmIndexFixups.Resolve(moduleCode, finalizers.RegistrationFixups[0], rootWalker + FinalizerQueueWasm.Register);
-                for (int entry = 0; entry < FinalizerQueueWasm.End; entry++)
+                WasmIndexFixups.Resolve(moduleCode, finalizers.SuppressionFixups[0], rootWalker + FinalizerSuppressionWasm.Suppress);
+                for (int entry = 0; entry < FinalizerSuppressionWasm.End; entry++)
                 {
                     bool read = entry == 1;
                     if (functions >= owners.Length) return -3;
                     int offset = NextSignature(offsets, arities, functions);
                     int arity = read ? 2 : entry == 0 || entry == ReachabilityWasm.Contains || entry == ReachabilityWasm.Add ||
-                        entry == FinalizerQueueWasm.Register ? 1 : 0;
+                        entry == FinalizerQueueWasm.Register || entry == FinalizerSuppressionWasm.Suppress || entry == FinalizerSuppressionWasm.Consume ? 1 : 0;
                     if (arity >= signatures.Length - offset) return -3;
                     signatures[offset] = read || entry == FinalizerQueueWasm.Pop ? ObjectReference :
-                        entry == ReachabilityWasm.Clear || entry == ReachabilityWasm.Add || entry == FinalizerQueueWasm.Register ? Void : I32;
+                        entry == ReachabilityWasm.Clear || entry == ReachabilityWasm.Add || entry == FinalizerQueueWasm.Register ||
+                        entry == FinalizerSuppressionWasm.Suppress ? Void : I32;
                     if (arity > 0) signatures[offset + 1] = ObjectReference;
                     if (read) signatures[offset + 2] = I32;
                     arities[functions] = arity;
@@ -908,7 +913,9 @@ namespace PortableCompiler
                         length = ReachabilityWasm.Write(moduleCode, length, entry, rootWalker, rootCount, markedCount, pendingCount, globals);
                     else if (entry == FinalizerQueueWasm.RunNext)
                         length = FinalizerDispatchWasm.Write(moduleCode, length, objects, finalizers, rootWalker, hostImports, rootCount);
-                    else length = FinalizerQueueWasm.Write(moduleCode, length, entry, rootWalker, registeredCount, pendingCount);
+                    else if (entry < FinalizerQueueWasm.End)
+                        length = FinalizerQueueWasm.Write(moduleCode, length, entry, rootWalker, registeredCount, pendingCount);
+                    else length = FinalizerSuppressionWasm.Write(moduleCode, length, entry, registeredCount, pendingCount, suppressedCount);
                     if (length < 0) return length;
                     sizes[functions] = length - bodyOffsets[functions];
                     functions++;
@@ -933,7 +940,7 @@ namespace PortableCompiler
             TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, MethodInstantiations instantiations, int[] methodArguments,
             int[] inlineLocations, int[] frameCells, int parameterCount, NativeAggregatePlans nativePlans,
             NativeStaticFields nativeStatics, byte[] booleanLocals,
-            FunctionPointerPlan pointers)
+            FunctionPointerPlan pointers, FinalizerSlots finalizers)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
@@ -1695,6 +1702,11 @@ namespace PortableCompiler
                             callerReceiver: addressed ? 0 : callerReceiver);
                         if (resolved < 0) return resolved;
                         int targetOwner = symbol[0], targetRow = symbol[1], targetContext = symbol[3];
+                        if (opcode == 0x28 && finalizers != null && finalizers.IsSuppression(targetOwner, targetRow))
+                        {
+                            records[slot] = BranchIl.SuppressFinalizer;
+                            continue;
+                        }
                         if (address < 0) targetContext = ~targetContext;
                         int linked = Lookup(owners, rows, contexts, bases, indices, functions, targetOwner, targetRow, targetContext);
                         bool virtualMethod = (symbol[4] & 0x40) != 0;
@@ -1773,6 +1785,11 @@ namespace PortableCompiler
                     return -1;
                 if (kind == BranchIl.Call)
                 {
+                    if (records[slot + 3] == 0 && finalizers != null && finalizers.IsSuppression(owner, target))
+                    {
+                        records[slot] = BranchIl.SuppressFinalizer;
+                        continue;
+                    }
                     int accessor = StringMetadata.AccessorDefinition(image, heaps, layout, target);
                     if (accessor != 0)
                     {

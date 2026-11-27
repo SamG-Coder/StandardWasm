@@ -16,7 +16,7 @@ namespace PortableCompiler
             if (code.Length - used < 512) return -3;
             if (entry == Register) used = RegisterReceiver(code, used, registered);
             else if (entry == Discover) used = DiscoverReceivers(code, used, first, registered, pending);
-            else used = PopReceiver(code, used, pending);
+            else used = PopReceiver(code, used, pending, first + FinalizerSuppressionWasm.Consume);
             code[used++] = 0x0b;
             return used;
         }
@@ -34,13 +34,17 @@ namespace PortableCompiler
 
         private static int DiscoverReceivers(byte[] code, int used, int first, int registered, int pending)
         {
-            const int cursor = 0, kept = 1, discovered = 2, receiver = 3;
-            code[used++] = 2; code[used++] = 3; code[used++] = 0x7f;
+            const int cursor = 0, kept = 1, discovered = 2, receiver = 3, oldPending = 4;
+            code[used++] = 3; code[used++] = 3; code[used++] = 0x7f;
             code[used++] = 1; code[used++] = 0x6d;
+            code[used++] = 1; code[used++] = 0x7f;
+            used = Index(code, used, 0x23, pending);
+            used = Local(code, used, 0x21, oldPending);
             used = Call(code, used, first + Mark);
             code[used++] = 0x1a; // drop the mark count
 
-            // Reserve the exact required capacity before changing either queue.
+            // Reserve capacity before changing either queue. Suppression can
+            // reduce the number moved during the second pass.
             // Both passes use the same snapshot, including previous pending roots.
             used = Loop(code, used);
             used = StopAtGlobal(code, used, cursor, registered);
@@ -67,7 +71,12 @@ namespace PortableCompiler
             used = Index(code, used, 0x26, RegisteredTable);
             used = Advance(code, used, kept);
             code[used++] = 0x05; // else: move the registration to pending
+            used = Local(code, used, 0x20, receiver);
+            used = Call(code, used, first + FinalizerSuppressionWasm.Consume);
+            code[used++] = 0x45;
+            code[used++] = 0x04; code[used++] = 0x40;
             used = Push(code, used, PendingTable, pending, receiver);
+            code[used++] = 0x0b;
             code[used++] = 0x0b;
             used = Advance(code, used, cursor);
             used = EndLoop(code, used);
@@ -81,7 +90,10 @@ namespace PortableCompiler
             used = Local(code, used, 0x20, kept);
             used = Index(code, used, 0x24, registered);
             used = Call(code, used, first + Clear);
-            return Local(code, used, 0x20, discovered);
+            used = Index(code, used, 0x23, pending);
+            used = Local(code, used, 0x20, oldPending);
+            code[used++] = 0x6b;
+            return used;
         }
 
         private static int ReadRegistered(byte[] code, int used, int cursor)
@@ -119,10 +131,12 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int PopReceiver(byte[] code, int used, int pending)
+        private static int PopReceiver(byte[] code, int used, int pending, int consume)
         {
             // The probe exposes dequeue order only for deterministic testing.
-            code[used++] = 1; code[used++] = 1; code[used++] = 0x7f;
+            code[used++] = 2; code[used++] = 1; code[used++] = 0x7f;
+            code[used++] = 1; code[used++] = 0x6d;
+            code[used++] = 0x03; code[used++] = 0x40;
             used = Index(code, used, 0x23, pending);
             code[used++] = 0x45;
             code[used++] = 0x04; code[used++] = 0x40;
@@ -136,9 +150,18 @@ namespace PortableCompiler
             used = Index(code, used, 0x24, pending);
             used = Local(code, used, 0x20, 0);
             used = Index(code, used, 0x25, PendingTable);
+            used = Local(code, used, 0x21, 1);
             used = Local(code, used, 0x20, 0);
             used = Null(code, used);
-            return Index(code, used, 0x26, PendingTable);
+            used = Index(code, used, 0x26, PendingTable);
+            used = Local(code, used, 0x20, 1);
+            used = Call(code, used, consume);
+            code[used++] = 0x0d; code[used++] = 0; // skip a suppressed entry
+            used = Local(code, used, 0x20, 1);
+            code[used++] = 0x0f;
+            code[used++] = 0x0b;
+            code[used++] = 0x00;
+            return used;
         }
     }
 }
