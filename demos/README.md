@@ -227,10 +227,10 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [230 · Browser Mono current thread](stage-230-mono-current-thread/README.md) | `npm run demo -- stage-230-mono-current-thread` | Verify the original browser CurrentThread path, identity and context |
 | [231 · Runtime type assignability](stage-231-type-assignability/README.md) | `npm run demo -- stage-231-type-assignability` | Compare runtime Type descriptors against a proven literal receiver |
 | [232 · Obsolete static fields](stage-232-obsolete-static-fields/README.md) | `npm run demo -- stage-232-obsolete-static-fields` | Verify deprecation metadata and ordinary static storage |
+| [234 · Runtime Type instance fields](stage-234-type-instance-fields/README.md) | `npm run demo -- stage-234-type-instance-fields` | Preserve canonical Type identity and ordinary struct value copies through readonly fields |
 
 ## Adding a stage
 
 Choose a stable stage number in the tracking issue. Add a stage-NN-name directory containing its project, C# sources, demo.json and README.md. Give each assembly a unique name because it identifies both the artifact and the test module. Copy an existing manifest and specify the assembly, export type, method, inputs and expected value. Library stages build for netstandard2.0 unless the manifest sets `targetFramework` (for example `net10.0`). Document the capability, command and expected result. Add the project reference to Verify/Verify.csproj and CLR comparison cases in Verify/Program.cs, then run the stage command and npm test. Update this index in the same PR. Keep generated files under ignored bin, obj and artifacts directories.
 
 Browser application stages can declare a runner in demo.json. Give them a documented verification command for the native and browser hosts.
-| [234 · Runtime Type instance fields](stage-234-type-instance-fields/README.md) | `npm run demo -- stage-234-type-instance-fields` | Preserve canonical Type identity and ordinary struct value copies through readonly fields |
