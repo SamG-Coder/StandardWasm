@@ -281,7 +281,7 @@ namespace PortableCompiler
             if (kind == SpanAddress)
                 return Match(stack, depth - 1, WritableCharacterSpan) && Match(stack, depth, I32)
                     ? Push(stack, allocated, depth - 2, CharacterLocation) : -2;
-            if (kind == SpanLength)
+            if (kind == SpanLength || kind == SpanIsEmpty)
                 return Match(stack, depth, extra) ? Push(stack, allocated, depth - 1, I32) : -2;
             if (kind == SpanSlice)
                 return Match(stack, depth - operand, extra) && Match(stack, depth, I32) &&

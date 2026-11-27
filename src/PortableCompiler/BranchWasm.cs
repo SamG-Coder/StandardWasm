@@ -1053,10 +1053,11 @@ namespace PortableCompiler
                 }
                 // A SpanAsReadOnly operation only changes the logical type.
                 // Both descriptors occupy the same Wasm spill bank.
-                else if (kind == SpanLength)
+                else if (kind == SpanLength || kind == SpanIsEmpty)
                 {
                     int type = records[slot + 3];
                     used = SpanWasm.Length(code, used, Spill(spills, maximum, spillFlags, type, top));
+                    if (kind == SpanIsEmpty) code[used++] = 0x45; // i32.eqz
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top));
                 }
                 else if (kind == SpanAddress)

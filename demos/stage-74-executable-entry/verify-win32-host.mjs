@@ -278,7 +278,7 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
     const scopedReceiverReset = [0, 65, 0x2000, 0xffff].map(rootExports.CheckScopedReceiverReset);
     const scopedNestedValue = [0, -1, 65, 2147483647].map(rootExports.CheckScopedNestedValue);
     const spanFromEnd = [0, 1, 2, 3].map(rootExports.CheckSpanFromEnd);
-    const spanSlices = Array.from({ length: 8 }, (_, scenario) => rootExports.CheckSpanSlices(scenario));
+    const spanSlices = Array.from({ length: 9 }, (_, scenario) => rootExports.CheckSpanSlices(scenario));
     const stackBackedSpan = [0, 1, 2, 3, 4, 5].map(rootExports.CheckStackBackedSpan);
     const scopedReference = [0, -1, 65, 0xffff].map(rootExports.CheckScopedReference);
     const characterCallbacks = [-1, 0, 1, 2, 17].map(rootExports.CheckCharacterCallback);
@@ -417,7 +417,7 @@ try {
         console.log("Eight original CoreLib trim cases matched CLR UTF-16 content and reference identity in Node and Edge.");
         console.log("Four scoped span cases matched CLR aliasing, default length, and UTF-16 wraparound in Node and Edge.");
         console.log("Six stack-backed span results matched the CLR in Node and Edge, including typed bounds and length failures.");
-        console.log("Eight span slice cases matched CLR aliasing, native offsets, empty spans, and typed range failures in Node and Edge.");
+        console.log("Nine span slice cases matched CLR aliasing, native offsets, empty spans, typed range failures, and application extensions in Node and Edge.");
         console.log("Four scoped byref cases matched CLR field mutation, span replacement, and value-copy independence in Node and Edge.");
         console.log("Four scoped receiver resets matched CLR alias updates and preserved earlier copies in Node and Edge.");
         console.log("Four nested value copies in scoped structs matched the CLR in Node and Edge.");

@@ -1,5 +1,6 @@
 using PeLibrary;
 using static PeLibrary.ImageBytes;
+using static PeLibrary.SignatureReader;
 using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
@@ -159,21 +160,6 @@ namespace PortableCompiler
             if (status < 0) return status;
             if (next[0] != end) return -1;
             return BundleLayouts.ReserveParent(bundle, image, layout, heaps, owner, head[0], objects, arguments);
-        }
-
-        private static int ReadGenericHeader(byte[] image, int[] cursor, int end, int[] head)
-        {
-            int start = cursor[0];
-            if (start >= end) return -1;
-            int definitionKind = image[start];
-            if (definitionKind != 0x12 && definitionKind != 0x11) return -2;
-            int definition = CompressedUnsigned(image, start + 1, end, cursor);
-            if (definition <= 0) return -1;
-            int count = CompressedUnsigned(image, cursor[0], end, cursor);
-            if (count <= 0 || count > end - cursor[0]) return -1;
-            head[0] = definition;
-            head[1] = definitionKind;
-            return count;
         }
 
         private static int ReadArguments(BundleImages bundle, byte[] image, int[] layout, int[] heaps,

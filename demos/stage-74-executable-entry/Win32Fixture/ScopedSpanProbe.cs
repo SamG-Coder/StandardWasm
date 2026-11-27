@@ -103,7 +103,7 @@ public static class ScopedSpanProbe
         {
             ReadOnlySpan<char> empty = default;
             ReadOnlySpan<char> slice = empty.Slice(0, 0);
-            return slice.Length;
+            return slice.IsEmpty ? slice.Length : -104;
         }
         if (scenario == 6)
         {
@@ -114,7 +114,14 @@ public static class ScopedSpanProbe
             ReadOnlySpan<char> view = new Span<char>(memory, 3);
             ReadOnlySpan<char> tail = view.Slice(1);
             ReadOnlySpan<char> last = tail.Slice(1, 1);
-            return tail[0] * 100 + last[0];
+            return tail.IsEmpty || last.IsEmpty ? -104 : tail[0] * 100 + last[0];
+        }
+        if (scenario == 8)
+        {
+            ReadOnlySpan<char> view = "abc".AsSpan();
+            ReadOnlySpan<char> framework = view.Slice(1, 1);
+            ReadOnlySpan<char> extension = ScopedSpanExtensions.Slice(view, 1, 1);
+            return framework[0] * 100 + extension.ReadAt(0);
         }
 
         var owner = new char[3];
@@ -126,7 +133,7 @@ public static class ScopedSpanProbe
         {
             Span<char> slice = span.Slice(start, length);
             Span<char> tail = span.Slice(start);
-            if (length == 0) return slice.Length + tail.Length;
+            if (length == 0) return slice.IsEmpty && tail.IsEmpty ? slice.Length + tail.Length : -104;
             slice[0] = 'x';
             return tail[0] * 100 + owner[1] + slice.Length;
         }
@@ -170,4 +177,15 @@ public static class ScopedSpanProbe
         Span<char> empty = zero.Characters;
         return alias[0] + owner[1] + empty.Length;
     }
+}
+
+internal static class ScopedSpanExtensions
+{
+    internal static ReadOnlySpan<char> Slice(this ReadOnlySpan<char> span, int start, int length)
+    {
+        int shifted = start + 1;
+        return span.Slice(shifted, length);
+    }
+
+    internal static int ReadAt(this ReadOnlySpan<char> span, int index) => span[index];
 }

@@ -100,6 +100,9 @@ a pointer-backed span over the shadow stack, a readonly view over the same
 memory, and typed exceptions for a negative length and invalid indices.
 The slice cases compare both managed slice overloads, shared backing storage,
 UTF-16 offsets for pointer-backed slices, the empty span, and typed range failures.
+An application extension named `Slice` shifts the requested offset and calls the
+framework member internally. The fixture compares its result with a direct
+framework call and invokes a second extension using member syntax.
 The by-reference case mutates an integer field and replaces a span in the
 caller's scoped struct. The caller observes both updates while its earlier
 value copy still refers to the original array. A separate case resets a

@@ -197,21 +197,15 @@ namespace PortableCompiler
             int parent = reference[AssemblyReferences.GenericParent];
             if (parent == 0 || ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps,
                 owner, parent, objects, context, methodArguments) != spanType) return false;
-            int blob = reference[5];
-            if (blob < 1 || blob >= heaps[1]) return false;
-            var next = new int[1];
-            int limit = heaps[0] + heaps[1];
-            int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
-            int at = next[0];
-            if (size < 8 || size > limit - at || image[at] != 0x20 || image[at + 1] != arity ||
-                image[at + 2] != 0x15 || image[at + 3] != 0x11) return false;
-            int end = at + size;
-            int result = CompressedUnsigned(image, at + 4, end, next);
-            at = next[0];
-            if (result < 1 || end - at != 3 + arity ||
-                !IsDefinition(image, layout, heaps, result, spanType == WritableCharacterSpan) ||
-                image[at] != 1 || image[at + 1] != 0x13 || image[at + 2] != 0) return false;
-            return image[at + 3] == 8 && (arity == 1 || image[at + 4] == 8);
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, reference[5], arity, cursor);
+            if (end < 0) return false;
+            int result = SignatureReader.ReadGenericValue(image, cursor, end, parameter: 0);
+            if (result < 1 || !IsDefinition(image, layout, heaps, result, spanType == WritableCharacterSpan))
+                return false;
+            for (int argument = 0; argument < arity; argument++)
+                if (!SignatureReader.TakeElement(image, cursor, end, SignatureReader.Int32)) return false;
+            return cursor[0] == end;
         }
 
         internal static int Accessor(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
@@ -224,17 +218,25 @@ namespace PortableCompiler
             if (parent == 0) return 0;
             uint name = (uint)reference[4];
             bool length = MatchesAscii(image, heaps, name, "get_Length");
-            if (!length && !MatchesAscii(image, heaps, name, "get_Item")) return 0;
+            bool empty = MatchesAscii(image, heaps, name, "get_IsEmpty");
+            if (!length && !empty && !MatchesAscii(image, heaps, name, "get_Item")) return 0;
             if (ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps,
                 owner, parent, objects, context, methodArguments) != spanType) return 0;
             int blob = reference[5];
+            if (length || empty)
+            {
+                var cursor = new int[1];
+                int signatureEnd = SignatureReader.ReadInstance(image, heaps, blob, 0, cursor);
+                int result = length ? SignatureReader.Int32 : SignatureReader.Boolean;
+                return signatureEnd >= 0 && SignatureReader.TakeElement(image, cursor, signatureEnd, result) && cursor[0] == signatureEnd
+                    ? length ? BranchIl.SpanLength : BranchIl.SpanIsEmpty : 0;
+            }
             if (blob < 1 || blob >= heaps[1]) return 0;
             var next = new int[1];
             int limit = heaps[0] + heaps[1];
             int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
             int at = next[0];
             if (size < 3 || size > limit - at || image[at] != 0x20) return 0;
-            if (length) return size == 3 && image[at + 1] == 0 && image[at + 2] == 8 ? BranchIl.SpanLength : 0;
             if (spanType == WritableCharacterSpan)
                 return size == 6 && U32(image, (uint)at) == 0x13100120 &&
                     U16(image, (uint)(at + 4)) == 0x0800 ? BranchIl.SpanAddress : 0;
