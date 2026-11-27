@@ -38,7 +38,7 @@ internal static class Program
             PrimitiveVectorTypeIdentity, PrimitiveVectorAliases, InitializedPrimitiveVectorIdentity,
             ClosedValueIsNotNull, ClosedValueIsNull, ClosedReferenceNullCheck, ClosedBoxNullBranches,
             NarrowEnumFlags, WideEnumFlags, UnsetEnumFlags, WideEnumSmallConstants,
-            ClosedEnumTypeBranches, ClosedNonEnumPrunesUnsafeBranch
+            ClosedEnumTypeBranches, ClosedNonEnumPrunesUnsafeBranch, NativePointerView
         };
         foreach (var run in cases)
         {
@@ -104,6 +104,15 @@ internal static class Program
     {
         if (typeof(T).IsEnum) return unchecked((long)Unsafe.As<T, ulong>(ref value));
         return 37;
+    }
+
+    public static unsafe int NativePointerView()
+    {
+        int* address = stackalloc int[1];
+        *address = 149;
+        int* restored = (int*)Unsafe.AsPointer(ref *address);
+        int* empty = null;
+        return restored == address && Unsafe.AsPointer(ref *empty) == null ? *restored : 0;
     }
 
     private static bool TestNarrow(NarrowFlag value, NarrowFlag mask) =>

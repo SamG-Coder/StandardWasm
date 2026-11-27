@@ -80,6 +80,7 @@ namespace PortableCompiler
         // Synthetic native thunks use absolute imports. The message is a UTF-16 data range.
         internal const int NativePresent = 163, NativeHelper = 164, CallNative = 165, LoadNativeMessage = 166;
         internal const int EnumHasFlag = 169, TakeProjectedFieldAddress = 170, CallNativeIndirect = 171;
+        internal const int NativeAddressView = 172;
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

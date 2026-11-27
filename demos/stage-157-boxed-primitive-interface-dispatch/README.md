@@ -82,6 +82,9 @@ The closed `typeof(T).IsEnum` cases include an enum, a non-enum struct,
 an integer, a string, and an interface. For the reference instantiations,
 the compiler removes the unreachable numeric reinterpretation before linking.
 
+The native pointer view case verifies that `Unsafe.AsPointer` preserves an
+existing linear-memory address, including address zero.
+
 Both `Int32` cases have CLR answers. The compiler now binds the original
 `Number.TryFormatInt32<char>` generic method. Until the formatting pipeline
 lowers, the verifier accepts only the located diagnostic at the pinned local

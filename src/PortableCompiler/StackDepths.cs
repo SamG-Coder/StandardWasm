@@ -460,6 +460,10 @@ namespace PortableCompiler
             if (kind == LoadFunction) return Push(stack, allocated, depth, MethodPointer);
             // Decision 0078: a function pointer is a native int; calli takes it last.
             if (kind == FunctionAddress) return Push(stack, allocated, depth, Native);
+            // Unsafe.AsPointer preserves an address that already lives in memory 0.
+            // A managed heap location requires separate pinning support.
+            if (kind == NativeAddressView)
+                return depth > 0 && IsNativeInteger(stack[depth - 1]) ? depth : -2;
             if (kind == CallNativeIndirect)
             {
                 if (depth < 2 || !IsNativeInteger(stack[depth - 1]) || !IsNativeInteger(stack[depth - 2])) return -2;
