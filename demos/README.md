@@ -305,6 +305,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [323 · Managed Vector128 words](stage-323-vector128-word-abi/README.md) | `npm run demo -- stage-323-vector128-word-abi` | Verify authentic CLR layout and SIMD values through managed calls |
 | [330 · Closed Vector128 generic constraints](stage-330-vector128-generic-constraints/README.md) | `npm run demo -- stage-330-vector128-generic-constraints` | Prove closed Vector128 value and interface constraints |
 | [333 · Readonly generic character calls](stage-333-readonly-generic-character-calls/README.md) | `npm run demo -- stage-333-readonly-generic-character-calls` | Preserve readonly loans through exact generic specializations |
+| [336 · Mono ICU locale membership](stage-336-mono-icu-locale/README.md) | `npm run demo -- stage-336-mono-icu-locale` | Verify the original UTF-16 P/Invoke against the published ICU profiles |
 
 ## Adding a stage
 

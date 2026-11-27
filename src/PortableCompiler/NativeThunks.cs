@@ -25,14 +25,17 @@ namespace PortableCompiler
     // Only blittable scalar signatures are lowered (see Blittable); anything else is a located -2.
     internal static class NativeThunks
     {
-        internal const int None = 0, PlatformInvoke = 1, InternalCall = 2, SymbolLookup = 3;
+        internal const int None = 0, PlatformInvoke = 1, InternalCall = 2, SymbolLookup = 3, LocalePointerInvoke = 4;
         private const int StaticMethod = 0x10, PinvokeImpl = 0x2000, PreserveSig = 0x80, InternalCallFlag = 0x1000;
         private const int SupportsLastError = 0x40;
 
         internal static int Kind(byte[] image, int[] heaps, int[] layout, int row)
         {
             if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & PinvokeImpl) != 0)
-                return IsSymbolLookup(image, heaps, layout, row) ? SymbolLookup : PlatformInvoke;
+            {
+                if (IsSymbolLookup(image, heaps, layout, row)) return SymbolLookup;
+                return MonoLocaleMetadata.IsPredefinedLocale(image, heaps, layout, row) ? LocalePointerInvoke : PlatformInvoke;
+            }
             if ((MethodDefinitions.ReadColumn(image, layout, row, 1) & InternalCallFlag) != 0) return InternalCall;
             return None;
         }
@@ -90,10 +93,19 @@ namespace PortableCompiler
                 shape[0] = 3; shape[1] = 0x7f; shape[2] = 0;
                 return Put(module, 0, "native:QCall") | Put(name, 0, "NativeLibrary_GetSymbol") << 16;
             }
-            int status = Blittable(image, heaps, layout, row, types, shape);
-            if (status < 0) return status;
+            if (kind == LocalePointerInvoke)
+            {
+                types[0] = 0x7f;
+                shape[0] = 1;
+                shape[1] = 0x7f;
+            }
+            else
+            {
+                int status = Blittable(image, heaps, layout, row, types, shape);
+                if (status < 0) return status;
+            }
             int moduleLength, nameLength;
-            if (kind == PlatformInvoke)
+            if (kind == PlatformInvoke || kind == LocalePointerInvoke)
             {
                 if ((implementation & PreserveSig) == 0) return -2;
                 var counts = new int[45];
@@ -175,7 +187,7 @@ namespace PortableCompiler
         internal static int LibraryMessage(byte[] module, int moduleLength, int kind, byte[] message)
         {
             int used = Put(message, 0, "Unable to load DLL '");
-            for (int i = kind == PlatformInvoke ? 7 : 0; i < moduleLength; i++) message[used++] = module[i];
+            for (int i = kind == PlatformInvoke || kind == LocalePointerInvoke ? 7 : 0; i < moduleLength; i++) message[used++] = module[i];
             return Put(message, used, "' or one of its dependencies: The specified module could not be found. (0x8007007E)");
         }
 
@@ -187,7 +199,7 @@ namespace PortableCompiler
             int used = Put(message, 0, "Unable to find an entry point named '");
             for (int i = 0; i < nameLength; i++) message[used++] = name[i];
             used = Put(message, used, "' in DLL '");
-            for (int i = kind == PlatformInvoke ? 7 : 0; i < moduleLength; i++) message[used++] = module[i];
+            for (int i = kind == PlatformInvoke || kind == LocalePointerInvoke ? 7 : 0; i < moduleLength; i++) message[used++] = module[i];
             return Put(message, used, "'.");
         }
 

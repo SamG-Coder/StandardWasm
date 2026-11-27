@@ -602,7 +602,8 @@ namespace PortableCompiler
                     nativeDescription = NativeThunks.Describe(image, heaps, layout, source, nativeKind,
                         nativeModule, nativeName, nativeTypes, nativeShape);
                     if (nativeDescription < 0) return nativeDescription;
-                    if (nativeKind == NativeThunks.SymbolLookup) hostUse[0] = hostUse[0] | WasmImports.Memory;
+                    if (nativeKind == NativeThunks.SymbolLookup || nativeKind == NativeThunks.LocalePointerInvoke)
+                        hostUse[0] = hostUse[0] | WasmImports.Memory;
                     body[0] = 0;
                     body[1] = NativeThunks.RecordCount(nativeShape[0], nativeShape[2] != 0, nativeKind);
                     body[2] = nativeShape[0] > 1 ? nativeShape[0] : 1;

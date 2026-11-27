@@ -2,6 +2,6 @@
 
 Canonical Assembly receivers follow the original Mono GetName forwarding body, GetName(bool) override, and AssemblyName.Create. The browser supplies an instance-local native identity record built from the loaded assembly metadata. The upstream FillName body reads that record and follows the authenticated native UTF-8 path from Stage 302.
 
-The three ordinary GetName cases link through the original readonly ordinal generic call and reach the Mono IsPredefinedLocale P/Invoke in globalization. The remaining cases verify independent managed AssemblyName values and authored virtual overrides.
+The three ordinary GetName cases link through the original readonly ordinal generic call and Mono IsPredefinedLocale boundary. The next dependency is ReadOnlySpan<char>.Empty inside the original CultureData.InitIcuCultureDataCore. The remaining cases verify independent managed AssemblyName values and authored virtual overrides.
 
 Set STANDARDWASM_COMPILER_PATH to an exact compiler image and run npm run demo -- stage-297-mono-assembly-identity. Set STANDARDWASM_MONO_CORELIB when the exact browser metadata differs from the installed x86 CLR version.
