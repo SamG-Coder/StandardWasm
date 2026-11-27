@@ -451,6 +451,9 @@ namespace PortableCompiler
                     status = Int32ExchangeWasm.WriteBody(moduleCode, length, image, layout, heaps, source,
                         signatures, offsets[current], arities[current], projections);
                     if (status == length)
+                        status = NativeExchangeWasm.WriteBody(moduleCode, length, image, layout, heaps, source,
+                            signatures, offsets[current], arities[current], projections);
+                    if (status == length)
                         status = ReferenceExchangeWasm.WriteBody(moduleCode, length, image, layout, heaps, source,
                             objects, signatures, offsets[current], arities[current], projections);
                     if (status < 0) return status;

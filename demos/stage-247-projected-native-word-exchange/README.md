@@ -1,0 +1,5 @@
+# Stage 247 · Projected native-word exchange
+
+A writable native integer field of a managed value has a location that follows the owning cell when the value is replaced. An earlier copy of the value retains its snapshot. The original CoreLib `Interlocked.Exchange(ref nint, nint)` declaration uses that location, returns its previous native word, and writes the replacement. Frame locations use the existing native-vector representation. The module executes the read and write on its single managed agent without a host call or suspension.
+
+Run `npm run demo -- stage-247-projected-native-word-exchange` with the generated compiler from `npm test`, or use `STANDARDWASM_COMPILER_PATH` to select a frozen compiler. The runner compares an ordinary DLL and authentic CoreLib with Windows x86, Node, and Edge. It covers projected fields, stable aliases and snapshots, separate owners, frame words, and typed null locations. Results and hashes are written to `artifacts/stage-247-projected-native-word-exchange/results.json`.

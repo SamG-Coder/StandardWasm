@@ -237,6 +237,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [242 · Closed Type comparisons through a local](stage-242-closed-type-local/README.md) | `npm run demo -- stage-242-closed-type-local` | Fold proven Type branches and preserve surviving local values |
 | [243 · Generic SZ-array enumeration](stage-243-sz-array-enumeration/README.md) | `npm run demo -- stage-243-sz-array-enumeration` | Run the original closed CoreLib enumerator from a vector interface call |
 | [244 · CoreLib Math internal calls](stage-244-corelib-math/README.md) | `npm run demo -- stage-244-corelib-math` | Compare original runtime Math method definitions against the x86 CLR |
+| [247 · Projected native-word exchange](stage-247-projected-native-word-exchange/README.md) | `npm run demo -- stage-247-projected-native-word-exchange` | Compare live native-word aliases and native Interlocked.Exchange with Windows |
 
 ## Adding a stage
 

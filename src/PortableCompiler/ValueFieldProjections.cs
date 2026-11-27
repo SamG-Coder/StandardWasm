@@ -22,10 +22,10 @@ namespace PortableCompiler
                 ReferenceVector = RegisterArray(objects, ObjectReference);
         }
 
-        internal const int Scalar = 1, Reference = 2, Aggregate = 4, ClassScalar = 8, BooleanScalar = 16;
+        internal const int Scalar = 1, Reference = 2, Aggregate = 4, ClassScalar = 8, BooleanScalar = 16, NativeScalar = 32;
 
         internal static int Kind(int location) => location == Int32Location ? Scalar :
-            location == BooleanLocation ? BooleanScalar :
+            location == BooleanLocation ? BooleanScalar : location == NativeIntLocation ? NativeScalar :
             IsReferenceLocation(location) ? Reference : IsValueLocation(location) ? Aggregate : 0;
 
         internal static int DecodeLocation(int[] objects, int encoded) =>

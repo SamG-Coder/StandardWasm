@@ -7,7 +7,7 @@ namespace PortableCompiler
 {
     internal static class ValueFieldProjectionWasm
     {
-        internal const int FirstSnapshotHelper = 4, FirstBooleanHelper = 6, HelperCount = 8;
+        internal const int FirstSnapshotHelper = 4, FirstBooleanHelper = 6, FirstNativeHelper = 8, HelperCount = 10;
 
         internal static bool IsSnapshotHelper(int helper) => helper >= FirstSnapshotHelper && helper < FirstBooleanHelper;
 
@@ -58,7 +58,8 @@ namespace PortableCompiler
 
         private static int Call(byte[] code, int used, int start, int location, bool write, ValueFieldProjections projections)
         {
-            int helper = (location == Int32Location ? 0 : location == BooleanLocation ? FirstBooleanHelper : 2) + (write ? 1 : 0);
+            int helper = (location == Int32Location ? 0 : location == BooleanLocation ? FirstBooleanHelper :
+                location == NativeIntLocation ? FirstNativeHelper : 2) + (write ? 1 : 0);
             return CallHelper(code, used, start, helper, projections);
         }
 
@@ -71,16 +72,18 @@ namespace PortableCompiler
             return WasmIndexFixups.WriteAt(code, used, start, projections.Fixups, helper);
         }
 
-        internal static int ValueType(int helper) => helper < 2 || helper >= FirstBooleanHelper ? I32 : ObjectReference;
+        internal static int ValueType(int helper) => helper >= FirstNativeHelper ? Native :
+            helper < 2 || helper >= FirstBooleanHelper ? I32 : ObjectReference;
 
         internal static int WriteHelper(byte[] code, int used, int[] objects, ValueFieldProjections projections, int helper)
         {
             bool write = (helper & 1) != 0;
             bool aggregate = IsSnapshotHelper(helper);
             int kind = aggregate ? Aggregate : helper < 2 ? Scalar :
-                helper >= FirstBooleanHelper ? BooleanScalar : Reference;
+                helper >= FirstNativeHelper ? NativeScalar : helper >= FirstBooleanHelper ? BooleanScalar : Reference;
             int value = ValueType(helper);
-            int vector = kind == Scalar ? Ints : kind == BooleanScalar ? Bytes : projections.ReferenceVector;
+            int vector = kind == Scalar ? Ints : kind == BooleanScalar ? Bytes :
+                kind == NativeScalar ? NativeVector : projections.ReferenceVector;
             const int address = 0, replacement = 1;
             int parent = write ? 2 : 1;
             int descriptor = aggregate ? parent + 1 : address;
