@@ -40,10 +40,10 @@ namespace PortableCompiler
         }
 
         internal static int WriteBody(byte[] code, int used, int[] types, int shape, int member, int import,
-            int hostImports, int initializer, int errorBase)
+            int hostImports, int initializer, int errorBase, ValueFieldProjections projections)
         {
             if (member == Win32ModuleBinding.GetProcessAwareness)
-                return WriteDpiQuery(code, used, types, shape, import, hostImports, initializer);
+                return WriteDpiQuery(code, used, types, shape, import, hostImports, initializer, projections);
             code[used++] = 0; // no declared locals
             if (initializer >= 0)
             {
@@ -83,7 +83,7 @@ namespace PortableCompiler
         }
 
         private static int WriteDpiQuery(byte[] code, int used, int[] types, int shape, int import,
-            int hostImports, int initializer)
+            int hostImports, int initializer, ValueFieldProjections projections)
         {
             // The browser host returns [HRESULT, awareness]. It never receives
             // a managed pointer. The exact SDK wrapper writes the result into
@@ -108,9 +108,7 @@ namespace PortableCompiler
             used = WasmBinary.Unsigned(code, used, import);
             used = Local(code, used, 0x21, 3);
             used = Local(code, used, 0x21, 2);
-            used = ManagedLocationWasm.AccessElement(code, used, 1, Ints);
-            used = Local(code, used, 0x20, 3);
-            used = Gc(code, used, 0x0e, Ints); // array.set
+            used = ValueFieldProjectionWasm.Write(code, used, 0, 1, 3, Ints, Int32Location, projections);
             used = Local(code, used, 0x20, 2);
             int result = types[shape];
             if (result != I32) used = Gc(code, used, 0, result);

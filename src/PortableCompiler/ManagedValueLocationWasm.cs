@@ -91,25 +91,35 @@ namespace PortableCompiler
             return WriteSnapshot(code, used);
         }
 
-        internal static int ReadLocation(byte[] code, int used, int local, int type)
+        internal static int ReadLocation(byte[] code, int used, int local, int type, ValueFieldProjections projections = null, int start = 0)
         {
             // Evaluation-stack locations can spill as eqref. Recover the
             // cell's heap type before reading its snapshot.
             used = LoadOperand(code, used, local, SignatureTypes.ValueLocation(type), SignatureTypes.ValueLocation(type));
-            return ReadSnapshot(code, used, type);
+            return ReadSnapshot(code, used, type, projections, start);
         }
 
-        internal static int ReadSnapshot(byte[] code, int used, int type)
+        internal static int ReadRawSnapshot(byte[] code, int used)
         {
             used = CellInstruction(code, used, 2);
             code[used++] = 0;
+            return used;
+        }
+
+        internal static int ReadSnapshot(byte[] code, int used, int type, ValueFieldProjections projections = null, int start = 0)
+        {
+            used = projections != null && projections.Aggregates
+                ? ValueFieldProjectionWasm.CallSnapshot(code, used, start, false, projections)
+                : ReadRawSnapshot(code, used);
             code[used++] = 0xfb;
             code[used++] = 0x17; // ref.cast null
             return WasmBinary.Signed(code, used, WasmBinary.HeapType(type));
         }
 
-        internal static int WriteSnapshot(byte[] code, int used)
+        internal static int WriteSnapshot(byte[] code, int used, ValueFieldProjections projections = null, int start = 0)
         {
+            if (projections != null && projections.Aggregates)
+                return ValueFieldProjectionWasm.CallSnapshot(code, used, start, true, projections);
             used = CellInstruction(code, used, 5);
             code[used++] = 0;
             return used;

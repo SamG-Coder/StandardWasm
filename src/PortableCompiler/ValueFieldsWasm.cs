@@ -51,11 +51,12 @@ namespace PortableCompiler
         }
 
         internal static int Update(byte[] code, int used, int[] objects, int type, int local, int temporary,
-            int field, int replacement, int replacementType, bool location = false)
+            int field, int replacement, int replacementType, bool location = false, bool widenedReplacement = false,
+            ValueFieldProjections projections = null, int start = 0)
         {
             if (location)
             {
-                used = ManagedValueLocationWasm.ReadLocation(code, used, local, type);
+                used = ManagedValueLocationWasm.ReadLocation(code, used, local, type, projections, start);
                 used = Local(code, used, 0x21, temporary);
                 used = LoadOperand(code, used, local, SignatureTypes.ValueLocation(type), SignatureTypes.ValueLocation(type));
                 local = temporary;
@@ -68,8 +69,12 @@ namespace PortableCompiler
                 int storage = FieldTypeAt(objects, type, i);
                 if (storage == 0) continue;
                 if (ordinal == field)
+                {
                     used = replacement < 0 ? FieldDefault(code, used, storage) :
                         LoadOperand(code, used, replacement, replacementType, storage);
+                    if (widenedReplacement)
+                        used = ManagedLocationWasm.CastCellValue(code, used, Representation(objects, storage));
+                }
                 else
                 {
                     used = Local(code, used, 0x20, temporary);
@@ -81,17 +86,18 @@ namespace PortableCompiler
             // Publish a fresh immutable aggregate to the addressed local.
             // Existing copies keep the original value.
             used = Gc(code, used, 0, type);
-            return location ? ManagedValueLocationWasm.WriteSnapshot(code, used) : Local(code, used, 0x21, local);
+            return location ? ManagedValueLocationWasm.WriteSnapshot(code, used, projections, start) :
+                Local(code, used, 0x21, local);
         }
 
         internal static int ClearAtLocation(byte[] code, int used, int[] objects, int field, int type, int reference,
-            int temporaries, bool constructorReceiver)
+            int temporaries, bool constructorReceiver, ValueFieldProjections projections, int start)
         {
             // A value constructor carries its current snapshot in parameter zero.
             // Other managed receivers carry a cell shared by all aliases.
             if (!constructorReceiver) used = GuardNull(code, used, reference);
             return Update(code, used, objects, type, constructorReceiver ? 0 : reference,
-                temporaries + type - FirstClass, field, -1, 0, !constructorReceiver);
+                temporaries + type - FirstClass, field, -1, 0, !constructorReceiver, projections: projections, start: start);
         }
 
         private static int FieldDefault(byte[] code, int used, int storage)

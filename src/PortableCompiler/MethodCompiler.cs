@@ -193,7 +193,7 @@ namespace PortableCompiler
             int hostFeatures, MissingAssemblyStubs stubs, bool rootProbe = false)
         {
             // Finalization is an internal runtime feature and has no host import indices.
-            var features = new int[] { hostFeatures, rootProbe ? 1 : 0 };
+            var features = new int[] { hostFeatures, rootProbe ? 1 : 0, 0 };
             var natives = new NativeImportTable();
             var addressedFields = new AddressedFields();
             var typeCalls = new RuntimeTypeCalls();
@@ -264,6 +264,8 @@ namespace PortableCompiler
             // Closed instantiations have distinct field slices and argument
             // vectors even when they share a CLI definition.
             var objects = new int[ObjectLayouts.FieldMapStart + imageBytes / 6 + interfaces * 2 + output.Length / 4];
+            var projections = new ValueFieldProjections(features[2], objects);
+            if (projections.ReferenceVector < 0) return projections.ReferenceVector;
             // One MethodDef can have a body per closed declaring instantiation.
             // Reserve as many specialized bodies as definitions; exceeding that
             // is a reported capacity failure, never a shared approximation.
@@ -426,7 +428,7 @@ namespace PortableCompiler
                 if (stub < 0 && initializerPrologue < 0)
                 {
                     status = ReferenceExchangeWasm.WriteBody(moduleCode, length, image, layout, heaps, source,
-                        objects, signatures, offsets[current], arities[current]);
+                        objects, signatures, offsets[current], arities[current], projections);
                     if (status < 0) return status;
                     if (status != length)
                     {
@@ -461,7 +463,7 @@ namespace PortableCompiler
                         int shape = offsets[current];
                         length = Win32ModuleWasm.WriteBody(moduleCode, length, signatures, shape, import,
                             WasmImports.Win32NativeSlot(hostFeatures, import), hostImports, initializerPrologue,
-                            WasmImports.Win32ErrorBase(hostFeatures));
+                            WasmImports.Win32ErrorBase(hostFeatures), projections);
                         sizes[current] = length - bodyOffsets[current];
                         continue;
                     }
@@ -477,7 +479,7 @@ namespace PortableCompiler
                     if (moduleCode.Length - length < Win32ModuleWasm.DpiQueryBodyCapacity) return -3;
                     bodyOffsets[current] = length;
                     length = Win32ModuleWasm.WriteBody(moduleCode, length, signatures, shape, member,
-                        WasmImports.Win32NativeSlot(hostFeatures, member), hostImports, initializerPrologue, 0);
+                        WasmImports.Win32NativeSlot(hostFeatures, member), hostImports, initializerPrologue, 0, projections);
                     sizes[current] = length - bodyOffsets[current];
                     continue;
                 }
@@ -775,6 +777,9 @@ namespace PortableCompiler
                         }
                         return resourceOpen && status == -1 ? -2 : status;
                     }
+                    ValueObjectOperands.LowerManaged(records, depths, states, maximum);
+                    status = projections.BindReachable(records, depths, states, maximum, objects, location);
+                    if (status < 0) return status;
                     if (resourceOpen)
                     {
                         hostUse[0] = hostUse[0] | WasmImports.Resources;
@@ -1099,7 +1104,8 @@ namespace PortableCompiler
                                 kind == BranchIl.ObjectElementAddress)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.RuntimeTypeDisplayName || kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
-                                kind == BranchIl.SetField || kind == BranchIl.ClearInteriorField || nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit ||
+                                kind == BranchIl.SetField || kind == BranchIl.ClearInteriorField || kind == BranchIl.TakeProjectedFieldAddress ||
+                                nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit ||
                                 kind == BranchIl.GetReferenceField || kind == BranchIl.SetReferenceField || kind == BranchIl.TakeReferenceFieldAddress ||
                                 kind == BranchIl.StringRange || kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection || kind == BranchIl.GetObjectType ||
@@ -1176,7 +1182,7 @@ namespace PortableCompiler
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
                         arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers,
                         reflection, inlineLocations, nativePlans.Plans, filters, frameCells, pointers, rootCount, frameRoots,
-                        tracksFinalizers ? finalizers : null, wrapsFailure ? failure : null, primitiveArrays);
+                        tracksFinalizers ? finalizers : null, wrapsFailure ? failure : null, primitiveArrays, projections);
                 }
 
                 if (used < 0) return used;
@@ -1189,9 +1195,11 @@ namespace PortableCompiler
                 length += used;
             }
             // Earlier accesses need the same backing as the address-taking use.
-            if ((hostUse[0] & ~hostFeatures) != 0 || addressedFields.Count != knownAddressedFields || natives.Count != reservedNatives)
+            if ((hostUse[0] & ~hostFeatures) != 0 || addressedFields.Count != knownAddressedFields ||
+                natives.Count != reservedNatives || (projections.Kinds & ~projections.KnownKinds) != 0)
             {
                 features[0] = hostFeatures | hostUse[0];
+                features[2] |= projections.Kinds;
                 return Reemit;
             }
             length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, objects, length,
@@ -1236,6 +1244,32 @@ namespace PortableCompiler
                 sizes[functions] = length - bodyOffsets[functions];
                 functions++;
             }
+            var projectionHelpers = new int[ValueFieldProjectionWasm.HelperCount];
+            for (int helper = 0; helper < projectionHelpers.Length; helper++)
+            {
+                bool snapshot = helper >= ValueFieldProjectionWasm.FirstSnapshotHelper;
+                if (projections.Fixups[helper] == 0 && !(snapshot && projections.Aggregates)) continue;
+                int offset = NextSignature(offsets, arities, functions);
+                bool write = (helper & 1) != 0;
+                int arity = write ? 2 : 1;
+                if (functions >= owners.Length || arity >= signatures.Length - offset) return -3;
+                int value = ValueFieldProjectionWasm.ValueType(helper);
+                signatures[offset] = write ? Void : value;
+                signatures[offset + 1] = snapshot ? ValueLocation(FirstClass) : ObjectLocation;
+                if (write) signatures[offset + 2] = value;
+                arities[functions] = arity;
+                offsets[functions] = offset;
+                bodyOffsets[functions] = length;
+                length = ValueFieldProjectionWasm.WriteHelper(moduleCode, length, objects, projections, helper);
+                if (length < 0) return length;
+                projectionHelpers[helper] = hostImports + functions;
+                sizes[functions] = length - bodyOffsets[functions];
+                functions++;
+            }
+            // An aggregate accessor can call itself and the other accessor.
+            // Resolve after all bodies have published their fixup chains.
+            for (int helper = 0; helper < projectionHelpers.Length; helper++)
+                WasmIndexFixups.Resolve(moduleCode, projections.Fixups[helper], projectionHelpers[helper]);
             for (int c = 0; c < pointers.CarrierCount; c++)
             {
                 int carrier = pointers.Carriers[c];
@@ -1764,8 +1798,11 @@ namespace PortableCompiler
                     int coded = row << 2 | (table == 1 ? 1 : 0);
                     int type = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true);
                     if (type < 0) return type;
+                    if (!ObjectLayouts.IsValueType(objects, type)) return -2;
                     int plan = NativeAggregates.Plan(bundle, objects, type, nativePlans);
-                    if (plan < 0) return plan;
+                    if (plan < 0 && plan != -2) return plan;
+                    // The verifier selects a managed cell or native layout
+                    // from the actual address, including for named types.
                     if (kind == BranchIl.InitializeValue) records[slot] = BranchIl.InitializeNative;
                     records[slot + 1] = type;
                     records[slot + 3] = plan + 1;
@@ -1917,17 +1954,36 @@ namespace PortableCompiler
                             if (span < 0) return span;
                             if (span != 0) continue;
                         }
-                        if (pointerField && !ObjectLayouts.IsValueType(objects, FieldAccess.Storage(descriptor)))
-                            continue; // &p->F of a primitive field: native address arithmetic
-                        if (ObjectLayouts.IsValueType(objects, FieldAccess.Storage(descriptor)) &&
+                        if (ObjectLayouts.IsValueType(objects, fieldStorage) &&
                             next < records.Length / BranchIl.Width && records[next * BranchIl.Width] == BranchIl.GetField &&
                             !ValueOperands.Entry(records, next, clauses))
+                        {
                             records[slot] = BranchIl.GetField;
-                        else if (ManagedValueLocationWasm.UsesCell(objects, FieldAccess.Owner(descriptor), FieldAccess.Storage(descriptor)))
+                            continue;
+                        }
+                        if (ObjectLayouts.IsValueType(objects, fieldOwner) &&
+                            !ObjectLayouts.IsExplicitValue(objects, fieldOwner) &&
+                            !ObjectLayouts.IsByRefLikeValue(objects, fieldOwner))
+                        {
+                            int projected = ValueFieldProjections.Bind(bundle, objects, fieldOwner, field);
+                            if (projected != -2)
+                            {
+                                if (projected < 0) return projected;
+                                records[slot] = BranchIl.TakeProjectedFieldAddress;
+                                records[slot + 3] = FieldAccess.Encode(fieldOwner,
+                                    IsValueLocation(projected) ? LocatedValue(projected) : projected);
+                                continue;
+                            }
+                        }
+                        if (pointerField && !ObjectLayouts.IsValueType(objects, fieldStorage))
+                            continue; // &p->F of a primitive field: native address arithmetic
+                        if (ManagedValueLocationWasm.UsesCell(objects, fieldOwner, fieldStorage))
                         {
                             int status = ValueOperands.LowerClassField(image, layout, heaps, bases[owner + 1] - bases[owner],
                                 records, slot, FieldAccess.Storage(descriptor), clauses);
-                            if (status < 0) return status;
+                            if (status < 0 && (status != -2 || linked && readOnlyAddress ||
+                                !linked && !ValueOperands.IsWritableInteriorField(image, layout, heaps, field, false)))
+                                return status;
                             records[slot] = BranchIl.TakeValueFieldAddress;
                         }
                         else if (linked || !LinkExchange(image, heaps, layout, records, slot)) return -2;

@@ -108,14 +108,14 @@ namespace PortableCompiler
                         return -1;
                     next = Push(stack, allocated, depth - 1, EventHandlerReference);
                 }
-                else if ((kind == GetField || fieldStore || kind == FieldAddress) &&
+                else if ((kind == GetField || fieldStore || kind == FieldAddress || kind == TakeProjectedFieldAddress) &&
                     records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
                     depth >= (fieldStore ? 2 : 1) && IsNativeInteger(stack[depth - (fieldStore ? 2 : 1)]))
                 {
                     // Stage 143 (decision 0071): p->F through an S* address in memory 0.
                     int storage = FieldAccess.Storage(records[slot + 3]);
                     if (kind == GetField) next = Push(stack, allocated, depth - 1, StackType(storage));
-                    else if (kind == FieldAddress) next = Push(stack, allocated, depth - 1, Native);
+                    else if (kind == FieldAddress || kind == TakeProjectedFieldAddress) next = Push(stack, allocated, depth - 1, Native);
                     else next = Assignable(stack[depth - 1], storage, objects) ? depth - 2 : -2;
                 }
                 else if (kind == VirtualCall)
@@ -268,13 +268,17 @@ namespace PortableCompiler
                     Assignable(stack[depth - 1], CellValue(extra), objects) ? depth - 2 : -2;
             if (kind == ClearManagedCell)
                 return Match(stack, depth, extra) ? depth - 1 : -2;
-            if (kind == LoadObject)
-                return depth >= 1 && IsNativeInteger(stack[depth - 1]) ? Push(stack, allocated, depth - 1, operand) : -2;
-            if (kind == StoreObject)
-                return depth >= 2 && IsNativeInteger(stack[depth - 2]) &&
-                    (stack[depth - 1] == operand || stack[depth - 1] == NullValue) ? depth - 2 : -2;
-            if (kind == InitializeNative)
-                return depth >= 1 && IsNativeInteger(stack[depth - 1]) ? depth - 1 : -2;
+            if (kind == LoadObject || kind == StoreObject || kind == InitializeNative)
+            {
+                bool store = kind == StoreObject;
+                int address = depth - (store ? 2 : 1);
+                if (address < 0) return -2;
+                bool managed = stack[address] == ValueLocation(operand);
+                if (!managed && (extra <= 0 || !IsNativeInteger(stack[address]))) return -2;
+                if (kind == LoadObject) return Push(stack, allocated, address, operand);
+                if (store && stack[depth - 1] != operand && (managed || stack[depth - 1] != NullValue)) return -2;
+                return address;
+            }
             if (kind == NativePointerConstructor)
                 return depth > 0 && IsNativeInteger(stack[depth - 1]) ? depth : -2;
             if (kind == PinString)
@@ -630,6 +634,9 @@ namespace PortableCompiler
             if (kind == LoadStaticField || kind == LoadNativeStatic) return Push(stack, allocated, depth, StackType(extra));
             if (kind == StoreStaticField || kind == StoreNativeStatic)
                 return depth > 0 && Assignable(stack[depth - 1], extra, objects) ? depth - 1 : -1;
+            if (kind == TakeProjectedFieldAddress)
+                return Match(stack, depth, ValueLocation(FieldAccess.Owner(extra)))
+                    ? Push(stack, allocated, depth - 1, ValueFieldProjections.DecodeLocation(objects, FieldAccess.Storage(extra))) : -2;
             if (kind == TakeValueFieldAddress)
             {
                 if (depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(extra), objects)) return -1;

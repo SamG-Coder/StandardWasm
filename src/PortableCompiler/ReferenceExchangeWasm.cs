@@ -10,7 +10,7 @@ namespace PortableCompiler
         // Its GC array belongs to one Wasm agent. No host call or yield occurs
         // between reading, comparing and conditionally replacing its payload.
         internal static int WriteBody(byte[] output, int cursor, byte[] image,
-            int[] layout, int[] heaps, int row, int[] objects, int[] signatures, int offset, int arity)
+            int[] layout, int[] heaps, int row, int[] objects, int[] signatures, int offset, int arity, ValueFieldProjections projections)
         {
             if (arity != 3 || !IsReferenceLocation(signatures[offset + 1])) return cursor;
             int type = CellValue(signatures[offset + 1]);
@@ -20,7 +20,7 @@ namespace PortableCompiler
             if (output.Length - cursor < 128) return -3;
             int vector = ObjectLayouts.RegisterArray(objects, ObjectLayouts.ObjectReference);
             if (vector < 0) return vector;
-            return Emit(output, cursor, vector, ObjectLayouts.Representation(objects, type));
+            return Emit(output, cursor, vector, ObjectLayouts.Representation(objects, type), signatures[offset + 1], projections);
         }
 
         private static bool IsCoreLibOperation(byte[] image, int[] layout, int[] heaps, int row, bool objectCell)
@@ -45,22 +45,19 @@ namespace PortableCompiler
                 "Interlocked", "CompareExchange", new byte[] { 0x10, 1, 3, 0x1e, 0, 0x10, 0x1e, 0, 0x1e, 0, 0x1e, 0 }, true);
         }
 
-        private static int Emit(byte[] output, int cursor, int vector, int representation)
+        private static int Emit(byte[] output, int cursor, int vector, int representation, int locationType, ValueFieldProjections projections)
         {
             const int location = 0, replacement = 1, comparand = 2, previous = 3;
             output[cursor++] = 1; // one local group
             output[cursor++] = 1; // previous value
             cursor = WasmBinary.ValueType(output, cursor, representation);
-            cursor = ManagedLocationWasm.AccessElement(output, cursor, location, vector);
-            cursor = Gc(output, cursor, 0x0b, vector); // array.get
+            cursor = ValueFieldProjectionWasm.Read(output, cursor, 0, location, vector, locationType, projections);
             cursor = ManagedLocationWasm.CastCellValue(output, cursor, representation);
             cursor = Local(output, cursor, 0x22, previous);
             cursor = Local(output, cursor, 0x20, comparand);
             output[cursor++] = 0xd3; // ref.eq
             output[cursor++] = 0x04; output[cursor++] = 0x40;
-            cursor = ManagedLocationWasm.AccessElement(output, cursor, location, vector);
-            cursor = Local(output, cursor, 0x20, replacement);
-            cursor = Gc(output, cursor, 0x0e, vector); // array.set
+            cursor = ValueFieldProjectionWasm.Write(output, cursor, 0, location, replacement, vector, locationType, projections);
             output[cursor++] = 0x0b;
             cursor = Local(output, cursor, 0x20, previous);
             output[cursor++] = 0x0b;
