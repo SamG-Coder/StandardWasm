@@ -13,14 +13,13 @@ string coreLib = Environment.GetEnvironmentVariable("STANDARDWASM_MONO_CORELIB")
         "browser-wasm", "native", "System.Private.CoreLib.dll");
 using var core = new PEReader(File.OpenRead(coreLib));
 MetadataReader metadata = core.GetMetadataReader();
-var searchValues = metadata.TypeDefinitions.Select(metadata.GetTypeDefinition).Single(type =>
-    metadata.GetString(type.Namespace) == "System.Buffers" && metadata.GetString(type.Name) == "SearchValues");
-int searchFrontier = MetadataTokens.GetRowNumber(searchValues.GetMethods().Single(handle =>
+var text = metadata.TypeDefinitions.Select(metadata.GetTypeDefinition).Single(type =>
+    metadata.GetString(type.Namespace) == "System" && metadata.GetString(type.Name) == "String");
+int rawStringFrontier = MetadataTokens.GetRowNumber(text.GetMethods().Single(handle =>
 {
     var method = metadata.GetMethodDefinition(handle);
-    byte[] signature = metadata.GetBlobBytes(method.Signature);
-    return metadata.GetString(method.Name) == "Create" && signature.Length > 6 && signature[0] == 0 &&
-        signature[1] == 1 && signature[^1] == 3;
+    return metadata.GetString(method.Name) == "GetRawStringData" &&
+        metadata.GetBlobBytes(method.Signature).SequenceEqual(new byte[] { 0x20, 0, 0x10, 3 });
 }));
 Func<int>[] cases = [Probe.Default, Probe.WithFlag, Probe.Version, Probe.ManagedIdentity, Probe.CustomSlot];
 File.WriteAllText(args[0], JsonSerializer.Serialize(new
@@ -33,6 +32,6 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
         name = run.Method.Name,
         row = run.Method.MetadataToken & 0xffffff,
         expected = run(),
-        rejection = index < 3 ? new { status = -2, location = new[] { 2, searchFrontier, 0x35 } } : null
+        rejection = index < 3 ? new { status = -2, location = new[] { 2, rawStringFrontier, 1 } } : null
     })
 }));

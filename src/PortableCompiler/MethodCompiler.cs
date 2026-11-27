@@ -2276,17 +2276,20 @@ namespace PortableCompiler
                         continue;
                     }
                     int referenceLocation = LocationFromIdentity(objects, type);
-                    if (type == I32 || type == I64 || type == Native || IsReferenceLocation(referenceLocation))
+                    bool characterSlot = type == Character && local >= parameterCount;
+                    if (characterSlot && !CanOwnCharacterCell(frame, parameterCount, result, objects)) return -2;
+                    if (type == I32 || type == I64 || type == Native || characterSlot || IsReferenceLocation(referenceLocation))
                     {
-                        // Native words still use managed cells when their address
-                        // crosses managed calls. Explicit pointers use NativeFrameWasm.
+                        // Every alias and ordinary local access share this
+                        // cell. Character cells keep their packed i16 storage.
                         int vector = type == Native ? NativeVector : type == I64 ? Longs : type == I32 ? booleanSlot ? Bytes : Ints :
-                            ObjectLayouts.RegisterArray(objects, ObjectReference);
+                            characterSlot ? Chars : ObjectLayouts.RegisterArray(objects, ObjectReference);
                         if (vector < 0) return vector;
                         frameCells[local] = vector;
                         records[slot] = BranchIl.LoadFrameLocation;
                         records[slot + 3] = type == Native ? NativeIntLocation :
-                            type == I32 ? booleanSlot ? BooleanLocation : Int32Location : type == I64 ? Int64Location : referenceLocation;
+                            type == I32 ? booleanSlot ? BooleanLocation : Int32Location : type == I64 ? Int64Location :
+                            characterSlot ? CharacterLocation : referenceLocation;
                         continue;
                     }
                     if (IsSpan(type))
