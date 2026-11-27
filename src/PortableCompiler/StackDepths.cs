@@ -319,6 +319,12 @@ namespace PortableCompiler
                     ? Push(stack, allocated, depth - 2, CharacterLocation) : -2;
             if (kind == SpanLength || kind == SpanIsEmpty)
                 return Match(stack, depth, extra) ? Push(stack, allocated, depth - 1, I32) : -2;
+            if (kind == ArrayClear)
+            {
+                int start = depth - operand;
+                if (start < 0 || operand == 3 && (!Match(stack, depth - 1, I32) || !Match(stack, depth, I32))) return -1;
+                return ArrayClearWasm.IsVector(objects, stack[start]) ? start : -2;
+            }
             if (kind == ArrayCopy)
             {
                 int start = depth - operand;

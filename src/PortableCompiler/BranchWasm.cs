@@ -1253,6 +1253,16 @@ namespace PortableCompiler
                     used = SpanWasm.Slice(code, used, type, view, start, length, frameShape[25] != 0);
                     used = Local(code, used, 0x21, view);
                 }
+                else if (kind == ArrayClear)
+                {
+                    int first = depth - operand;
+                    int vector = states[state + first];
+                    int array = Spill(spills, maximum, spillFlags, vector, first);
+                    // All slots containing consumed operands are dead after the clear.
+                    int cursor = Spill(spills, maximum, spillFlags, I32, operand == 1 ? first : first + 1);
+                    int length = operand == 1 ? -1 : Spill(spills, maximum, spillFlags, I32, top);
+                    used = ArrayClearWasm.Emit(code, used, objects, vector, array, cursor, length);
+                }
                 else if (kind == ArrayCopy)
                 {
                     int first = depth - operand, target = first + (operand == 3 ? 1 : 2);

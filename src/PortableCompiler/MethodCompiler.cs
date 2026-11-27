@@ -1128,6 +1128,12 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - CharacterSpanCopyWasm.Capacity) return -3;
                                 capacity += CharacterSpanCopyWasm.Capacity;
                             }
+                            else if (kind == BranchIl.ArrayClear)
+                            {
+                                tags = ExceptionTypes.ArgumentNull | ExceptionTypes.IndexOutOfRange;
+                                if (capacity > int.MaxValue - ArrayClearWasm.Capacity) return -3;
+                                capacity += ArrayClearWasm.Capacity;
+                            }
                             else if (kind == BranchIl.ArrayCopy)
                                 tags = ExceptionTypes.ArgumentNull | ExceptionTypes.ArgumentOutOfRange | ExceptionTypes.Argument;
                             else if (kind == BranchIl.ThrowFrameworkArgument)
@@ -2227,6 +2233,14 @@ namespace PortableCompiler
                 if ((kind == BranchIl.Call || kind == BranchIl.MemberCall) && records[slot + 3] ==
                     (kind == BranchIl.Call ? 0 : 0x28) && records[slot + BranchIl.Width + 1] == 0)
                 {
+                    int clear = ArrayClearMetadata.Arity(image, layout, heaps, records[slot + 1], kind == BranchIl.MemberCall);
+                    if (clear != 0)
+                    {
+                        records[slot] = BranchIl.ArrayClear;
+                        records[slot + 1] = clear;
+                        records[slot + 3] = 0;
+                        continue;
+                    }
                     int arity = ArrayCopyMetadata.Arity(image, layout, heaps, records[slot + 1], kind == BranchIl.MemberCall);
                     if (arity != 0)
                     {
