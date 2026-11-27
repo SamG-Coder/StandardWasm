@@ -97,6 +97,10 @@ namespace PortableCompiler
                     Search(bundle, objects, required, definition[0], definition[1], noParameters, 0, depth);
             }
             if (argument < ObjectLayouts.FirstClass || argument - ObjectLayouts.FirstClass >= objects[0]) return 0;
+            // An interface satisfies its own constraint without an InterfaceImpl edge.
+            // Match the arguments as well as the definition to preserve closed identity.
+            if (ObjectLayouts.IsInterface(objects, argument) && MatchesLayout(objects, argument, required))
+                return 1;
             for (int source = argument; source != 0; source = ObjectLayouts.Parent(objects, source))
             {
                 int row = ObjectLayouts.TypeDef(objects, source);
@@ -106,6 +110,18 @@ namespace PortableCompiler
                 if (status != 0) return status;
             }
             return 0;
+        }
+
+        private static bool MatchesLayout(int[] objects, int argument, int[] required)
+        {
+            int arity = ObjectLayouts.ArgumentCount(objects, argument);
+            if (ObjectLayouts.AssemblyOf(objects, argument) != required[0] ||
+                ObjectLayouts.TypeDef(objects, argument) != required[1] || arity != required.Length - 2)
+                return false;
+            for (int i = 0; i < arity; i++)
+                if (ObjectLayouts.Argument(objects, argument, i) != required[i + 2])
+                    return false;
+            return true;
         }
 
         internal static int FindPrimitive(BundleImages bundle, int argument, int[] definition)
