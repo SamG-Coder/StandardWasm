@@ -181,7 +181,7 @@ namespace PortableCompiler
                 missing[3 * which + 2] = constructor;
             }
             NativeThunks.Records(records, current, shape[0], entry, nativeBase + present, nativeBase + library,
-                nativeBase + entry, clear, save, missing);
+                nativeBase + entry, clear, save, missing, kind);
             return functions;
         }
 
@@ -498,7 +498,7 @@ namespace PortableCompiler
                     continue;
                 }
                 uint rva = 0;
-                int nativeKind = stub >= 0 ? NativeThunks.None : NativeThunks.Kind(image, layout, source);
+                int nativeKind = stub >= 0 ? NativeThunks.None : NativeThunks.Kind(image, heaps, layout, source);
                 int nativeDescription = 0;
                 if (stub >= 0)
                 {
@@ -514,8 +514,9 @@ namespace PortableCompiler
                     nativeDescription = NativeThunks.Describe(image, heaps, layout, source, nativeKind,
                         nativeModule, nativeName, nativeTypes, nativeShape);
                     if (nativeDescription < 0) return nativeDescription;
+                    if (nativeKind == NativeThunks.SymbolLookup) hostUse[0] = hostUse[0] | WasmImports.Memory;
                     body[0] = 0;
-                    body[1] = NativeThunks.RecordCount(nativeShape[0], nativeShape[2] != 0);
+                    body[1] = NativeThunks.RecordCount(nativeShape[0], nativeShape[2] != 0, nativeKind);
                     body[2] = nativeShape[0] > 1 ? nativeShape[0] : 1;
                     body[3] = 0; body[4] = 0; body[5] = 0;
                 }

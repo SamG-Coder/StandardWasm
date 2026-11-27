@@ -18,6 +18,8 @@ internal static unsafe class Program
     private static uint Other(int input, char* address) =>
         unchecked((uint)(address[0] - input));
 
+    private delegate nint CoreLibLookup(nint module, string symbol, bool throwOnError);
+
     private delegate nint CoreLibLoader(string name, nint reserved, int flags);
 
     private static object ObserveLoadLibrary()
@@ -39,11 +41,24 @@ internal static unsafe class Program
             var loadOriginal = coreLibLoad.CreateDelegate<CoreLibLoader>();
             nint original = loadOriginal(LibraryCalls.LibraryName(), 0, 0x800);
             int originalError = Marshal.GetLastPInvokeError();
+            var getSymbol = typeof(NativeLibrary).GetMethod("GetSymbol", flags,
+                null, new[] { typeof(nint), typeof(string), typeof(bool) }, null)!;
+            var lookup = getSymbol.CreateDelegate<CoreLibLookup>();
+            int originalSymbol = lookup(library, LibraryCalls.ExportName(0), false) == target ? 1 : 0;
+            int originalMissing = lookup(library, LibraryCalls.ExportName(1), false) == 0 ? 0 : -1;
+            var tryFind = typeof(LibraryCalls).GetMethod(nameof(LibraryCalls.TryFind))!;
             return new
             {
                 original = new[] { original == library ? 1 : 0, originalError },
                 nameRow = typeof(LibraryCalls).GetMethod(nameof(LibraryCalls.LibraryName))!.MetadataToken & 0x00ffffff,
                 coreLibRow = coreLibLoad.MetadataToken & 0x00ffffff,
+                symbolRow = typeof(LibraryCalls).GetMethod(nameof(LibraryCalls.Find))!.MetadataToken & 0x00ffffff,
+                symbols = new[] { LibraryCalls.Find(0), LibraryCalls.Find(1) },
+                symbolNameRow = typeof(LibraryCalls).GetMethod(nameof(LibraryCalls.ExportName))!.MetadataToken & 0x00ffffff,
+                originalSymbolRow = getSymbol.MetadataToken & 0x00ffffff,
+                originalSymbol = new[] { originalSymbol, originalMissing },
+                trySymbolRow = tryFind.MetadataToken & 0x00ffffff,
+                trySymbols = new[] { LibraryCalls.TryFind(0), LibraryCalls.TryFind(1) },
                 loadRow = typeof(LibraryCalls).GetMethod(nameof(LibraryCalls.Load))!.MetadataToken & 0x00ffffff,
                 combinedRow = typeof(LibraryCalls).GetMethod(nameof(LibraryCalls.LoadAndInvoke))!.MetadataToken & 0x00ffffff,
                 cases = new[] { LibraryCalls.Load(0) == library ? 1 : 0, (int)LibraryCalls.Load(1),

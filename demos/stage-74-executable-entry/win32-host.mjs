@@ -20,6 +20,29 @@ const executableHandle = 1;
 const decoder = new TextDecoder("utf-16le", { ignoreBOM: true });
 const normalize = name => name.replaceAll("\\", "/").toLowerCase();
 
+// Reader for the native UTF-16 buffer, shared by both library APIs.
+function readWideString(memory, address) {
+    const bytes = memory.buffer;
+    const view = new DataView(bytes);
+    let end = address;
+    while (end + 1 < view.byteLength && view.getUint16(end, true) !== 0) end += 2;
+    if (end + 1 >= view.byteLength) return null;
+    return decoder.decode(new Uint8Array(bytes, address, end - address));
+}
+
+export function createNativeSymbolLookup(memory, libraries, errors) {
+    return function getNativeSymbol(_state, handle, pointer) {
+        const address = pointer >>> 0;
+        const name = address === 0 ? null : readWideString(memory, address);
+        if (name === null) {
+            errors.system = noAccess;
+            return 0;
+        }
+        // The generated thunk applies the original QCall's throwOnError flag.
+        return libraries.getProcAddress(handle, name);
+    };
+}
+
 export function createWin32Host(memory, executablePath, assets = [], windows = createWindowState(),
     errors = { system: 0, pinvoke: 0 }, dynamicLibraries) {
     const byPath = new Map();
@@ -45,36 +68,28 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
 
     const getWindowLong = (handle, index) => windows.getWindowLong(handle, index, value => { errors.system = value; });
 
-    function readWideString(address) {
-        // A buffer view is refreshed after every memory.grow. Never read
-        // beyond the explicit linear-memory instance supplied by the loader.
-        const bytes = memory.buffer;
-        const view = new DataView(bytes);
-        let end = address;
-        while (end + 1 < view.byteLength && view.getUint16(end, true) !== 0) end += 2;
-        if (end + 1 >= view.byteLength) {
-            errors.system = noAccess;
-            return null;
-        }
-        return decoder.decode(new Uint8Array(bytes, address, end - address));
-    }
-
     function loadLibraryExW(pointer, reserved, flags) {
         const address = pointer >>> 0;
         if (!address) {
             errors.system = invalidWin32Parameter;
             return 0;
         }
-        const name = readWideString(address);
-        if (name === null) return 0;
+        const name = readWideString(memory, address);
+        if (name === null) {
+            errors.system = noAccess;
+            return 0;
+        }
         return dynamicLibraries.loadLibrary(name, reserved, flags);
     }
 
     function getModuleHandleW(pointer) {
         const address = pointer >>> 0;
         if (!address) return executableHandle;
-        const text = readWideString(address);
-        if (text === null) return 0;
+        const text = readWideString(memory, address);
+        if (text === null) {
+            errors.system = noAccess;
+            return 0;
+        }
         let name = normalize(text);
         if (name) {
             const leaf = baseName(name);

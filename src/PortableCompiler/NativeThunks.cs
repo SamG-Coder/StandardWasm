@@ -25,15 +25,30 @@ namespace PortableCompiler
     // Only blittable scalar signatures are lowered (see Blittable); anything else is a located -2.
     internal static class NativeThunks
     {
-        internal const int None = 0, PlatformInvoke = 1, InternalCall = 2;
+        internal const int None = 0, PlatformInvoke = 1, InternalCall = 2, SymbolLookup = 3;
         private const int StaticMethod = 0x10, PinvokeImpl = 0x2000, PreserveSig = 0x80, InternalCallFlag = 0x1000;
         private const int SupportsLastError = 0x40;
 
-        internal static int Kind(byte[] image, int[] layout, int row)
+        internal static int Kind(byte[] image, int[] heaps, int[] layout, int row)
         {
-            if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & PinvokeImpl) != 0) return PlatformInvoke;
+            if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & PinvokeImpl) != 0)
+                return IsSymbolLookup(image, heaps, layout, row) ? SymbolLookup : PlatformInvoke;
             if ((MethodDefinitions.ReadColumn(image, layout, row, 1) & InternalCallFlag) != 0) return InternalCall;
             return None;
+        }
+
+        private static bool IsSymbolLookup(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            int blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
+            if (blob <= 0 || blob > heaps[1] - 8) return false;
+            int at = heaps[0] + blob;
+            if (ImageBytes.U32(image, (uint)at) != 0x18030007 ||
+                ImageBytes.U32(image, (uint)(at + 4)) != 0x08070f18) return false;
+            if (MethodDefinitions.ReadColumn(image, layout, row, 1) != PreserveSig) return false;
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            return first >= 0 && PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts) &&
+                NativeImports.Find(image, heaps, layout, counts, "QCall", "NativeLibrary_GetSymbol", row, 0x101) == row;
         }
 
         // The MethodDef row of `instance void .ctor(string)` on TypeDef row type, or 0.
@@ -54,8 +69,8 @@ namespace PortableCompiler
         }
 
         // Records for n parameters: 10 for the presence checks, then the forwarding call.
-        internal static int RecordCount(int parameters, bool setLastError) =>
-            10 + parameters + 2 + (setLastError ? 2 : 0);
+        internal static int RecordCount(int parameters, bool setLastError, int kind) =>
+            10 + parameters + 2 + (kind == SymbolLookup ? 8 : setLastError ? 2 : 0);
 
         // Describes the import for row: module and name (UTF-8) into module/name, the parameters'
         // Wasm value types into types, and the result type (0 for void) in shape[1]. shape[0] gets
@@ -69,6 +84,12 @@ namespace PortableCompiler
             // Instance InternalCalls and HRESULT-translating (non-PreserveSig) imports have
             // marshalling this step does not perform.
             if ((attributes & StaticMethod) == 0) return -2;
+            if (kind == SymbolLookup)
+            {
+                for (int i = 0; i < 3; i++) types[i] = 0x7f;
+                shape[0] = 3; shape[1] = 0x7f; shape[2] = 0;
+                return Put(module, 0, "native:QCall") | Put(name, 0, "NativeLibrary_GetSymbol") << 16;
+            }
             int status = Blittable(image, heaps, layout, row, types, shape);
             if (status < 0) return status;
             int moduleLength, nameLength;
@@ -162,6 +183,7 @@ namespace PortableCompiler
         // the declared module name (without the "native:" prefix). Returns the byte count.
         internal static int Message(byte[] module, int moduleLength, int kind, byte[] name, int nameLength, byte[] message)
         {
+            if (kind == SymbolLookup) return Put(message, 0, "The requested native export was not found.");
             int used = Put(message, 0, "Unable to find an entry point named '");
             for (int i = 0; i < nameLength; i++) message[used++] = name[i];
             used = Put(message, used, "' in DLL '");
@@ -174,7 +196,7 @@ namespace PortableCompiler
         // missing[0..2] are the DllNotFoundException message start, length and constructor;
         // missing[3..5] the same for EntryPointNotFoundException.
         internal static void Records(int[] records, int self, int parameters, int entry, int presentImport,
-            int libraryImport, int callImport, int clearImport, int saveImport, int[] missing)
+            int libraryImport, int callImport, int clearImport, int saveImport, int[] missing, int kind)
         {
             int pc = 0;
             pc = Put(records, pc, BranchIl.NativePresent, presentImport, entry);
@@ -190,7 +212,20 @@ namespace PortableCompiler
             for (int i = 0; i < parameters; i++) pc = Put(records, pc, BranchIl.Load, i, 0);
             if (clearImport >= 0) pc = Put(records, pc, BranchIl.NativeHelper, clearImport, 0);
             pc = Put(records, pc, BranchIl.CallNative, self, callImport);
-            if (saveImport >= 0) pc = Put(records, pc, BranchIl.NativeHelper, saveImport, 0);
+            if (kind == SymbolLookup)
+            {
+                // The QCall's third argument alone decides whether a missing
+                // export returns zero or throws a managed exception.
+                pc = Put(records, pc, BranchIl.Dup, 0, 0);
+                pc = Put(records, pc, BranchIl.Conditional, pc + 7, 0);
+                pc = Put(records, pc, BranchIl.Load, 2, 0);
+                pc = Put(records, pc, BranchIl.Conditional, pc + 5, 0x45);
+                pc = Put(records, pc, BranchIl.Pop, 0, 0);
+                pc = Put(records, pc, BranchIl.LoadNativeMessage, missing[3], missing[4]);
+                pc = Put(records, pc, BranchIl.NewObject, missing[5], 0);
+                pc = Put(records, pc, BranchIl.ThrowNull, 0, 0);
+            }
+            else if (saveImport >= 0) pc = Put(records, pc, BranchIl.NativeHelper, saveImport, 0);
             Put(records, pc, BranchIl.Return, 0, 0);
         }
 

@@ -119,6 +119,12 @@ async function exerciseLibrary(compilerBytes, assemblyBytes, framework, oracle, 
     }
 
     const module = await compile(oracle.loadRow);
+    const symbolModule = await compile(oracle.symbolRow);
+    const symbolNameModule = await compile(oracle.symbolNameRow);
+    const originalSymbolModule = await compile(oracle.originalSymbolRow, framework[0], framework.slice(1));
+    const [tryBundle, tryEntries] = pack(asset, framework, oracle.trySymbolRow, origins);
+    const tryResult = tool.CompileBundleDetailed(upload(tryBundle), upload(tryEntries), output, diagnostic);
+    const tryDiagnostic = [0, 1, 2].map(index => tool.ReadDiagnostic(diagnostic, index));
     const sourceName = await compile(oracle.nameRow);
     const combined = await compile(oracle.combinedRow);
     const coreLib = await compile(oracle.coreLibRow, framework[0], framework.slice(1));
@@ -140,6 +146,12 @@ async function exerciseLibrary(compilerBytes, assemblyBytes, framework, oracle, 
     const unconfiguredResult = [unconfigured.exports.run(0), unconfigured.exports.run(2)];
     const { exports: load } = await instantiate(module, tool, [], {}, undefined, undefined, undefined, platform);
     const firstLibrary = library;
+    const { exports: symbolFixture } = await instantiate(symbolModule, tool, [], {}, undefined, undefined, undefined, platform);
+    const symbols = [0, 1].map(scenario => symbolFixture.run(scenario));
+    const { exports: names } = await instantiate(symbolNameModule, tool, []);
+    const { exports: originalLookup } = await instantiate(originalSymbolModule, tool, [], {}, undefined, undefined, undefined, platform);
+    const originalSymbol = [originalLookup.run(library, names.run(0), 0) === token ? 1 : 0,
+        originalLookup.run(library, names.run(1), 0)];
     const cases = [load.run(0) === firstLibrary ? 1 : 0, load.run(1), load.run(2), load.run(3), load.run(6), load.run(10)];
 
     const { exports: mixed } = await instantiate(combined, tool, [], {}, undefined, undefined, undefined, platform);
@@ -163,7 +175,7 @@ async function exerciseLibrary(compilerBytes, assemblyBytes, framework, oracle, 
     });
     const originalSuccess = [original.run(nameFixture.run(), 0, 0x800) === expectedLibrary ? 1 : 0, coreLibErrors.pinvoke];
     const originalNull = [original.run(null, 0, 0x800), coreLibErrors.system, coreLibErrors.pinvoke];
-    return { cases, unconfigured: unconfiguredResult, isolatedRegistry, required, length, text, imports, originalSuccess, originalNull };
+    return { cases, symbols, originalSymbol, tryResult, tryDiagnostic, unconfigured: unconfiguredResult, isolatedRegistry, required, length, text, imports, originalSuccess, originalNull };
 }
 
 const nativeIndirect = "standardwasm:native-indirect";
@@ -278,6 +290,11 @@ const variants = {
 };
 const library = await exerciseLibrary(compiler, assembly, framework, oracle.loadLibrary, packEntry, instantiateManagedModule, createTempPathHost);
 assert.deepEqual(library.cases, oracle.loadLibrary.cases);
+assert.deepEqual(library.symbols, oracle.loadLibrary.symbols);
+assert.deepEqual(library.originalSymbol, oracle.loadLibrary.originalSymbol);
+assert.equal(library.tryResult, -2);
+assert.deepEqual(library.tryDiagnostic.slice(0, 2), [0, oracle.loadLibrary.trySymbolRow]);
+assert.ok(library.tryDiagnostic[2] >= 0);
 assert.deepEqual(library.unconfigured, [0, 126]);
 assert.equal(library.isolatedRegistry, true);
 assert.equal(library.required, oracle.loadLibrary.required);

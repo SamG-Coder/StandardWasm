@@ -1,7 +1,7 @@
 import { comImportModule, isNativeImportModule, nativeImports, nativeIndirectImportModule, windowsScalars } from "../../scripts/native-imports.mjs";
 import { comDispatchSignature, createComHost } from "./com-host.mjs";
 import { createDynamicLibraryHost, createNativeIndirectDispatch, nativeIndirectSignature, scopedUtf16Signature } from "./dynamic-library-host.mjs";
-import { createWin32Host, win32ImportModule, win32ImportNames, win32MemoryImports } from "./win32-host.mjs";
+import { createNativeSymbolLookup, createWin32Host, win32ImportModule, win32ImportNames, win32MemoryImports } from "./win32-host.mjs";
 
 export const resourceImportModule = "standardwasm:resources";
 
@@ -115,6 +115,7 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     let wantsDebugger = false;
     let wantsNative = false;
     let wantsCom = false;
+    let wantsNativeSymbol = false;
     const nativeIndirectRequests = new Set();
     for (const { module: owner, name, kind } of WebAssembly.Module.imports(module)) {
         if (owner === resourceImportModule) {
@@ -156,6 +157,8 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         }
         if (isNativeImportModule(owner)) {
             wantsNative = true;
+            if (owner === "native:QCall" && name === "NativeLibrary_GetSymbol" && kind === "function")
+                wantsNativeSymbol = true;
             continue;
         }
         const group = Object.hasOwn(runtimeImports, owner) ? runtimeImports[owner] : undefined;
@@ -171,6 +174,8 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     if (wantsCom && !requestedResources.has("memory"))
         throw Error("COM dispatch requires the StandardWasm memory import.");
     const wantsNativeIndirect = nativeIndirectRequests.size !== 0;
+    if (wantsNativeSymbol && !requestedResources.has("memory"))
+        throw Error("Native symbol lookup requires the StandardWasm memory import.");
     if (wantsNativeIndirect && !requestedResources.has("memory"))
         throw Error("Native indirect dispatch requires the StandardWasm memory import.");
     if (wantsNativeIndirect && typeof platform?.configureNativeLibraries !== "function")
@@ -181,7 +186,6 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     // system and saved error slots shared within one instance and isolated across instances.
     const errors = { system: 0, pinvoke: 0 };
     let imports = { ...runtimeImports };
-    if (wantsNative) Object.assign(imports, nativeImports(module, windowsScalars, errors));
     if (requestedResources.size === 1 && requestedResources.has("memory")) {
         memory = createMemory();
         imports[resourceImportModule] = { memory };
@@ -194,7 +198,7 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         imports = { ...imports, ...resource.imports };
     }
     let dynamicLibraries;
-    if (wantsNativeIndirect || requestedWin32.has("loadLibraryExW")) {
+    if (wantsNativeIndirect || wantsNativeSymbol || requestedWin32.has("loadLibraryExW")) {
         dynamicLibraries = createDynamicLibraryHost(errors);
         const { invoke, invokeScoped, ...registry } = dynamicLibraries;
         platform?.configureNativeLibraries?.({ memory, errors, ...registry });
@@ -206,6 +210,12 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
                 dispatch[scopedUtf16Signature] = createNativeIndirectDispatch(invokeScoped, true);
             imports[nativeIndirectImportModule] = dispatch;
         }
+    }
+    if (wantsNative) {
+        const registry = wantsNativeSymbol ? { ...windowsScalars,
+            "qcall!NativeLibrary_GetSymbol": createNativeSymbolLookup(memory, dynamicLibraries, errors)
+        } : windowsScalars;
+        Object.assign(imports, nativeImports(module, registry, errors));
     }
     if (requestedWin32.size) {
         const usesModules = requestedWin32.has("getModuleHandleW") || requestedWin32.has("createActCtxW");

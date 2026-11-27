@@ -44,3 +44,16 @@ The Windows .NET 10 wrapper itself is compared with its emitted Wasm. The
 supported static CoreLib string marshaller reuses read-only UTF-16 pin
 storage and produces address zero for a null string. The fixture verifies
 the native load and indirect call share the same registry for one instance.
+
+The trusted CoreLib `NativeLibrary_GetSymbol` QCall reads the symbol name
+from guest UTF-16 memory and resolves it in the same per-instance registry.
+The unchanged `GetSymbol` wrapper returns zero for a missing export when
+its throwing flag is false. The unchanged public `GetExport` raises a
+managed `EntryPointNotFoundException` on that miss. The verifier checks
+case-sensitive resolution, a matching export token, and the managed catch.
+The exception currently carries a generic missing-export message.
+
+Public `TryGetExport` passes an `out nint` location. The x86 CLR verifies
+its expected success and false results, and the compiler still reports
+the unsupported location at the original managed call site. The raw QCall
+and its non-throwing result already work independently of that location.

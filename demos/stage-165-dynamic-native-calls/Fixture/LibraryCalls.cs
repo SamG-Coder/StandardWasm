@@ -1,3 +1,4 @@
+using System;
 using System.Runtime.InteropServices;
 
 namespace DynamicCallFixture;
@@ -19,6 +20,22 @@ public static unsafe class LibraryCalls
     {
         nint module = LoadNative("kernel32.dll", 0, 0x800);
         return module == expectedModule ? Calls.Invoke(target, count, destination) : 0;
+    }
+
+    public static string ExportName(int scenario) => scenario == 0 ? "GetTempPathW" : "gettemppathw";
+
+    public static int TryFind(int scenario)
+    {
+        nint library = LoadNative("kernel32.dll", 0, 0x800);
+        return NativeLibrary.TryGetExport(library, ExportName(scenario), out nint address) ? address != 0 ? 1 : -1 :
+            address == 0 ? 0 : -1;
+    }
+
+    public static int Find(int scenario)
+    {
+        nint library = LoadNative("kernel32.dll", 0, 0x800);
+        try { return NativeLibrary.GetExport(library, ExportName(scenario)) != 0 ? 2 : -1; }
+        catch (EntryPointNotFoundException) { return 3; }
     }
 
     private static nint LoadNative(string libraryName, nint reserved, int flags)
