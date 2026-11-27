@@ -130,6 +130,12 @@ export function createWindowState() {
             }
             return false;
         },
+        hasChildWindows(parent) {
+            parent >>>= 0;
+            for (const window of windows.values())
+                if ((window.style & childStyle) !== 0 && (window.attributes.parent >>> 0) === parent) return true;
+            return false;
+        },
         getMessageRoot() {
             // Windows resolves HWND_MESSAGE to a real hidden parent before
             // dispatching CREATESTRUCT. Give each launch its own parent.
@@ -377,28 +383,6 @@ export function createWindowRectQueries(memory, windows, setError) {
     return {
         getWindowRect: (hwnd, pointer) => query(hwnd, pointer, false),
         getClientRect: (hwnd, pointer) => query(hwnd, pointer, true)
-    };
-}
-
-export function createInvalidateRect(memory, windows, setError) {
-    return function invalidateRect(hwnd, rectangle, _erase) {
-        const fail = error => { setError(error); return 0; };
-        // Broadcast invalidation and paint delivery for shown/child windows
-        // require the full update-region and message-queue contract.
-        if (hwnd === 0) return fail(notSupported);
-        if (!windows.hasWindow(hwnd)) {
-            // Windows x86 reports ERROR_INVALID_WINDOW_HANDLE but returns
-            // TRUE for a stale or otherwise invalid non-null HWND.
-            setError(invalidWindow);
-            return 1;
-        }
-        if ((windows.getWindowLong(hwnd, -16, setError) & visibleOrChildStyle) !== 0)
-            return fail(notSupported);
-        if (rectangle !== 0 && (rectangle >>> 0) > memory.buffer.byteLength - rectBytes)
-            return fail(noAccess);
-        // A hidden top-level client stays clean with either BOOL erase value.
-        // The RECT is borrowed read-only, and no WM_PAINT is sent or queued.
-        return 1;
     };
 }
 

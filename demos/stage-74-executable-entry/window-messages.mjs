@@ -54,7 +54,9 @@ function integerMessageName(name) {
     return ordinal;
 }
 
-export function createThreadMessageQueue(memory, windows, setError) {
+// nextPaint is the window-paint source. It is consulted only after no posted
+// message is eligible, because Windows synthesizes WM_PAINT on demand.
+export function createThreadMessageQueue(memory, windows, setError, nextPaint = () => 0) {
     const messages = [];
     const maximumPostedMessages = 10000;
     let seenDestructions = windows.getDestroyedWindowCount();
@@ -99,22 +101,26 @@ export function createThreadMessageQueue(memory, windows, setError) {
             const threadOnly = filter === 0xffffffff;
             if (filter !== 0 && !threadOnly && !windows.hasWindow(filter)) return fail(1400);
             const queueStatus = flags >>> 16;
-            if (queueStatus !== 0 && (queueStatus & 0x08) === 0) return 0; // QS_POSTMESSAGE
+            const postedEligible = queueStatus === 0 || (queueStatus & 0x08) !== 0; // QS_POSTMESSAGE
             pruneDestroyedTargets();
             const first = minimum >>> 0;
             const last = maximum >>> 0;
             const allMessages = first === 0 && last === 0;
             // A thread post of WM_QUIT follows the range filter like any other post.
             // A quit produced by PostQuitMessage is a separate queue operation.
-            const index = messages.findIndex(({ hwnd, message }) =>
+            const index = !postedEligible ? -1 : messages.findIndex(({ hwnd, message }) =>
                 (allMessages || (message >= first && message <= last)) &&
                 (filter === 0 || (threadOnly ? hwnd === 0 : hwnd === filter || windows.isWindowChild(filter, hwnd))));
-            if (index < 0) return 0;
+            // A synthesized WM_PAINT has no queue entry and stays retrievable
+            // until the window is validated, so PM_REMOVE does not consume it.
+            const paintTarget = index < 0 ? nextPaint(filter, first, last, queueStatus) : 0;
+            if (index < 0 && paintTarget === 0) return 0;
 
             const at = pointer >>> 0;
             const view = new DataView(memory.buffer);
             if (at === 0 || at + 28 > view.byteLength) return fail(998); // ERROR_NOACCESS
-            const { hwnd, message, wParam, lParam, time } = messages[index];
+            const { hwnd, message, wParam, lParam, time } = index >= 0 ? messages[index] :
+                { hwnd: paintTarget, message: 0x000f, wParam: 0, lParam: 0, time: performance.now() >>> 0 };
             // Native x86 MSG has seven 32-bit words. The queue has no guest
             // cursor coordinates for a thread post. Preserve adjacent bytes.
             view.setUint32(at, hwnd, true);
@@ -124,7 +130,7 @@ export function createThreadMessageQueue(memory, windows, setError) {
             view.setUint32(at + 16, time, true);
             view.setInt32(at + 20, 0, true);
             view.setInt32(at + 24, 0, true);
-            if ((flags & 1) !== 0) messages.splice(index, 1); // PM_REMOVE
+            if (index >= 0 && (flags & 1) !== 0) messages.splice(index, 1); // PM_REMOVE
             return 1;
         }
     };
