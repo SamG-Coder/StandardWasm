@@ -1,7 +1,7 @@
-using PortableCompiler;
+using PeLibrary;
 using static PeLibrary.ImageBytes;
 
-namespace PeLibrary
+namespace PortableCompiler
 {
     internal static class RuntimeInitializerMetadata
     {
