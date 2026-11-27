@@ -482,6 +482,19 @@ namespace PortableCompiler
                         continue;
                     }
                 }
+                if (stub < 0 && FullPathBinding.IsWrapper(image, layout, heaps, source))
+                {
+                    int member = Win32ModuleBinding.GetFullPathName;
+                    hostUse[0] = hostUse[0] | WasmImports.Win32NativeFeature(member) | WasmImports.Win32Errors;
+                    int stackStatus = StackAllocationWasm.Register(globals, shadowStack);
+                    if (stackStatus < 0) return stackStatus;
+                    if (moduleCode.Length - length < FullPathWasm.Capacity) return -3;
+                    bodyOffsets[current] = length;
+                    length = FullPathWasm.WriteBody(moduleCode, length, WasmImports.Win32NativeSlot(hostFeatures, member),
+                        WasmImports.Win32ErrorBase(hostFeatures), initializerPrologue, hostImports, shadowStack);
+                    sizes[current] = length - bodyOffsets[current];
+                    continue;
+                }
                 if (stub < 0 && DpiQueryBinding.IsWrapper(image, heaps, layout, source))
                 {
                     int member = Win32ModuleBinding.GetProcessAwareness;
@@ -3529,6 +3542,8 @@ namespace PortableCompiler
                 !ObjectLayouts.IsConstructor(image, heaps, layout, row)) return -2;
             int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
             int arity = SignatureTypes.Read(bundle, image, heaps, signature, types, offset, receiver, layout, objects, assembly, context, methodArguments);
+            if (arity == 4 && FullPathBinding.IsWrapper(image, layout, heaps, row))
+                types[offset + 1] = ReadOnlyCharacterLocation;
             if ((debuggerQuery || nativeImport != 0) && arity >= 0 && (debuggerQuery ? arity != 0 || types[offset] != I32 :
                 !Win32ModuleBinding.MatchesSignature(bundle, objects, nativeImport, types, offset, arity))) return -2;
             if (arity > 0 && !isStatic && ObjectLayouts.IsValueType(objects, receiver) &&

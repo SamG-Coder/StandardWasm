@@ -100,6 +100,7 @@ namespace PortableCompiler
         {
             int expected = StackType(target);
             if (source == expected) return true;
+            if (source == CharacterLocation && expected == ReadOnlyCharacterLocation) return true;
             if (IsManagedLocation(source) || IsManagedLocation(expected)) return false;
             if (source >= ConstructorAddress || expected >= ConstructorAddress) return false;
             if (ObjectLayouts.IsValueType(objects, source) || ObjectLayouts.IsValueType(objects, expected)) return false;

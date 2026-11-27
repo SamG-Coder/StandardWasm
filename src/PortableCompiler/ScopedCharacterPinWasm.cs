@@ -89,7 +89,7 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int Copy(byte[] code, int used, int chars, int start, int count, int address, int index, bool writeBack)
+        internal static int Copy(byte[] code, int used, int chars, int start, int count, int address, int index, bool writeBack)
         {
             used = Const(code, used, 0);
             used = Local(code, used, 0x21, index);
