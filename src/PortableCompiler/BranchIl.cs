@@ -54,7 +54,7 @@ namespace PortableCompiler
         internal const int LoadFrameLocation = 127;
         internal const int LoadManagedCell = 128, StoreManagedCell = 129, ClearManagedCell = 130;
         internal const int WidenReference = 131, ConstrainedInstance = 132;
-        internal const int StringFirstCodeUnit = 133;
+        internal const int StringFirstCodeUnit = 133, LoadStaticByteSpan = 134;
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.

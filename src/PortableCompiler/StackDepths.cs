@@ -194,6 +194,7 @@ namespace PortableCompiler
             if (kind == WidenReference)
                 return depth > 0 && Assignable(stack[depth - 1], operand, objects)
                     ? Push(stack, allocated, depth - 1, ObjectReference) : -2;
+            if (kind == LoadStaticByteSpan) return Push(stack, allocated, depth, ReadOnlyByteSpan);
             if (kind == LoadString) return Push(stack, allocated, depth, String);
             if (kind == LoadTypeToken) return Push(stack, allocated, depth, PeLibrary.RuntimeTypeMetadata.Handle);
             // Only an unmanaged pointer (a native int, decision 0060) addresses memory 0.
@@ -253,7 +254,7 @@ namespace PortableCompiler
                 return Match(stack, depth, extra) ? Push(stack, allocated, depth - 1, I32) : -2;
             if (kind == SpanRead)
                 return Match(stack, depth - 1, extra) && Match(stack, depth, I32)
-                    ? Push(stack, allocated, depth - 2, extra == CharacterSpan ? I32 : ObjectReference) : -2;
+                    ? Push(stack, allocated, depth - 2, extra == ObjectSpan ? ObjectReference : I32) : -2;
             if (kind == ObjectElementAddress)
             {
                 if (depth < 2 || !ArrayIndex(stack, depth)) return -1;

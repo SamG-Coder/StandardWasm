@@ -395,6 +395,9 @@ namespace PortableCompiler
                     status = ArrayInitializers.Lower(image, heaps, layout, records, literals, literalSize, location);
                     if (status < 0)
                         return status;
+                    status = StaticByteSpans.Lower(bundle, image, layout, heaps, owner, context, methodArguments,
+                        records, objects, catchRegion, literals, literalSize, location);
+                    if (status < 0) return status;
                     if (locals != 0 && !resourceOpen)
                     {
                         status = PinnedStrings.Lower(image, heaps, layout, records, pinned, parameters, locals, location);

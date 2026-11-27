@@ -61,6 +61,22 @@ namespace PortableCompiler
             return used;
         }
 
+        internal static int FromStaticBytes(byte[] code, int used, int offset, int length)
+        {
+            if (length == 0)
+            {
+                code[used++] = 0xd0; // empty view with no passive segment
+                return WasmBinary.Signed(code, used, WasmBinary.HeapType(ReadOnlyByteSpan));
+            }
+            used = Const(code, used, offset);
+            used = Const(code, used, length);
+            used = Gc(code, used, 9, Bytes); // fresh packed owner from the passive data segment
+            code[used++] = 0;
+            used = Const(code, used, 0);
+            used = Const(code, used, length);
+            return Gc(code, used, 0, ReadOnlyByteSpan);
+        }
+
         internal static int Length(byte[] code, int used, int view)
         {
             // A default-initialized span is empty even without a descriptor.
@@ -78,7 +94,7 @@ namespace PortableCompiler
         internal static int Read(byte[] code, int used, int vector, int view, int index)
         {
             used = Address(code, used, vector, view, index);
-            return Gc(code, used, vector == Chars ? 0x0d : 0x0b, vector); // array.get_u for packed UTF-16
+            return Gc(code, used, vector == Chars || vector == Bytes ? 0x0d : 0x0b, vector);
         }
 
         internal static int Address(byte[] code, int used, int vector, int view, int index)

@@ -170,6 +170,21 @@ namespace PortableCompiler
                 reference[AssemblyReferences.GenericParent], objects, context, methodArguments) == ObjectSpan;
         }
 
+        internal static bool IsBytePointerConstructor(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int member, int context, int[] methodArguments, int[] objects)
+        {
+            var reference = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadMember(image, heaps, layout, member, reference, allowClosedParent: true) < 0 ||
+                reference[AssemblyReferences.GenericParent] == 0 ||
+                !MatchesAscii(image, heaps, (uint)reference[4], ".ctor")) return false;
+            uint blob = (uint)reference[5], at = (uint)heaps[0] + blob;
+            // instance void .ctor(void*, int32), on the platform ReadOnlySpan<byte>.
+            if (!Fits(blob, 7, (uint)heaps[1]) || image[at] != 6 ||
+                U32(image, at + 1) != 0x0f010220 || U16(image, at + 5) != 0x0801) return false;
+            return ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps, owner,
+                reference[AssemblyReferences.GenericParent], objects, context, methodArguments) == ReadOnlyByteSpan;
+        }
+
         internal static int Accessor(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int member, int context, int[] methodArguments, int spanType, int[] objects)
         {

@@ -40,10 +40,12 @@ namespace PortableCompiler
                 // its immediate read so it never becomes a writable location.
                 int load = records[call + 2] * Width;
                 if (load >= records.Length || ValueOperands.Entry(records, load / Width, clauses)) return 0;
-                bool characters = spanType == SignatureTypes.CharacterSpan;
-                if (characters ? records[load] != LoadIndirect || records[load + 1] != 0x49 :
+                int indirect = spanType == SignatureTypes.CharacterSpan ? 0x49 :
+                    spanType == SignatureTypes.ReadOnlyByteSpan ? 0x47 : 0;
+                if (indirect != 0 ? records[load] != LoadIndirect || records[load + 1] != indirect :
                     records[load] != LoadObjectIndirect) return 0;
-                int vector = characters ? SignatureTypes.Chars :
+                int vector = spanType == SignatureTypes.CharacterSpan ? SignatureTypes.Chars :
+                    spanType == SignatureTypes.ReadOnlyByteSpan ? SignatureTypes.Bytes :
                     ObjectLayouts.RegisterArray(objects, ObjectLayouts.ObjectReference);
                 if (vector < 0) return vector;
                 records[call + 1] = vector;

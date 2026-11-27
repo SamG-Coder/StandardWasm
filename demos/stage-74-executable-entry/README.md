@@ -92,7 +92,9 @@ reference local initializes to null. A CoreLib-backed fixture also verifies
 that a direct method can return a canonical type descriptor or null to a
 caller that compares the result as a `System.Type`. The original CoreLib
 `String.StartsWith(char)` body also runs against the browser's UTF-16
-storage, including embedded NUL, empty, and null-receiver cases.
+storage, including embedded NUL, empty, and null-receiver cases. The static
+byte span probe uses the original PE's readonly data and
+checks unsigned byte values and typed bounds failures.
 
 The monitor probe checks the CLR's reentrant lock behavior on the launch
 worker's single managed execution agent. It verifies lockTaken and typed

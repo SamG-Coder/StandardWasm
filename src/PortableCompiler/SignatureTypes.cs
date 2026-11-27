@@ -13,6 +13,7 @@ namespace PortableCompiler
         // the ordinary Object/reference conversion lattice.
         internal const int ObjectLocation = 0x80, ObjectSpan = 0x81, CharacterSpan = 0x82;
         internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84, BooleanLocation = 0x86, StringLocation = 0x87;
+        internal const int ReadOnlyByteSpan = 0x88;
         internal static bool IsManagedLocation(int type) =>
             type == ObjectLocation || type == CharacterLocation || type == BooleanLocation || type == StringLocation;
 
@@ -24,7 +25,7 @@ namespace PortableCompiler
             IsValueLocation(location) ? LocatedValue(location) :
             location == BooleanLocation ? I32 : location == StringLocation ? String : ObjectLayouts.ObjectReference;
 
-        internal static bool IsSpan(int type) => type == ObjectSpan || type == CharacterSpan || type == WritableCharacterSpan;
+        internal static bool IsSpan(int type) => type == ObjectSpan || type == CharacterSpan || type == WritableCharacterSpan || type == ReadOnlyByteSpan;
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
         // Keep the located CLI type in the verifier even though all cells share a Wasm heap.
         private const int ValueLocationBase = 65536;

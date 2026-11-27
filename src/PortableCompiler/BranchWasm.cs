@@ -309,6 +309,11 @@ namespace PortableCompiler
                     used = Local(code, used, 0x21, operand);
                     used = ResourceWasm.ThrowForFailure(code, used, resourceLocals + 5);
                 }
+                else if (kind == LoadStaticByteSpan)
+                {
+                    used = SpanWasm.FromStaticBytes(code, used, operand, records[slot + 3]);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, ReadOnlyByteSpan, depth));
+                }
                 else if (kind == LoadString)
                 {
                     int global = records[slot + BranchIl.Width + 1];
@@ -885,7 +890,7 @@ namespace PortableCompiler
                     int view = Spill(spills, maximum, spillFlags, type, top - 1);
                     int index = Spill(spills, maximum, spillFlags, I32, top);
                     used = SpanWasm.Read(code, used, operand, view, index);
-                    int resultType = type == CharacterSpan ? I32 : ObjectReference;
+                    int resultType = type == ObjectSpan ? ObjectReference : I32;
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, resultType, top - 1));
                 }
                 else if (kind == ObjectElementAddress)
