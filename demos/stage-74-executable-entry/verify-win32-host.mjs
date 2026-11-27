@@ -205,7 +205,8 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
     const genericLocations = [0, 1, 2].map(exports.GenericBooleanLocations)
         .concat([0, 1, 2].map(exports.GenericStringLocations));
     const bundledModule = await compile(["InvokeFinalWriter", "ReadGenericValue",
-        "InvokeConstrainedReceiver", "CheckWidenedIdentity", "CheckGenericDescriptors", "CheckValueAlias"], []);
+        "InvokeConstrainedReceiver", "CheckWidenedIdentity", "CheckGenericDescriptors", "CheckValueAlias",
+        "VerifyGenericValueMethod", "VerifyGenericDefaultReference"], []);
     const { exports: bundledExports } = await instantiate(bundledModule, compiler, []);
     const finalWriter = [0, 1].map(bundledExports.InvokeFinalWriter);
     const genericValues = [-1, 0, 1].map(bundledExports.ReadGenericValue);
@@ -213,6 +214,8 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
         .concat([0, 1, 2].map(bundledExports.CheckWidenedIdentity));
     const genericDescriptors = [0, 1, 2].map(bundledExports.CheckGenericDescriptors);
     const valueAliases = [0, 1, 2].map(bundledExports.CheckValueAlias);
+    const genericValueMethods = [0, 1, 2].map(bundledExports.VerifyGenericValueMethod)
+        .concat([0, 1, 2].map(bundledExports.VerifyGenericDefaultReference));
     const rootModule = await compile(["CompareThroughRoot"], runtimeAssets);
     const { exports: rootExports } = await instantiate(rootModule, compiler, []);
     const rootDispatch = [0, 1, 2, 3].map(rootExports.CompareThroughRoot);
@@ -227,7 +230,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, rootDispatch, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, dpi };
 }
 
 function readOracle(...args) {
@@ -249,7 +252,8 @@ const expectedCompiler = {
     filter: oracle.compiledFilter, objectSpans: oracle.compiledObjectSpans, booleanLocations: oracle.compiledBooleanLocations,
     genericLocations: oracle.compiledGenericLocations, finalWriter: oracle.compiledFinalWriter,
     genericValues: oracle.compiledGenericValues, constrainedReferences: oracle.compiledConstrainedReferences,
-    genericDescriptors: oracle.compiledGenericDescriptors, valueAliases: oracle.compiledValueAliases, rootDispatch: oracle.compiledRootDispatch
+    genericDescriptors: oracle.compiledGenericDescriptors, valueAliases: oracle.compiledValueAliases, rootDispatch: oracle.compiledRootDispatch,
+    genericValueMethods: oracle.compiledGenericValueMethods
 };
 let compilerBytes, fixtureBytes;
 if (compilerPath) {
@@ -309,6 +313,7 @@ try {
         }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes],
             name: framework.name, dpiScenarios, runtimePaths });
         assert.deepEqual(compiled, expectedCompiler);
+        console.log("Six generic value method and reference default cases matched the CLR in Node and Edge.");
         console.log("Four original CoreLib virtual dispatch cases matched the CLR in Node and Edge.");
         console.log("Three struct alias, copy, and reset cases matched the CLR in Node and Edge.");
         console.log("Three closed generic type identity cases matched the CLR in Node and Edge.");

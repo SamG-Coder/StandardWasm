@@ -173,14 +173,14 @@ namespace PortableCompiler
                 {
                     int type = signatures[offsets[index] + parameter];
                     if (CanExchangeClass(objects, type)) externalObjects = true;
-                    if (type == NullPointer || IsManagedLocation(type) || IsSpan(type) || RuntimeTypeMetadata.IsStorage(type) || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
+                    if (type == NullPointer || IsManagedLocation(type) || IsValueLocation(type) || IsSpan(type) || RuntimeTypeMetadata.IsStorage(type) || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
                         return -2;
                 }
                 int result = signatures[offsets[index]];
                 // A foreign Wasm caller can mutate an escaped class or array
                 // that still has an alias inside the linked application.
                 if (CanExchangeClass(objects, result)) externalObjects = true;
-                if (result == NullPointer || IsSpan(result) || RuntimeTypeMetadata.IsStorage(result) || ObjectLayouts.IsValueType(objects, result)) return -2;
+                if (result == NullPointer || IsValueLocation(result) || IsSpan(result) || RuntimeTypeMetadata.IsStorage(result) || ObjectLayouts.IsValueType(objects, result)) return -2;
                 exports[export] = index;
             }
             var body = new int[6];
@@ -888,7 +888,7 @@ namespace PortableCompiler
                     // starg.0 would replace the address itself.
                     if (kind == BranchIl.Store) return -2;
                     int lowered = ValueOperands.LowerReceiver(bundle, image, layout, heaps,
-                        owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses, readOnlyReceiver);
+                        owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses, readOnlyReceiver, context, methodArguments);
                     if (lowered == -2 && valueConstructor)
                         records[slot] = BranchIl.LoadConstructorAddress;
                     else if (lowered < 0)
@@ -965,7 +965,7 @@ namespace PortableCompiler
                         if (stable != 0) continue;
                     }
                     int lowered = ValueOperands.LowerFrame(bundle, image, layout, heaps,
-                        owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses);
+                        owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses, context, methodArguments);
                     if (lowered == -2 && ObjectLayouts.IsValueType(objects, type) &&
                         !ObjectLayouts.IsByRefLikeValue(objects, type) && !ObjectLayouts.IsExplicitValue(objects, type))
                     {
@@ -1021,7 +1021,8 @@ namespace PortableCompiler
                         if (callerType < 0) return -1;
                         var symbol = new int[5];
                         status = AssemblyBundle.Resolve(bundle, image, layout, heaps, owner, row, checkReceiver ? 0x6f : 0x28, false, objects, symbol,
-                            context, callerType, methodArity: spec[MethodSpecifications.Arity], callerMethodArguments: methodArguments);
+                            context, callerType, valueAddress: !checkReceiver, methodArity: spec[MethodSpecifications.Arity],
+                            callerMethodArguments: methodArguments);
                         if (status < 0) return status;
                         targetOwner = symbol[0];
                         row = symbol[1];
@@ -1039,7 +1040,7 @@ namespace PortableCompiler
                     }
                     int methodFlags = MethodDefinitions.ReadColumn(targetImage, targetLayout, row, 2);
                     bool instance = (methodFlags & 0x10) == 0;
-                    // Generic virtual slots and value receivers need their own dispatch or location ABI.
+                    // Generic virtual slots still need their own dispatch plan.
                     if ((checkReceiver && !instance) || (methodFlags & 0x40) != 0) return -2;
                     var types = new int[spec[MethodSpecifications.Arity]];
                     status = MethodInstantiations.ReadArguments(bundle, image, layout, heaps, owner,
@@ -1056,17 +1057,29 @@ namespace PortableCompiler
                         if (constraints < 0) return constraints;
                     }
 
-                    int function = instantiations.Find(owners, rows, contexts, functions, targetOwner, row, targetContext, types);
+                    int implementationContext = targetContext;
+                    if (instance && !checkReceiver)
+                    {
+                        int declaring = ObjectLayouts.Owner(targetImage, targetHeaps, targetLayout, row, false);
+                        if (declaring < 1) return -1;
+                        int value = targetContext != 0 ? targetContext : BundleLayouts.RegisterValue(bundle, targetImage,
+                            targetLayout, targetHeaps, targetOwner, declaring, objects);
+                        if (value < 0 && value != -2) return value;
+                        if (ObjectLayouts.IsValueType(objects, value))
+                            implementationContext = ~targetContext;
+                    }
+                    int function = instantiations.Find(owners, rows, contexts, functions, targetOwner, row, implementationContext, types);
                     if (function < 0)
                     {
-                        functions = Register(bundle, targetImage, targetLayout, targetHeaps, targetOwner, row, targetContext,
+                        functions = Register(bundle, targetImage, targetLayout, targetHeaps, targetOwner, row, implementationContext,
                             owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions, methodArguments: types);
                         if (functions < 0) return functions;
                         function = functions - 1;
                         if (instance)
                         {
                             int receiver = signatures[offsets[function] + 1];
-                            if (!IsObjectReference(receiver) || ObjectLayouts.IsValueType(objects, receiver)) return -2;
+                            if (implementationContext < 0 ? !IsValueLocation(receiver) :
+                                !IsObjectReference(receiver) || ObjectLayouts.IsValueType(objects, receiver)) return -2;
                         }
                         // Reserve before decoding the body so self-recursion reuses the slot.
                         instantiations.Record(function, owners.Length, types);
@@ -2067,7 +2080,8 @@ namespace PortableCompiler
             int receiver = isStatic ? 0 : receiverOverride != 0 ? receiverOverride : context;
             if (!isStatic && receiver == 0 && PlatformTypeReferences.IsString(image, heaps, layout, owner << 2))
                 receiver = String;
-            if (!isStatic && receiver == 0 && ObjectLayouts.IsCoreObjectType(image, heaps, layout, owner << 2))
+            if (!isStatic && receiver == 0 && allowVirtual && (attributes & 0x40) != 0 &&
+                ObjectLayouts.IsCoreObjectType(image, heaps, layout, owner << 2))
                 receiver = ObjectReference;
             if (!isStatic && receiver == 0)
             {

@@ -57,13 +57,22 @@ namespace StaticStorageDemo
             return unchecked(firstAccess + Storage.ThreadCounter);
         }
 
-        public static int ReadUnsupportedAttribute() => AttributedStorage.Counter;
+        public static int ReadCompilerGenerated() => AttributedStorage.Counter;
+        public static int ReadUnsupportedAttribute() => AttributedStorage.UnsupportedCounter;
     }
 
     internal static class AttributedStorage
     {
         [System.Runtime.CompilerServices.CompilerGenerated]
         internal static int Counter = 0;
+
+        [UnmappedField]
+        internal static int UnsupportedCounter = 0;
+    }
+
+    [System.AttributeUsage(System.AttributeTargets.Field)]
+    internal sealed class UnmappedFieldAttribute : System.Attribute
+    {
     }
 
     public static class AnnotatedKeys

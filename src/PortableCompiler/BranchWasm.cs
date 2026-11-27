@@ -1100,11 +1100,18 @@ namespace PortableCompiler
                         used = ManagedValueLocationWasm.ClearFrameCell(code, used, cellLocals[operand]);
                     else if (inlineLocations[operand] != 0)
                         used = InlineObjectStorageWasm.Clear(code, used, inlineLocations[operand], operand, FieldCount(objects, frame[operand]));
-                    else if (frame[operand] == PeLibrary.RuntimeTypeMetadata.Handle)
+                    else if (frame[operand] == PeLibrary.RuntimeTypeMetadata.Handle ||
+                        IsObjectReference(frame[operand]) && !IsValueType(objects, frame[operand]))
                     {
-                        code[used++] = 0xd0; // ref.null eq
-                        code[used++] = 0x6d;
-                        used = Local(code, used, 0x21, operand);
+                        if (frameCells[operand] != 0)
+                        {
+                            used = Local(code, used, 0x20, cellLocals[operand]);
+                            used = Const(code, used, 0);
+                        }
+                        code[used++] = 0xd0;
+                        code[used++] = NullSpillWasm.NullRef;
+                        used = frameCells[operand] != 0 ? Gc(code, used, 0x0e, frameCells[operand]) :
+                            Local(code, used, 0x21, operand);
                     }
                     else used = ValueFieldsWasm.Clear(code, used, frame[operand], operand);
                 }

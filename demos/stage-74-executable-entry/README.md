@@ -85,7 +85,10 @@ copies and replaces a struct through generic `ref T` and `out T`, including
 resetting the original slot to its default value. The CoreLib dispatch probe links
 Microsoft's `System.Object.Equals` body and compares inherited equality,
 a managed override, and the null-receiver exception. This probe uses the
-matching installed win-x86 .NET 10 runtime pack (decision 0044).
+matching installed win-x86 .NET 10 runtime pack (decision 0044). The
+generic member probe invokes original generic methods on a struct location,
+including writes that remain visible to the caller, and checks that a generic
+reference local initializes to null.
 
 The monitor probe checks the CLR's reentrant lock behavior on the launch
 worker's single managed execution agent. It verifies lockTaken and typed

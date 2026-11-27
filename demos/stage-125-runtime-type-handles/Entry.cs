@@ -87,6 +87,17 @@ namespace RuntimeTypeDemo
 
         public static int ConstructedType() => Same(typeof(System.Collections.Generic.List<int>), null) ? 0 : 1;
 
+        public static int LocalConstructedType(int mode)
+        {
+            var type = typeof(TypeMarker<bool>);
+            if (mode == 0) return Same(type, typeof(TypeMarker<bool>)) ? 1 : 0;
+            return Same(type, typeof(TypeMarker<int>)) ? 0 : 1;
+        }
+
+        private sealed class TypeMarker<T>
+        {
+        }
+
         public static int RequiresPeer() => Same(typeof(LinkedMarker), null) ? 0 : 1;
 
         private static object WidenType() => typeof(Marker);

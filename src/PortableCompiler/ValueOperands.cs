@@ -6,16 +6,18 @@ namespace PortableCompiler
     internal static class ValueOperands
     {
         internal static int LowerFrame(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
-            int owner, int methodCount, int[] records, int slot, int[] frame, int[] objects, int[] clauses)
+            int owner, int methodCount, int[] records, int slot, int[] frame, int[] objects, int[] clauses,
+            int context, int[] methodArguments)
         {
             int local = records[slot + 1], type = frame[local];
-            if (type != RuntimeTypeMetadata.Handle && !SignatureTypes.IsSpan(type) && !ObjectLayouts.IsValueType(objects, type)) return -2;
+            bool value = type == RuntimeTypeMetadata.Handle || SignatureTypes.IsSpan(type) || ObjectLayouts.IsValueType(objects, type);
+            if (!value && !SignatureTypes.IsObjectReference(type)) return -2;
             int next = records[slot + 2] * Width;
             if (next >= records.Length || Entry(records, next / Width, clauses)) return -2;
             int kind = records[next];
             if (kind == InitializeValue)
-                return Clear(bundle, image, layout, heaps, owner, records, slot, next, type, objects);
-            if (type == RuntimeTypeMetadata.Handle || SignatureTypes.IsSpan(type)) return -2;
+                return Clear(bundle, image, layout, heaps, owner, records, slot, next, type, objects, context, methodArguments);
+            if (!value || type == RuntimeTypeMetadata.Handle || SignatureTypes.IsSpan(type)) return -2;
             if (kind == GetField)
             {
                 records[slot] = Load;
@@ -34,7 +36,7 @@ namespace PortableCompiler
         // same address, so initobj, stfld and a chained constructor stay
         // diagnosed and the callee never writes the caller's location.
         internal static int LowerReceiver(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
-            int owner, int methodCount, int[] records, int slot, int[] frame, int[] objects, int[] clauses, bool readOnly = false)
+            int owner, int methodCount, int[] records, int slot, int[] frame, int[] objects, int[] clauses, bool readOnly, int context, int[] methodArguments)
         {
             int next = records[slot + 2] * Width;
             if (next >= records.Length || Entry(records, next / Width, clauses)) return -2;
@@ -51,7 +53,7 @@ namespace PortableCompiler
             }
             if (kind == InitializeValue)
                 return readOnly || SignatureTypes.IsValueLocation(frame[0]) ? -2 :
-                    Clear(bundle, image, layout, heaps, owner, records, slot, next, frame[0], objects);
+                    Clear(bundle, image, layout, heaps, owner, records, slot, next, frame[0], objects, context, methodArguments);
             return LowerAddressUse(image, layout, heaps, methodCount, records, slot, 0, clauses, readOnly);
         }
 
@@ -61,7 +63,7 @@ namespace PortableCompiler
 
         // A frame address followed by initobj of the same type clears the location.
         private static int Clear(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
-            int owner, int[] records, int slot, int next, int type, int[] objects)
+            int owner, int[] records, int slot, int next, int type, int[] objects, int context, int[] methodArguments)
         {
             uint token = unchecked((uint)records[next + 1]);
             uint table = token >> 24;
@@ -69,10 +71,10 @@ namespace PortableCompiler
             int initialized;
             if (table == 0x1b)
             {
-                int blob = AssemblyReferences.TypeSpecBlob(image, heaps, layout, row);
-                if (blob < 0) return blob;
-                initialized = ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps,
-                    owner, blob, objects);
+                int identity = ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps,
+                    owner, row, context, objects, methodArguments);
+                if (identity < 0) return identity;
+                initialized = ObjectLayouts.SignatureStorage(objects, identity);
             }
             else
             {
@@ -80,7 +82,13 @@ namespace PortableCompiler
                 int coded = row << 2 | (table == 1 ? 1 : 0);
                 initialized = RuntimeTypeMetadata.Storage(image, heaps, layout, coded, true);
                 if (initialized == 0)
-                    initialized = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true);
+                {
+                    if (SignatureTypes.IsObjectReference(type) && !ObjectLayouts.IsValueType(objects, type))
+                        initialized = PlatformTypeReferences.IsString(image, heaps, layout, coded) ? SignatureTypes.String :
+                            BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
+                    else
+                        initialized = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true);
+                }
             }
             if (initialized < 0 || initialized != type) return -2;
             // The operand stays the original frame index.
@@ -123,11 +131,6 @@ namespace PortableCompiler
                         next = records[next + 2] * Width;
                         continue;
                     }
-
-                    // A static call can consume this address as an ordinary byref
-                    // argument. Leave it intact for the frame-cell representation.
-                    if (StaticCallDepth(image, layout, heaps, methodCount, kind, records[next + 1], int.MaxValue - 1) >= 0)
-                        return -2;
 
                     // [&value, arguments] -> call -> []. The link step accepts only
                     // a value-type instance constructor (ConstructValue) or a
