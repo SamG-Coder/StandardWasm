@@ -787,11 +787,19 @@ namespace PortableCompiler
                         return -2;
                     var depths = new int[body[1]];
                     var states = new int[body[1] * maximum];
-                    bool hasNull = false;
+                    bool hasNull = false, hasBranch = false;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
-                        if (records[slot] == BranchIl.NullLiteral || records[slot] == BranchIl.ConvertInteger &&
+                    {
+                        int kind = records[slot];
+                        if (kind == BranchIl.NullLiteral || kind == BranchIl.ConvertInteger &&
                             records[slot + 3] == BranchIl.ProvenNativeZero) hasNull = true;
+                        if (kind == BranchIl.Branch || kind == BranchIl.Conditional || kind == BranchIl.Switch)
+                            hasBranch = true;
+                    }
                     var outgoingNulls = new byte[hasNull ? states.Length : 0];
+                    // Without a control-flow edge into a shared successor, the
+                    // producer's spill type already matches the next consumer.
+                    var outgoingReferences = new int[hasBranch ? states.Length : 0];
                     var allocatedStates = new byte[virtualUsed[0] != 0 ? states.Length : 0];
                     int exceptionLocals = 0;
                     var fixedObjects = new int[ExceptionDispatchWasm.FrameWidth];
@@ -806,7 +814,7 @@ namespace PortableCompiler
                     }
                     var descriptorMismatch = new int[4];
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
-                        result, signatures, offsets, arities, location, catchRegion, outgoingNulls, objects, virtualTypes, allocatedStates,
+                        result, signatures, offsets, arities, location, catchRegion, outgoingNulls, outgoingReferences, objects, virtualTypes, allocatedStates,
                         descriptorMismatch, contexts);
                     if (status < 0)
                     {
@@ -1117,10 +1125,10 @@ namespace PortableCompiler
                             }
                             if (kind == BranchIl.BoxValue) dispatch.AddBox(operation);
                             if (kind == BranchIl.BoxAggregate) reflection.AggregateBoxes.Include(operation, records[slot + 3]);
-                            if (hasNull)
+                            if (hasNull || hasBranch)
                             {
-                                capacity = NullSpillWasm.Transfer(sizingBuffer, capacity, records, pc,
-                                    depths, states, outgoingNulls, maximum, 0);
+                                capacity = StackSpillWasm.Transfer(sizingBuffer, capacity, records, pc,
+                                    depths, states, outgoingNulls, outgoingReferences, maximum, 0);
                                 if (capacity == int.MaxValue) return -3;
                             }
                             if (hasFinally && kind == BranchIl.Leave)
@@ -1279,7 +1287,7 @@ namespace PortableCompiler
                     }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
-                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers,
+                        arities, code, remainderFixup, catchRegion, outgoingNulls, outgoingReferences, objects, initializers.FieldInitializers,
                         reflection, inlineLocations, nativePlans.Plans, filters, frameCells, pointers, rootCount, frameRoots,
                         tracksFinalizers ? finalizers : null, wrapsFailure ? failure : null, primitiveArrays, projections);
                 }

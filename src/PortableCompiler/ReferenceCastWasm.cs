@@ -53,7 +53,7 @@ namespace PortableCompiler
             {
                 code[used++] = 0x05; // else
                 code[used++] = 0xd0; // ref.null none
-                code[used++] = NullSpillWasm.NullRef;
+                code[used++] = StackSpillWasm.NullRef;
                 code[used++] = 0x0b;
             }
             return Local(code, used, 0x21, target);

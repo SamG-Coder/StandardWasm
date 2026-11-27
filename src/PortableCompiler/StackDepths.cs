@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal static int Analyze(int[] records, int[] depths, int[] states, int maximum,
             int[] frame, int result, int[] signatures, int[] offsets, int[] arities, int[] location, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects, int[] virtualTypes, byte[] allocatedStates, int[] descriptorMismatch, int[] contexts)
+            byte[] outgoingNulls, int[] outgoingReferences, int[] objects, int[] virtualTypes, byte[] allocatedStates, int[] descriptorMismatch, int[] contexts)
         {
             if (depths.Length == 0)
                 return -1;
@@ -203,6 +203,9 @@ namespace PortableCompiler
                     for (int i = 0; i < next; i++)
                         outgoingNulls[pc * maximum + i] = stack[i] == NullValue ? (byte)1 :
                             stack[i] == NativeZero ? (byte)2 : (byte)0;
+                if (outgoingReferences.Length != 0)
+                    for (int i = 0; i < next; i++)
+                        outgoingReferences[pc * maximum + i] = IsReference(stack[i]) ? stack[i] : 0;
                 if (kind == Branch || kind == Conditional || kind == Leave)
                 {
                     head = Edge(operand, next, maximum, stack, depths, states, pending, head, objects, allocated, allocatedStates);
@@ -884,8 +887,16 @@ namespace PortableCompiler
                     if (current != incoming && (IsValueType(objects, current) || IsValueType(objects, incoming))) return -1;
                     if (current == incoming || incoming == NullValue && IsReference(current) ||
                         incoming == NativeZero && (current == Native || current == NullPointer)) continue;
-                    if ((current != NullValue || !IsReference(incoming)) &&
-                        (current != NativeZero || (incoming != Native && incoming != NullPointer))) return -1;
+                    bool replacesPlaceholder = current == NullValue && IsReference(incoming) ||
+                        current == NativeZero && (incoming == Native || incoming == NullPointer);
+                    if (!replacesPlaceholder)
+                    {
+                        // Keep an already wider reference, or requeue the consumer
+                        // if the new predecessor widens its verified input.
+                        if (!IsReference(current) || !IsReference(incoming)) return -1;
+                        if (Assignable(incoming, current, objects)) continue;
+                        if (!Assignable(current, incoming, objects)) return -1;
+                    }
                     states[offset + i] = incoming;
                     changed = true;
                 }

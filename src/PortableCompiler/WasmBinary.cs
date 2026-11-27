@@ -603,7 +603,7 @@ namespace PortableCompiler
             if (type == I32 || type == MethodPointer || IsNativeInteger(type) || type == ConsoleStorage.Writer)
                 output[cursor++] = 0x7f; // Console writers store their host stream number.
             else if (type == NullPointer)
-                output[cursor++] = NullSpillWasm.NullRef; // Only the null pointer inhabits the browser storage type.
+                output[cursor++] = StackSpillWasm.NullRef; // Only the null pointer inhabits the browser storage type.
             else if (type == I64)
                 output[cursor++] = 0x7e;
             else if (IsFloat(type))

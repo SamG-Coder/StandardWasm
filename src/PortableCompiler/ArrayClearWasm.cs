@@ -104,7 +104,7 @@ namespace PortableCompiler
             if (!IsScalar(element))
             {
                 code[used++] = 0xd0;
-                code[used++] = NullSpillWasm.NullRef; // bottom reference matches every nullable element heap
+                code[used++] = StackSpillWasm.NullRef; // bottom reference matches every nullable element heap
                 return used;
             }
             if (element == I64)

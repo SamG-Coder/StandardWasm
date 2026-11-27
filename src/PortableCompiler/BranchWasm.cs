@@ -10,7 +10,7 @@ namespace PortableCompiler
         private const int LocationSpill = 1, SpanSpill = 2;
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection,
+            byte[] outgoingNulls, int[] outgoingReferences, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection,
             int[] inlineLocations, int[] nativePlans, int[] filters, int[] frameCells,
             FunctionPointerPlan pointers, int rootCount, byte[] frameRoots, FinalizerSlots finalizers, int[] failure,
             PrimitiveArrayWasm primitiveArrays, ValueFieldProjections projections)
@@ -93,7 +93,7 @@ namespace PortableCompiler
                 // A default-initialized bottom reference supplies any concrete
                 // managed heap type and never needs to be written.
                 code[used++] = 1;
-                code[used++] = NullSpillWasm.NullRef;
+                code[used++] = StackSpillWasm.NullRef;
             }
             if (maximum != 0)
             {
@@ -1635,7 +1635,7 @@ namespace PortableCompiler
                             used = Const(code, used, 0);
                         }
                         code[used++] = 0xd0;
-                        code[used++] = NullSpillWasm.NullRef;
+                        code[used++] = StackSpillWasm.NullRef;
                         used = frameCells[operand] != 0 ? Gc(code, used, 0x0e, frameCells[operand]) :
                             Local(code, used, 0x21, operand);
                     }
@@ -1771,8 +1771,9 @@ namespace PortableCompiler
                     used = ExceptionDispatchWasm.ReraiseCaught(code, used, pcLocal + 2 + operand, objectBase + 1 + operand);
                 else
                 {
-                    if (hasNull)
-                        used = NullSpillWasm.Transfer(code, used, records, pc, depths, states, outgoingNulls, maximum, spills, spillFlags);
+                    if (hasNull || outgoingReferences.Length != 0)
+                        used = StackSpillWasm.Transfer(code, used, records, pc, depths, states,
+                            outgoingNulls, outgoingReferences, maximum, spills, spillFlags);
                     if (kind == Conditional)
                     {
                         int comparison = records[slot + 3];
@@ -1979,7 +1980,7 @@ namespace PortableCompiler
             }
             if (source != NativeZero || target != NullPointer) return Local(code, used, 0x20, local);
             code[used++] = 0xd0; // ref.null none
-            code[used++] = NullSpillWasm.NullRef;
+            code[used++] = StackSpillWasm.NullRef;
             return used;
         }
 

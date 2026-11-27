@@ -105,7 +105,7 @@ namespace PortableCompiler
             if (IsObjectReference(storage))
             {
                 code[used++] = 0xd0; // ref.null none, valid for any managed field type.
-                code[used++] = NullSpillWasm.NullRef;
+                code[used++] = StackSpillWasm.NullRef;
             }
             else if (storage == F32 || storage == F64)
             {

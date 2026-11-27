@@ -35,7 +35,7 @@ namespace PortableCompiler
                 if (form == Namespace && end == start)
                 {
                     code[used++] = 0xd0; // ref.null
-                    code[used++] = NullSpillWasm.NullRef;
+                    code[used++] = StackSpillWasm.NullRef;
                     code[used++] = 0x0f;
                     code[used++] = 0x0b;
                     continue;
