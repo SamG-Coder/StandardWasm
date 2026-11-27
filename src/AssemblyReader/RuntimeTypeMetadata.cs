@@ -54,20 +54,27 @@ namespace PeLibrary
                 ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2, "System", "RuntimeType");
         }
 
-        internal static bool IsCoreGenericTypeGetter(byte[] image, int[] heaps, int[] layout, int row)
+        internal const int GenericKind = 1, GenericDefinition = 2;
+
+        internal static int CoreGenericTypeOperation(byte[] image, int[] heaps, int[] layout, int row)
         {
             int flags = MethodDefinitions.ReadColumn(image, layout, row, 2);
-            if ((flags & 0x2857) != 0x0846 ||
-                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "get_IsGenericType"))
-                return false;
+            if ((flags & 0x2057) != 0x0046) return 0;
+            uint name = (uint)MethodDefinitions.ReadColumn(image, layout, row, 3);
+            int operation = (flags & 0x0800) != 0 && MatchesAscii(image, heaps, name, "get_IsGenericType") ? GenericKind :
+                (flags & 0x0800) == 0 && MatchesAscii(image, heaps, name, "GetGenericTypeDefinition") ? GenericDefinition : 0;
+            if (operation == 0) return 0;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
-            if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return false;
+            if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return 0;
             int declaring = ObjectLayouts.Owner(image, heaps, layout, row, false);
-            if (!ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, declaring, "System", "Type")) return false;
+            if (!ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, declaring, "System", "Type")) return 0;
             var cursor = new int[1];
             int end = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), 0, cursor);
-            return end >= 0 && SignatureReader.TakeElement(image, cursor, end, SignatureReader.Boolean) && cursor[0] == end;
+            if (end < 0) return 0;
+            bool result = operation == GenericKind ? SignatureReader.TakeElement(image, cursor, end, SignatureReader.Boolean) :
+                SignatureReader.ReadClass(image, cursor, end) == declaring << 2;
+            return result && cursor[0] == end ? operation : 0;
         }
 
         internal static bool ValidDefinition(byte[] image, int[] heaps, int row)

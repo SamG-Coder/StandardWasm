@@ -15,6 +15,7 @@ namespace PortableCompiler
         internal readonly int[] TypeSimpleNameFixups = new int[1];
         internal readonly int[] TypeNamespaceFixups = new int[1];
         internal readonly int[] TypeGenericKindFixups = new int[1];
+        internal readonly RuntimeGenericDefinitions GenericDefinitions = new RuntimeGenericDefinitions();
         internal readonly int[] HeapFixups = new int[1];
         internal readonly RuntimeGenericTypes GenericTypes = new RuntimeGenericTypes();
         internal readonly RuntimeTypeRelations TypeRelations = new RuntimeTypeRelations();

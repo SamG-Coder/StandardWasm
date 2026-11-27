@@ -935,7 +935,7 @@ namespace PortableCompiler
                     {
                         functions = LinkVirtualCalls(bundle, records, depths, states, allocatedStates, maximum, virtualTypes,
                             owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions, location,
-                            dispatch, externalObjects, owner, source, instantiations);
+                            dispatch, externalObjects, owner, source, instantiations, reflection);
                         if (functions < 0) return functions;
                     }
 
@@ -1292,7 +1292,7 @@ namespace PortableCompiler
                                 kind == BranchIl.ObjectElementAddress)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.RuntimeTypeDisplayName || kind == BranchIl.RuntimeTypeIsGeneric ||
-                                kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
+                                kind == BranchIl.RuntimeTypeGenericDefinition || kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || kind == BranchIl.ClearInteriorField || kind == BranchIl.TakeProjectedFieldAddress ||
                                 nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit ||
                                 kind == BranchIl.GetReferenceField || kind == BranchIl.SetReferenceField || kind == BranchIl.TakeReferenceFieldAddress ||
@@ -1427,6 +1427,23 @@ namespace PortableCompiler
                 exceptionTags |= ExceptionTypes.ArgumentNull | ExceptionTypes.Argument;
                 length = reflection.GenericTypes.Write(bundle, moduleCode, length, objects, globals, bodyOffsets, sizes);
                 if (length < 0) return length;
+            }
+            if (reflection.GenericDefinitions.Fixups[0] != 0)
+            {
+                exceptionTags |= ExceptionTypes.Object;
+                if (functions >= owners.Length) return -3;
+                int offset = NextSignature(offsets, arities, functions);
+                if (offset + 1 >= signatures.Length) return -3;
+                signatures[offset] = RuntimeTypeMetadata.Type;
+                signatures[offset + 1] = RuntimeTypeMetadata.Type;
+                arities[functions] = 1;
+                offsets[functions] = offset;
+                bodyOffsets[functions] = length;
+                length = reflection.GenericDefinitions.Write(bundle, moduleCode, length, objects, globals, hostImports);
+                if (length < 0) return length;
+                WasmIndexFixups.Resolve(moduleCode, reflection.GenericDefinitions.Fixups[0], hostImports + functions);
+                sizes[functions] = length - bodyOffsets[functions];
+                functions++;
             }
             for (int nameForm = RuntimeTypeNames.Display; nameForm <= RuntimeTypeNames.Namespace; nameForm++)
             {
@@ -3455,7 +3472,8 @@ namespace PortableCompiler
             int arity = SignatureTypes.Read(bundle, image, heaps, blob, types, shape,
                 receiver, layout, objects, owner, closed);
             if (arity < 1) return arity < 0 ? arity : -1;
-            if (RuntimeTypeLocals.IsLinkedSystemType(bundle, objects, types[shape]))
+            int operation = arity == 1 ? RuntimeTypeMetadata.CoreGenericTypeOperation(image, heaps, layout, row) : 0;
+            if (operation != RuntimeTypeMetadata.GenericDefinition && RuntimeTypeLocals.IsLinkedSystemType(bundle, objects, types[shape]))
                 types[shape] = RuntimeTypeMetadata.Type;
             typeCalls.ApplyVirtualArguments(bundle, owner, row, types, shape, objects);
             if (!IsSharedBundleSignature(types, shape, arity)) return -2;
@@ -3466,8 +3484,10 @@ namespace PortableCompiler
             // The following four IL bytes are the token operand. Their
             // record kinds remain zero, so no control-flow edge enters them.
             records[slot + BranchIl.Width + 1] = owner;
-            if (arity == 1 && RuntimeTypeMetadata.IsCoreGenericTypeGetter(image, heaps, layout, row))
+            if (operation == RuntimeTypeMetadata.GenericKind)
                 records[slot + BranchIl.Width + 2] = BranchIl.RuntimeTypeIsGeneric;
+            if (operation == RuntimeTypeMetadata.GenericDefinition)
+                records[slot + BranchIl.Width + 2] = BranchIl.RuntimeTypeGenericDefinition;
             records[slot + BranchIl.Width + 3] = row;
             return 0;
         }
@@ -3475,7 +3495,8 @@ namespace PortableCompiler
         private static int LinkVirtualCalls(BundleImages bundle, int[] records,
             int[] depths, int[] states, byte[] allocatedStates, int maximum, int[] types, int[] owners, int[] rows, int[] contexts, int[] bases,
             int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int functions, int[] location,
-            VirtualDispatch dispatch, bool externalObjects, int callerOwner, int callerRow, MethodInstantiations instantiations)
+            VirtualDispatch dispatch, bool externalObjects, int callerOwner, int callerRow, MethodInstantiations instantiations,
+            RuntimeReflectionPlan reflection)
         {
             for (int pc = 0; pc < depths.Length; pc++)
             {
@@ -3487,12 +3508,20 @@ namespace PortableCompiler
                 int actual = states[receiver], declared = types[shape + 1];
                 int bound = actual == NullValue ? declared : actual;
                 int owner = records[slot + BranchIl.Width + 1], row = records[slot + BranchIl.Width + 3];
-                if (records[slot + BranchIl.Width + 2] == BranchIl.RuntimeTypeIsGeneric &&
+                int operation = records[slot + BranchIl.Width + 2];
+                if ((operation == BranchIl.RuntimeTypeIsGeneric || operation == BranchIl.RuntimeTypeGenericDefinition) &&
                     RuntimeTypeGenericKind.IsDescriptorReceiver(actual))
                 {
                     // Select the descriptor path only after dataflow has seen
                     // every predecessor. Nominal receivers keep virtual dispatch.
-                    records[slot] = BranchIl.RuntimeTypeIsGeneric;
+                    if (operation == BranchIl.RuntimeTypeGenericDefinition)
+                    {
+                        functions = reflection.GenericDefinitions.BindFailure(bundle, owner, owners, rows, contexts,
+                            bases, indices, arities, offsets, signatures, objects, functions);
+                        if (functions < 0) return functions;
+                        dispatch.AddAllocation(reflection.GenericDefinitions.ExceptionType);
+                    }
+                    records[slot] = operation;
                     continue;
                 }
                 if (actual == RuntimeTypeMetadata.Type && declared == ObjectReference && arity == 1 && types[shape] == String)

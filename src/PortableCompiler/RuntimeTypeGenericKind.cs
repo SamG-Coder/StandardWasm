@@ -20,9 +20,9 @@ namespace PortableCompiler
                 int owner = StaticFields.Owner(globals, index), row = StaticFields.Row(globals, index);
                 if (!RuntimeTypeTokens.IsDescriptorOwner(owner) || row < 0) continue;
                 int module = RuntimeTypeTokens.ModuleSlot(owner) - 1;
-                int value = Classify(bundle, objects, module, row, layout, heaps);
-                if (value == -1) return -1;
-                if (value < 0) continue;
+                int definition = Definition(bundle, objects, module, row, layout, heaps);
+                if (definition == -1) return -1;
+                if (definition < 0) continue;
                 if (code.Length - used < 18) return -3;
                 used = Local(code, used, 0x20, 0);
                 code[used++] = 0x23; // global.get
@@ -30,7 +30,7 @@ namespace PortableCompiler
                 code[used++] = 0xd3; // ref.eq
                 code[used++] = 0x04;
                 code[used++] = 0x40;
-                used = Const(code, used, value);
+                used = Const(code, used, definition > 0 ? 1 : 0);
                 code[used++] = 0x0f;
                 code[used++] = 0x0b;
             }
@@ -39,7 +39,7 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int Classify(BundleImages bundle, int[] objects, int owner, int row, int[] layout, int[] heaps)
+        internal static int Definition(BundleImages bundle, int[] objects, int owner, int row, int[] layout, int[] heaps)
         {
             if (row >= RuntimeTypeTokens.PrimitiveVectorKey)
                 return owner == AssemblyBundle.ObjectOwner && ArrayTypeRefs.Storage(row - RuntimeTypeTokens.PrimitiveVectorKey) != 0 ? 0 : -2;
@@ -50,7 +50,7 @@ namespace PortableCompiler
                 // An array remains nongeneric even if the element is generic.
                 if (ArrayElementKey(objects, type) != 0) return 0;
                 if (AssemblyOf(objects, type) != owner || !HasArguments(objects, type)) return -2;
-                return 1;
+                return TypeDef(objects, type);
             }
             if (owner == AssemblyBundle.ObjectOwner) return row == 0 ? 0 : -2;
             if (owner < 0 || owner >= bundle.Count) return -2;
@@ -61,7 +61,7 @@ namespace PortableCompiler
             // Generic definitions, including nested types that inherit outer
             // parameters, are identified by GenericParam ownership.
             int[] parameters = GenericParameters.TypeParameterNames(image, heaps, layout, counts, row);
-            return parameters == null ? -1 : parameters.Length == 0 ? 0 : 1;
+            return parameters == null ? -1 : parameters.Length == 0 ? 0 : row;
         }
     }
 }

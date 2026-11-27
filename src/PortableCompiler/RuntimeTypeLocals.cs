@@ -13,7 +13,7 @@ namespace PortableCompiler
             if (locals == 0 || bundle.Length == 0) return;
             bool hasDescriptor = false;
             for (int slot = 0; slot < records.Length && !hasDescriptor; slot += Width)
-                hasDescriptor = ProducesDescriptor(records, slot, signatures, offsets, virtualTypes);
+                hasDescriptor = ProducesDescriptor(records, slot, frame, clauses, signatures, offsets, virtualTypes);
             if (!hasDescriptor) return;
 
             int[] writes = null;
@@ -32,7 +32,7 @@ namespace PortableCompiler
                             !ValueOperands.Entry(records, slot / Width, clauses);
                         int producer = fallthrough ? records[previous] : 0;
                         if (writes == null) writes = new int[locals];
-                        if (fallthrough && ProducesDescriptor(records, previous, signatures, offsets, virtualTypes)) writes[local] = writes[local] | 1;
+                        if (fallthrough && ProducesDescriptor(records, previous, frame, clauses, signatures, offsets, virtualTypes)) writes[local] = writes[local] | 1;
                         else if (producer != NullLiteral) writes[local] = writes[local] | 2;
                     }
                 }
@@ -48,12 +48,23 @@ namespace PortableCompiler
             }
         }
 
-        private static bool ProducesDescriptor(int[] records, int slot, int[] signatures, int[] offsets, int[] virtualTypes)
+        private static bool ProducesDescriptor(int[] records, int slot, int[] frame, int[] clauses,
+            int[] signatures, int[] offsets, int[] virtualTypes)
         {
+            bool readsDefinition = false;
+            // A definition getter on a proven descriptor returns a descriptor.
+            // Its nominal virtual override can return an ordinary Type reference.
+            while (records[slot] == VirtualCall && records[slot + Width + 2] == RuntimeTypeGenericDefinition)
+            {
+                readsDefinition = true;
+                slot = RuntimeTypeRelations.Previous(records, slot, clauses);
+                if (slot < 0) return false;
+            }
             int kind = records[slot];
             return kind == TypeFromHandle || kind == GetObjectType ||
                 kind == VirtualCall && virtualTypes[records[slot + 1]] == RuntimeTypeMetadata.Type ||
-                kind == Call && signatures[offsets[records[slot + 1]]] == RuntimeTypeMetadata.Type;
+                kind == Call && signatures[offsets[records[slot + 1]]] == RuntimeTypeMetadata.Type ||
+                readsDefinition && kind == Load && frame[records[slot + 1]] == RuntimeTypeMetadata.Type;
         }
 
         internal static bool IsLinkedSystemType(BundleImages bundle, int[] objects, int type)
