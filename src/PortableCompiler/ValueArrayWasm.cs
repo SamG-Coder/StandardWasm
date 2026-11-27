@@ -53,13 +53,27 @@ namespace PortableCompiler
         }
 
         internal static int EmitAccess(byte[] code, int used, bool read, int array, int type,
-            int state, int top, int[] states, int spills, int maximum, int spillFlags)
+            int state, int top, int[] states, int spills, int maximum, int spillFlags, int[] objects)
         {
             int position = read ? top - 1 : top - 2;
             int reference = Spill(spills, maximum, spillFlags, states[state + position], position);
             int index = Spill(spills, maximum, spillFlags, states[state + position + 1], position + 1);
             used = GuardNull(code, used, reference);
             used = GuardArrayIndex(code, used, reference, index, false);
+            if (!PeLibrary.ObjectLayouts.IsValueType(objects, type))
+            {
+                // The verifier has bound the exact nominal vector. Reference
+                // slots store their payload directly and need no value cell.
+                used = Operands(code, used, reference, index);
+                if (read)
+                {
+                    used = Gc(code, used, 0x0b, array);
+                    return Local(code, used, 0x21, Spill(spills, maximum, spillFlags, type, position));
+                }
+                int sourceType = states[state + top];
+                used = LoadOperand(code, used, Spill(spills, maximum, spillFlags, sourceType, top), sourceType, type);
+                return Gc(code, used, 0x0e, array);
+            }
             if (!read)
             {
                 int sourceType = states[state + top];

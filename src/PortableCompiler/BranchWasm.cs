@@ -1428,7 +1428,7 @@ namespace PortableCompiler
                 else if ((kind == ArrayGet || kind == ArraySet) && records[slot + 3] != 0)
                 {
                     used = ValueArrayWasm.EmitAccess(code, used, kind == ArrayGet, operand, records[slot + 3], state, top, states,
-                        spills, maximum, spillFlags);
+                        spills, maximum, spillFlags, objects);
                 }
                 else if (kind == ArrayGet)
                 {

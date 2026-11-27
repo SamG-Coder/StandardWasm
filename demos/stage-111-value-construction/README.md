@@ -72,6 +72,9 @@ The closed generic static fixture checks independent storage and initializer
 state for two type arguments. It exercises a precise initializer, a
 `beforefieldinit` initializer, an init-only field, and different storage
 types for the same generic field declaration.
+The generic array fixture allocates arrays, reads, and replaces elements
+through C# methods specialized for `int`, `sbyte`, `double`, and `string`. It also compares
+typed bounds and null exceptions.
 The runtime type fixture compares `Object.GetType` for a derived instance,
 a plain object, a string, and boxed `Int32` and `UInt32` against the CLR.
 It includes an interface receiver, a null receiver, and the identity shared

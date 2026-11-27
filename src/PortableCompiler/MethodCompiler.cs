@@ -1160,10 +1160,10 @@ namespace PortableCompiler
                         int coded = (int)((token & 0xffffff) << 2) | (table == 1 ? 1 : table == 2 ? 0 : 2);
                         int element = ArrayTokenElement(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);
                         if (element < 0) return element;
-                        // Generic primitive vectors have their own built-in array type.
-                        // Keep the newly linked TypeSpec path on nominal layouts.
-                        if (GenericScalar.IsScalar(element)) return -2;
-                        type = ObjectLayouts.RegisterArray(objects, element);
+                        // Use the same representation as a closed T[] signature.
+                        type = GenericScalar.IsScalar(element)
+                            ? GenericScalar.Storage(GenericScalar.VectorKey(element))
+                            : ObjectLayouts.RegisterArray(objects, element);
                     }
                     if (type < 0) return type;
                     records[slot + 1] = type;
@@ -1207,9 +1207,20 @@ namespace PortableCompiler
                     int token = records[slot + 3], table = token >> 24;
                     if (table != 1 && table != 2 && table != 0x1b) return -2;
                     int coded = (token & 0xffffff) << 2 | (table == 1 ? 1 : table == 2 ? 0 : 2);
-                    int type = ArrayTokenElement(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);
+                    int primitive = table == 0x1b ? -2 : ArrayTypeRefs.PrimitiveElement(image, heaps, layout, coded);
+                    int type = primitive > 0 ? GenericScalar.Key(primitive) :
+                        ArrayTokenElement(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);
                     if (type < 0) return type;
-                    if (!ObjectLayouts.IsValueType(objects, type)) return -2;
+                    if (GenericScalar.IsScalar(type))
+                    {
+                        int opcode = PrimitiveArrayAccess(GenericScalar.Element(type), kind == BranchIl.ArrayGet);
+                        if (opcode == 0) return -2;
+                        records[slot + 1] = opcode;
+                        records[slot + 3] = 0;
+                        continue;
+                    }
+                    if (ObjectLayouts.IsEnumKey(type) || (!ObjectLayouts.IsValueType(objects, type) && !IsObjectReference(type)))
+                        return -2;
                     int vector = ObjectLayouts.RegisterArray(objects, type);
                     if (vector < 0) return vector;
                     records[slot + 1] = vector;
@@ -2348,6 +2359,23 @@ namespace PortableCompiler
             if (PlatformTypeReferences.IsString(image, heaps, layout, coded)) return String;
             int type = BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
             return type == -2 ? BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true, true) : type;
+        }
+
+        private static int PrimitiveArrayAccess(int element, bool load)
+        {
+            // Reuse the normal array instructions after substituting !0 or !!0,
+            // preserving the sign extension selected by the CLI element type.
+            switch (ArrayTypeRefs.Storage(element))
+            {
+                case Bytes: return load ? element == 4 ? 0x90 : 0x91 : 0x9c;
+                case Chars: return load ? element == 6 ? 0x92 : 0x93 : 0x9d;
+                case Ints: return load ? 0x94 : 0x9e;
+                case Longs: return load ? 0x96 : 0x9f;
+                case NativeVector: return load ? 0x97 : 0x9b;
+                case Singles: return load ? 0x98 : 0xa0;
+                case Doubles: return load ? 0x99 : 0xa1;
+                default: return 0;
+            }
         }
 
         private static bool UsesLocationReceiver(int[] objects, int receiver) =>
