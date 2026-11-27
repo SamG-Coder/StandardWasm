@@ -76,7 +76,12 @@ async function exercise(compiler, image, cases, instantiate) {
 
 const expected = oracle.cases.map(({ result, after }) => ({ result, after }));
 const node = await exercise(compiler, image, oracle.cases, instantiateManagedModule);
-assert.deepEqual(node.results, expected);
+assert.equal(node.results.length, expected.length);
+for (let i = 0; i < expected.length; i++) {
+    const { dpi, style, extendedStyle, menu } = oracle.cases[i];
+    assert.deepEqual(node.results[i], expected[i],
+        `Windows parity at DPI ${dpi}, style 0x${(style >>> 0).toString(16)}, extended style 0x${extendedStyle.toString(16)}, menu ${menu}`);
+}
 assert.deepEqual(node.badAddresses, Array(2).fill({ result: 0, error: 998 }));
 assert.deepEqual(node.invalidDpi, { result: 0, error: 87, unchanged: true });
 

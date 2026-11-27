@@ -16,6 +16,11 @@ cases.AddRange(from dpi in new[] {96, 120, 144, 192} from style in compoundStyle
 
 foreach (int dpi in Enumerable.Range(0, 69))
     cases.Add(Probe(0x00CF0000, 0x200, -1, dpi, [-12, -25, 88, 211]));
+
+// Cover the small caption and menu tables with tool windows and without a caption.
+cases.AddRange(from dpi in Enumerable.Range(1, 95) from style in new[] {0x00CF0000, 0x00800000, 0x00040000}
+               from extendedStyle in new[] {0, 0x80, 0x280} from menu in new[] {0, -1}
+               select Probe(style, extendedStyle, menu, dpi, [-12, -25, 88, 211]));
 cases.Add(Probe(0x00C80000, 0, 0, 192, [60, 70, -22, -51]));
 File.WriteAllText(args[0], JsonSerializer.Serialize(new {
     assembly = typeof(Guest).Assembly.Location, runtime = Environment.Version.ToString(), cases
