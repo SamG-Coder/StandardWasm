@@ -30,5 +30,13 @@ namespace ComCallFixture
             var notify = (delegate* unmanaged[Stdcall]<Site*, Result>)site->VTable[3];
             return notify(site).Code;
         }
+
+        public static int Clear(nint receiver)
+        {
+            *Slot(receiver) = null;
+            return *Slot(receiver) == null ? 1 : 0;
+        }
+
+        private static void** Slot(nint receiver) => ((Site*)receiver)->VTable + 3;
     }
 }

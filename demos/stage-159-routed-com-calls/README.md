@@ -10,6 +10,8 @@ through an unmanaged stdcall function pointer. Windows uses a native invocation 
 test container's callback. The browser supplies a registered guest vtable and invokes the
 same signature through the host. The scalar and four-byte managed result forms return
 `0` and `-2147467259` respectively, and both callbacks receive the original receiver.
+A null receiver raises `System.NullReferenceException` before any callback runs.
+An additional case clears a native slot through a `void**` returned by a helper.
 
 The browser verification in Stage 74 separately exercises malformed signatures, unknown
 receivers and modified vtables, instance isolation, and mixed native and COM ordinal

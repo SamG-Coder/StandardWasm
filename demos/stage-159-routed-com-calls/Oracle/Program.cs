@@ -22,6 +22,14 @@ internal static unsafe class Program
         int wrapped = Calls.Wrapped(expectedReceiver);
         if (scalar != 0 || wrapped != FailureCode || calls != 2)
             throw new InvalidOperationException("The CLR vtable did not dispatch both calls with the original receiver.");
+        string nullReceiver = "no exception";
+        try { Calls.Scalar(0); }
+        catch (NullReferenceException error) { nullReceiver = error.GetType().FullName!; }
+        if (nullReceiver != "System.NullReferenceException" || calls != 2)
+            throw new InvalidOperationException("A null vtable receiver reached the callback.");
+        int clear = Calls.Clear(expectedReceiver);
+        if (clear != 1 || vtable[3] != null)
+            throw new InvalidOperationException("The CLR did not clear the pointer slot.");
         File.WriteAllText(args[0], JsonSerializer.Serialize(new
         {
             runtime = Environment.Version.ToString(),
@@ -29,9 +37,12 @@ internal static unsafe class Program
             assembly = typeof(Calls).Assembly.Location,
             scalarRow = typeof(Calls).GetMethod(nameof(Calls.Scalar))!.MetadataToken & 0xffffff,
             wrappedRow = typeof(Calls).GetMethod(nameof(Calls.Wrapped))!.MetadataToken & 0xffffff,
+            clearRow = typeof(Calls).GetMethod(nameof(Calls.Clear))!.MetadataToken & 0xffffff,
             scalar,
             wrapped,
-            calls
+            calls,
+            nullReceiver,
+            clear
         }));
     }
 

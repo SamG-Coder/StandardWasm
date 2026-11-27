@@ -29,8 +29,8 @@ namespace PortableCompiler
             // address into memory 0, the CLI's native-int stack type. A byte* passes to a
             // void* parameter with no IL conversion, so both must share it (the original
             // UnmanagedMemoryStream calls ArgumentNullException.ThrowIfNull(void*, string)).
-            // Pointers to named structs and multi-level pointers keep the null-only
-            // storage of decisions 0032 and 0035.
+            // The compiler keeps the null-only representation for unsupported
+            // named layouts. A pointer-only slot still has native-width storage.
             if (position < end && IsPrimitiveElement(image[position]))
             {
                 next[0] = position + 1;
@@ -47,6 +47,8 @@ namespace PortableCompiler
             }
             int pointee = PointerStorage.ReadPointee(image, position, end, next);
             if (pointee < 0) return pointee;
+            if (pointee == 0 && image[position] == PointerStorage.Element)
+                return SignatureTypes.Native; // e.g. void** passed to a native slot-clearing helper.
             if (pointee > 0 && image[position] == 0x11)
             {
                 // Stage 143 (decision 0071): a single-level pointer to a blittable sequential struct is an address.

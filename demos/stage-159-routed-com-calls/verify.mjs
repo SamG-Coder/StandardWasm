@@ -20,7 +20,7 @@ const assembly = readFileSync(oracle.assembly);
 const compilerPath = process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts/StandardWasm.Compiler.wasm");
 const compiler = readFileSync(compilerPath);
 
-async function exercise(compiler, assembly, scalarRow, wrappedRow, instantiate) {
+async function exercise(compiler, assembly, caseRows, instantiate) {
     const { instance: { exports: tool } } = await WebAssembly.instantiate(compiler);
     function upload(bytes) {
         const managed = tool.CreateBytes(bytes.length);
@@ -31,7 +31,7 @@ async function exercise(compiler, assembly, scalarRow, wrappedRow, instantiate) 
     new DataView(pack.buffer).setUint32(0, assembly.length, true);
     pack.set(assembly, 4);
     const entries = [];
-    for (const [row, name] of [[scalarRow, "scalar"], [wrappedRow, "wrapped"]]) {
+    for (const [row, name] of caseRows) {
         const text = new TextEncoder().encode(name);
         const entry = new Uint8Array(8 + text.length);
         const words = new DataView(entry.buffer);
@@ -61,11 +61,20 @@ async function exercise(compiler, assembly, scalarRow, wrappedRow, instantiate) 
     });
     const scalar = instance.exports.scalar(site);
     const wrapped = instance.exports.wrapped(site);
-    return { scalar, wrapped, calls, imports };
+    let nullReceiver = "no exception";
+    try { instance.exports.scalar(0); }
+    catch (error) {
+        const tag = instance.exports["\0nullReference"];
+        if (!(error instanceof WebAssembly.Exception) || !(tag instanceof WebAssembly.Tag) || !error.is(tag)) throw error;
+        nullReceiver = "System.NullReferenceException";
+    }
+    const clear = instance.exports.clear(site);
+    return { scalar, wrapped, calls, nullReceiver, clear, imports };
 }
 
-const node = await exercise(compiler, assembly, oracle.scalarRow, oracle.wrappedRow, instantiateManagedModule);
-assert.deepEqual(node, { scalar: oracle.scalar, wrapped: oracle.wrapped, calls: oracle.calls, imports: [
+const caseRows = [[oracle.scalarRow, "scalar"], [oracle.wrappedRow, "wrapped"], [oracle.clearRow, "clear"]];
+const node = await exercise(compiler, assembly, caseRows, instantiateManagedModule);
+assert.deepEqual(node, { scalar: oracle.scalar, wrapped: oracle.wrapped, calls: oracle.calls, nullReceiver: oracle.nullReceiver, clear: oracle.clear, imports: [
     ["standardwasm:resources", "memory", "memory"], ["standardwasm:com", "stdcall:i32(p32)", "function"]
 ] });
 const server = await serveLaunch(0, compilerPath);
@@ -73,13 +82,13 @@ const browser = await chromium.launch({ channel: "msedge" });
 try {
     const page = await browser.newPage();
     await page.goto(server.url);
-    const edge = await page.evaluate(async ({ source, assembly, scalarRow, wrappedRow }) => {
+    const edge = await page.evaluate(async ({ source, assembly, caseRows }) => {
         const { instantiateManagedModule } = await import("/launch/resource-host.mjs");
         const response = await fetch("/StandardWasm.Compiler.wasm");
         if (!response.ok) throw Error("Could not load the frozen compiler");
         const compiler = await response.arrayBuffer();
-        return (0, eval)("(" + source + ")")(compiler, new Uint8Array(assembly), scalarRow, wrappedRow, instantiateManagedModule);
-    }, { source: exercise.toString(), assembly: [...assembly], scalarRow: oracle.scalarRow, wrappedRow: oracle.wrappedRow });
+        return (0, eval)("(" + source + ")")(compiler, new Uint8Array(assembly), caseRows, instantiateManagedModule);
+    }, { source: exercise.toString(), assembly: [...assembly], caseRows });
     assert.deepEqual(edge, node);
     const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
     const results = { compiler: sha256(compiler), assembly: sha256(assembly), clr: oracle.runtime,
