@@ -298,7 +298,7 @@ namespace PortableCompiler
                 (image[start] == SignatureReader.Boolean || image[start] == SignatureReader.Int32 || image[start] == 9);
         }
 
-        private static void RemoveUnreachable(int[] records)
+        internal static void RemoveUnreachable(int[] records)
         {
             var reachable = new byte[records.Length / Width];
             var pending = new int[reachable.Length];

@@ -275,6 +275,7 @@ namespace PortableCompiler
             var rows = new int[functionCapacity];
             var contexts = new int[functionCapacity];
             var instantiations = new MethodInstantiations();
+            var falseBooleans = new FalseBooleanSpecializations();
             var indices = new int[symbols + 1];
             var arities = new int[functionCapacity];
             var offsets = new int[functionCapacity];
@@ -739,6 +740,11 @@ namespace PortableCompiler
                         CoreStringSpanCopy.Lower(bundle, image, layout, heaps, owner, source, records, objects, catchRegion);
                     CoreStringCreation.Lower(bundle, image, layout, heaps, owner, source, methodArguments,
                         frame, records, objects, catchRegion);
+                    if (falseBooleans.IsClone(bases[owner] + source, current))
+                    {
+                        bool instance = (MethodDefinitions.ReadColumn(image, layout, source, 2) & 0x10) == 0;
+                        FalseBooleanSpecializations.Fold(image, body, instance, records, catchRegion);
+                    }
                     RuntimeTypeBranches.FoldClosedTypeBranches(bundle, image, layout, heaps, owner, context,
                         methodArguments, objects, frame, records, catchRegion, count);
                     RuntimeTypeBranches.FoldClosedSizeBranches(bundle, image, layout, heaps, owner,
@@ -816,7 +822,7 @@ namespace PortableCompiler
                             parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                             bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
                             initializers, reflection, typeCalls, instantiations, methodArguments, inlineLocations, frameCells, parameters, signatures[signature],
-                            nativePlans, addressedFields, localElements, pointers, finalizers, tracksFinalizers, scopedReceiver);
+                            nativePlans, addressedFields, localElements, pointers, finalizers, tracksFinalizers, scopedReceiver, falseBooleans);
                         if (functions == Reemit)
                         {
                             // Allocation can precede the first reachable suppression call.
@@ -1695,7 +1701,7 @@ namespace PortableCompiler
             MethodInstantiations instantiations, int[] methodArguments,
             int[] inlineLocations, int[] frameCells, int parameterCount, int result, NativeAggregatePlans nativePlans,
             AddressedFields addressedFields, byte[] localElements,
-            FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers, int scopedReceiver)
+            FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers, int scopedReceiver, FalseBooleanSpecializations falseBooleans)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             bool arrayEnumerator = ArrayElementKey(objects, callerReceiver) != 0 &&
@@ -3312,6 +3318,7 @@ namespace PortableCompiler
                 }
                 int fieldReceiver = kind == BranchIl.Call ? records[slot + BranchIl.Width + 1] : 0;
                 int key = fieldReceiver < 0 ? -1 : 0, localPrimitiveReceiver = 0;
+                bool valueTarget = false;
                 if (kind == BranchIl.Call && fieldReceiver == 0 && records[slot + 3] == 0 &&
                     (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) == 0 &&
                     !ObjectLayouts.IsConstructor(image, heaps, layout, target))
@@ -3330,13 +3337,21 @@ namespace PortableCompiler
                             receiver = BundleLayouts.RegisterValue(bundle, image, layout, heaps, owner, declaring, objects);
                         // An unrewritten IL receiver of a value method is a byref.
                         // Address scans that substituted a snapshot mark the call separately.
+                        valueTarget = ObjectLayouts.IsValueType(objects, receiver);
                         if (UsesLocationReceiver(objects, receiver)) key = -1;
                     }
                 }
-                int index = Lookup(owners, rows, contexts, bases, indices, functions, owner, target, key);
+                // The clone shares the metadata identity and ABI. All ordinary
+                // calls, exports and function pointers still use the original index.
+                int[] targetIndices = kind == BranchIl.Call && key == 0 && context == 0 &&
+                    methodArguments == null && fieldReceiver == 0 && localPrimitiveReceiver == 0 &&
+                    !valueTarget && records[slot + 3] == 0 &&
+                    FalseBooleanSpecializations.CanSpecialize(image, layout, heaps, callerRow, target, targetFlags, records, slot, clauses)
+                    ? falseBooleans.Indices(indices.Length) : indices;
+                int index = Lookup(owners, rows, contexts, bases, targetIndices, functions, owner, target, key);
                 if (index < 0)
                 {
-                    functions = Register(bundle, image, layout, heaps, owner, target, key, owners, rows, contexts, bases, indices,
+                    functions = Register(bundle, image, layout, heaps, owner, target, key, owners, rows, contexts, bases, targetIndices,
                         arities, offsets, signatures, objects, functions, allowVirtual: virtualMethodLocal && kind == BranchIl.Call,
                         receiverOverride: localPrimitiveReceiver);
                     if (functions < 0) return functions;

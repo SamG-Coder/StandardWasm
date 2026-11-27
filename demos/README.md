@@ -284,6 +284,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [287 · Runtime value type classification](stage-287-runtime-value-type-kind/README.md) | `npm run demo -- stage-287-runtime-value-type-kind` | Compare canonical CLR value type identity and protected Type overrides |
 | [288 · Constrained Int32 comparison](stage-288-constrained-int32-compare/README.md) | `npm run demo -- stage-288-constrained-int32-compare` | Bind the original Int32 comparison through its exact interface slot |
 | [289 · Closed type guards and Boolean branches](stage-289-closed-type-boolean-guards/README.md) | `npm run demo -- stage-289-closed-type-boolean-guards` | Eliminate impossible generic branches and preserve operand evaluation |
+| [290 · Direct private calls with a known false argument](stage-290-private-bool-specialization/README.md) | `npm run demo -- stage-290-private-bool-specialization` | Reuse a private Boolean method body with proven normal-flow reachability |
 | [291 · Managed native-word class fields](stage-291-native-word-class-fields/README.md) | `npm run demo -- stage-291-native-word-class-fields` | Verify traced mutable native-word fields and typed null handling |
 
 ## Adding a stage
