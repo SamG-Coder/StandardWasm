@@ -92,7 +92,8 @@ namespace PeLibrary
             return 1;
         }
 
-        internal static int[] TypeParameterNames(byte[] image, int[] heaps, int[] methods, int[] counts, int typeRow)
+        internal static int[] TypeParameterNames(byte[] image, int[] heaps, int[] methods, int[] counts, int typeRow,
+            int[] variance = null)
         {
             if (counts[42] == 0) return new int[0];
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 42);
@@ -109,11 +110,13 @@ namespace PeLibrary
             }
             while (end < counts[42] && Index(image, (uint)(table + end * width + 4), ownerWidth) == owner) end++;
             var names = new int[end - first];
+            if (variance != null && variance.Length != names.Length) return null;
             for (int i = 0; i < names.Length; i++)
             {
                 uint at = (uint)(table + (first + i) * width);
                 if (U16(image, at) != i) return null;
                 names[i] = Index(image, at + (uint)(4 + ownerWidth), methods[2]);
+                if (variance != null) variance[i] = (int)(U16(image, at + 2) & Variance);
             }
             return names;
         }

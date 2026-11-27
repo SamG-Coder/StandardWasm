@@ -13,8 +13,12 @@ namespace PortableCompiler
 
         internal static int Implements(BundleImages bundle, int[] objects, int type)
         {
-            if (!ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.HasArguments(objects, type)) return 0;
-            var required = new[] { ObjectLayouts.AssemblyOf(objects, type), ObjectLayouts.TypeDef(objects, type) };
+            if (!ObjectLayouts.IsInterface(objects, type)) return 0;
+            int arity = ObjectLayouts.ArgumentCount(objects, type);
+            var required = new int[2 + arity];
+            required[0] = ObjectLayouts.AssemblyOf(objects, type);
+            required[1] = ObjectLayouts.TypeDef(objects, type);
+            for (int index = 0; index < arity; index++) required[index + 2] = ObjectLayouts.Argument(objects, type, index);
             return BundleConstraints.ImplementsCoreEnum(bundle, objects, required);
         }
 
