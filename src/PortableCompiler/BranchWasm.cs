@@ -170,14 +170,31 @@ namespace PortableCompiler
             code[used++] = 0x03;
             code[used++] = 0x40;
             if (catchRegion.Length != 0) used = ExceptionDispatchWasm.Begin(code, used);
+            // The dispatch loop tests one state per `if`, in pc order. A large body groups
+            // consecutive states into blocks headed by `br_if (pc >= next group's first pc)`,
+            // so re-entering the loop skips a whole group with one comparison instead of
+            // testing each of its states (#316). A branch to the loop leaves one more block.
+            int emitted = 0;
+            for (int pc = 0; pc < depths.Length; pc++)
+                if (depths[pc] != 0) emitted++;
+            int groupSize = emitted > MinimumGroupedStates ? GroupSize(emitted) : 0;
+            int loopDepth = (catchRegion.Length == 0 ? 1 : ExceptionDispatchWasm.Depth) + (groupSize != 0 ? 1 : 0);
+            int ordinal = 0;
             for (int pc = 0; pc < depths.Length; pc++)
             {
                 if (depths[pc] == 0) continue;
+                if (groupSize != 0 && ordinal % groupSize == 0)
+                {
+                    if (ordinal != 0) code[used++] = 0x0b; // end the previous group
+                    used = BeginGroup(code, used, depths, pc, groupSize, pcLocal);
+                }
+                ordinal++;
                 int slot = pc * BranchIl.Width;
                 int kind = records[slot], operand = records[slot + 1], next = records[slot + 2];
                 int depth = depths[pc] - 1;
                 int state = pc * maximum;
                 int top = depth - 1;
+                bool fallsThrough = false;
                 used = Local(code, used, 0x20, pcLocal);
                 used = Const(code, used, pc);
                 code[used++] = 0x46;
@@ -959,14 +976,27 @@ namespace PortableCompiler
                         used = FinallyWasm.Finish(code, used, pcLocal + 2 + operand, objectBase + 1 + operand, continuationBase + operand);
                     else if (kind == Leave && continuations != 0)
                         used = FinallyWasm.Leave(code, used, pc, operand, pcLocal, continuationBase, objectBase, catchRegion);
-                    else used = Const(code, used, kind == Branch || kind == Leave ? operand : next);
+                    else
+                    {
+                        int successor = kind == Branch || kind == Leave ? operand : next;
+                        used = Const(code, used, successor);
+                        // States are tested in pc order. When the constant successor is the
+                        // next emitted state, its test follows this one directly, so control
+                        // falls through instead of re-entering the dispatch loop. pcLocal is
+                        // still written, so exception dispatch observes the same state.
+                        fallsThrough = successor == NextEmitted(depths, pc);
+                    }
                     used = Local(code, used, 0x21, pcLocal);
-                    code[used++] = 0x0c;
-                    // Catch dispatch adds try_table and one block per tag around the instruction if.
-                    code[used++] = catchRegion.Length == 0 ? (byte)1 : (byte)ExceptionDispatchWasm.Depth;
+                    if (!fallsThrough)
+                    {
+                        code[used++] = 0x0c;
+                        // Catch dispatch adds try_table and one block per tag around the instruction if.
+                        code[used++] = (byte)loopDepth;
+                    }
                 }
                 code[used++] = 0x0b;
             }
+            if (groupSize != 0) code[used++] = 0x0b; // end the last group
             code[used++] = 0;
             if (catchRegion.Length != 0)
             {
@@ -994,6 +1024,49 @@ namespace PortableCompiler
             }
             code[used++] = 0x0b;
             return used;
+        }
+
+        // Bodies with at most this many states keep the flat dispatch chain.
+        internal const int MinimumGroupedStates = 32;
+        // Bytes BeginGroup and its closing `end` add per group, at most.
+        internal const int GroupBytes = 16;
+
+        // About the square root of the state count balances the groups skipped on the way
+        // to a state against the states tested inside its group.
+        internal static int GroupSize(int states)
+        {
+            int size = 8;
+            while (size * size < states) size++;
+            return size;
+        }
+
+        // block; br_if 0 (pc >= the first pc of the next group). A pc past every state
+        // skips all groups and reaches the loop's trailing unreachable, as before.
+        private static int BeginGroup(byte[] code, int used, int[] depths, int pc, int groupSize, int pcLocal)
+        {
+            int end = pc, counted = 0;
+            while (end < depths.Length && counted < groupSize)
+            {
+                if (depths[end] != 0) counted++;
+                end++;
+            }
+            while (end < depths.Length && depths[end] == 0) end++;
+            code[used++] = 0x02;
+            code[used++] = 0x40;
+            used = Local(code, used, 0x20, pcLocal);
+            used = Const(code, used, end);
+            code[used++] = 0x4e; // i32.ge_s
+            code[used++] = 0x0d;
+            code[used++] = 0;
+            return used;
+        }
+
+        // The next pc the dispatch loop emits a state for, or depths.Length past the last.
+        private static int NextEmitted(int[] depths, int pc)
+        {
+            int candidate = pc + 1;
+            while (candidate < depths.Length && depths[candidate] == 0) candidate++;
+            return candidate;
         }
 
         private static int GuardNull(byte[] code, int used, int reference, int tag = ExceptionTagsWasm.NullTag)

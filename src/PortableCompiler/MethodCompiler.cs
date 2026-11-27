@@ -573,6 +573,8 @@ namespace PortableCompiler
 
                     if (location.Length != 0) location[2] = -1;
                     int capacity = body[1] * 64 + 32;
+                    // Grouped dispatch (BranchWasm.BeginGroup) opens a block per group of at least eight states.
+                    capacity += (body[1] / 8 + 1) * BranchWasm.GroupBytes;
                     if (catchRegion.Length != 0)
                     {
                         // One dispatch per fixed tag plus the object dispatch, whose clause arms add a
