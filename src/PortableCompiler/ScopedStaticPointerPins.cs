@@ -7,8 +7,8 @@ namespace PortableCompiler
     {
         internal const int BorrowedAddress = 1;
 
-        internal static int Lower(byte[] image, int[] layout, int[] heaps, int method, int methodCount,
-            int[] records, int[] clauses, int[] pinned, int parameters, int locals, int[] location)
+        internal static int Lower(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner, int method, int methodCount,
+            int[] records, int[] clauses, int[] pinned, int[] frame, int parameters, int locals, int[] location)
         {
             int local = -1;
             for (int i = 0; i < locals; i++)
@@ -47,20 +47,50 @@ namespace PortableCompiler
             if (clear < 0 || Next(records, store) != load) return -2;
             int convert = Next(records, load);
             if (!At(records, convert, ConvertInteger, 0xe0)) return Reject(location, load);
-            int use = Next(records, convert), after = NativeStore(records, use);
-            if (after < 0 && At(records, use, Call, -1) && records[use + 3] == 0 &&
-                WritesBorrowedWord(image, layout, heaps, methodCount, records[use + 1]))
-                after = Next(records, use);
-            if (!At(records, after, Constant, 0) ||
-                !At(records, Next(records, after), ConvertInteger, 0xe0) || Next(records, Next(records, after)) != clear)
-                return Reject(location, use);
+            int use = Next(records, convert), consumer = use;
+            if (At(records, use, Store, -1))
+            {
+                int alias = records[use + 1];
+                if (alias < parameters || alias == local || alias >= parameters + locals || frame[alias] != SignatureTypes.Native)
+                    return Reject(location, use);
+                int aliasLoad = FindAliasLoad(records, use, clear, alias);
+                if (aliasLoad < 0) return Reject(location, use);
+                consumer = Next(records, aliasLoad);
+            }
+            int after = NativeStore(records, consumer);
+            if (after < 0 && At(records, consumer, Call, -1) && records[consumer + 3] == 0)
+            {
+                int target = records[consumer + 1];
+                if (WritesBorrowedWord(image, layout, heaps, methodCount, target) ||
+                    ComOutputPointer.MatchesActivation(bundle, image, layout, heaps, owner, methodCount, target))
+                    after = Next(records, consumer);
+            }
+            if (after < 0 || after >= clear) return Reject(location, consumer);
             // All instructions between taking the address and clearing the pin
-            // execute in order. The address reaches only the validated word store.
+            // execute in order. The address reaches only a validated consumer.
             for (int at = store; at <= clear; at = Next(records, at))
-                if (ValueOperands.Entry(records, at / Width, clauses)) return Reject(location, at);
+                if (TransfersControl(records[at]) || ValueOperands.Entry(records, at / Width, clauses)) return Reject(location, at);
             records[address + Width + 3] = BorrowedAddress;
             return 0;
         }
+
+        private static int FindAliasLoad(int[] records, int store, int clear, int alias)
+        {
+            int load = -1;
+            for (int at = 0; at < records.Length; at = Next(records, at))
+            {
+                if (at == store || records[at + 1] != alias) continue;
+                int kind = records[at];
+                if (kind == Store || kind == FrameAddress) return -1;
+                if (kind != Load) continue;
+                if (load >= 0 || at < store || at > clear) return -1;
+                load = at;
+            }
+            return load;
+        }
+
+        private static bool TransfersControl(int kind) => kind == Branch || kind == Conditional || kind == Switch ||
+            kind == Return || kind == Leave || kind == ThrowNull || kind == Rethrow || kind == EndFinally;
 
         private static bool WritesBorrowedWord(byte[] image, int[] layout, int[] heaps, int methods, int target)
         {

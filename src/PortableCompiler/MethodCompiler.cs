@@ -785,8 +785,8 @@ namespace PortableCompiler
                             objects, records, pinned, frame, parameters, locals, catchRegion, literals);
                         status = PinnedStrings.Lower(image, heaps, layout, records, pinned, parameters, locals, location);
                         if (status < 0) return status;
-                        status = ScopedStaticPointerPins.Lower(image, layout, heaps, source, count,
-                            records, catchRegion, pinned, parameters, locals, location);
+                        status = ScopedStaticPointerPins.Lower(bundle, image, layout, heaps, owner, source, count,
+                            records, catchRegion, pinned, frame, parameters, locals, location);
                         if (status < 0) return status;
                         ScopedValuePins.Lower(bundle, image, layout, heaps, owner, source, count, localBlob,
                             records, catchRegion, frame, parameters, locals, objects, nativePlans);

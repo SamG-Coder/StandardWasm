@@ -3,7 +3,7 @@ using StaticPointerPinning;
 
 if (IntPtr.Size != 4) throw new InvalidOperationException("Expected Windows x86 CLR.");
 int Row(int token) => token & 0xffffff;
-Func<int>[] probes = [HelperWrite.Read, InlineWrite.Read, EscapingAddress.Read];
+Func<int>[] probes = [HelperWrite.Read, InlineWrite.Read, AliasWrite.Read, EscapingAddress.Read];
 int rejectingInitializer = Row(typeof(EscapingAddress).TypeInitializer!.MetadataToken);
 File.WriteAllText(args[0], JsonSerializer.Serialize(new
 {

@@ -33,6 +33,35 @@ namespace StaticPointerPinning
         public static int Read() => observedBorrow && value == (int*)4 ? 103 : -1;
     }
 
+    public static unsafe class AliasWrite
+    {
+        private static readonly int* value;
+        private static readonly int beforeWrite;
+
+        static AliasWrite()
+        {
+            fixed (int** address = &value)
+            {
+                PackedCarrier** alias = (PackedCarrier**)address;
+                beforeWrite = Observe();
+                SetAddress(alias);
+            }
+        }
+
+        private static int Observe() => value == null ? 31 : -1;
+
+        private static void SetAddress(PackedCarrier** address) => *address = (PackedCarrier*)5;
+
+        public static int Read() => beforeWrite == 31 && value == (int*)5 ? 109 : -1;
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 1)]
+        private struct PackedCarrier
+        {
+            internal byte Prefix;
+            internal int Value;
+        }
+    }
+
     public static unsafe class EscapingAddress
     {
         private static readonly int* value;

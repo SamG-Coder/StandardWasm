@@ -6,4 +6,4 @@ The fixture borrows the address of a static unmanaged pointer during its declari
 npm run demo -- stage-301-static-pointer-pinning
 ```
 
-The same ordinary .NET Standard assembly runs on Windows x86 CLR, Node, and Edge. Results are `101` for the synchronous helper write and `103` when an inline borrowed write and direct accesses share one location. Attempting to publish the fixed address produces a compile diagnostic. Calls that lack a synchronous non-escaping proof, including the original WinForms COM activation, still need separate binding.
+The same ordinary .NET Standard assembly runs on Windows x86 CLR, Node, and Edge. Results are `101` for the synchronous helper write, `103` when an inline borrowed write and direct accesses share one location, and `109` when a native alias survives an intervening managed call. Attempting to publish the fixed address produces a compile diagnostic. The compiler recognizes the original `CoCreateInstance` output-pointer contract for borrow analysis. Browser COM activation still needs its host implementation.
