@@ -1,4 +1,5 @@
 const disabledStyle = 0x08000000; // WS_DISABLED
+const childStyle = 0x40000000; // WS_CHILD
 const enableMessage = 0x000a; // WM_ENABLE
 const cancelModeMessage = 0x001f; // WM_CANCELMODE
 
@@ -6,12 +7,14 @@ const invalidWindow = 1400, invalidIndex = 1413, invalidParameter = 87;
 const procedureIndex = -4; // GWL_WNDPROC
 let nextOwnerId = 1;
 export const windowImportNames = [
-    "isWindow", "isWindowEnabled", "enableWindow", "getWindowLongW", "getWindowLongPtrW", "setWindowLongW", "setWindowLongPtrW"
+    "isWindow", "isWindowEnabled", "enableWindow", "getWindowLongW", "getWindowLongPtrW", "setWindowLongW", "setWindowLongPtrW",
+    "getActiveWindow", "setActiveWindow"
 ];
 
 export function createWindowState() {
     const windows = new Map();
     let nextHandle = 1;
+    let activeWindow = 0;
     if (nextOwnerId > 0xfffffffe) throw new RangeError("Win32 window owner ID space is exhausted.");
     // A launch currently owns one process and one GUI thread. These IDs
     // belong to the guest, independent of the renderer's OS identities.
@@ -25,7 +28,23 @@ export function createWindowState() {
             return handle;
         },
         unregister(handle) {
-            return windows.delete(handle >>> 0);
+            handle >>>= 0;
+            if (activeWindow === handle) activeWindow = 0;
+            return windows.delete(handle);
+        },
+        getActiveWindow() {
+            return activeWindow;
+        },
+        setActiveWindow(handle, setError) {
+            handle >>>= 0;
+            if (handle === 0) return 0;
+            const window = windows.get(handle);
+            if (!window) { setError(invalidWindow); return 0; }
+            const previous = activeWindow;
+            // The launch models one guest input queue. Only a top-level HWND
+            // becomes active, independently of the browser's DOM focus.
+            if ((window.style & childStyle) === 0) activeWindow = handle;
+            return previous;
         },
         hasWindow(handle) {
             return windows.has(handle >>> 0);
