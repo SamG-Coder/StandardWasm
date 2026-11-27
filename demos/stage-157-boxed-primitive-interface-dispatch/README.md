@@ -14,9 +14,10 @@ The runner also passes runtime `Type` descriptors through the original
 `IFormatProvider.GetFormat` declaration and through two virtual overrides.
 The override cases pass two descriptors and a null argument.
 
-Both `Int32` cases have CLR answers. Until the generic numeric formatting
-body lowers, the verifier accepts only the located diagnostic at the call
-to `Number.TryFormatInt32<char>` in the original `Int32.TryFormat`. Once
-that body compiles, the verifier requires the CLR answer.
+Both `Int32` cases have CLR answers. The compiler now binds the original
+`Number.TryFormatInt32<char>` generic method. Until the formatting pipeline
+lowers, the verifier accepts only the located diagnostic at the byte-array
+conversion to `ReadOnlySpan<byte>` in `NumberFormatInfo.NegativeSignTChar`.
+Once the pipeline compiles, the verifier requires the CLR answer.
 
 See decision 0084 and issue #272.

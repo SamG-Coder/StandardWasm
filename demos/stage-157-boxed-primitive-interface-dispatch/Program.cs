@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Reflection;
 using System.Text.Json;
 
 internal static class Program
@@ -6,14 +8,15 @@ internal static class Program
     {
         if (IntPtr.Size != 4) throw new InvalidOperationException("Expected the x86 CLR.");
         string runtime = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-        var intFormatter = typeof(int).GetMethod(nameof(int.TryFormat),
-            [typeof(Span<char>), typeof(int).MakeByRefType(), typeof(ReadOnlySpan<char>), typeof(IFormatProvider)])!;
-        const int numberCallOffset = 8;
-        byte[] formatterIl = intFormatter.GetMethodBody()!.GetILAsByteArray()!;
-        if (formatterIl[numberCallOffset] != 0x28 ||
-            intFormatter.Module.ResolveMethod(BitConverter.ToInt32(formatterIl, numberCallOffset + 1))?.Name != "TryFormatInt32")
+        var negativeSign = typeof(NumberFormatInfo).GetMethod("NegativeSignTChar",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        const int conversionOffset = 0x3e;
+        byte[] formatterIl = negativeSign.GetMethodBody()!.GetILAsByteArray()!;
+        if (formatterIl.Length < conversionOffset + 5 || formatterIl[conversionOffset] != 0x28 ||
+            negativeSign.Module.ResolveMethod(BitConverter.ToInt32(formatterIl, conversionOffset + 1)) is not MethodInfo conversion ||
+            conversion.Name != "op_Implicit" || conversion.DeclaringType != typeof(ReadOnlySpan<byte>))
             throw new InvalidOperationException("The CoreLib formatting baseline changed.");
-        int[] intDiagnostic = [2, intFormatter.MetadataToken & 0xffffff, numberCallOffset];
+        int[] intDiagnostic = [2, negativeSign.MetadataToken & 0xffffff, conversionOffset];
 
         var cases = new Func<int>[]
         {

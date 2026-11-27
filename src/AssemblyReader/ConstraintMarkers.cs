@@ -13,6 +13,15 @@ namespace PeLibrary
 
         internal static bool IsUnmanaged(byte[] image, int[] layout, int[] heaps, int coded)
         {
+            if ((coded & 3) == 0)
+            {
+                // CoreLib can reference its own modifier by definition.
+                var definitions = new int[45];
+                int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], definitions);
+                return first >= 0 && PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, definitions) &&
+                    ObjectLayouts.NamedDefinition(image, heaps, layout, definitions, first, coded >> 2,
+                        "System.Runtime.InteropServices", "UnmanagedType");
+            }
             if ((coded & 3) != 1) return false;
             var reference = new int[AssemblyReferences.SymbolWidth];
             if (AssemblyReferences.ReadType(image, heaps, layout, coded >> 2, reference) < 0 ||
