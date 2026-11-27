@@ -20,6 +20,11 @@ namespace PortableCompiler
                 if (marker != 0) continue;
 
                 int argument = arguments[parameter[0]];
+                if (parameter[1] != 0 && ConstraintMarkers.IsCoreEnumDefinition(image, layout, heaps, coded))
+                {
+                    if (!ObjectLayouts.IsEnumKey(argument)) return -2;
+                    continue;
+                }
                 int dependent = CheckTypeParameterConstraint(bundle, image, layout, heaps, owner, objects, coded,
                     argument, method ? null : arguments, context, method ? arguments : null, cursor, 0);
                 if (dependent < 0) return dependent;

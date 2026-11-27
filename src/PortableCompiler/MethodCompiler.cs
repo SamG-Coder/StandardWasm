@@ -380,10 +380,17 @@ namespace PortableCompiler
             {
                 if (current == functions)
                 {
+                    int expanded = functions;
+                    for (int index = 0; index < reflection.ActivationCount; index++)
+                    {
+                        expanded = reflection.Activations[index].Expand(bundle, objects, globals, owners, rows, contexts,
+                            bases, indices, arities, offsets, signatures, expanded, finalizers, dispatch);
+                        if (expanded < 0) return expanded;
+                    }
                     // Newly selected overrides can allocate additional runtime
                     // classes. Compile them and revisit only the new allocations.
-                    int expanded = dispatch.Expand(bundle, objects, owners, rows, contexts, bases, indices,
-                        arities, offsets, signatures, functions, location, instantiations);
+                    expanded = dispatch.Expand(bundle, objects, owners, rows, contexts, bases, indices,
+                        arities, offsets, signatures, expanded, location, instantiations);
                     if (expanded < 0) return expanded;
                     dispatch.ObserveReceiverDemand(receiverDemand, contexts);
                     for (int i = 0; i < exports.Length; i++) receiverDemand.Require(exports[i], contexts);
@@ -1656,6 +1663,12 @@ namespace PortableCompiler
             if (length < 0) return length;
             length = reflection.NeutralResources.Write(moduleCode, length, bodyOffsets, sizes, hostImports, reflection);
             if (length < 0) return length;
+            for (int index = 0; index < reflection.ActivationCount; index++)
+            {
+                exceptionTags |= ExceptionTypes.NullReference;
+                length = reflection.Activations[index].Write(moduleCode, length, bodyOffsets, sizes, hostImports, rootCount);
+                if (length < 0) return length;
+            }
             if (reflection.RuntimeTypeCastFixups[0] != 0)
             {
                 int offset = NextSignature(offsets, arities, functions);
@@ -3420,6 +3433,28 @@ namespace PortableCompiler
                 // neutral resource string, so SR properties compile without ResourceManager.
                 if (kind == BranchIl.Call && records[slot + 3] == 0)
                 {
+                    if (GenericActivationMetadata.IsCoreWrapper(image, layout, heaps, target))
+                    {
+                        int template = RuntimeGenericActivation.Template(records, slot, clauses);
+                        if (template >= 0)
+                        {
+                            var activation = RuntimeGenericActivation.Bind(bundle, objects, globals, template, functions);
+                            if (activation != null)
+                            {
+                                if (functions >= owners.Length) return -3;
+                                int offset = NextSignature(offsets, arities, functions);
+                                if (offset + 2 >= signatures.Length) return -3;
+                                offsets[functions] = offset;
+                                arities[functions] = 2;
+                                signatures[offset] = ObjectReference;
+                                signatures[offset + 1] = RuntimeTypeMetadata.Type;
+                                signatures[offset + 2] = RuntimeTypeMetadata.Type;
+                                reflection.AddActivation(activation);
+                                records[slot + 1] = functions++;
+                                continue;
+                            }
+                        }
+                    }
                     int folded = ResourceStringFolding.FoldResourceCall(image, heaps, layout, records, slot, clauses, literals, literalSize);
                     if (folded < 0) return folded;
                     if (folded > 0) continue;

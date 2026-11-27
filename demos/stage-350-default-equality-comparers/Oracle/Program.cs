@@ -1,5 +1,4 @@
 using System;
-using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -34,13 +33,6 @@ foreach (var test in cases)
         throw new InvalidOperationException("Unexpected activation for " + test.Run.Method.Name);
 }
 
-const int handleConstruction = 0x13;
-byte[] activationBody = activate.GetMethodBody().GetILAsByteArray();
-if (activationBody.Length < handleConstruction + 5 || activationBody[handleConstruction] != 0x73 ||
-    activate.Module.ResolveMethod(BinaryPrimitives.ReadInt32LittleEndian(activationBody.AsSpan(handleConstruction + 1)))
-        .DeclaringType?.FullName != "System.Runtime.CompilerServices.QCallTypeHandle")
-    throw new InvalidOperationException("The CoreCLR handle-construction checkpoint changed.");
-
 string core = typeof(object).Assembly.Location;
 string runtime = Path.GetDirectoryName(core);
 File.WriteAllText(args[0], JsonSerializer.Serialize(new
@@ -55,6 +47,24 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
         row = test.Run.Method.MetadataToken & 0xffffff,
         expected = test.Run(),
         comparer = test.Comparer.GetType().Name,
-        rejection = new { status = -2, location = new[] { 5, activate.MetadataToken & 0xffffff, handleConstruction } }
+        rejection = ExpectedDiagnostic(test.Run.Method.Name)
     })
 }));
+
+object ExpectedDiagnostic(string fixture)
+{
+    var target = fixture switch
+    {
+        nameof(Probe.Strings) => ("GenericEqualityComparer", "Equals", -1, 19),
+        nameof(Probe.NullableValues) => ("ObjectEqualityComparer", "Equals", -2, 1),
+        nameof(Probe.EnumValues) => ("ObjectEqualityComparer", "Equals", -2, 16),
+        nameof(Probe.ObjectFallback) => ("ObjectEqualityComparer", "GetHashCode", -2, 37),
+        _ => (null, null, 0, 0)
+    };
+    if (target.Item1 == null) return null;
+    var declaring = coreAssembly.GetType("System.Collections.Generic." + target.Item1 + "`1", throwOnError: true);
+    int parameters = target.Item2 == "Equals" ? 2 : 1;
+    var method = declaring.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+        .Single(candidate => candidate.Name == target.Item2 && candidate.GetParameters().Length == parameters);
+    return new { status = target.Item3, location = new[] { 5, method.MetadataToken & 0xffffff, target.Item4 } };
+}

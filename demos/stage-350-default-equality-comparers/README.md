@@ -6,4 +6,4 @@ An ordinary .NET Standard assembly exercises the original CoreCLR default compar
 npm run demo -- stage-350-default-equality-comparers --no-rebuild
 ```
 
-This stage tracks a compile checkpoint. Node and Edge must report the unsupported `QCallTypeHandle` construction in the original `RuntimeTypeHandle.CreateInstanceForAnotherGenericParameter` body for all six exports. The CLR oracle checks the actual instruction before supplying its metadata location. Even the string case reaches this frontier during static linking, although CLR execution chooses the nongeneric string comparer. Replace the expected diagnostics with CLR outcome assertions when activation and comparer execution are implemented. Results are written to `artifacts/stage-350-default-equality-comparers/`.
+The equatable struct and cached identity cases execute in Node and Edge and compare their results against the CLR. The other four cases track exact linker diagnostics in the reachable managed comparer methods. Linking currently visits alternative comparer implementations for the same closed type. Results are written to `artifacts/stage-350-default-equality-comparers/`.
