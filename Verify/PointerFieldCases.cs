@@ -68,7 +68,8 @@ internal static class PointerFieldCases
             Positive("null void* dereference", nameof(Kernels.DereferenceNullAddress), [], null, error.GetType().FullName,
                 memory: true);
         }
-        Reject("function pointer field", bundle, nameof(Kernels.RejectCallbackLayout), OpCodes.Newobj, -2);
+        // Stage 150 (decision 0078): a function-pointer field is a native int, so the layout links.
+        Positive("function pointer field", nameof(Kernels.CallbackLayout), [], Kernels.CallbackLayout(), null);
 
         using var pe = new PEReader(new MemoryStream(image));
         var metadata = pe.GetMetadataReader();

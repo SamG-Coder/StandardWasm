@@ -16,6 +16,18 @@ namespace PortableCompiler
             return used;
         }
 
+        // The same, for one of several chains kept side by side (no jagged arrays: the
+        // compiler compiles itself).
+        internal static int WriteAt(byte[] code, int used, int bodyStart, int[] heads, int chain)
+        {
+            int previous = heads[chain];
+            heads[chain] = bodyStart + used + 1;
+            for (int shift = 0; shift < 32; shift += 8)
+                code[used++] = unchecked((byte)(previous >> shift));
+            code[used++] = 0;
+            return used;
+        }
+
         internal static void Resolve(byte[] bodies, int head, int index)
         {
             while (head != 0)

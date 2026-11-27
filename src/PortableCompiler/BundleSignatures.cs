@@ -131,6 +131,19 @@ namespace PortableCompiler
                     left = next[0];
                     right = match;
                 }
+                else if (element == 0x1b)
+                {
+                    // Decision 0078: a function-pointer type matches when both signatures are
+                    // token free and byte-identical (primitives, generic parameters, pointers).
+                    // Other function-pointer signatures stay unmatched, so linking reports them.
+                    int leftAfter = SignatureExtents.TokenFreeMethod(caller, left, leftEnd);
+                    int rightAfter = SignatureExtents.TokenFreeMethod(target, right, rightEnd);
+                    if (leftAfter < 0 || rightAfter < 0 || leftAfter - left != rightAfter - right) return 0;
+                    for (int b = 0; b < leftAfter - left; b++)
+                        if (caller[left + b] != target[right + b]) return 0;
+                    left = leftAfter;
+                    right = rightAfter;
+                }
                 else if (element == PointerStorage.Element)
                 {
                     int match = PointerSignatures.Match(bundle, caller, callerLayout, callerHeaps,
