@@ -21,6 +21,10 @@ namespace PortableCompiler
             bool stringScratch = (frameShape[5] & 1) != 0;
             bool scopedPinScratch = (frameShape[5] & 2) != 0;
             bool enumScratch = (frameShape[5] & 4) != 0;
+            int scopedValuePin = -1;
+            if ((frameShape[5] & ScopedValuePins.FrameFlag) != 0)
+                for (int at = 0; at < records.Length; at += Width)
+                    if (records[at] == PinScopedValue) { scopedValuePin = at; break; }
             bool eventScratch = frameShape[6] != 0;
             int exceptionLocals = frameShape[8], continuations = frameShape[9];
             int hostImports = frameShape[10];
@@ -1238,6 +1242,10 @@ namespace PortableCompiler
                     used = LinearMemoryWasm.GuardNull(code, used, address);
                     used = NativeAggregates.Clear(code, used, nativePlans, records[slot + 3] - 1, address);
                 }
+                else if (kind == PinScopedValue)
+                    used = ScopedValuePinWasm.CopyIn(code, used, objects, nativePlans, records[slot + 3],
+                        LocatedValue(frame[0]), operand, temporaries, scopedPinLocals + 1,
+                        stackPointer, stackBase, stackLimit, spills, maximum, spillFlags, top, projections, frameShape[7]);
                 else if (kind == PinStaticBytes)
                 {
                     int address = Spill(spills, maximum, spillFlags, Native, depth);
@@ -1843,6 +1851,9 @@ namespace PortableCompiler
 
                 if (kind == Return)
                 {
+                    if (scopedValuePin >= 0)
+                        used = ScopedValuePinWasm.CopyBack(code, used, nativePlans, records[scopedValuePin + 3],
+                            LocatedValue(frame[0]), records[scopedValuePin + 1], projections, frameShape[7]);
                     // A value constructor's IL ret has an empty stack. Its Wasm
                     // result is the receiver's final aggregate.
                     if (valueConstructor) used = Local(code, used, 0x20, 0);

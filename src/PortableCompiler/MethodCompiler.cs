@@ -675,7 +675,7 @@ namespace PortableCompiler
                     if (type != I32) scalar = false;
                     if (IsNarrow(type)) narrowParameters++;
                 }
-                int locals = 0;
+                int locals = 0, localBlob = 0;
                 if (resourceOpen)
                 {
                     locals = ResourceOpenIl.Frame(frame, parameters);
@@ -683,7 +683,7 @@ namespace PortableCompiler
                 }
                 else if (body[3] != 0)
                 {
-                    int localBlob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, body[3]);
+                    localBlob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, body[3]);
                     if (localBlob < 0)
                         return -1;
                     locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context, methodArguments, pinned, filters, localElements);
@@ -782,6 +782,8 @@ namespace PortableCompiler
                             objects, records, pinned, frame, parameters, locals, catchRegion, literals);
                         status = PinnedStrings.Lower(image, heaps, layout, records, pinned, parameters, locals, location);
                         if (status < 0) return status;
+                        ScopedValuePins.Lower(bundle, image, layout, heaps, owner, source, count, localBlob,
+                            records, catchRegion, frame, parameters, locals, objects, nativePlans);
                     }
                     virtualUsed[0] = 0;
                     var inlineLocations = new int[parameters + locals];
@@ -1154,7 +1156,8 @@ namespace PortableCompiler
                             records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
                             IsNativeInteger(states[pc * maximum + depths[pc] - 1 - (fieldStore ? 2 : 1)]);
                         if (nativeField) linearMemory = true;
-                        if ((kind == BranchIl.LocalAllocate || kind == BranchIl.PinString || kind == BranchIl.PinStaticBytes || kind == BranchIl.CallPinnedCharacterNative) && depths[pc] != 0)
+                        if ((kind == BranchIl.LocalAllocate || kind == BranchIl.PinString || kind == BranchIl.PinStaticBytes ||
+                            kind == BranchIl.CallPinnedCharacterNative || kind == BranchIl.PinScopedValue) && depths[pc] != 0)
                         {
                             // An initializer's guard and a shadow-stack frame both wrap the
                             // body; combining them is not supported yet.
@@ -1179,6 +1182,13 @@ namespace PortableCompiler
                             }
                             int allocationBytes = kind == BranchIl.PinString ? Utf16MemoryWasm.PinCapacity :
                                 kind == BranchIl.CallPinnedCharacterNative ? ScopedCharacterPinWasm.Capacity : StackAllocationWasm.Capacity;
+                            if (kind == BranchIl.PinScopedValue)
+                            {
+                                // Both directions walk the verified native aggregate.
+                                int size = NativeAggregates.Size(nativePlans.Plans, records[slot + 3]);
+                                if (size > (int.MaxValue - allocationBytes) / 32) return -3;
+                                allocationBytes += size * 32;
+                            }
                             if (capacity > int.MaxValue - allocationBytes) return -3;
                             capacity += allocationBytes;
                         }
@@ -1415,6 +1425,7 @@ namespace PortableCompiler
                             kind == BranchIl.FindCharacterInSpan) frameShape[5] |= 1;
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
                         if (kind == BranchIl.FormatEnum) frameShape[5] |= 5;
+                        if (kind == BranchIl.PinScopedValue) frameShape[5] |= 2 | ScopedValuePins.FrameFlag;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
                             frameShape[6] = 1;
