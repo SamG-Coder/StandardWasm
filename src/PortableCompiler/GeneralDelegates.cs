@@ -51,6 +51,65 @@ namespace PortableCompiler
             return DelegateShapes.Register(objects, kind, -1, count, result, parameters, parameterCount);
         }
 
+        internal const int DefinedDelegate = 3;
+
+        // The key for a non-generic delegate TypeDef (row in `image`, bundle assembly `assembly`): a class
+        // extending the platform System.MulticastDelegate whose Invoke has Wasm storage for every
+        // parameter and the result. 0 when it is not such a delegate, or a negative status.
+        internal static int DefinedStorage(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int assembly,
+            int row, int[] objects)
+        {
+            var shape = new int[5];
+            if (ObjectLayouts.ReadShape(image, heaps, layout, row, shape) != 0 || shape[3] == 0 ||
+                !SpanMetadata.IsPlatformType(image, layout, heaps, shape[3], "System", "MulticastDelegate"))
+                return 0;
+            var range = new int[2];
+            if (ObjectLayouts.MethodRange(image, heaps, layout, row, range) < 0) return 0;
+            int invoke = 0;
+            for (int method = range[0]; method < range[1]; method++)
+                if (MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, method, 3), "Invoke"))
+                    invoke = method;
+            if (invoke == 0) return 0;
+            // A parameter of the delegate's own type would re-enter this registration; the layout
+            // depth bound turns any such cycle into a diagnostic.
+            if (bundle.LayoutDepth > 32) return -2;
+            bundle.LayoutDepth++;
+            var types = new int[64];
+            int arity = SignatureTypes.Read(bundle, image, heaps, MethodDefinitions.ReadColumn(image, layout, invoke, 4),
+                types, 0, ObjectLayouts.ObjectReference, layout, objects, assembly, 0);
+            bundle.LayoutDepth--;
+            if (arity < 1) return arity < 0 && arity != -2 ? arity : 0;
+            int count = arity - 1;
+            var parameters = new int[count];
+            for (int i = 0; i < count; i++)
+            {
+                parameters[i] = CliStorage(objects, types[2 + i]);
+                if (parameters[i] == 0) return 0;
+            }
+            int result = types[0] == Void ? Void : CliStorage(objects, types[0]);
+            if (types[0] != Void && result == 0) return 0;
+            return DelegateShapes.Register(objects, DefinedDelegate, assembly, row, result, parameters, count);
+        }
+
+        // Construct or Invoke for a MethodDef of a delegate TypeDef with a key (DefinedStorage); key[0]
+        // receives it. Only the runtime-provided members qualify: the CLI gives a delegate's .ctor and
+        // Invoke no IL (ImplFlags CodeTypeMask Runtime), so they never compile as ordinary methods.
+        // BeginInvoke and EndInvoke stay ordinary unresolved calls and are diagnosed.
+        internal static int DefinedMember(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
+            int method, int[] objects, int[] key)
+        {
+            if ((MethodDefinitions.ReadColumn(image, layout, method, 1) & 3) != 3) return 0;
+            uint name = (uint)MethodDefinitions.ReadColumn(image, layout, method, 3);
+            bool construct = MatchesAscii(image, heaps, name, ".ctor");
+            if (!construct && !MatchesAscii(image, heaps, name, "Invoke")) return 0;
+            int declaring = ObjectLayouts.Owner(image, heaps, layout, method, false);
+            if (declaring < 1) return 0;
+            int type = DefinedStorage(bundle, image, layout, heaps, owner, declaring, objects);
+            if (type <= 0) return type;
+            key[0] = type;
+            return construct ? Construct : Invoke;
+        }
+
         // A generic argument's signature storage when a delegate parameter or result can carry it.
         private static int CliStorage(int[] objects, int argument)
         {

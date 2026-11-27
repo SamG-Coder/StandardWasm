@@ -2697,6 +2697,37 @@ namespace PortableCompiler
                 }
                 if (kind != BranchIl.Call && kind != BranchIl.NewObject && kind != BranchIl.LoadFunction)
                     continue;
+                if (kind != BranchIl.LoadFunction)
+                {
+                    // Stage 204 (decision 0091): .ctor and Invoke of a delegate TypeDef in this image.
+                    var definedKey = new int[1];
+                    int defined = GeneralDelegates.DefinedMember(bundle, image, layout, heaps, owner, target, objects, definedKey);
+                    if (defined < 0) return defined;
+                    if (defined == GeneralDelegates.Invoke)
+                    {
+                        if (kind != BranchIl.Call || records[slot + 3] == 0 || records[slot + BranchIl.Width + 1] != 0)
+                            return -2; // Invoke without callvirt or through an address: no lowering
+                        functions = GeneralDelegates.RegisterInvokeHelper(objects, definedKey[0], owner, owners, rows, contexts,
+                            arities, offsets, signatures, functions);
+                        if (functions < 0) return functions;
+                        records[slot + 1] = DelegateShapes.InvokeHelper(objects, definedKey[0]);
+                        records[slot + 3] = 1; // callvirt null check: a null delegate raises NullReferenceException
+                        continue;
+                    }
+                    if (defined == GeneralDelegates.Construct)
+                    {
+                        // ldftn (or ldvirtftn's absence: the pointer must be an ldftn) then newobj, as for
+                        // the platform delegates; the ldftn linking checked the target's signature.
+                        int pointer = slot - 6 * BranchIl.Width;
+                        if (kind != BranchIl.NewObject || pointer < 0 || records[pointer] != BranchIl.LoadFunction ||
+                            records[pointer + 2] != slot / BranchIl.Width)
+                            return -2;
+                        records[slot] = BranchIl.NewDelegate;
+                        records[slot + 1] = definedKey[0];
+                        records[slot + 3] = records[pointer + 3];
+                        continue;
+                    }
+                }
                 // Issue #304: ldstr "key"; call SR.GetResourceString(string) in CoreLib folds to the
                 // neutral resource string, so SR properties compile without ResourceManager.
                 if (kind == BranchIl.Call && records[slot + 3] == 0)
@@ -2841,12 +2872,16 @@ namespace PortableCompiler
                     }
                     bool instance = (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) == 0;
                     int next = records[slot + 2] * BranchIl.Width;
-                    if (next >= records.Length || records[next] != BranchIl.MemberCall || records[next + 3] != 0x73)
-                        return -2;
-                    bool spanCallback = CharacterSpanCallbackMetadata.Member(bundle, image, layout, heaps, owner,
-                        records[next + 1], context, methodArguments, objects) == CharacterSpanCallbackMetadata.Construct;
                     var generalKey = new int[1];
-                    bool general = !spanCallback && GeneralDelegates.Member(bundle, image, layout, heaps, owner,
+                    // Stage 204: newobj of a delegate TypeDef's runtime .ctor (a MethodDef record).
+                    bool defined = next < records.Length && records[next] == BranchIl.NewObject &&
+                        GeneralDelegates.DefinedMember(bundle, image, layout, heaps, owner, records[next + 1], objects,
+                            generalKey) == GeneralDelegates.Construct;
+                    if (!defined && (next >= records.Length || records[next] != BranchIl.MemberCall || records[next + 3] != 0x73))
+                        return -2;
+                    bool spanCallback = !defined && CharacterSpanCallbackMetadata.Member(bundle, image, layout, heaps, owner,
+                        records[next + 1], context, methodArguments, objects) == CharacterSpanCallbackMetadata.Construct;
+                    bool general = defined || !spanCallback && GeneralDelegates.Member(bundle, image, layout, heaps, owner,
                         records[next + 1], context, methodArguments, objects, generalKey) == GeneralDelegates.Construct;
                     if (general)
                     {

@@ -275,11 +275,19 @@ namespace PortableCompiler
             if (status < 0) return status;
             if (symbol[0] == AssemblyBundle.ObjectOwner) return valueType ? -2 : ObjectLayouts.ObjectReference;
             if (symbol[0] == owner)
+            {
+                // Stage 204 (decision 0091): a delegate TypeDef is a delegate key, not a class layout.
+                int defined = valueType ? 0 : GeneralDelegates.DefinedStorage(bundle, image, layout, heaps, owner, symbol[1], objects);
+                if (defined != 0) return defined;
                 return RegisterClosed(bundle, image, layout, heaps, owner, symbol[1], objects, new int[0], valueType, enumIdentity);
+            }
             byte[] target = bundle.Get(symbol[0]);
             var targetLayout = new int[4];
             var targetHeaps = new int[8];
             if (CompressedTables.FindWithHeaps(target, targetLayout, targetHeaps) < 0) return -1;
+            int definedElsewhere = valueType ? 0 : GeneralDelegates.DefinedStorage(bundle, target, targetLayout, targetHeaps,
+                symbol[0], symbol[1], objects);
+            if (definedElsewhere != 0) return definedElsewhere;
             return RegisterClosed(bundle, target, targetLayout, targetHeaps, symbol[0], symbol[1], objects, new int[0], valueType, enumIdentity);
         }
     }
