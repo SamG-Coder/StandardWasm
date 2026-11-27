@@ -83,10 +83,10 @@ namespace PortableCompiler
             if (start < 0 || length > (literals.Length - start) / 2) return -3;
             int used = start;
             if (message)
-                for (int i = 0; i < prefix.Length; i++) used = Unit(literals, used, prefix[i]);
-            for (int i = 0; i < NameLength[stub]; i++) used = Unit(literals, used, Units[NameStart[stub] + i]);
+                for (int i = 0; i < prefix.Length; i++) used = WriteUnit(literals, used, prefix[i]);
+            for (int i = 0; i < NameLength[stub]; i++) used = WriteUnit(literals, used, Units[NameStart[stub] + i]);
             if (message)
-                for (int i = 0; i < suffix.Length; i++) used = Unit(literals, used, suffix[i]);
+                for (int i = 0; i < suffix.Length; i++) used = WriteUnit(literals, used, suffix[i]);
             return length;
         }
 
@@ -158,7 +158,7 @@ namespace PortableCompiler
             Units[UnitCount++] = unit;
         }
 
-        private static int Unit(byte[] literals, int used, int unit)
+        private static int WriteUnit(byte[] literals, int used, int unit)
         {
             literals[used] = (byte)unit;
             literals[used + 1] = (byte)(unit >> 8);
