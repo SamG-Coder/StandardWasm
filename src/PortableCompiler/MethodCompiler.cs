@@ -1860,6 +1860,10 @@ namespace PortableCompiler
                     if (status < 0) return status;
                     continue;
                 }
+                // Validate direct MethodDef operands before framework recognizers inspect their rows.
+                int target = records[slot + 1];
+                if ((kind == BranchIl.Call || kind == BranchIl.NewObject || kind == BranchIl.LoadFunction) &&
+                    (target < 1 || target > bases[owner + 1] - bases[owner])) return -1;
                 if ((kind == BranchIl.NewObject && records[slot + 3] == 0 ||
                     kind == BranchIl.MemberCall && records[slot + 3] == 0x73) &&
                     CoreStringCreation.IsReadOnlySpanConstructor(image, layout, heaps, records[slot + 1], kind == BranchIl.MemberCall))
@@ -1885,7 +1889,6 @@ namespace PortableCompiler
                 }
                 if ((kind == BranchIl.Call || kind == BranchIl.MemberCall) && records[slot + 3] ==
                     (kind == BranchIl.Call ? 0 : 0x28) && records[slot + BranchIl.Width + 1] == 0 &&
-                    (kind == BranchIl.MemberCall || (uint)(records[slot + 1] - 1) < (uint)(bases[owner + 1] - bases[owner])) &&
                     SpanMetadata.StringAsSpan(image, layout, heaps, records[slot + 1], kind == BranchIl.MemberCall))
                 {
                     records[slot] = BranchIl.StringAsSpan;
@@ -2214,9 +2217,6 @@ namespace PortableCompiler
                 }
                 if (kind != BranchIl.Call && kind != BranchIl.NewObject && kind != BranchIl.LoadFunction)
                     continue;
-                int target = records[slot + 1];
-                if (target < 1 || target > bases[owner + 1] - bases[owner])
-                    return -1;
                 if (kind == BranchIl.Call)
                 {
                     if (records[slot + 3] == 0 && finalizers != null && finalizers.IsSuppression(owner, target))

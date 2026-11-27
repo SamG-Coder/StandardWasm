@@ -39,7 +39,9 @@ internal static class PlatformIdentityCases
         Reject(nameof(Probe.InvokeFunc), OpCodes.Ldftn);
         Reject(nameof(Probe.EventArgsEmpty), OpCodes.Ldsfld);
         Reject(nameof(Probe.InvokeEvent), OpCodes.Callvirt);
-        Reject(nameof(Probe.Exchange), OpCodes.Ldflda);
+        // Taking the address of a managed reference field is supported.
+        // The third-party CompareExchange must still be rejected at its call.
+        Reject(nameof(Probe.Exchange), OpCodes.Call);
         Reject(nameof(Probe.Combine), OpCodes.Call);
 
         void Reject(string name, OpCode rejectedOpcode)
