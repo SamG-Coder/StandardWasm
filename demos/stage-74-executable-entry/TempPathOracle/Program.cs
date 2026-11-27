@@ -13,7 +13,8 @@ try
         clr = Environment.Version.ToString(),
         architecture = RuntimeInformation.ProcessArchitecture.ToString(),
         legacy = Observe("GetTempPathW"),
-        current = Observe("GetTempPath2W")
+        current = Observe("GetTempPath2W"),
+        registry = RegistryOracle.Observe(library)
     };
     File.WriteAllText(args[0], JsonSerializer.Serialize(result));
 }

@@ -220,3 +220,23 @@ filesystem adapter for the original Windows file operations.
 Run `node demos/stage-74-executable-entry/verify-temp-path-host.mjs` on
 Windows with both Kernel32 exports, matching x86 and default-host .NET 10
 runtimes, Node and Edge. Results go under `artifacts/temp-path-host/`.
+
+### Dynamic export lookup
+
+The host registry starts empty and registers browser callbacks under explicit
+library names. Loading accepts the default name lookup or the System32 search
+flag within that registry. A live module handle resolves case-sensitive exports
+to typed opaque tokens. Loading the same module again retains it. Freeing its
+last reference invalidates the handle and all of its tokens. The registry
+keeps these records within each instance and reports Win32 failures through
+its system error slot.
+
+CoreLib's temp-path helper loads Kernel32 through `LoadLibraryExW`.
+`NativeLibrary.TryGetExport` and `NativeLibrary.GetExport` both call
+`NativeLibrary_GetSymbol`, with distinct behavior for an absent export in the
+throwing form. The host fixture uses an explicit temp provider, exercises
+both exports and the older-export fallback, and independently looks up and
+calls `MulDiv`. The registry supplies the shared host lookup and dispatch
+primitives for the eventual compiler adapters.
+[CoreLib export QCall](https://github.com/dotnet/runtime/blob/v10.0.10/src/coreclr/System.Private.CoreLib/src/System/Runtime/InteropServices/NativeLibrary.CoreCLR.cs#L18-L30) ·
+[CoreCLR export implementation](https://github.com/dotnet/runtime/blob/v10.0.10/src/coreclr/vm/nativelibrary.cpp#L260-L281)
