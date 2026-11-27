@@ -11,9 +11,8 @@ namespace PortableCompiler
             int caller, int[] records, int[] clauses, int[] frame, int parameters, int locals, int maximum,
             int[] objects, int[] globals)
         {
-            // This private CoreLib method is the only admitted producer and consumer of the
-            // handle. The managed slot remains live in this frame for the synchronous QCall.
-            if (parameters != 0 || locals != 1 || maximum < 2 || clauses.Length != 0 ||
+            // Bind only the authentic CoreLib initializer. Its TLS store stays in managed IL.
+            if (parameters != 0 || locals > 1 || maximum < 1 || clauses.Length != 0 ||
                 caller < 1 || MemberFlags(image, layout, caller) != 0x10 ||
                 !Named(image, heaps, layout, caller, "InitializeCurrentThread")) return 0;
             var counts = new int[45];
@@ -21,8 +20,10 @@ namespace PortableCompiler
                 !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return 0;
 
             int thread = ObjectLayouts.FindTypeDefinition(image, heaps, layout, "System.Threading", "Thread");
+            if (thread < 1 || ObjectLayouts.Owner(image, heaps, layout, caller, false) != thread) return 0;
+            if (locals == 0) return BindMonoReturn(image, heaps, layout, counts, owner, thread, records, objects, globals);
             int handle = ObjectLayouts.FindTypeDefinition(image, heaps, layout, "System.Runtime.CompilerServices", "ObjectHandleOnStack");
-            if (thread < 1 || handle < 1 || ObjectLayouts.Owner(image, heaps, layout, caller, false) != thread) return 0;
+            if (handle < 1 || maximum < 2) return 0;
             int type = frame[0];
             if (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0] ||
                 ObjectLayouts.IsValueType(objects, type) || ObjectLayouts.TypeDef(objects, type) != thread ||
@@ -40,7 +41,7 @@ namespace PortableCompiler
                     !IsThreadQCall(image, heaps, layout, counts, records[qcall + 1], thread, handle)) continue;
 
                 var fields = new int[3];
-                int status = BindFields(image, heaps, layout, objects, type, fields);
+                int status = BindFields(image, heaps, layout, objects, type, fields, false);
                 if (status < 0) return status;
                 int root = StaticFields.Register(globals, owner, CurrentThreadWasm.RootKey, type);
                 if (root < 0) return root;
@@ -59,6 +60,47 @@ namespace PortableCompiler
                 records[qcall + 2 * Width + 1] = fields[2];
             }
             return 0;
+        }
+
+        // Mono gets the same managed runtime object directly. The original
+        // managed InitializeCurrentThread still performs its TLS cache store.
+        private static int BindMonoReturn(byte[] image, int[] heaps, int[] layout, int[] counts, int owner,
+            int thread, int[] records, int[] objects, int[] globals)
+        {
+            for (int slot = 0; slot < records.Length; slot += Width)
+            {
+                if (records[slot] != Call || records[slot + 3] != 0 ||
+                    !IsMonoThreadCall(image, heaps, layout, counts, records[slot + 1], thread)) continue;
+                int type = ObjectLayouts.Find(objects, owner, thread, new int[0]);
+                if (type < ObjectLayouts.FirstClass || slot + 3 * Width + 1 >= records.Length) return -2;
+                var fields = new int[3];
+                int status = BindFields(image, heaps, layout, objects, type, fields, true);
+                if (status < 0) return status;
+                int root = StaticFields.Register(globals, owner, CurrentThreadWasm.RootKey, type);
+                if (root < 0) return root;
+                records[slot] = LoadMonoCurrentThread;
+                records[slot + 1] = type;
+                records[slot + 3] = root;
+                // Remaining bytes of the original call token are not IL entries.
+                records[slot + Width + 1] = fields[0];
+                records[slot + Width + 2] = fields[1];
+                records[slot + Width + 3] = fields[2];
+            }
+            return 0;
+        }
+
+        private static bool IsMonoThreadCall(byte[] image, int[] heaps, int[] layout, int[] counts, int row, int thread)
+        {
+            if (row < 1 || row > counts[6] || MemberFlags(image, layout, row) != 0x10 ||
+                MethodDefinitions.ReadColumn(image, layout, row, 0) != 0 ||
+                MethodDefinitions.ReadColumn(image, layout, row, 1) != 0x1000 ||
+                ObjectLayouts.Owner(image, heaps, layout, row, false) != thread ||
+                !Named(image, heaps, layout, row, "GetCurrentThread")) return false;
+            var next = new int[1];
+            int start = Signature(image, heaps, layout, row, next), end = next[0];
+            return start >= 0 && end - start >= 4 && image[start] == 0 && image[start + 1] == 0 &&
+                image[start + 2] == 0x12 &&
+                CompressedUnsigned(image, start + 3, end, next) == (thread << 2) && next[0] == end;
         }
 
         private static bool IsHandleCreation(byte[] image, int[] heaps, int[] layout, int[] counts, int row,
@@ -126,12 +168,13 @@ namespace PortableCompiler
         private static bool Entry(int[] records, int slot) =>
             ValueOperands.Entry(records, slot / Width, new int[0]);
 
-        private static int BindFields(byte[] image, int[] heaps, int[] layout, int[] objects, int type, int[] fields)
+        private static int BindFields(byte[] image, int[] heaps, int[] layout, int[] objects, int type, int[] fields, bool mono)
         {
             int table = ObjectLayouts.TableOf(objects, type), first = ObjectLayouts.FirstRow(objects, type);
             int count = ObjectLayouts.DeclaredFieldCount(objects, type);
             var definition = new int[3];
-            string[] names = { "_managedThreadId", "_priority", "_DONT_USE_InternalThread" };
+            string[] names = mono ? new[] { "managed_id", "priority", "self" } :
+                new[] { "_managedThreadId", "_priority", "_DONT_USE_InternalThread" };
             for (int i = 0; i < fields.Length; i++)
             {
                 fields[i] = -1;
@@ -139,7 +182,8 @@ namespace PortableCompiler
                 {
                     AssemblyReferences.ReadField(image, layout, table, row, definition);
                     if (!MatchesAscii(image, heaps, (uint)definition[1], names[i])) continue;
-                    if (fields[i] >= 0 || ObjectLayouts.FieldType(objects, type, row) != (i == 2 ? Native : I32)) return -2;
+                    int expected = i < 2 ? I32 : (mono ? type : Native);
+                    if (fields[i] >= 0 || ObjectLayouts.FieldType(objects, type, row) != expected) return -2;
                     fields[i] = ObjectLayouts.FieldOrdinal(objects, type, row);
                 }
                 if (fields[i] < 0) return -2;

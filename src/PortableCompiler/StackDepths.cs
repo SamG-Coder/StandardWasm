@@ -268,6 +268,7 @@ namespace PortableCompiler
                 return Match(stack, depth, StaticByteLocation) ? Push(stack, allocated, depth - 1, I32) : -2;
             if (kind == LoadString || kind == LoadNativeMessage) return Push(stack, allocated, depth, String);
             if (kind == LoadTypeToken) return Push(stack, allocated, depth, PeLibrary.RuntimeTypeMetadata.Handle);
+            if (kind == LoadMonoCurrentThread) return Push(stack, allocated, depth, operand);
             // Only an unmanaged pointer (a native int, decision 0060) addresses memory 0.
             // A proven null (NativeZero) spills as Native and raises NullReferenceException
             // at run time, as on the CLR. A managed byref stays a diagnostic.

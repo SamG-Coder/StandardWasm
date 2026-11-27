@@ -88,6 +88,7 @@ namespace PortableCompiler
         internal const int NativeFieldPointer = 189, NativeFrameFieldAddress = 190, FormatEnum = 191, TypeToHandle = 192;
         internal const int LoadStaticPrimitiveSpan = 193;
         internal const int SetCurrentThreadHandle = 224; // [scoped Thread&] -> []
+        internal const int LoadMonoCurrentThread = 225; // [] -> [Thread]
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

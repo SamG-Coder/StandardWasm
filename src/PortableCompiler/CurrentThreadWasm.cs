@@ -13,7 +13,7 @@ namespace PortableCompiler
         // Result is stored in a typed local to share allocation/identity with other admitted
         // CoreLib entry points. Desktop's QCall will then write it into its caller's slot.
         internal static int Load(byte[] code, int used, int type, int target, int root,
-            int managedIdField, int priorityField, int backingField)
+            int managedIdField, int priorityField, int backingField, bool selfReference = false)
         {
             code[used++] = 0x23; // global.get
             used = WasmBinary.Unsigned(code, used, root);
@@ -25,7 +25,14 @@ namespace PortableCompiler
             used = Local(code, used, 0x21, target);
             used = InitializeField(code, used, target, type, managedIdField, ManagedId);
             used = InitializeField(code, used, target, type, priorityField, NormalPriority);
-            used = InitializeField(code, used, target, type, backingField, BackingMarker);
+            if (selfReference)
+            {
+                used = Local(code, used, 0x20, target);
+                used = Local(code, used, 0x20, target);
+                used = Gc(code, used, 5, type); // struct.set Thread.self
+                used = WasmBinary.Unsigned(code, used, backingField);
+            }
+            else used = InitializeField(code, used, target, type, backingField, BackingMarker);
             used = Local(code, used, 0x20, target);
             code[used++] = 0x24; // global.set
             used = WasmBinary.Unsigned(code, used, root);

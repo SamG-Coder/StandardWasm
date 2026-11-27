@@ -1020,7 +1020,8 @@ namespace PortableCompiler
                             if (capacity > int.MaxValue - 320) return -3;
                             capacity += 320;
                         }
-                        if (kind == BranchIl.SetCurrentThreadHandle && depths[slot / BranchIl.Width] != 0)
+                        if ((kind == BranchIl.SetCurrentThreadHandle || kind == BranchIl.LoadMonoCurrentThread) &&
+                            depths[slot / BranchIl.Width] != 0)
                         {
                             if (capacity > int.MaxValue - CurrentThreadWasm.Capacity) return -3;
                             capacity += CurrentThreadWasm.Capacity;

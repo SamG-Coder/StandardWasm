@@ -224,6 +224,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [227 · Defaulting inline span fields](stage-227-inline-span-field-defaults/README.md) | `npm run demo -- stage-227-inline-span-field-defaults` | Verify exact field defaults through a shared managed owner and through earlier copies |
 | [228 · Readonly aggregate arguments](stage-228-readonly-aggregate-call/README.md) | `npm run demo -- stage-228-readonly-aggregate-call` | Verify nonescaping readonly field arguments, exception identity and null checks |
 | [229 · Current managed thread](stage-229-current-managed-thread/README.md) | `npm run demo -- stage-229-current-managed-thread` | Preserve the original CoreCLR Thread identity, managed fields and scoped QCall write |
+| [230 · Browser Mono current thread](stage-230-mono-current-thread/README.md) | `npm run demo -- stage-230-mono-current-thread` | Verify the original browser CurrentThread path, identity and context |
 | [232 · Obsolete static fields](stage-232-obsolete-static-fields/README.md) | `npm run demo -- stage-232-obsolete-static-fields` | Verify deprecation metadata and ordinary static storage |
 
 ## Adding a stage

@@ -1135,6 +1135,12 @@ namespace PortableCompiler
                         used = ManagedValueLocationWasm.WriteSnapshot(code, used, projections, frameShape[7]);
                     }
                 }
+                else if (kind == LoadMonoCurrentThread)
+                {
+                    int target = Spill(spills, maximum, spillFlags, operand, depth);
+                    used = CurrentThreadWasm.Load(code, used, operand, target, records[slot + 3],
+                        records[slot + Width + 1], records[slot + Width + 2], records[slot + Width + 3], true);
+                }
                 else if (kind == SetCurrentThreadHandle)
                 {
                     int location = records[slot + 3];
