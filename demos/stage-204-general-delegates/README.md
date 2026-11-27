@@ -26,7 +26,7 @@ and Edge must return the CLR's value for every kernel:
 - invoking a null delegate (`NullReferenceException`)
 - `Slot<Action<int>>` and `Slot<Action<uint>>` stay distinct types with their own static fields,
   and `Func<uint>` is a general delegate, not decision 0088's `Func<int>`
-- 140 distinct delegate types in one method, so the module's type count and thunk type indices
+- 80 distinct delegate types in one method, so the module's type count and thunk type indices
   need multi-byte LEB encodings
 
 The `Reject*` kernels must be diagnosed, not approximated: the shared closure has no type identity,
