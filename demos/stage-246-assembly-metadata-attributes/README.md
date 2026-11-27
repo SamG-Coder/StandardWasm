@@ -10,8 +10,9 @@ enumerator and the normal `Key` and `Value` getters.
 The same .NET Standard fixture runs on Windows x86 CLR, Node and Edge. It checks
 a dependency with no matching attributes, dynamic selection of two distinct
 assemblies, duplicate keys, a null value, an empty string, Unicode including a
-supplementary character, fresh attribute instances and the null-assembly
-exception. Other attribute types and user-defined assembly implementations
+supplementary character, fresh attribute instances, canonical empty strings
+and the null-assembly exception. The Windows CLR shares the typed zero-row
+result array. The genuine browser Mono runtime creates it for each query. Other attribute types and user-defined assembly implementations
 remain outside this query's scope.
 
 Run the stage with the generated compiler.

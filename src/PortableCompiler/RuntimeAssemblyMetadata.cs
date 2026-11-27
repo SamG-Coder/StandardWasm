@@ -9,7 +9,11 @@ namespace PortableCompiler
     internal sealed class RuntimeAssemblyMetadata
     {
         internal const int AttributeWidth = 4;
+        // Distinct from ordinary static fields, string literals and Type names.
+        private const int CacheOwner = int.MaxValue - 2;
         private int function = -1;
+        internal int EmptyString { get; private set; } = -1;
+        internal int EmptyVector { get; private set; } = -1;
         internal int Constructor { get; private set; }
         internal int Attribute { get; private set; }
         internal int Vector { get; private set; }
@@ -120,8 +124,23 @@ namespace PortableCompiler
             if (arity != 1 || signatures[offset + 1] != RuntimeTypeMetadata.Assembly ||
                 !IsExactArrayEnumerable(objects, vector, signatures[offset])) return -2;
 
-            status = ReadAttributes(bundle, owner, attributeRow, literals, literalSize);
+            status = ReadAttributes(bundle, owner, attributeRow, globals, literals, literalSize);
             if (status < 0) return status;
+            for (int module = 1; module <= bundle.Count; module++)
+            {
+                if (Starts[module] != Starts[module + 1]) continue;
+                // CoreCLR's reflection cache supplies a shared typed empty
+                // array. Mono allocates its empty array for every query.
+                var helper = new int[2];
+                status = RuntimeTypeTokens.FindCoreType(bundle, "SZArrayHelper", helper);
+                if (status < 0 && status != -6) return status;
+                if (status == 0 && helper[0] == owner)
+                {
+                    EmptyVector = StaticFields.Register(globals, CacheOwner, 0, vector);
+                    if (EmptyVector < 0) return EmptyVector;
+                }
+                break;
+            }
             Attribute = attribute;
             Vector = vector;
             Constructor = constructor;
@@ -131,7 +150,7 @@ namespace PortableCompiler
             return functions + 1;
         }
 
-        private int ReadAttributes(BundleImages bundle, int core, int attribute, byte[] literals, int[] size)
+        private int ReadAttributes(BundleImages bundle, int core, int attribute, int[] globals, byte[] literals, int[] size)
         {
             Starts = new int[bundle.Count + 2];
             Values = new int[AttributeWidth * 4];
@@ -160,6 +179,11 @@ namespace PortableCompiler
                     if (!AssemblyAttributeRecords.IsStringPairConstructor(image, heaps, layout, constructor)) return -2;
                     int status = AssemblyAttributeRecords.ReadStringPair(image, heaps, entry[1], literals, size, pair);
                     if (status < 0) return status;
+                    if (EmptyString < 0 && (pair[0] >= 0 && pair[1] == 0 || pair[2] >= 0 && pair[3] == 0))
+                    {
+                        EmptyString = StringLiterals.Empty(globals);
+                        if (EmptyString < 0) return EmptyString;
+                    }
                     if (used == Values.Length)
                     {
                         if (used > int.MaxValue / 2) return -3;

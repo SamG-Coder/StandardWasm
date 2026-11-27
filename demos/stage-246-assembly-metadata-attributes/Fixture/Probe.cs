@@ -28,7 +28,8 @@ namespace AssemblyMetadataFixture
                 second.Value.Length != 3 || second.Value[0] != 0x00e9 || second.Value[1] != 0xd83d || second.Value[2] != 0xde42)
                 return 0;
             if (!attributes.MoveNext() || attributes.Current.Key[0] != 'N' || attributes.Current.Value != null) return 0;
-            if (!attributes.MoveNext() || attributes.Current.Key[0] != 'E' || attributes.Current.Value.Length != 0) return 0;
+            if (!attributes.MoveNext() || attributes.Current.Key[0] != 'E' ||
+                !ReferenceEquals(attributes.Current.Value, string.Empty)) return 0;
             return attributes.MoveNext() ? 0 : 1117;
         }
 
@@ -53,6 +54,14 @@ namespace AssemblyMetadataFixture
             var first = Query(typeof(Marker).Assembly).GetEnumerator();
             var second = Query(typeof(Marker).Assembly).GetEnumerator();
             return first.MoveNext() && second.MoveNext() && !ReferenceEquals(first.Current, second.Current) ? 1129 : 0;
+        }
+
+        public static int EmptyArrayIdentity()
+        {
+            var assembly = typeof(EmptyMetadata.Marker).Assembly;
+            var first = Query(assembly);
+            var second = Query(assembly);
+            return ReferenceEquals(first, second) ? 1153 : 1157;
         }
 
         public static int NullAssembly()
