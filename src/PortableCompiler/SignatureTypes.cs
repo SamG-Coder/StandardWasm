@@ -85,6 +85,7 @@ namespace PortableCompiler
         // Boxing and other CLR reference conversions use separate IL operations.
         internal static bool IsObjectReference(int type) =>
             type == String || type == CharacterSpanCallback || type == ObjectLayouts.DelegateReference || RuntimeTypeMetadata.IsReference(type) || IsArray(type) ||
+            DelegateShapes.IsKey(type) || // Stage 204/221: general delegates are invocation lists (decision 0092)
             type >= ObjectLayouts.FirstClass && type < ObjectLayouts.FirstClass + ObjectLayouts.MaxClasses ||
             type >= ObjectLayouts.ObjectReference && type <= ObjectLayouts.EventHandlerReference;
 
@@ -112,6 +113,7 @@ namespace PortableCompiler
                 source == NativeZero && (target == Native || target == NullPointer) ||
                 target == ObjectLayouts.ObjectReference && IsObjectReference(source) ||
                 target == ObjectLayouts.DelegateReference && source == ObjectLayouts.EventHandlerReference ||
+                target == ObjectLayouts.DelegateReference && DelegateShapes.IsKey(source) ||
                 ObjectLayouts.Inherits(objects, source, expected) || ObjectLayouts.Implements(objects, source, expected);
         }
 

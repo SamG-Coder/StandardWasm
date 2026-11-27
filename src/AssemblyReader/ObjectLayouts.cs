@@ -8,13 +8,14 @@ namespace PeLibrary
         internal const int DelegateReference = 0x85;
         // Keep layout IDs above primitive, packed storage and generic scalar keys.
         internal const int FirstClass = 0x400, MaxClasses = 4096, MaxTypeDepth = 236;
-        private const int Header = 4, Width = 14, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
+        private const int Header = 5, Width = 14, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         private const int Arguments = 10, Arity = 11, Element = 12, ExplicitSlots = 13;
         private const int ValueShape = 0x40000000, NullableShape = 0x20000000, InlineArrayShape = 0x10000000, ByRefLikeShape = 0x08000000;
         internal const int ExplicitSlotWidth = 8;
         private const int FieldStorageBits = 16, FieldStorageMask = (1 << FieldStorageBits) - 1;
         private const int EnumHead = 3, EnumKeyBase = 0x100000;
+        internal const int DelegateHead = 4; // Stage 204: DelegateShapes entries
         internal const int FieldMapStart = Header + MaxClasses * Width;
 
         // The header stores the type count, occupied field and auxiliary slots,
