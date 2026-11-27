@@ -162,6 +162,20 @@ namespace PeLibrary
             return U32(image, at) == 0x03012004 && image[at + 4] == 8 ? Character : 0;
         }
 
+        internal static bool IsFirstCodeUnitDefinition(byte[] image, int[] streams, int[] methods, int row)
+        {
+            int owner = ObjectLayouts.Owner(image, streams, methods, row, true);
+            if (owner < 1 || !PlatformTypeReferences.IsString(image, streams, methods, owner << 2)) return false;
+            int table = AssemblyReferences.FieldTable(image, streams, methods);
+            if (table < 0) return false;
+            var field = new int[3];
+            AssemblyReferences.ReadField(image, methods, table, row, field);
+            if ((field[0] & 0x10) != 0 || !MatchesAscii(image, streams, (uint)field[1], "_firstChar") ||
+                !Fits((uint)field[2], 3, (uint)streams[1])) return false;
+            uint at = (uint)(streams[0] + field[2]);
+            return U16(image, at) == 0x0602 && image[at + 2] == 3; // FIELD CHAR
+        }
+
         internal static bool IsEmptyDefinition(byte[] image, int[] streams, int[] methods, int row)
         {
             int owner = ObjectLayouts.Owner(image, streams, methods, row, true);

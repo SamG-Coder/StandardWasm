@@ -651,7 +651,7 @@ namespace PortableCompiler
                                 kind == BranchIl.ObjectElementAddress)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
-                                kind == BranchIl.SetField || nativeField || kind == BranchIl.StringLength || kind == BranchIl.InvokeDelegate ||
+                                kind == BranchIl.SetField || nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection || kind == BranchIl.GetObjectType ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
                                 kind == BranchIl.LoadManagedCell || kind == BranchIl.StoreManagedCell || kind == BranchIl.ClearManagedCell ||
@@ -1139,6 +1139,11 @@ namespace PortableCompiler
                 {
                     int field = records[slot + 1];
                     bool linked = records[slot + 3] != 0;
+                    if (!linked && kind == BranchIl.GetField && StringMetadata.IsFirstCodeUnitDefinition(image, heaps, layout, field))
+                    {
+                        records[slot] = BranchIl.StringFirstCodeUnit;
+                        continue;
+                    }
                     if (linked)
                     {
                         if (bundle.Length == 0) return -2;

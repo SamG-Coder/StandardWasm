@@ -348,6 +348,13 @@ namespace PortableCompiler
                         Spill(spills, maximum, spillFlags, states[state + top], top), scratch, join, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, String, at));
                 }
+                else if (kind == StringFirstCodeUnit)
+                {
+                    int reference = Spill(spills, maximum, spillFlags, states[state + top], top);
+                    used = GuardNull(code, used, reference);
+                    used = StringWasm.FirstCodeUnit(code, used, reference);
+                    used = Local(code, used, 0x21, spills + top);
+                }
                 else if (kind == StringLength || kind == StringCharacter)
                 {
                     int at = top - (kind == StringCharacter ? 1 : 0);

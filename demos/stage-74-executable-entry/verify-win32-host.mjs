@@ -216,10 +216,11 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
     const valueAliases = [0, 1, 2].map(bundledExports.CheckValueAlias);
     const genericValueMethods = [0, 1, 2].map(bundledExports.VerifyGenericValueMethod)
         .concat([0, 1, 2].map(bundledExports.VerifyGenericDefaultReference));
-    const rootModule = await compile(["CompareThroughRoot", "CompareReturnedType"], runtimeAssets);
+    const rootModule = await compile(["CompareThroughRoot", "CompareReturnedType", "CheckCoreStringFirstCharacter"], runtimeAssets);
     const { exports: rootExports } = await instantiate(rootModule, compiler, []);
     const rootDispatch = [0, 1, 2, 3].map(rootExports.CompareThroughRoot);
     const typeReturn = [0, 1].map(rootExports.CompareReturnedType);
+    const stringField = [0, 1, 2, 3, 4].map(rootExports.CheckCoreStringFirstCharacter);
     const dpi = [];
     // Each Windows oracle invocation starts a fresh process.
     for (const scenario of dpiScenarios) {
@@ -231,7 +232,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, dpi };
 }
 
 function readOracle(...args) {
@@ -254,7 +255,7 @@ const expectedCompiler = {
     genericLocations: oracle.compiledGenericLocations, finalWriter: oracle.compiledFinalWriter,
     genericValues: oracle.compiledGenericValues, constrainedReferences: oracle.compiledConstrainedReferences,
     genericDescriptors: oracle.compiledGenericDescriptors, valueAliases: oracle.compiledValueAliases, rootDispatch: oracle.compiledRootDispatch,
-    typeReturn: oracle.compiledTypeReturn,
+    typeReturn: oracle.compiledTypeReturn, stringField: oracle.compiledStringField,
     genericValueMethods: oracle.compiledGenericValueMethods
 };
 let compilerBytes, fixtureBytes;
@@ -316,6 +317,7 @@ try {
             name: framework.name, dpiScenarios, runtimePaths });
         assert.deepEqual(compiled, expectedCompiler);
         console.log("Six generic value method and reference default cases matched the CLR in Node and Edge.");
+        console.log("Five original CoreLib String.StartsWith(char) cases matched the CLR in Node and Edge.");
         console.log("Both returned runtime type cases matched the CLR in Node and Edge.");
         console.log("Four original CoreLib virtual dispatch cases matched the CLR in Node and Edge.");
         console.log("Three struct alias, copy, and reset cases matched the CLR in Node and Edge.");

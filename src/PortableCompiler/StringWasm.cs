@@ -186,6 +186,22 @@ namespace PortableCompiler
             return used;
         }
 
+        internal static int FirstCodeUnit(byte[] code, int used, int reference)
+        {
+            used = Unwrap(code, Local(code, used, 0x20, reference));
+            code[used++] = 0xfb; code[used++] = 0x0f; // array.len
+            code[used++] = 0x45; // i32.eqz
+            code[used++] = 0x04; code[used++] = 0x7f;
+            // CoreLib's first field contains the terminator for an empty string.
+            used = Zero(code, used);
+            code[used++] = 0x05;
+            used = Unwrap(code, Local(code, used, 0x20, reference));
+            used = Zero(code, used);
+            code[used++] = 0xfb; code[used++] = 0x0d; code[used++] = 4; // array.get_u Char[]
+            code[used++] = 0x0b;
+            return used;
+        }
+
         internal static int Unwrap(byte[] code, int used)
         {
             code[used++] = 0xfb;
