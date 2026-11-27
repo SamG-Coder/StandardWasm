@@ -11,6 +11,15 @@ namespace PortableCompiler
         {
             int receiver = actual == NullValue ? declared : actual;
             if (receiver == String) return SelectStringBody(bundle, objects, declared, owner, row, symbol);
+            if (allocated && declared == ObjectReference && !finalizer &&
+                (receiver == ObjectReference || ArrayElementKey(objects, receiver) != 0))
+            {
+                // Bare objects have no overrides. CLR vector arrays inherit the Object slot.
+                symbol[0] = owner;
+                symbol[1] = row;
+                if (symbol.Length > 2) symbol[2] = 0;
+                return 0;
+            }
             if (receiver < FirstClass || receiver - FirstClass >= objects[0] ||
                 (!allocated && !IsSealed(objects, receiver)) ||
                 IsValueType(objects, receiver) != exactValue || IsInterface(objects, receiver)) return -2;

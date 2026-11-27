@@ -384,7 +384,7 @@ namespace PortableCompiler
             if (kind == ClearValue || kind == ResourceLookup) return depth;
             if (kind == NullLiteral) return Push(stack, allocated, depth, NullValue);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, allocated, depth, EventArgsReference);
-            if (kind == NewRootObject) return Push(stack, allocated, depth, ObjectReference);
+            if (kind == NewRootObject) return Push(stack, allocated, depth, ObjectReference, true);
             if (kind == CombineHandler || kind == RemoveHandler)
                 return depth >= 2 && Assignable(stack[depth - 1], DelegateReference, objects) &&
                     Assignable(stack[depth - 2], DelegateReference, objects)

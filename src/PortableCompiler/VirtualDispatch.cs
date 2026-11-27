@@ -8,7 +8,7 @@ namespace PortableCompiler
     internal sealed class VirtualDispatch
     {
         private const int Function = 0, Owner = 1, Row = 2, Receiver = 3,
-            Declared = 4, CallerOwner = 5, CallerRow = 6, CallerOffset = 7, Scanned = 8, Head = 9, ScannedBoxes = 10, SiteWidth = 11;
+            Declared = 4, CallerOwner = 5, CallerRow = 6, CallerOffset = 7, Scanned = 8, Head = 9, ScannedBoxes = 10, RootTarget = 11, SiteWidth = 12;
         private const int Class = 0, Target = 1, Next = 2, BoxElement = 3, CaseWidth = 4;
 
         private readonly byte[] known = new byte[MaxClasses];
@@ -18,6 +18,7 @@ namespace PortableCompiler
         private int[] sites = new int[0];
         private int[] cases = new int[0];
         private int allocationsCount, sitesUsed, casesUsed = CaseWidth, boxes;
+        private bool typeDescriptors, unsupportedRootReceiver;
 
         internal VirtualDispatch(int capacity, RuntimeTypeCalls typeCalls)
         {
@@ -51,6 +52,18 @@ namespace PortableCompiler
 
         internal void AddBox(int element) => boxes |= 1 << element;
 
+        // Every produced evaluation-stack value is at the top on an incoming
+        // edge. Until raw vectors and special host objects carry exact runtime
+        // identities, their presence leaves the root dispatch universe open.
+        internal void ObserveReceiver(int type)
+        {
+            if (type == RuntimeTypeMetadata.Type) typeDescriptors = true;
+            if (SignatureTypes.IsArray(type) || type == EventArgsReference || type == EventHandlerReference ||
+                type == DelegateReference || type == SignatureTypes.Delegate || type == SignatureTypes.CharacterSpanCallback ||
+                type == RuntimeTypeMetadata.Module || type == RuntimeTypeMetadata.Assembly)
+                unsupportedRootReceiver = true;
+        }
+
         internal int Add(int function, int owner, int row, int receiver, int declared, int callerOwner, int callerRow, int pc)
         {
             for (int site = 0; site < sitesUsed; site += SiteWidth)
@@ -83,9 +96,30 @@ namespace PortableCompiler
             for (int site = 0; site < sitesUsed; site += SiteWidth)
             {
                 int receiver = sites[site + Receiver], dispatcher = sites[site + Function];
+                if (receiver == ObjectReference)
+                {
+                    CompileLocation.Set(location, sites[site + CallerOwner], sites[site + CallerRow], sites[site + CallerOffset]);
+                    if (unsupportedRootReceiver) return -2;
+                    if (sites[site + RootTarget] == 0)
+                    {
+                        int root = MethodCompiler.BindVirtualBody(bundle, objects, ObjectReference, true, ObjectReference,
+                            sites[site + Owner], sites[site + Row], owners, rows, contexts, bases, indices, arities, offsets, signatures, functions);
+                        if (root < 0) return root;
+                        if (root == functions) functions++;
+                        sites[site + RootTarget] = root + 1;
+
+                        int text = MethodCompiler.BindVirtualBody(bundle, objects, SignatureTypes.String, true, ObjectReference,
+                            sites[site + Owner], sites[site + Row], owners, rows, contexts, bases, indices, arities, offsets, signatures, functions);
+                        if (text < 0) return text;
+                        if (text == functions) functions++;
+                        int added = AddCase(site, SignatureTypes.String, text, 0);
+                        if (added < 0) return added;
+                    }
+                }
                 for (int index = sites[site + Scanned]; index < allocationsCount; index++)
                 {
                     int type = allocations[index];
+                    if (receiver != ObjectReference && ArrayElementKey(objects, type) != 0) continue;
                     if (!SignatureTypes.Assignable(type, receiver, objects)) continue;
                     CompileLocation.Set(location, sites[site + CallerOwner], sites[site + CallerRow], sites[site + CallerOffset]);
                     int shape = offsets[dispatcher];
@@ -103,7 +137,8 @@ namespace PortableCompiler
                     if (added < 0) return added;
                 }
                 sites[site + Scanned] = allocationsCount;
-                if (IsInterface(objects, sites[site + Declared]) && boxes != sites[site + ScannedBoxes])
+                if ((receiver == ObjectReference || IsInterface(objects, sites[site + Declared])) &&
+                    boxes != sites[site + ScannedBoxes])
                 {
                     functions = ExpandBoxes(bundle, objects, owners, rows, contexts, bases, indices, arities,
                         offsets, signatures, functions, location, site);
@@ -118,7 +153,8 @@ namespace PortableCompiler
         {
             int declared = sites[site + Declared], dispatcher = sites[site + Function];
             int pending = boxes & ~sites[site + ScannedBoxes];
-            var required = new[] { AssemblyOf(objects, declared), TypeDef(objects, declared) };
+            bool root = declared == ObjectReference;
+            var required = root ? null : new[] { AssemblyOf(objects, declared), TypeDef(objects, declared) };
             if (HasArguments(objects, declared))
             {
                 sites[site + ScannedBoxes] = boxes;
@@ -128,9 +164,12 @@ namespace PortableCompiler
             {
                 if ((pending & (1 << element)) == 0) continue;
                 int primitive = GenericScalar.Key(element);
-                int implements = BundleConstraints.Implements(bundle, objects, primitive, required, 0);
-                if (implements < 0) return implements;
-                if (implements == 0) continue;
+                if (!root)
+                {
+                    int implements = BundleConstraints.Implements(bundle, objects, primitive, required, 0);
+                    if (implements < 0) return implements;
+                    if (implements == 0) continue;
+                }
                 CompileLocation.Set(location, sites[site + CallerOwner], sites[site + CallerRow], sites[site + CallerOffset]);
                 var identity = new int[2];
                 int found = BundleConstraints.FindPrimitive(bundle, primitive, identity);
@@ -143,8 +182,11 @@ namespace PortableCompiler
                 if (type < 0) return type;
                 if (!PrimitiveBoxing.HasPayloadField(objects, type, GenericScalar.Storage(primitive))) return -2;
                 var method = new int[3];
-                int selected = InterfaceSlots.SelectBody(bundle, objects, type, declared, sites[site + Owner],
-                    sites[site + Row], method, primitiveMap: true);
+                int selected = root
+                    ? VirtualSlots.SelectVirtualBody(bundle, objects, type, true, declared, sites[site + Owner],
+                        sites[site + Row], method, exactValue: true)
+                    : InterfaceSlots.SelectBody(bundle, objects, type, declared, sites[site + Owner],
+                        sites[site + Row], method, primitiveMap: true);
                 if (selected < 0) return selected;
                 if (method[0] != identity[0]) return -2;
                 int target = MethodCompiler.Lookup(owners, rows, contexts, bases, indices, functions, method[0], method[1], type);
@@ -192,7 +234,7 @@ namespace PortableCompiler
         }
 
         internal int Write(byte[] code, int[] bodyOffsets, int[] sizes, int[] arities, int[] offsets,
-            int[] signatures, int[] objects, int length, int hostImports, int[] location)
+            int[] signatures, int[] objects, int length, int hostImports, int[] location, RuntimeReflectionPlan reflection)
         {
             int boxLayout = boxes == 0 ? 0 : PrimitiveBoxing.FindLayout(objects);
             for (int site = 0; site < sitesUsed; site += SiteWidth)
@@ -211,6 +253,15 @@ namespace PortableCompiler
                     length = element == 0
                         ? VirtualDispatchWasm.Arm(code, length, type, signatures[offsets[target] + 1], hostImports + target, arity)
                         : VirtualDispatchWasm.BoxArm(code, length, boxLayout, element, type, hostImports + target, arity);
+                }
+
+                if (sites[site + RootTarget] != 0)
+                {
+                    if (code.Length - length < 64) return -3;
+                    if (typeDescriptors)
+                        length = VirtualDispatchWasm.DescriptorArm(code, length, reflection);
+                    length = VirtualDispatchWasm.ArmHeap(code, length, WasmBinary.RootObjectHeap, ObjectReference,
+                        hostImports + sites[site + RootTarget] - 1, arity);
                 }
 
                 // The caller checked null. The fixed point covers reachable

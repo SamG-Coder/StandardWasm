@@ -16,6 +16,9 @@ internal static class Program
             throw new InvalidOperationException("The CoreLib formatting baseline changed.");
         int[] intDiagnostic = [2, digits.MetadataToken & 0xffffff, -1];
 
+        var root = typeof(Program).GetMethod(nameof(DescribeRoot), BindingFlags.Static | BindingFlags.NonPublic)!;
+        int[] primitiveVectorDiagnostic = [0, root.MetadataToken & 0xffffff, 1];
+
         var cases = new Func<int>[]
         {
             BoxedIntMatch, BoxedDoubleMatch, BoxedBooleanMiss, StringMiss, NullMiss, ReferenceMatch, BoxIdentity,
@@ -25,11 +28,13 @@ internal static class Program
             WritableSpanReference, ClosedGenericSpanReference, DefaultSpanReference,
             StringObjectSlot, StringOwnSlot, NullStringObjectSlot,
             OriginalExceptionGetType, OriginalDerivedExceptionGetType, NullExceptionGetType, OriginalObjectDisplayName,
-            ClosedTypeDisplayName, OpenTypeDisplayName, ArrayTypeDisplayName, RepeatedTypeDisplayName, NamespacedTypeDisplayName, NullTypeDisplayName
+            ClosedTypeDisplayName, OpenTypeDisplayName, ArrayTypeDisplayName, RepeatedTypeDisplayName, NamespacedTypeDisplayName, NullTypeDisplayName,
+            ExactRootDispatch, DynamicRootDispatch, NullRootDispatch, PrimitiveVectorRootDispatch
         };
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
-            acceptedDiagnostic = run.Method.Name.StartsWith("OriginalInt", StringComparison.Ordinal) ? intDiagnostic : null
+            acceptedDiagnostic = run.Method.Name.StartsWith("OriginalInt", StringComparison.Ordinal) ? intDiagnostic :
+                run.Method.Name == nameof(PrimitiveVectorRootDispatch) ? primitiveVectorDiagnostic : null
         });
         File.WriteAllText(args[0], JsonSerializer.Serialize(new {
             runtime = Environment.Version.ToString(), files = new[] {
@@ -38,6 +43,36 @@ internal static class Program
                 Path.Combine(runtime, "System.Memory.dll")
             }, cases = results
         }));
+    }
+
+    public static int ExactRootDispatch() => new object().ToString() == "System.Object" ? 67 : 0;
+
+    public static int DynamicRootDispatch()
+    {
+        int result = DescribeRoot(new object()) == "System.Object" ? 1 : 0;
+        if (DescribeRoot("test") == "test") result += 2;
+        if (DescribeRoot(new NamedOverride()) == "override") result += 4;
+        if (DescribeRoot(new NominalNameProbe()) == "Program+NominalNameProbe") result += 8;
+        if (DescribeRoot(typeof(NamedOverride)) == "Program+NamedOverride") result += 16;
+        if (DescribeRoot(true) == "True") result += 32;
+        if (DescribeRoot(new NamedOverride[1]) == "Program+NamedOverride[]") result += 64;
+        return result;
+    }
+
+    public static int NullRootDispatch()
+    {
+        try { return DescribeRoot(null!).Length; }
+        catch (NullReferenceException) { return 53; }
+    }
+
+    public static int PrimitiveVectorRootDispatch() =>
+        DescribeRoot(new byte[1]) == "System.Byte[]" ? 59 : 0;
+
+    private static string DescribeRoot(object value) => value.ToString()!;
+
+    private sealed class NamedOverride
+    {
+        public override string ToString() => "override";
     }
 
     public static int OriginalObjectDisplayName() =>

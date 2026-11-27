@@ -2,12 +2,15 @@ namespace PortableCompiler
 {
     internal static class VirtualDispatchWasm
     {
-        internal static int Arm(byte[] code, int used, int type, int targetReceiver, int target, int arity)
+        internal static int Arm(byte[] code, int used, int type, int targetReceiver, int target, int arity) =>
+            ArmHeap(code, used, WasmBinary.HeapType(type), targetReceiver, target, arity);
+
+        internal static int ArmHeap(byte[] code, int used, int heap, int targetReceiver, int target, int arity)
         {
             used = BranchWasm.Local(code, used, 0x20, 0);
             code[used++] = 0xfb;
             code[used++] = 20; // ref.test (ref T)
-            used = WasmBinary.Signed(code, used, WasmBinary.HeapType(type));
+            used = WasmBinary.Signed(code, used, heap);
             code[used++] = 0x04; // if
             code[used++] = 0x40; // empty block
             used = BranchWasm.Local(code, used, 0x20, 0);
@@ -19,6 +22,21 @@ namespace PortableCompiler
             }
             used = TailCall(code, used, target, arity);
             code[used++] = 0x0b; // end if
+            return used;
+        }
+
+        internal static int DescriptorArm(byte[] code, int used, RuntimeReflectionPlan reflection)
+        {
+            used = BranchWasm.Local(code, used, 0x20, 0);
+            code[used++] = 0xfb;
+            code[used++] = 20; // ref.test for the linker-owned Type descriptor heap
+            used = WasmIndexFixups.Write(code, used, 0, reflection.HeapFixups);
+            code[used++] = 0x04;
+            code[used++] = 0x40;
+            used = BranchWasm.Local(code, used, 0x20, 0);
+            code[used++] = 0x12; // return_call
+            used = WasmIndexFixups.Write(code, used, 0, reflection.TypeNameFixups);
+            code[used++] = 0x0b;
             return used;
         }
 

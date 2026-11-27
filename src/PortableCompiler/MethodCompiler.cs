@@ -909,6 +909,9 @@ namespace PortableCompiler
                         }
                         if (depths[pc] != 0)
                         {
+                            if (depths[pc] > 1) dispatch.ObserveReceiver(states[pc * maximum + depths[pc] - 2]);
+                            if (kind == BranchIl.NewArray && ObjectLayouts.ArrayElementKey(objects, operation) != 0)
+                                dispatch.AddAllocation(operation);
                             if (kind == BranchIl.BoxValue) dispatch.AddBox(operation);
                             if (hasNull)
                             {
@@ -1064,7 +1067,8 @@ namespace PortableCompiler
                 features[0] = hostFeatures | hostUse[0];
                 return Reemit;
             }
-            length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, objects, length, hostImports, location);
+            length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, objects, length,
+                hostImports, location, reflection);
             if (length < 0) return length;
             var interfacePosition = new[] { length };
             functions = reflection.InterfaceTests.Write(moduleCode, interfacePosition, objects, offsets, signatures,
@@ -2663,8 +2667,18 @@ namespace PortableCompiler
                 }
                 else
                 {
-                    if (externalObjects || bound < ObjectLayouts.FirstClass ||
-                        ObjectLayouts.IsValueType(objects, bound) || !Assignable(bound, declared, objects)) return -2;
+                    if (externalObjects || ObjectLayouts.IsValueType(objects, bound) ||
+                        !Assignable(bound, declared, objects)) return -2;
+                    if (bound < ObjectLayouts.FirstClass)
+                    {
+                        if (bound != ObjectReference || declared != ObjectReference || arity != 1 || types[shape] != String)
+                            return -2;
+                        byte[] source = bundle.Get(owner);
+                        var layout = new int[4];
+                        var heaps = new int[8];
+                        if (CompressedTables.FindWithHeaps(source, layout, heaps) < 0) return -1;
+                        if (!RuntimeTypeMetadata.IsCoreObjectToString(source, heaps, layout, row)) return -2;
+                    }
                     function = dispatch.Add(functions, owner, row, bound, declared, callerOwner, callerRow, pc);
                     if (function < 0) return function;
                     if (function == functions)

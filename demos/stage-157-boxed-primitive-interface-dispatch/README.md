@@ -32,6 +32,13 @@ The display-name cases execute the original base call to
 `Object.ToString`. They check names for nested, open and closed generic
 types and arrays, UTF-16 names, cached string identity, and a null receiver.
 
+The root dispatch cases call `Object.ToString` at the same virtual site with a
+bare object, a string, a class override, an inherited implementation, a
+runtime type descriptor, a boxed scalar and a nominal reference array.
+They also cover the null receiver. Primitive vectors share Wasm heaps across
+distinct CLI types, so the verifier accepts the located diagnostic for that
+case until those identities can be carried through dispatch.
+
 Both `Int32` cases have CLR answers. The compiler now binds the original
 `Number.TryFormatInt32<char>` generic method. Until the formatting pipeline
 lowers, the verifier accepts only the located diagnostic at the pinned local
