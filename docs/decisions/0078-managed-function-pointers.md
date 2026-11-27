@@ -50,6 +50,18 @@ engine's check.
 Each lower table is emitted, possibly empty, whenever a higher table exists, so
 the indices stay fixed.
 
+## Scope against WinForms
+
+A census of the .NET 10.0.10 WindowsDesktop assemblies found 3,450 `calli`
+sites, and every one uses the unmanaged stdcall convention (`0x02`):
+
+- 3,128 in `System.Windows.Forms.Primitives`
+- 322 in `System.Private.Windows.Core`
+
+They are COM vtable calls through the generated Win32 bindings. This stage
+covers ordinary managed `delegate*` code. Those sites still need unmanaged
+`calli`, bound to host imports (#274).
+
 ## Still diagnosed
 
 - unmanaged calling conventions (`delegate* unmanaged[...]`, `calli` with a
