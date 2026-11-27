@@ -1429,6 +1429,10 @@ namespace PortableCompiler
                         continue;
                     }
                     if (element != -2) return element;
+                    // Platform reflection descriptors use their own representation.
+                    // Keep their cast diagnostic before probing for a value layout.
+                    if (kind == BranchIl.TestClass &&
+                        RuntimeTypeMetadata.RequiresReflectionCast(image, heaps, layout, records[slot + 1])) return -2;
                     int type = AggregateBoxing.ValueIdentity(bundle, image, layout, heaps, owner, operand, context, methodArguments, objects);
                     if (type < 0 && type != -2) return type;
                     if (kind == BranchIl.BoxValue && (operand >> 24) == 0x1b)

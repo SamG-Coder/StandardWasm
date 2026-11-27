@@ -37,8 +37,9 @@ namespace PortableCompiler
                 return ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps,
                     owner, row, context, objects, methodArguments);
             if (table != 1 && table != 2) return -2;
-            return BundleLayouts.RegisterType(bundle, image, layout, heaps, owner,
-                row << 2 | (table == 1 ? 1 : 0), objects, true, true);
+            int coded = row << 2 | (table == 1 ? 1 : 0);
+            if (RuntimeTypeMetadata.Storage(image, heaps, layout, coded, true) != 0) return -2;
+            return BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true, true);
         }
 
         internal static int TypeBytes => 8 + WasmBinary.HeapTypeSize(WasmBinary.ValueLocationHeap);

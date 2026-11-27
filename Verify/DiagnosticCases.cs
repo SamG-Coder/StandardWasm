@@ -19,8 +19,8 @@ internal static class DiagnosticCases
         const BindingFlags methodFlags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
         Type estimates = typeof(Estimates);
 
-        var direct = estimates.GetMethod(nameof(Estimates.BoxedValue))!;
-        Reject(nameof(Estimates.BoxedValue), image, Row(direct), -2, At(0, direct, OpCodes.Box));
+        var direct = estimates.GetMethod(nameof(Estimates.BoxedEnum))!;
+        Reject(nameof(Estimates.BoxedEnum), image, Row(direct), -2, At(0, direct, OpCodes.Box));
         var entry = estimates.GetMethod(nameof(Estimates.ViaBoxingHelper))!;
         var helper = estimates.GetMethod("BoxCost", methodFlags)!;
         Reject(nameof(Estimates.ViaBoxingHelper), image, Row(entry), -2, At(0, helper, OpCodes.Box));
