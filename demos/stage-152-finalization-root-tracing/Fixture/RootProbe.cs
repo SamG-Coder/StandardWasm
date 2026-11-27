@@ -4,6 +4,15 @@ namespace ManagedFinalizationExperiment
 {
     public static class RootProbe
     {
+        private static object saved;
+
+        public static object SetStaticRoot(object value)
+        {
+            object previous = saved;
+            saved = value;
+            return previous;
+        }
+
         public static int ObserveFrames(int seed)
         {
             var receiver = new Receiver { Value = seed };

@@ -45,12 +45,17 @@ exception unwind. The normal compilation entry point keeps the diagnostic
 table private by omitting it entirely.
 
 The same module emits typed reads of reference fields and reference arrays.
-The graph fixture starts with a single published root. The verifier follows
-inherited fields, array elements and a cycle, and compares aliases and null
-entries against the CLR. Both traversals find five reachable objects. Byte
-arrays are leaves, and scalar fields do not take an edge index.
+The Wasm mark pass starts from published frames and ordinary managed statics.
+It follows inherited fields, array elements and a cycle, using reference
+identity to visit aliases once. Both engines find the CLR's five reachable
+objects. The verifier moves the graph from a frame to a static and checks
+that clearing the static removes all five objects from the next mark set.
+Byte arrays are leaves, and scalar fields do not take an edge index.
 
-Binding the queue to the original CoreLib APIs still needs static and host
-roots, traversal of runtime wrappers such as view owners and event delegates,
+The mark list retains its references until the next mark pass or explicit
+clear. Its linear identity lookup makes this a prototype for small graphs.
+Binding the queue to the original CoreLib APIs still needs host roots,
+traversal of runtime wrappers such as view owners and event delegates,
 managed addresses, protected regions, indirect calls and a cleanup policy for
-raw Wasm traps. The current verifier drives the traversal from JavaScript.
+raw Wasm traps. JavaScript invokes the pass at a probe observation point and
+checks the result. The Wasm module performs the worklist and edge traversal.

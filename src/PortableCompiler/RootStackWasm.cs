@@ -12,6 +12,9 @@ namespace PortableCompiler
         private const string CountExport = "__root_probe_count";
         private const string EdgeCountExport = "__root_probe_edge_count";
         private const string EdgeReadExport = "__root_probe_edge_read";
+        private const string MarkExport = "__root_probe_mark";
+        private const string ContainsExport = "__root_probe_contains";
+        private const string ClearExport = "__root_probe_clear";
 
         internal static byte[] MapFrame(int[] records, int[] frame, int slots)
         {
@@ -29,16 +32,22 @@ namespace PortableCompiler
             return map;
         }
 
-        internal static int ExportSize(int count, int walker) => TableExport.Length + CountExport.Length + 5 +
-            WasmBinary.UnsignedSize(count) + EdgeCountExport.Length + EdgeReadExport.Length + 4 +
-            WasmBinary.UnsignedSize(walker) + WasmBinary.UnsignedSize(walker + 1);
+        internal static int ExportSize(int count, int walker) => ExportSize(TableExport, Table) + ExportSize(CountExport, count) +
+            ExportSize(EdgeCountExport, walker) + ExportSize(EdgeReadExport, walker + 1) +
+            ExportSize(MarkExport, walker + ReachabilityWasm.Mark) + ExportSize(ContainsExport, walker + ReachabilityWasm.Contains) +
+            ExportSize(ClearExport, walker + ReachabilityWasm.Clear);
+
+        private static int ExportSize(string name, int index) => name.Length + 2 + WasmBinary.UnsignedSize(index);
 
         internal static int WriteExports(byte[] code, int used, int count, int walker)
         {
             used = Export(code, used, TableExport, 1, Table);
             used = Export(code, used, CountExport, 3, count);
             used = Export(code, used, EdgeCountExport, 0, walker);
-            return Export(code, used, EdgeReadExport, 0, walker + 1);
+            used = Export(code, used, EdgeReadExport, 0, walker + 1);
+            used = Export(code, used, MarkExport, 0, walker + ReachabilityWasm.Mark);
+            used = Export(code, used, ContainsExport, 0, walker + ReachabilityWasm.Contains);
+            return Export(code, used, ClearExport, 0, walker + ReachabilityWasm.Clear);
         }
 
         private static int Export(byte[] code, int used, string name, byte kind, int index)

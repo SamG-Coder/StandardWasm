@@ -199,7 +199,8 @@ namespace PortableCompiler
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * 3];
             int rootCount = rootProbe ? StaticFields.Register(globals, 0, RootStackWasm.GlobalKey, I32) : -1;
-            if (rootProbe && rootCount < 0) return -3;
+            int markedCount = rootProbe ? StaticFields.Register(globals, 0, ReachabilityWasm.GlobalKey, I32) : -1;
+            if (rootProbe && (rootCount < 0 || markedCount < 0)) return -3;
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
             var nativePlans = new NativeAggregatePlans();
             var pointers = new FunctionPointerPlan();
@@ -840,20 +841,21 @@ namespace PortableCompiler
             if (rootProbe)
             {
                 rootWalker = hostImports + functions;
-                for (int entry = 0; entry < 2; entry++)
+                for (int entry = 0; entry < ReachabilityWasm.End; entry++)
                 {
-                    bool read = entry != 0;
+                    bool read = entry == 1;
                     if (functions >= owners.Length) return -3;
                     int offset = NextSignature(offsets, arities, functions);
-                    int arity = read ? 2 : 1;
+                    int arity = read ? 2 : entry == ReachabilityWasm.Mark || entry == ReachabilityWasm.Clear ? 0 : 1;
                     if (arity >= signatures.Length - offset) return -3;
-                    signatures[offset] = read ? ObjectReference : I32;
-                    signatures[offset + 1] = ObjectReference;
+                    signatures[offset] = read ? ObjectReference : entry == ReachabilityWasm.Clear || entry == ReachabilityWasm.Add ? Void : I32;
+                    if (arity > 0) signatures[offset + 1] = ObjectReference;
                     if (read) signatures[offset + 2] = I32;
                     arities[functions] = arity;
                     offsets[functions] = offset;
                     bodyOffsets[functions] = length;
-                    length = HeapEdgesWasm.Write(moduleCode, length, objects, read);
+                    length = entry < ReachabilityWasm.Mark ? HeapEdgesWasm.Write(moduleCode, length, objects, read) :
+                        ReachabilityWasm.Write(moduleCode, length, entry, rootWalker, rootCount, markedCount, globals);
                     if (length < 0) return length;
                     sizes[functions] = length - bodyOffsets[functions];
                     functions++;

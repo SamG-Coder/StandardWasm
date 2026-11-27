@@ -16,7 +16,8 @@ internal static class EmitRootProbe
         image.CopyTo(bundle, sizeof(int));
         using var manifest = new MemoryStream();
         using var entries = new BinaryWriter(manifest);
-        foreach (string name in new[] { nameof(RootProbe.ObserveFrames), nameof(RootProbe.ObserveConstructor), nameof(RootProbe.ThrowWithRoot), nameof(RootProbe.BuildGraph) })
+        foreach (string name in new[] { nameof(RootProbe.ObserveFrames), nameof(RootProbe.ObserveConstructor),
+            nameof(RootProbe.ThrowWithRoot), nameof(RootProbe.BuildGraph), nameof(RootProbe.SetStaticRoot) })
         {
             byte[] label = Encoding.UTF8.GetBytes(name);
             entries.Write(typeof(RootProbe).GetMethod(name)!.MetadataToken & 0x00ffffff);
@@ -56,6 +57,8 @@ internal static class EmitRootProbe
         }
         finally { Console.SetOut(original); }
         Type type = root.GetType();
+        if (RootProbe.SetStaticRoot(root) is not null || !ReferenceEquals(RootProbe.SetStaticRoot(null), root))
+            throw new Exception("Unexpected CLR static root storage");
         object next = type.GetField("Next", fields)!.GetValue(root)!;
         var items = (Array)type.GetField("Items", fields)!.GetValue(root)!;
         return new

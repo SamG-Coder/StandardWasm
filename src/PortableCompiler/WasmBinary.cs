@@ -149,7 +149,7 @@ namespace PortableCompiler
                 (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) +
                 (nullReference ? 1 : 0) + (invalidCast ? 1 : 0) + (argumentException ? 1 : 0) + (objectTag ? 1 : 0) +
                 (argumentNull ? 1 : 0) + (synchronizationLock ? 1 : 0);
-            if (rootCount >= 0) exportCount += 4;
+            if (rootCount >= 0) exportCount += 7;
             int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
                 (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
                 (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0) +
@@ -175,7 +175,7 @@ namespace PortableCompiler
             bool pinTable = PinRegistryWasm.Present(globals) || pointerTable;
             bool tables = thunks[0] != 0 || pinTable;
             int tableSize = 3 + UnsignedSize(thunks[0]) + (pinTable ? 3 : 0) +
-                (pointerTable ? 2 + UnsignedSize(pointers.TargetCount + 1) : 0) + (rootCount >= 0 ? 3 : 0);
+                (pointerTable ? 2 + UnsignedSize(pointers.TargetCount + 1) : 0) + (rootCount >= 0 ? 6 : 0);
             bool elements = thunks[0] != 0 || pointers.TargetCount != 0;
             int elementSize = 5 + UnsignedSize(thunks[0]);
             for (int i = 0; i < thunks[0]; i++)
@@ -409,7 +409,7 @@ namespace PortableCompiler
                 // Table 0 holds delegate thunks (possibly none); table 1 is the
                 // live-pin registry of decision 0077, which starts empty and grows.
                 cursor = Section(output, cursor, 4, tableSize);
-                output[cursor++] = (byte)(rootCount >= 0 ? 4 : pointerTable ? 3 : pinTable ? 2 : 1);
+                output[cursor++] = (byte)(rootCount >= 0 ? 5 : pointerTable ? 3 : pinTable ? 2 : 1);
                 output[cursor++] = 0x70;
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, thunks[0]);
@@ -427,7 +427,10 @@ namespace PortableCompiler
                 }
                 if (rootCount >= 0)
                 {
-                    output[cursor++] = 0x6d; // eqref, initially empty
+                    output[cursor++] = 0x6d; // published frame roots
+                    output[cursor++] = 0;
+                    output[cursor++] = 0;
+                    output[cursor++] = 0x6d; // deduplicated marks and worklist
                     output[cursor++] = 0;
                     output[cursor++] = 0;
                 }

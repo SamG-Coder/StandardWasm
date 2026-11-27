@@ -50,6 +50,8 @@ async function probe({ compiler, fixture, row, count }) {
 async function observeRoots(bytes) {
     const snapshots = [];
     let published;
+    let inspectGraph = false;
+    let reachable;
     const { instance } = await WebAssembly.instantiate(bytes, {
         "standardwasm:console": {
             write() { throw new Error("The probe emits only line breaks"); },
@@ -58,12 +60,14 @@ async function observeRoots(bytes) {
                 const roots = Array.from({ length: count.value }, (_, index) => table.get(index));
                 if (roots.some(value => value === null)) throw new Error("Expected a live object in every snapshot slot");
                 published = roots;
+                if (inspectGraph) reachable = instance.exports.__root_probe_mark();
                 snapshots.push({ count: roots.length, unique: new Set(roots).size });
             }
         }
     });
     const { __root_probe_table: table, __root_probe_count: count, __root_probe_edge_count: edges,
-        __root_probe_edge_read: read, ObserveFrames, ObserveConstructor, ThrowWithRoot, BuildGraph } = instance.exports;
+        __root_probe_edge_read: read, __root_probe_mark: mark, __root_probe_contains: contains,
+        __root_probe_clear: clear, ObserveFrames, ObserveConstructor, ThrowWithRoot, BuildGraph, SetStaticRoot } = instance.exports;
     function assertEmpty() {
         if (count.value !== 0) throw new Error("Root scope was not restored");
         for (let i = 0; i < table.length; i++)
@@ -81,21 +85,12 @@ async function observeRoots(bytes) {
     assertEmpty();
     if (ObserveFrames(11) !== value) throw new Error("Failed to reuse the module after unwinding");
     assertEmpty();
+    inspectGraph = true;
     const root = BuildGraph(11);
+    inspectGraph = false;
     assertEmpty();
     if (published.length !== 1 || published[0] !== root)
         throw new Error("The graph root was missing during the call");
-    const seen = new Set(published);
-    const pending = [...published];
-    for (let cursor = 0; cursor < pending.length; cursor++) {
-        const item = pending[cursor];
-        for (let index = 0; index < edges(item); index++) {
-            const child = read(item, index);
-            if (child === null || seen.has(child)) continue;
-            seen.add(child);
-            pending.push(child);
-        }
-    }
     const inherited = read(root, 0);
     const next = read(root, 1);
     const array = read(root, 2);
@@ -104,15 +99,24 @@ async function observeRoots(bytes) {
         read(array, edges(array)) !== null || read(root, edges(root)) !== null ||
         payload === null || edges(payload) !== 0 || read(payload, 0) !== null)
         throw new Error("Unexpected edge read for a missing reference or a payload without references");
+    if ([root, inherited, next, array, payload].some(item => contains(item) !== 1) || contains(null) !== 0)
+        throw new Error("The marked snapshot lost a node or included null");
+    clear();
+    if (contains(root) !== 0 || mark() !== 0) throw new Error("A released frame still appears in the mark set");
+    if (SetStaticRoot(root) !== null || mark() !== reachable || contains(next) !== 1)
+        throw new Error("The static root did not keep its graph reachable");
+    if (SetStaticRoot(null) !== root || mark() !== 0 || contains(next) !== 0)
+        throw new Error("The removed static still appears in the mark set");
+    clear();
     const graph = { fields: edges(root), arrayLength: edges(array), inherited: inherited !== null,
         cycle: read(next, 1) === root, arrayAliases: read(array, 0) === next && read(array, 2) === root,
-        nullEdges: Number(read(array, 1) === null) + Number(read(root, 3) === null), reachable: seen.size };
-    return { values: [value, constructed], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph };
+        nullEdges: Number(read(array, 1) === null) + Number(read(root, 3) === null), reachable };
+    return { values: [value, constructed], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph, staticRoot: true };
 }
 
 const expectedRoots = { values: oracle.rootProbeResult,
     snapshots: [{ count: 3, unique: 2 }, { count: 2, unique: 1 }, { count: 1, unique: 1 }, { count: 3, unique: 2 }, { count: 1, unique: 1 }],
-    clearedOnReturn: true, clearedOnUnwind: true, graph: oracle.graph };
+    clearedOnReturn: true, clearedOnUnwind: true, graph: oracle.graph, staticRoot: true };
 const node = await probe(assets);
 assert.deepEqual(node, oracle.result);
 const nodeRoots = await observeRoots(assets.rootProbe);
