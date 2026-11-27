@@ -44,6 +44,7 @@ try
 {
     var operations = new List<object>();
     Observe("window", echo, unchecked((int)0xf1234567), -9, 0, 1, true, 0);
+    Observe("window", echo, unchecked((int)0xf1234567), 0, 0, 1, true, 0);
     Observe("window", echo, 25, 25, 3, 0, true, 1);
     Observe("window", slow, 7, 9, 2, 1, true, 0);
     Observe("window", echo, 3, 5, 8, 0, false, 0);
