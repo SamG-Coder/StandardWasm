@@ -18,7 +18,7 @@ for (int i = 1; i < args.Length; i++)
         object? result = kernels.GetMethod(name)!.Invoke(null, inputs.Cast<object>().ToArray());
         cases.Add(new { name, row = Row(name), inputs, expected = ((int)result!).ToString() });
     }
-    foreach (string name in new[] { "First", "Weighted", "Terminator", "Measure", "Reverse", "Repeated", "Thrown", "ReadAfterCall" })
+    foreach (string name in new[] { "First", "Weighted", "Terminator", "Measure", "Reverse", "Repeated", "Thrown", "ReadAfterCall", "SameFrame", "Nested", "Distinct", "ManyPins" })
         for (int selection = 0; selection <= 5; selection++) Run(name, selection);
     foreach (var (left, right) in new[] { (2, 3), (2, 2), (3, 5), (1, 2), (5, 5), (5, 2), (4, 1), (0, 2) })
         Run("Compare", left, right);

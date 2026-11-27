@@ -168,8 +168,9 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[20];
+            var frameShape = new int[21];
             var shadowStack = new int[3]; // $sp, base, limit globals + 1
+            var pinRegistry = new int[1]; // the live-pin count global + 1 (decision 0077)
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * 3];
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
@@ -404,7 +405,7 @@ namespace PortableCompiler
                         if (capacity > int.MaxValue - 320) return -3;
                         capacity += 320;
                     }
-                    bool allocates = false;
+                    bool allocates = false, pins = false;
                     int classBytes = objects[0] * 12;
                     if (classBytes > int.MaxValue - capacity) return -3;
                     capacity += classBytes;
@@ -458,6 +459,16 @@ namespace PortableCompiler
                                     if (global < 0) return global;
                                     shadowStack[g] = global + 1;
                                 }
+                            if (kind == BranchIl.PinString)
+                            {
+                                pins = true;
+                                if (pinRegistry[0] == 0)
+                                {
+                                    int global = StaticFields.Register(globals, 0, PinRegistryWasm.GlobalKey, I32);
+                                    if (global < 0) return global;
+                                    pinRegistry[0] = global + 1;
+                                }
+                            }
                             int allocationBytes = kind == BranchIl.PinString ? Utf16MemoryWasm.PinCapacity : StackAllocationWasm.Capacity;
                             if (capacity > int.MaxValue - allocationBytes) return -3;
                             capacity += allocationBytes;
@@ -560,6 +571,7 @@ namespace PortableCompiler
                     frameShape[16] = allocates ? shadowStack[0] : 0;
                     frameShape[17] = allocates ? shadowStack[1] : 0;
                     frameShape[18] = allocates ? shadowStack[2] : 0;
+                    frameShape[20] = pins ? pinRegistry[0] : 0;
                     frameShape[19] = resourceOpen ? ((hostFeatures & WasmImports.Console) != 0 ? ConsoleWasm.ImportCount + 1 : 1) : 0;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
@@ -607,7 +619,7 @@ namespace PortableCompiler
                     offsets[functions] = offset;
                     bodyOffsets[functions] = length;
                     length = TypeInitializerWasm.ExportEntry(moduleCode, length, initializers.Epoch, initializers.Active,
-                        hostImports + target, arity, shadowStack[0] - 1, shadowStack[2] - 1);
+                        hostImports + target, arity, shadowStack[0] - 1, shadowStack[2] - 1, pinRegistry[0] - 1);
                     if (length < 0) return length;
                     sizes[functions] = length - bodyOffsets[functions];
                     exports[export] = functions++;

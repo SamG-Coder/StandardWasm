@@ -25,6 +25,8 @@ namespace PortableCompiler
             // Stage 137 (decision 0065): a frame that uses localloc owns a slice of the shadow stack.
             int stackPointer = frameShape[16] - 1, stackBase = frameShape[17] - 1, stackLimit = frameShape[18] - 1;
             int resourceFunction = frameShape[19] - 1;
+            // Stage 149 (decision 0077): a pinning frame also saves the live-pin count.
+            int pins = frameShape[20] - 1;
             bool hasNull = outgoingNulls.Length != 0;
             int spillKinds = PeLibrary.ConsoleStorage.Writer + classes;
             // V8 counts parameters together with function locals. Reject
@@ -35,7 +37,7 @@ namespace PortableCompiler
             int spills = arguments + locals + (hasNull ? 1 : 0);
             int fixedLocals = spills + classes + (stringScratch ? 5 : 0) +
                 (eventScratch ? 6 : 0) + (resourceFunction >= 0 ? 7 : 0) + 1 + 2 * exceptionLocals + continuations +
-                (stackPointer >= 0 ? 1 : 0);
+                (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0);
             if (fixedLocals > MaxLocals || maximum > (MaxLocals - fixedLocals) / spillKinds) return -2;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
@@ -50,7 +52,7 @@ namespace PortableCompiler
                 (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
                 (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0));
             // The saved shadow-stack pointer follows every other local.
-            int stackFrame = objectBase + exceptionLocals;
+            int stackFrame = objectBase + exceptionLocals, pinFrame = stackFrame + 1;
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < arguments + locals; i++)
             {
@@ -122,7 +124,7 @@ namespace PortableCompiler
             }
             if (stackPointer >= 0)
             {
-                code[used++] = 1;
+                code[used++] = (byte)(pins >= 0 ? 2 : 1); // saved $sp, then the saved pin count
                 code[used++] = 0x7f;
             }
             // Raw Wasm callers supply i32. Enforce the CLI argument width before
@@ -143,6 +145,7 @@ namespace PortableCompiler
             if (stackPointer >= 0)
             {
                 used = StackAllocationWasm.Begin(code, used, stackPointer, stackFrame);
+                if (pins >= 0) used = PinRegistryWasm.Begin(code, used, pins, pinFrame);
                 // An exception leaving this frame releases its allocations, then continues.
                 code[used++] = 0x02; code[used++] = ExceptionDispatchWasm.ExceptionReference; // block (result exnref)
                 code[used++] = 0x1f; code[used++] = 0x40; code[used++] = 1;                  // try_table
@@ -610,7 +613,7 @@ namespace PortableCompiler
                     int source = Spill(spills, maximum, String, top);
                     if (records[slot + 3] != 0) used = GuardNull(code, used, source);
                     used = Utf16MemoryWasm.Pin(code, used, source, scratch, scratch + 3, scratch + 4,
-                        Spill(spills, maximum, Native, top), stackPointer, stackBase, stackLimit, pcLocal);
+                        Spill(spills, maximum, Native, top), stackPointer, stackBase, stackLimit, pcLocal, pins);
                 }
                 else if (kind == LocalAllocate)
                 {
@@ -814,6 +817,7 @@ namespace PortableCompiler
                         used = NormalizeSlot(code, used, result);
                     }
                     if (guard >= 0) used = TypeInitializerWasm.Complete(code, used, guard, activeInitializers);
+                    if (pins >= 0) used = PinRegistryWasm.Release(code, used, pins, pinFrame);
                     if (stackPointer >= 0) used = StackAllocationWasm.Release(code, used, stackPointer, stackLimit, stackFrame);
                     code[used++] = 0x0f;
                 }
@@ -895,6 +899,7 @@ namespace PortableCompiler
                 code[used++] = 0x0b; // end try_table
                 code[used++] = 0x00;
                 code[used++] = 0x0b; // end block: the caught exnref is on the stack
+                if (pins >= 0) used = PinRegistryWasm.Release(code, used, pins, pinFrame);
                 used = StackAllocationWasm.Release(code, used, stackPointer, stackLimit, stackFrame);
                 code[used++] = 0x0a; // throw_ref
             }

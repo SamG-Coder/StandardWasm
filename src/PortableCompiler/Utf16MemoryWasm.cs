@@ -4,18 +4,23 @@ namespace PortableCompiler
 {
     internal static class Utf16MemoryWasm
     {
-        internal const int PinCapacity = StackAllocationWasm.Capacity + 160;
+        internal const int PinCapacity = StackAllocationWasm.Capacity + 320;
 
-        // Null remains address zero. A non-null string gets a frame-owned
-        // copy, including a zero code unit even for an empty string.
+        // Null remains address zero. A string already pinned by a live frame keeps its
+        // address (PinRegistryWasm), as on the CLR. Otherwise it gets a frame-owned copy,
+        // including a zero code unit even for an empty string.
         internal static int Pin(byte[] code, int used, int source, int chars, int length, int sizeOrIndex,
-            int address, int sp, int stackBase, int stackLimit, int scratch)
+            int address, int sp, int stackBase, int stackLimit, int scratch, int pins)
         {
             used = Const(code, used, 0);
             used = Local(code, used, 0x21, address);
             used = Local(code, used, 0x20, source);
             code[used++] = 0xd1; // ref.is_null
             code[used++] = 0x45;
+            code[used++] = 0x04; code[used++] = 0x40;
+            used = PinRegistryWasm.Find(code, used, pins, source, sizeOrIndex, address);
+            used = Local(code, used, 0x20, address);
+            code[used++] = 0x45; // i32.eqz: not pinned yet
             code[used++] = 0x04; code[used++] = 0x40;
             used = Local(code, used, 0x20, source);
             used = StringWasm.Unwrap(code, used);
@@ -34,7 +39,9 @@ namespace PortableCompiler
             // Allocation zeroes the final code unit before Copy fills the contents.
             used = StackAllocationWasm.Allocate(code, used, sp, stackBase, stackLimit, sizeOrIndex, address, scratch);
             used = Copy(code, used, chars, length, address, sizeOrIndex);
-            code[used++] = 0x0b;
+            used = PinRegistryWasm.Register(code, used, pins, source, address);
+            code[used++] = 0x0b; // not pinned
+            code[used++] = 0x0b; // non-null
             return used;
         }
 
