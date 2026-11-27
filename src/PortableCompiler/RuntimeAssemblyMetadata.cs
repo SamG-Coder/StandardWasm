@@ -4,11 +4,14 @@ using static PeLibrary.ObjectLayouts;
 
 namespace PortableCompiler
 {
-    // One exact generic query in the current bundle. Data is keyed by the
-    // canonical runtime assembly slot, including calls through parameters.
+    // Each supported query keeps its own data keyed by canonical assembly slot.
     internal sealed class RuntimeAssemblyMetadata
     {
-        internal const int AttributeWidth = 4;
+        internal readonly bool Single;
+        private readonly string attributeNamespace;
+        private readonly string attributeName;
+        private readonly int constructorArity;
+        internal int AttributeWidth => constructorArity * 2;
         // Distinct from ordinary static fields, string literals and Type names.
         private const int CacheOwner = int.MaxValue - 2;
         private int function = -1;
@@ -20,10 +23,19 @@ namespace PortableCompiler
         internal int[] Starts { get; private set; }
         internal int[] Values { get; private set; }
 
-        internal static bool IsQuery(byte[] image, int[] layout, int[] heaps, int owner, int row, int[] objects, int argument)
+        internal RuntimeAssemblyMetadata(bool single, string attributeNamespace, string attributeName, int constructorArity)
+        {
+            Single = single;
+            this.attributeNamespace = attributeNamespace;
+            this.attributeName = attributeName;
+            this.constructorArity = constructorArity;
+        }
+
+        internal bool IsQuery(byte[] image, int[] layout, int[] heaps, int owner, int row, int[] objects, int argument)
         {
             if (argument < FirstClass || argument - FirstClass >= objects[0] ||
-                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "GetCustomAttributes") ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3),
+                    Single ? "GetCustomAttribute" : "GetCustomAttributes") ||
                 (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x2057) != 0x16 ||
                 AssemblyOf(objects, argument) != owner || !IsSealed(objects, argument)) return false;
             var counts = new int[45];
@@ -32,7 +44,7 @@ namespace PortableCompiler
                 !NamedDefinition(image, heaps, layout, counts, start, Owner(image, heaps, layout, row, false),
                     "System.Reflection", "CustomAttributeExtensions") ||
                 !NamedDefinition(image, heaps, layout, counts, start, TypeDef(objects, argument),
-                    "System.Reflection", "AssemblyMetadataAttribute")) return false;
+                    attributeNamespace, attributeName)) return false;
 
             int blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
             if (blob <= 0 || blob >= heaps[1]) return false;
@@ -40,16 +52,19 @@ namespace PortableCompiler
             var cursor = new int[1];
             int length = CompressedUnsigned(image, heaps[0] + blob, limit, cursor);
             int at = cursor[0];
-            if (length < 10 || length > limit - at) return false;
+            if (length < (Single ? 7 : 10) || length > limit - at) return false;
             int end = at + length;
             if (!SignatureReader.TakeElement(image, cursor, end, 0x10) ||
                 !SignatureReader.TakeElement(image, cursor, end, 1) ||
-                !SignatureReader.TakeElement(image, cursor, end, 1) ||
-                !SignatureReader.TakeElement(image, cursor, end, 0x15)) return false;
-            var head = new int[2];
-            if (SignatureReader.ReadGenericHeader(image, cursor, end, head) != 1 || head[1] != 0x12 || (head[0] & 3) != 0 ||
-                !NamedDefinition(image, heaps, layout, counts, start, head[0] >> 2, "System.Collections.Generic", "IEnumerable`1") ||
-                !SignatureReader.TakeElement(image, cursor, end, 0x1e) ||
+                !SignatureReader.TakeElement(image, cursor, end, 1)) return false;
+            if (!Single)
+            {
+                if (!SignatureReader.TakeElement(image, cursor, end, 0x15)) return false;
+                var head = new int[2];
+                if (SignatureReader.ReadGenericHeader(image, cursor, end, head) != 1 || head[1] != 0x12 || (head[0] & 3) != 0 ||
+                    !NamedDefinition(image, heaps, layout, counts, start, head[0] >> 2, "System.Collections.Generic", "IEnumerable`1")) return false;
+            }
+            if (!SignatureReader.TakeElement(image, cursor, end, 0x1e) ||
                 !SignatureReader.TakeElement(image, cursor, end, 0)) return false;
             int receiver = SignatureReader.ReadClass(image, cursor, end);
             return cursor[0] == end && RuntimeTypeMetadata.IsAssemblyDefinition(image, heaps, layout, receiver);
@@ -59,7 +74,7 @@ namespace PortableCompiler
             int[] objects, int argument, int[] table)
         {
             // The ordinary generic constraint path supports nominal interfaces.
-            // This exact platform overload instead constrains its argument to
+            // The assembly attribute overloads instead constrain their argument to
             // the Attribute class, whose base path is already in the layout.
             var parameter = new int[2];
             int type = 0;
@@ -98,7 +113,7 @@ namespace PortableCompiler
             for (int candidate = range[0]; candidate < range[1]; candidate++)
             {
                 if (!IsConstructor(image, heaps, layout, candidate) ||
-                    !AssemblyAttributeRecords.IsStringPairConstructor(image, heaps, layout, candidate << 3 | 2)) continue;
+                    !AssemblyAttributeRecords.IsStringConstructor(image, heaps, layout, candidate << 3 | 2, constructorArity)) continue;
                 if (ctor != 0) return -5;
                 ctor = candidate;
             }
@@ -112,7 +127,7 @@ namespace PortableCompiler
                 if (functions < 0) return functions;
             }
 
-            int vector = RegisterArray(objects, attribute);
+            int vector = Single ? 0 : RegisterArray(objects, attribute);
             if (vector < 0) return vector;
             int offset = MethodCompiler.NextSignature(offsets, arities, functions);
             if (functions >= owners.Length || signatures.Length - offset < 2) return -3;
@@ -122,11 +137,11 @@ namespace PortableCompiler
                 0, layout, objects, owner, 0, arguments);
             if (arity < 0) return arity;
             if (arity != 1 || signatures[offset + 1] != RuntimeTypeMetadata.Assembly ||
-                !IsExactArrayEnumerable(objects, vector, signatures[offset])) return -2;
+                (Single ? signatures[offset] != attribute : !IsExactArrayEnumerable(objects, vector, signatures[offset]))) return -2;
 
             status = ReadAttributes(bundle, owner, attributeRow, globals, literals, literalSize);
             if (status < 0) return status;
-            for (int module = 1; module <= bundle.Count; module++)
+            for (int module = 1; !Single && module <= bundle.Count; module++)
             {
                 if (Starts[module] != Starts[module + 1]) continue;
                 // CoreCLR's reflection cache supplies a shared typed empty
@@ -176,11 +191,14 @@ namespace PortableCompiler
                     int match = IdentifyAttribute(bundle, image, layout, heaps, owner, type, core, attribute);
                     if (match < 0) return match;
                     if (match == 0) continue;
-                    if (!AssemblyAttributeRecords.IsStringPairConstructor(image, heaps, layout, constructor)) return -2;
-                    int status = AssemblyAttributeRecords.ReadStringPair(image, heaps, entry[1], literals, size, pair);
+                    // This plan supports one instance of the neutral language attribute.
+                    if (Single && used != Starts[owner + 1]) return -2;
+                    if (!AssemblyAttributeRecords.IsStringConstructor(image, heaps, layout, constructor, constructorArity)) return -2;
+                    int status = AssemblyAttributeRecords.ReadStrings(image, heaps, entry[1], literals, size, pair, constructorArity);
                     if (status < 0) return status;
-                    if (EmptyString < 0 && (pair[0] >= 0 && pair[1] == 0 || pair[2] >= 0 && pair[3] == 0))
+                    for (int index = 0; EmptyString < 0 && index < AttributeWidth; index += 2)
                     {
+                        if (pair[index] < 0 || pair[index + 1] != 0) continue;
                         EmptyString = StringLiterals.Empty(globals);
                         if (EmptyString < 0) return EmptyString;
                     }
@@ -198,7 +216,7 @@ namespace PortableCompiler
             return 0;
         }
 
-        private static int IdentifyAttribute(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+        private int IdentifyAttribute(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int type, int core, int attribute)
         {
             if ((type & 7) == 0) return owner == core && type >> 3 == attribute ? 1 : 0;
@@ -207,8 +225,8 @@ namespace PortableCompiler
             int status = AssemblyReferences.ReadType(image, heaps, layout, type >> 3, reference);
             if (status < 0) return status;
             if (reference[AssemblyReferences.Depth] != 0 ||
-                !MatchesAscii(image, heaps, (uint)reference[2], "AssemblyMetadataAttribute") ||
-                !MatchesAscii(image, heaps, (uint)reference[3], "System.Reflection")) return 0;
+                !MatchesAscii(image, heaps, (uint)reference[2], attributeName) ||
+                !MatchesAscii(image, heaps, (uint)reference[3], attributeNamespace)) return 0;
             var identity = new int[2];
             status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, (type >> 3) << 2 | 1, identity);
             if (status < 0) return status;

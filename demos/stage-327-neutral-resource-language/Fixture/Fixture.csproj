@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>NeutralResourceLanguageFixture</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../stage-246-assembly-metadata-attributes/Empty/EmptyMetadata.csproj" /></ItemGroup>
+</Project>

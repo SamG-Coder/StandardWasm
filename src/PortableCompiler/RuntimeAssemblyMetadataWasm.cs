@@ -10,11 +10,14 @@ namespace PortableCompiler
         {
             if (code.Length - used < 48) return -3;
             const int assembly = 0, slot = 1, vector = 2, attribute = 3;
-            code[used++] = 3; // three local declaration groups
+            code[used++] = query.Single ? (byte)2 : (byte)3;
             code[used++] = 1;
             code[used++] = 0x7f; // assembly module slot
-            code[used++] = 1;
-            used = WasmBinary.ValueType(code, used, query.Vector);
+            if (!query.Single)
+            {
+                code[used++] = 1;
+                used = WasmBinary.ValueType(code, used, query.Vector);
+            }
             code[used++] = 1;
             used = WasmBinary.ValueType(code, used, query.Attribute);
             used = GuardNull(code, used, assembly, ExceptionTagsWasm.ArgumentNullTag);
@@ -29,13 +32,18 @@ namespace PortableCompiler
                 used = Const(code, used, module);
                 code[used++] = 0x46; // i32.eq
                 code[used++] = 0x04; code[used++] = 0x40; // if (void)
-                used = WriteVector(code, used, (end - start) / RuntimeAssemblyMetadata.AttributeWidth, query);
+                if (query.Single)
+                {
+                    used = WriteSingle(code, used, imports, start, end, slot + 1, query);
+                    continue;
+                }
+                used = WriteVector(code, used, (end - start) / query.AttributeWidth, query);
                 used = Local(code, used, 0x21, vector);
-                for (int i = start; i < end; i += RuntimeAssemblyMetadata.AttributeWidth)
+                for (int i = start; i < end; i += query.AttributeWidth)
                 {
                     if (code.Length - used < 90) return -3;
                     used = Local(code, used, 0x20, vector);
-                    used = Const(code, used, (i - start) / RuntimeAssemblyMetadata.AttributeWidth);
+                    used = Const(code, used, (i - start) / query.AttributeWidth);
                     used = Gc(code, used, 1, query.Attribute); // struct.new_default
                     used = Local(code, used, 0x22, attribute);
                     used = WriteString(code, used, query.Values[i], query.Values[i + 1], query.EmptyString);
@@ -53,6 +61,29 @@ namespace PortableCompiler
             if (code.Length - used < 2) return -3;
             code[used++] = 0x00; // Only known assembly descriptors can reach the helper.
             code[used++] = 0x0b;
+            return used;
+        }
+
+        private static int WriteSingle(byte[] code, int used, int imports, int start, int end, int attribute,
+            RuntimeAssemblyMetadata query)
+        {
+            if (start == end)
+            {
+                code[used++] = 0xd0; // ref.null attribute
+                used = WasmBinary.Signed(code, used, WasmBinary.HeapType(query.Attribute));
+            }
+            else
+            {
+                // Keep the new reference below the original constructor's arguments.
+                used = Gc(code, used, 1, query.Attribute);
+                used = Local(code, used, 0x22, attribute);
+                used = Local(code, used, 0x20, attribute);
+                used = WriteString(code, used, query.Values[start], query.Values[start + 1], query.EmptyString);
+                code[used++] = 0x10;
+                used = WasmBinary.Unsigned(code, used, imports + query.Constructor);
+            }
+            code[used++] = 0x0f; // return
+            code[used++] = 0x0b; // end if
             return used;
         }
 

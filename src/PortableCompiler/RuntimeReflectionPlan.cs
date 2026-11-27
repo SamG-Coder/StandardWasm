@@ -26,7 +26,10 @@ namespace PortableCompiler
         internal readonly RuntimeGenericTypes GenericTypes = new RuntimeGenericTypes();
         internal readonly RuntimeTypeRelations TypeRelations = new RuntimeTypeRelations();
         internal readonly AssemblyTypeLookup AssemblyTypes = new AssemblyTypeLookup();
-        internal readonly RuntimeAssemblyMetadata AssemblyMetadata = new RuntimeAssemblyMetadata();
+        internal readonly RuntimeAssemblyMetadata AssemblyMetadata = new RuntimeAssemblyMetadata(false,
+            "System.Reflection", "AssemblyMetadataAttribute", 2);
+        internal readonly RuntimeAssemblyMetadata NeutralResources = new RuntimeAssemblyMetadata(true,
+            "System.Resources", "NeutralResourcesLanguageAttribute", 1);
         internal readonly RuntimeObjectTypes ObjectTypes = new RuntimeObjectTypes();
         internal readonly RuntimeInterfaceTests InterfaceTests = new RuntimeInterfaceTests();
         internal readonly AggregateBoxPlan AggregateBoxes = new AggregateBoxPlan();

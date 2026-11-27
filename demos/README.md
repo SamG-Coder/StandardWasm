@@ -309,6 +309,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [324 · CoreCLR native exception messages](stage-324-core-exception-text/README.md) | `npm run demo -- stage-324-core-exception-text` | Compare native exception message text and reference identity |
 | [325 · Virtual file deletion](stage-325-virtual-file-deletion/README.md) | `npm run demo -- stage-325-virtual-file-deletion` | Compare DeleteFileW and launch-local path mutation |
 | [326 · Window and thread message posts](stage-326-window-message-posts/README.md) | `npm run demo -- stage-326-window-message-posts` | Compare HWND posts and filtered peeks on one guest queue |
+| [327 · Neutral resource language](stage-327-neutral-resource-language/README.md) | `npm run demo -- stage-327-neutral-resource-language` | Materialize a genuine neutral resource-language attribute from the assembly manifest |
 
 ## Adding a stage
 

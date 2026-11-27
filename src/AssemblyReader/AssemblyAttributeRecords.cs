@@ -27,7 +27,7 @@ namespace PeLibrary
             return true;
         }
 
-        internal static bool IsStringPairConstructor(byte[] image, int[] heaps, int[] layout, int constructor)
+        internal static bool IsStringConstructor(byte[] image, int[] heaps, int[] layout, int constructor, int arity)
         {
             int kind = constructor & 7, row = constructor >> 3;
             uint name;
@@ -47,27 +47,28 @@ namespace PeLibrary
             else return false;
             if (!MatchesAscii(image, heaps, name, ".ctor")) return false;
             var cursor = new int[1];
-            int end = SignatureReader.ReadInstance(image, heaps, blob, 2, cursor);
+            int end = SignatureReader.ReadInstance(image, heaps, blob, arity, cursor);
             return end >= 0 && SignatureReader.TakeElement(image, cursor, end, SignatureReader.Void) &&
                 SignatureReader.TakeElement(image, cursor, end, 0x0e) &&
-                SignatureReader.TakeElement(image, cursor, end, 0x0e) && cursor[0] == end;
+                (arity == 1 || SignatureReader.TakeElement(image, cursor, end, 0x0e)) && cursor[0] == end;
         }
 
-        internal static int ReadStringPair(byte[] image, int[] heaps, int blob, byte[] literals, int[] size, int[] pair)
+        internal static int ReadStrings(byte[] image, int[] heaps, int blob, byte[] literals, int[] size, int[] values, int arity)
         {
             if (blob <= 0 || blob >= heaps[1]) return -1;
             var cursor = new int[1];
             int limit = heaps[0] + heaps[1];
             int bytes = CompressedUnsigned(image, heaps[0] + blob, limit, cursor);
             int start = cursor[0];
-            if (bytes < 6 || bytes > limit - start || U16(image, (uint)start) != 1) return -1;
+            if (bytes < 4 + arity || bytes > limit - start || U16(image, (uint)start) != 1) return -1;
             int end = start + bytes;
             cursor[0] += 2;
-            int status = ReadSerString(image, cursor, end, literals, size, pair, 0);
-            if (status < 0) return status;
-            status = ReadSerString(image, cursor, end, literals, size, pair, 2);
-            if (status < 0) return status;
-            // AssemblyMetadataAttribute only declares the two constructor arguments.
+            for (int index = 0; index < arity; index++)
+            {
+                int status = ReadSerString(image, cursor, end, literals, size, values, index * 2);
+                if (status < 0) return status;
+            }
+            // These attribute forms have fixed arguments and no named assignments.
             return end - cursor[0] == 2 && U16(image, (uint)cursor[0]) == 0 ? 0 : -2;
         }
 

@@ -1009,6 +1009,11 @@ namespace PortableCompiler
                         dispatch.AddAllocation(reflection.AssemblyMetadata.Vector);
                         exceptionTags |= ExceptionTypes.ArgumentNull;
                     }
+                    if (reflection.NeutralResources.Attribute != 0)
+                    {
+                        dispatch.AddAllocation(reflection.NeutralResources.Attribute);
+                        exceptionTags |= ExceptionTypes.ArgumentNull;
+                    }
                     ValueObjectOperands.LowerManaged(records, depths, states, maximum);
                     status = projections.BindReachable(records, depths, states, maximum, objects, location);
                     if (status < 0) return status;
@@ -1629,6 +1634,8 @@ namespace PortableCompiler
                 if (length < 0) return length;
             }
             length = reflection.AssemblyMetadata.Write(moduleCode, length, bodyOffsets, sizes, hostImports, reflection);
+            if (length < 0) return length;
+            length = reflection.NeutralResources.Write(moduleCode, length, bodyOffsets, sizes, hostImports, reflection);
             if (length < 0) return length;
             var projectionHelpers = new int[ValueFieldProjectionWasm.HelperCount];
             for (int helper = 0; helper < projectionHelpers.Length; helper++)
@@ -2405,8 +2412,14 @@ namespace PortableCompiler
                     status = MethodInstantiations.ReadArguments(bundle, image, layout, heaps, owner,
                         context, objects, methodArguments, spec, types);
                     if (status < 0) return status;
-                    bool assemblyMetadata = !instance && !checkReceiver && types.Length == 1 &&
-                        RuntimeAssemblyMetadata.IsQuery(targetImage, targetLayout, targetHeaps, targetOwner, row, objects, types[0]);
+                    RuntimeAssemblyMetadata attributeQuery = null;
+                    if (!instance && !checkReceiver && types.Length == 1)
+                    {
+                        if (reflection.AssemblyMetadata.IsQuery(targetImage, targetLayout, targetHeaps, targetOwner, row, objects, types[0]))
+                            attributeQuery = reflection.AssemblyMetadata;
+                        else if (reflection.NeutralResources.IsQuery(targetImage, targetLayout, targetHeaps, targetOwner, row, objects, types[0]))
+                            attributeQuery = reflection.NeutralResources;
+                    }
                     var deferred = new int[8];
                     var constructors = new int[types.Length];
                     int constraints = GenericParameters.Check(targetImage, targetHeaps, targetLayout, row,
@@ -2416,18 +2429,18 @@ namespace PortableCompiler
                     if (status < 0) return status;
                     if (constraints != 0)
                     {
-                        constraints = assemblyMetadata ? RuntimeAssemblyMetadata.CheckConstraint(targetImage, targetLayout,
+                        constraints = attributeQuery != null ? RuntimeAssemblyMetadata.CheckConstraint(targetImage, targetLayout,
                             targetHeaps, targetOwner, objects, types[0], deferred) :
                             BundleConstraints.Check(bundle, targetImage, targetLayout, targetHeaps,
                                 targetOwner, objects, types, deferred, method: true, context: targetContext);
                         if (constraints < 0) return constraints;
                     }
-                    else if (assemblyMetadata) return -2;
+                    else if (attributeQuery != null) return -2;
 
-                    if (assemblyMetadata)
+                    if (attributeQuery != null)
                     {
                         var query = new int[1];
-                        functions = reflection.AssemblyMetadata.Bind(bundle, targetImage, targetLayout, targetHeaps,
+                        functions = attributeQuery.Bind(bundle, targetImage, targetLayout, targetHeaps,
                             targetOwner, row, types[0], objects, globals, literals, literalSize, reflection,
                             owners, rows, contexts, bases, indices, arities, offsets, signatures, functions, query);
                         if (functions < 0) return functions;
