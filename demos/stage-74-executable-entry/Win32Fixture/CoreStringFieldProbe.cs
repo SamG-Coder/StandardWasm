@@ -11,6 +11,18 @@ public static class CoreStringFieldProbe
         catch (NullReferenceException) { return -1; }
     }
 
+    public static int CheckCoreStringContains(int mode)
+    {
+        string value = mode == 0 ? "" : mode == 1 ? "abc" : mode == 2 ? "a\0b" :
+            mode == 3 || mode == 4 ? "\ud83d\ude00" : mode == 5 ? null :
+            mode == 6 ? "\ud800" : mode == 7 ? "abcc" : "\uffff";
+        char needle = mode == 0 || mode == 1 || mode == 2 ? '\0' :
+            mode == 3 ? '\ud83d' : mode == 4 ? '\ude00' : mode == 6 ? '\ud801' :
+            mode == 7 ? 'c' : '\uffff';
+        try { return value.Contains(needle) ? 1 : 0; }
+        catch (NullReferenceException) { return -1; }
+    }
+
     public static int CheckCoreStringTrim(int mode)
     {
         string input = mode == 0 ? "" : mode == 1 ? "abc" : mode == 2 ? "  a b\t" :

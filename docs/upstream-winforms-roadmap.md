@@ -188,13 +188,15 @@ body. The compiler now preserves the duplicated span receiver in CoreLib's
 `Path.JoinInternal` when the method computes the element index from the span
 length. The normal compiler entry point now activates private finalizer
 registration and suppression when it links CoreLib's `GC.SuppressFinalize`.
-The original startup bundle advances to `Path.GetFullPath` at `IL_002a`,
-where the original method calls `String.Contains(char)` to check for embedded
-nulls. Stage 152 compares five cases through the normal entry point, including
+Stage 152 compares five cases through the normal entry point, including
 the null argument exception. The launcher retries compiler workspace
-exhaustion with a larger buffer. The original application reached the
-`Path.GetFullPath` diagnostic with a 2 MiB workspace. Production
-collection scheduling, host roots, and re-registration remain open.
+exhaustion with a larger buffer. CoreLib's `Path.GetFullPath` now uses the
+Wasm UTF-16 string backing array for the original ordinal code-unit search
+in `String.Contains(char)`. The original startup bundle advances to the
+static reference address in `AppDomain.get_CurrentDomain` at `IL_0007`.
+CoreLib passes that address to `Interlocked.CompareExchange` to publish the
+domain. Production collection scheduling, host roots, and re-registration
+remain open.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

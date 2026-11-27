@@ -58,6 +58,7 @@ Console.WriteLine(JsonSerializer.Serialize(new { executable, results, errors = n
     compiledWhitespace = new[] { 0, 32, 133, 160, 5760, 8192, 8203, 8232, 12288, 65535 }
         .Select(StaticByteSpanProbe.CheckCoreWhitespace).ToArray(),
     compiledStringField = Enumerable.Range(0, 5).Select(CoreStringFieldProbe.CheckCoreStringFirstCharacter).ToArray(),
+    compiledStringContains = Enumerable.Range(0, 9).Select(CoreStringFieldProbe.CheckCoreStringContains).ToArray(),
     compiledStringTrim = Enumerable.Range(0, 8).Select(CoreStringFieldProbe.CheckCoreStringTrim).ToArray(),
     scopedWritableSpan = new[] { 0, 65, 0x2000, 0xffff }.Select(ScopedSpanProbe.ScopedWritableSpan).ToArray(),
     scopedReceiverReset = new[] { 0, 65, 0x2000, 0xffff }.Select(ScopedSpanProbe.CheckScopedReceiverReset).ToArray(),

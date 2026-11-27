@@ -468,28 +468,33 @@ namespace PortableCompiler
                     used = StringWasm.CopyRange(code, used, source, start, length, scratch);
                     used = Local(code, used, 0x21, source);
                 }
-                else if (kind == StringLength || kind == StringCharacter)
+                else if (kind == StringLength || kind == StringCharacter || kind == StringContainsCodeUnit)
                 {
-                    int at = top - (kind == StringCharacter ? 1 : 0);
+                    int at = top - (kind == StringLength ? 0 : 1);
                     int reference = Spill(spills, maximum, spillFlags, states[state + at], at);
                     used = GuardNull(code, used, reference);
-                    if (kind == StringCharacter)
-                        used = GuardArrayIndex(code, used, reference, spills + top, true);
-                    used = Local(code, used, 0x20, reference);
-                    used = StringWasm.Unwrap(code, used);
-                    if (kind == StringCharacter)
-                    {
-                        used = Local(code, used, 0x20, spills + top);
-                        code[used++] = 0xfb;
-                        code[used++] = 0x0d;
-                        code[used++] = 4;
-                    }
+                    if (kind == StringContainsCodeUnit)
+                        used = StringWasm.ContainsCodeUnit(code, used, reference, spills + top, spills + at, scratch);
                     else
                     {
-                        code[used++] = 0xfb;
-                        code[used++] = 0x0f;
+                        if (kind == StringCharacter)
+                            used = GuardArrayIndex(code, used, reference, spills + top, true);
+                        used = Local(code, used, 0x20, reference);
+                        used = StringWasm.Unwrap(code, used);
+                        if (kind == StringCharacter)
+                        {
+                            used = Local(code, used, 0x20, spills + top);
+                            code[used++] = 0xfb;
+                            code[used++] = 0x0d;
+                            code[used++] = 4;
+                        }
+                        else
+                        {
+                            code[used++] = 0xfb;
+                            code[used++] = 0x0f;
+                        }
+                        used = Local(code, used, 0x21, spills + at);
                     }
-                    used = Local(code, used, 0x21, spills + at);
                 }
                 else if (kind == ConsoleReadLine)
                 {

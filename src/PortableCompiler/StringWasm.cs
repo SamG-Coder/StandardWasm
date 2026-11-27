@@ -162,6 +162,37 @@ namespace PortableCompiler
             return used;
         }
 
+        internal static int ContainsCodeUnit(byte[] code, int used, int source, int needle, int result, int scratch)
+        {
+            int array = scratch, length = scratch + 3, index = scratch + 4;
+            used = Unwrap(code, Local(code, used, 0x20, source));
+            used = Local(code, used, 0x21, array);
+            used = Local(code, Length(code, used, array), 0x21, length);
+            used = Local(code, Zero(code, used), 0x21, result);
+            used = Local(code, Zero(code, used), 0x21, index);
+            code[used++] = 0x02; code[used++] = 0x40; // search block
+            code[used++] = 0x03; code[used++] = 0x40; // loop
+            used = Local(code, used, 0x20, index);
+            used = Local(code, used, 0x20, length);
+            code[used++] = 0x46; // i32.eq
+            code[used++] = 0x0d; code[used++] = 1; // exhausted
+
+            // Equality is on one UTF-16 unit, including isolated surrogate units.
+            used = Character(code, used, array, index);
+            used = Local(code, used, 0x20, needle);
+            code[used++] = 0x46; // i32.eq
+            used = Local(code, used, 0x22, result);
+            code[used++] = 0x0d; code[used++] = 1; // found
+            used = Local(code, used, 0x20, index);
+            used = BranchWasm.Const(code, used, 1);
+            code[used++] = 0x6a; // i32.add
+            used = Local(code, used, 0x21, index);
+            code[used++] = 0x0c; code[used++] = 0;
+            code[used++] = 0x0b;
+            code[used++] = 0x0b;
+            return used;
+        }
+
         private static int SetTrue(byte[] code, int used, int result)
         {
             code[used++] = 0x41; code[used++] = 1;

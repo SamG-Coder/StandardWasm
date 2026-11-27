@@ -519,6 +519,8 @@ namespace PortableCompiler
                     else if (resourceOpen) status = ResourceOpenIl.Decode(image, body, records, location, parameters);
                     else if (parameters == 3 && locals == 1 && frame[parameters] == Native &&
                         CoreStringRange.Lower(image, layout, heaps, source, body, records)) status = 0;
+                    else if (parameters == 2 && locals == 0 && frame[0] == String &&
+                        CoreStringSearch.Lower(image, layout, heaps, source, body, records)) status = 0;
                     else status = BranchIl.Decode(image, body[0], body[1], parameters, locals, records,
                         location, catchRegion.Length != 0, filterEnds: filterEnds);
                     if (status < 0)
@@ -906,7 +908,7 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || kind == BranchIl.ClearInteriorField || nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit ||
-                                kind == BranchIl.StringRange || kind == BranchIl.InvokeDelegate ||
+                                kind == BranchIl.StringRange || kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection || kind == BranchIl.GetObjectType ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.ReadStaticUInt16 || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
                                 kind == BranchIl.LoadManagedCell || kind == BranchIl.StoreManagedCell || kind == BranchIl.ClearManagedCell ||
@@ -969,7 +971,8 @@ namespace PortableCompiler
                     {
                         int kind = records[slot];
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
-                            kind == BranchIl.ConsoleWrite || kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine) frameShape[5] = 1;
+                            kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.ConsoleWrite ||
+                            kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine) frameShape[5] = 1;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
                             frameShape[6] = 1;
@@ -2238,7 +2241,10 @@ namespace PortableCompiler
                 }
                 else if (records[slot + 3] != 0)
                 {
-                    if (!hasReceiver || (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) != 0)
+                    // The canonical String receiver has a GC representation
+                    // even though it is below the nominal class type range.
+                    if ((!hasReceiver && (arities[index] == 0 || signatures[signature + 1] != String)) ||
+                        (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) != 0)
                         return -2;
                 }
                 records[slot + 1] = index;
