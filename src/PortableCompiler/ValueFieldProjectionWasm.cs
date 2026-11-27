@@ -89,7 +89,7 @@ namespace PortableCompiler
             int vector = kind == Scalar ? Ints : kind == BooleanScalar ? Bytes :
                 kind == WideScalar ? Longs : kind == NativeScalar ? NativeVector : projections.ReferenceVector;
             int scalarLocation = kind == Scalar ? Int32Location : kind == WideScalar ? Int64Location :
-                kind == BooleanScalar ? BooleanLocation : 0;
+                kind == BooleanScalar ? BooleanLocation : kind == NativeScalar ? NativeIntLocation : 0;
             const int address = 0, replacement = 1;
             int parent = write ? 2 : 1;
             int descriptor = aggregate ? parent + 1 : address;

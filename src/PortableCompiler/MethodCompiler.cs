@@ -2584,8 +2584,9 @@ namespace PortableCompiler
                             continue;
                         }
                         bool valueOwner = ObjectLayouts.IsValueType(objects, fieldOwner);
-                        int classScalar = !valueOwner && (fieldStorage == I32 || fieldStorage == I64 || fieldStorage == Unsigned8) &&
-                            !ObjectLayouts.IsInterface(objects, fieldOwner) ? fieldStorage : 0;
+                        bool classField = fieldStorage == I32 || fieldStorage == I64 || fieldStorage == Unsigned8 || fieldStorage == Native;
+                        int classScalar = !valueOwner && classField && !ObjectLayouts.IsInterface(objects, fieldOwner)
+                            ? fieldStorage : 0;
                         if (classScalar != 0 || valueOwner && !ObjectLayouts.IsExplicitValue(objects, fieldOwner) &&
                             !ObjectLayouts.IsByRefLikeValue(objects, fieldOwner))
                         {

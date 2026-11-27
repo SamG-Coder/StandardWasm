@@ -23,7 +23,7 @@ namespace PortableCompiler
         }
 
         internal const int Scalar = 1, Reference = 2, Aggregate = 4, ClassScalar = 8, BooleanScalar = 16,
-            WideScalar = 32, ClassWideScalar = 64, ClassBooleanScalar = 128, NativeScalar = 256;
+            WideScalar = 32, ClassWideScalar = 64, ClassBooleanScalar = 128, NativeScalar = 256, ClassNativeScalar = 512;
 
         internal static int Kind(int location) => location == Int32Location ? Scalar :
             location == BooleanLocation ? BooleanScalar : location == Int64Location ? WideScalar :
@@ -40,7 +40,7 @@ namespace PortableCompiler
 
         private static int ClassKind(int location) =>
             location == Int32Location ? ClassScalar : location == Int64Location ? ClassWideScalar :
-            location == BooleanLocation ? ClassBooleanScalar : 0;
+            location == BooleanLocation ? ClassBooleanScalar : location == NativeIntLocation ? ClassNativeScalar : 0;
         internal bool Aggregates => (KnownKinds & Aggregate) != 0;
 
         internal int Owner(int selector) => fields[selector * Width];
@@ -137,6 +137,9 @@ namespace PortableCompiler
                 // Boolean and Byte share the packed Wasm field but have
                 // distinct CLI signatures and byref semantics.
                 if (classStorage == Unsigned8) return type == GenericScalar.Key(2) ? BooleanLocation : -2;
+                // Native words retain their CLI byref kind even though wasm32 stores them as i32.
+                if (classStorage == Native)
+                    return type == GenericScalar.Key(0x18) ? NativeIntLocation : -2;
                 return ManagedReferenceSignatures.ElementLocation(objects, type) == Int64Location ? Int64Location : -2;
             }
             int location = ManagedReferenceSignatures.ReadLocation(bundle, image, layout, heaps,
