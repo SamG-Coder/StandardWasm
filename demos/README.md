@@ -312,6 +312,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [326 · Window and thread message posts](stage-326-window-message-posts/README.md) | `npm run demo -- stage-326-window-message-posts` | Compare HWND posts and filtered peeks on one guest queue |
 | [327 · Neutral resource language](stage-327-neutral-resource-language/README.md) | `npm run demo -- stage-327-neutral-resource-language` | Materialize a genuine neutral resource-language attribute from the assembly manifest |
 | [341 · Fixed-buffer copies](stage-341-mutable-fixed-buffer-copies/README.md) | `npm run demo -- stage-341-mutable-fixed-buffer-copies` | Preserve all native fixed-buffer elements across aggregate value copies |
+| [342 · Native UTF-16 string construction](stage-342-native-utf16-string-constructor/README.md) | `npm run demo -- stage-342-native-utf16-string-constructor` | Link the CoreLib pointer constructor and copy native UTF-16 into a managed string |
 
 ## Adding a stage
 

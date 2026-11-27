@@ -558,6 +558,13 @@ namespace PortableCompiler
                     used = StringWasm.AllocateForConstruction(code, used, Spill(spills, maximum, spillFlags, states[state + top], top));
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, String, top));
                 }
+                else if (kind == NativeUtf16Length)
+                    used = Utf16MemoryWasm.Length(code, used, Spill(spills, maximum, spillFlags, Native, top),
+                        scratch + 3, Spill(spills, maximum, spillFlags, I32, top));
+                else if (kind == CopyNativeConstructionString)
+                    used = Utf16MemoryWasm.CopyIntoConstruction(code, used, Spill(spills, maximum, spillFlags, String, top - 2),
+                        Spill(spills, maximum, spillFlags, Native, top - 1), Spill(spills, maximum, spillFlags, Native, top),
+                        scratch, scratch + 3);
                 else if (kind == CopyConstructionString)
                     used = StringWasm.CopyForConstruction(code, used, Spill(spills, maximum, spillFlags, String, top - 2),
                         Spill(spills, maximum, spillFlags, I32, top - 1), Spill(spills, maximum, spillFlags, String, top), scratch);

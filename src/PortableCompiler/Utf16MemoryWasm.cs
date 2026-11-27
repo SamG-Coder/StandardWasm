@@ -5,6 +5,70 @@ namespace PortableCompiler
     internal static class Utf16MemoryWasm
     {
         internal const int PinCapacity = StackAllocationWasm.Capacity + 320;
+        internal const int ConstructionCapacity = 120;
+
+        internal static int Length(byte[] code, int used, int address, int cursor, int result)
+        {
+            used = Local(code, used, 0x20, address);
+            used = Local(code, used, 0x21, cursor);
+            code[used++] = 0x02; code[used++] = 0x40; // scan exit
+            code[used++] = 0x03; code[used++] = 0x40; // scan loop
+            used = Local(code, used, 0x20, cursor);
+            used = LinearMemoryWasm.Load(code, used, 0x49, 0);
+            code[used++] = 0x45;
+            code[used++] = 0x0d; code[used++] = 1;
+            used = Local(code, used, 0x20, cursor);
+            used = Const(code, used, 2);
+            code[used++] = 0x6a;
+            used = Local(code, used, 0x22, cursor);
+            used = Local(code, used, 0x20, address);
+            code[used++] = 0x49; // i32.lt_u: reject a wrapped wasm32 address
+            code[used++] = 0x04; code[used++] = 0x40;
+            code[used++] = 0x00;
+            code[used++] = 0x0b;
+            code[used++] = 0x0c; code[used++] = 0;
+            code[used++] = 0x0b;
+            code[used++] = 0x0b;
+            used = Local(code, used, 0x20, cursor);
+            used = Local(code, used, 0x20, address);
+            code[used++] = 0x6b;
+            used = Const(code, used, 1);
+            code[used++] = 0x76; // i32.shr_u: code units, including unaligned inputs
+            return Local(code, used, 0x21, result);
+        }
+
+        internal static int CopyIntoConstruction(byte[] code, int used, int destination, int address,
+            int length, int chars, int index)
+        {
+            used = Local(code, used, 0x20, destination);
+            used = StringWasm.Unwrap(code, used);
+            used = Local(code, used, 0x21, chars);
+            used = Const(code, used, 0);
+            used = Local(code, used, 0x21, index);
+            code[used++] = 0x02; code[used++] = 0x40;
+            code[used++] = 0x03; code[used++] = 0x40;
+            used = Local(code, used, 0x20, index);
+            used = Local(code, used, 0x20, length);
+            code[used++] = 0x46;
+            code[used++] = 0x0d; code[used++] = 1;
+            used = Local(code, used, 0x20, chars);
+            used = Local(code, used, 0x20, index);
+            used = Local(code, used, 0x20, address);
+            used = Local(code, used, 0x20, index);
+            used = Const(code, used, 1);
+            code[used++] = 0x74;
+            code[used++] = 0x6a;
+            used = LinearMemoryWasm.Load(code, used, 0x49, 0);
+            used = Gc(code, used, 14, SignatureTypes.Chars);
+            used = Local(code, used, 0x20, index);
+            used = Const(code, used, 1);
+            code[used++] = 0x6a;
+            used = Local(code, used, 0x21, index);
+            code[used++] = 0x0c; code[used++] = 0;
+            code[used++] = 0x0b;
+            code[used++] = 0x0b;
+            return used;
+        }
 
         // Null remains address zero. A string already pinned by a live frame keeps its
         // address (PinRegistryWasm), as on the CLR. Otherwise it gets a frame-owned copy,

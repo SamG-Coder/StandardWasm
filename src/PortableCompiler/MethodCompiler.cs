@@ -761,6 +761,7 @@ namespace PortableCompiler
                         CoreStringSpanCopy.Lower(bundle, image, layout, heaps, owner, source, records, objects, catchRegion);
                     CoreStringCreation.Lower(bundle, image, layout, heaps, owner, source, methodArguments,
                         frame, records, objects, catchRegion);
+                    CoreStringPointer.Lower(image, layout, heaps, source, body, records);
                     CoreStringConcat.Lower(image, layout, heaps, source, frame, parameters, locals, records, catchRegion);
                     if (falseBooleans.IsClone(bases[owner] + source, current))
                     {
@@ -1215,6 +1216,12 @@ namespace PortableCompiler
                             records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
                             IsNativeInteger(states[pc * maximum + depths[pc] - 1 - (fieldStore ? 2 : 1)]);
                         if (nativeField) linearMemory = true;
+                        if (depths[pc] != 0 && (kind == BranchIl.NativeUtf16Length || kind == BranchIl.CopyNativeConstructionString))
+                        {
+                            linearMemory = true;
+                            if (capacity > int.MaxValue - Utf16MemoryWasm.ConstructionCapacity) return -3;
+                            capacity += Utf16MemoryWasm.ConstructionCapacity;
+                        }
                         if ((kind == BranchIl.LocalAllocate || kind == BranchIl.PinString || kind == BranchIl.PinStaticBytes ||
                             kind == BranchIl.CallPinnedCharacterNative || kind == BranchIl.PinScopedValue) && depths[pc] != 0)
                         {
@@ -1482,6 +1489,7 @@ namespace PortableCompiler
                         int kind = records[slot];
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
                             kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.StringFromSpan || kind == BranchIl.ConsoleWrite ||
+                            kind == BranchIl.NativeUtf16Length || kind == BranchIl.CopyNativeConstructionString ||
                             kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine || kind == BranchIl.CopyCharacterSpan ||
                             kind == BranchIl.FindCharacterInSpan || kind == BranchIl.CopyConstructionString) frameShape[5] |= 1;
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
@@ -2880,6 +2888,33 @@ namespace PortableCompiler
                     records[slot] = BranchIl.StringFromSpan;
                     records[slot + 1] = empty;
                     records[slot + 3] = CharacterSpan;
+                    continue;
+                }
+                if ((kind == BranchIl.NewObject && records[slot + 3] == 0 ||
+                    kind == BranchIl.MemberCall && records[slot + 3] == 0x73) &&
+                    CoreStringPointer.IsConstructor(image, layout, heaps, target, kind == BranchIl.MemberCall))
+                {
+                    var identity = new int[2];
+                    int status = RuntimeTypeTokens.FindCoreType(bundle, "String", identity);
+                    if (status < 0) return status;
+                    int core = identity[0];
+                    byte[] coreImage = bundle.Get(core);
+                    var coreLayout = new int[4];
+                    var coreHeaps = new int[8];
+                    if (CompressedTables.FindWithHeaps(coreImage, coreLayout, coreHeaps) < 0) return -1;
+                    int helper = CoreStringPointer.FindHelper(coreImage, coreLayout, coreHeaps, identity[1]);
+                    if (helper < 0) return helper;
+                    int constructorIndex = Lookup(owners, rows, contexts, bases, indices, functions, core, helper, 0);
+                    if (constructorIndex < 0)
+                    {
+                        constructorIndex = functions;
+                        functions = Register(bundle, coreImage, coreLayout, coreHeaps, core, helper, 0,
+                            owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions);
+                        if (functions < 0) return functions;
+                    }
+                    records[slot] = BranchIl.Call;
+                    records[slot + 1] = constructorIndex;
+                    records[slot + 3] = 0;
                     continue;
                 }
                 if (kind == BranchIl.NewObject && records[slot + 3] == 0 ||
