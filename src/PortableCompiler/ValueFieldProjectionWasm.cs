@@ -174,7 +174,7 @@ namespace PortableCompiler
         private static int ClassScalars(byte[] code, int used, int[] objects, ValueFieldProjections projections,
             int address, int replacement, bool write)
         {
-            if (code.Length - used < 16) return -3;
+            if (code.Length - used < 96) return -3;
             used = ManagedLocationWasm.LoadField(code, used, address, 1);
             used = Const(code, used, 0);
             code[used++] = 0x48; // i32.lt_s
@@ -183,7 +183,7 @@ namespace PortableCompiler
             {
                 int owner = projections.Owner(i);
                 if (IsValueType(objects, owner)) continue;
-                if (code.Length - used < 36) return -3;
+                if (code.Length - used < 96) return -3;
                 used = ManagedLocationWasm.LoadField(code, used, address, 1);
                 used = Const(code, used, ~i);
                 code[used++] = 0x46; // i32.eq
