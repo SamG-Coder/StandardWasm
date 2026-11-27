@@ -604,6 +604,14 @@ namespace PortableCompiler
                     used = LinearMemoryWasm.GuardNull(code, used, address);
                     used = NativeAggregates.Clear(code, used, nativePlans, records[slot + 3] - 1, address);
                 }
+                else if (kind == PinString)
+                {
+                    // The String scratch bank supplies the Char[] and two i32 locals.
+                    int source = Spill(spills, maximum, String, top);
+                    if (records[slot + 3] != 0) used = GuardNull(code, used, source);
+                    used = Utf16MemoryWasm.Pin(code, used, source, scratch, scratch + 3, scratch + 4,
+                        Spill(spills, maximum, Native, top), stackPointer, stackBase, stackLimit, pcLocal);
+                }
                 else if (kind == LocalAllocate)
                 {
                     int size = Spill(spills, maximum, states[state + top], top);
