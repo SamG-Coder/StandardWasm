@@ -114,7 +114,7 @@ namespace PortableCompiler
             return 0;
         }
 
-        private static int CheckInterfaceMap(BundleImages bundle, int[] objects, int type, int[] layout, int[] heaps)
+        internal static int CheckInterfaceMap(BundleImages bundle, int[] objects, int type, int[] layout, int[] heaps)
         {
             byte[] image = bundle.Get(AssemblyOf(objects, type));
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;

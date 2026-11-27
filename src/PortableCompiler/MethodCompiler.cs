@@ -1373,6 +1373,8 @@ namespace PortableCompiler
                 sizes[functions] = length - bodyOffsets[functions];
                 functions++;
             }
+            length = reflection.TypeRelations.Write(bundle, moduleCode, length, objects, globals, bodyOffsets, sizes);
+            if (length < 0) return length;
             var projectionHelpers = new int[ValueFieldProjectionWasm.HelperCount];
             for (int helper = 0; helper < projectionHelpers.Length; helper++)
             {
@@ -1536,6 +1538,26 @@ namespace PortableCompiler
                 }
                 if ((kind == BranchIl.Call || kind == BranchIl.MemberCall) &&
                     RuntimeTypeTokens.LowerExactHandleGetter(image, layout, heaps, records, slot, clauses)) continue;
+                if (kind == BranchIl.Call && records[slot + 3] == 1 ||
+                    kind == BranchIl.MemberCall && records[slot + 3] == 0x6f)
+                {
+                    if (RuntimeTypeMetadata.IsTypeAssignableFrom(image, heaps, layout, records[slot + 1], kind == BranchIl.Call))
+                    {
+                        var argument = new[] { -1 };
+                        int literalReceiver = RuntimeTypeRelations.LiteralReceiver(records, slot, clauses, argument);
+                        if (literalReceiver >= 0)
+                        {
+                            var helper = new int[1];
+                            functions = reflection.TypeRelations.Bind(bundle, objects, globals, literalReceiver, argument[0],
+                                owners, arities, offsets, signatures, functions, helper);
+                            if (functions < 0) return functions;
+                            records[slot] = BranchIl.Call;
+                            records[slot + 1] = helper[0];
+                            records[slot + 3] = 0;
+                            continue;
+                        }
+                    }
+                }
                 if (kind == BranchIl.LoadTypeToken)
                 {
                     int explicitCall = ExactTypeInitialization.MatchCall(image, layout, heaps, records, slot, clauses);
