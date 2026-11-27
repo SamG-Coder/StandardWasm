@@ -189,11 +189,12 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
 
     const module = await compile(["Exchange", "Read", "LookupModule", "Create", "Lifecycle", "PointerRoundTrip", "NativeLocalAlias", "NativeAggregateAlias",
         "Alias", "Sum", "LockRoundTrip", "ReleaseDepth", "MatchPair", "ObjectSpanAliases", "ObjectSpanBounds",
-        "DpiValid", "DpiAwareness", "DpiApply", "DpiCurrent", "DpiIsAware", "BooleanAliases", "BooleanWithMonitor",
+        "DpiValid", "DpiAwareness", "DpiApply", "DpiCurrent", "DpiIsAware", "DpiReadProcessAwareness",
+        "BooleanAliases", "BooleanWithMonitor",
         "GenericBooleanLocations", "GenericStringLocations"]);
     const nativeImports = new Set(WebAssembly.Module.imports(module)
         .filter(entry => entry.module === "standardwasm:win32").map(entry => entry.name));
-    for (const name of ["createActCtxW", "getCurrentActCtx", "activateActCtx", "deactivateActCtx", "releaseActCtx"])
+    for (const name of ["createActCtxW", "getCurrentActCtx", "activateActCtx", "deactivateActCtx", "releaseActCtx", "getProcessDpiAwareness"])
         if (!nativeImports.has(name)) throw Error("The generated fixture omitted " + name);
     const { exports } = await instantiate(module, compiler,
         [{ path: framework.name, bytes: new Uint8Array(framework.bytes) }]);
@@ -325,11 +326,16 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
     for (const scenario of dpiScenarios) {
         const { exports: probe } = await instantiate(module, compiler, []);
         const contexts = [0, -1, -2, -3, -4, -5, -6];
-        dpi.push({
+        const query = () => [0, -1, 1, 17].map(probe.DpiReadProcessAwareness);
+        const result = {
             valid: contexts.map(probe.DpiValid), awareness: contexts.map(probe.DpiAwareness),
-            initial: probe.DpiCurrent(),
-            steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
-        });
+            initial: probe.DpiCurrent(), steps: [], processQueries: [query()]
+        };
+        for (const mode of scenario) {
+            result.steps.push([probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()]);
+            result.processQueries.push(query());
+        }
+        dpi.push(result);
     }
     return { legacy, mixedErrors, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, enumVectors, windowEnabled, systemRandom, randomStatuses, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringContains, stringTrim, scopedWritableSpan, scopedReceiverReset, scopedNestedValue, spanFromEnd, spanSlices, stringsFromSpan, stackBackedSpan, scopedReference, characterCallbacks, stringCreation, staticEventCallbacks, debuggerStatus, exactValueReads, byteSpan, byteLocations, whitespace, dpi };
 }
@@ -466,7 +472,7 @@ try {
         console.log("Calls to a final generic method matched the CLR for live and null receivers.");
         console.log("Six generic Boolean and string location cases matched the CLR in Node and Edge.");
         console.log("Five managed Boolean alias cases matched the CLR in Node and Edge.");
-        console.log("Four isolated DPI startup sequences matched Windows CLR in Node and Edge.");
+        console.log("Four isolated DPI startup sequences and 64 process awareness queries matched Windows CLR in Node and Edge.");
         console.log("Single-object spans matched CLR argument and local aliasing and typed bounds failures.");
         console.log("Two-type exception filters matched the CLR for both matches, a rejection, and normal completion.");
         console.log("Monitor reentrancy, lockTaken, and three typed failure paths matched the CLR.");

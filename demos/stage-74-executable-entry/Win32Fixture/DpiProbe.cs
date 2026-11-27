@@ -50,6 +50,29 @@ public static class DpiProbe
     [DllImport("USER32.dll", ExactSpelling = true)]
     private static extern BOOL IsProcessDPIAware();
 
+    private enum PROCESS_DPI_AWARENESS : int { Unaware, SystemAware, PerMonitorAware }
+
+    [DllImport("api-ms-win-shcore-scaling-l1-1-1.dll", ExactSpelling = true)]
+    private static unsafe extern HRESULT GetProcessDpiAwareness(HANDLE process, PROCESS_DPI_AWARENESS* awareness);
+
+    private static unsafe HRESULT GetProcessDpiAwareness(HANDLE process, out PROCESS_DPI_AWARENESS awareness)
+    {
+        fixed (PROCESS_DPI_AWARENESS* pointer = &awareness)
+            return GetProcessDpiAwareness(process, pointer);
+    }
+
+    public static unsafe int DpiReadProcessAwareness(int handle)
+    {
+        PROCESS_DPI_AWARENESS awareness = (PROCESS_DPI_AWARENESS)42;
+        Marshal.SetLastSystemError(73);
+        Marshal.SetLastPInvokeError(91);
+        int result = GetProcessDpiAwareness(new HANDLE((void*)(nint)handle), out awareness).Value;
+        int system = Marshal.GetLastSystemError();
+        int pinvoke = Marshal.GetLastPInvokeError();
+        int status = result == 0 ? 0 : result == unchecked((int)0x80070057) ? 1 : 2;
+        return ((int)awareness + 1) * 1000000 + status * 100000 + system * 100 + pinvoke;
+    }
+
     public static int DpiValid(int mode) => IsValidDpiAwarenessContext(new DPI_AWARENESS_CONTEXT(mode)).Value;
 
     public static int DpiAwareness(int mode) => GetAwarenessFromDpiAwarenessContext(new DPI_AWARENESS_CONTEXT(mode));

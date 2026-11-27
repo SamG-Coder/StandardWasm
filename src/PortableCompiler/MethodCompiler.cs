@@ -465,6 +465,21 @@ namespace PortableCompiler
                         continue;
                     }
                 }
+                if (stub < 0 && DpiQueryBinding.IsWrapper(image, heaps, layout, source))
+                {
+                    int member = Win32ModuleBinding.GetProcessAwareness;
+                    int shape = offsets[current];
+                    if (!Win32ModuleBinding.MatchesSignature(bundle, objects, member, signatures, shape, arities[current]))
+                        return -2;
+                    hostUse[0] = hostUse[0] | WasmImports.Win32NativeFeature(member);
+                    exceptionTags |= ExceptionTypes.NullReference;
+                    if (moduleCode.Length - length < Win32ModuleWasm.DpiQueryBodyCapacity) return -3;
+                    bodyOffsets[current] = length;
+                    length = Win32ModuleWasm.WriteBody(moduleCode, length, signatures, shape, member,
+                        WasmImports.Win32NativeSlot(hostFeatures, member), hostImports, initializerPrologue, 0);
+                    sizes[current] = length - bodyOffsets[current];
+                    continue;
+                }
                 uint rva = 0;
                 int nativeKind = stub >= 0 ? NativeThunks.None : NativeThunks.Kind(image, layout, source);
                 int nativeDescription = 0;

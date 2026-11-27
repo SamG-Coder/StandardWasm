@@ -47,6 +47,12 @@ validation and queries, modern and legacy setters, and error handling with
 fresh Windows processes. Browser viewport scaling, per-monitor DPI changes,
 and manifest-defined initial awareness are outside this contract.
 
+The compiled process awareness probe follows the SDK's managed
+`GetProcessDpiAwareness` wrapper. The fixed adapter writes the resulting
+enum through the original managed location, including failure writes.
+The verifier checks current-process and pseudo-handle results, invalid
+handles, and both last-error slots against Windows.
+
 Run `node demos/stage-74-executable-entry/verify-win32-host.mjs` on Windows to
 compare the host import contract in Node and Edge against native .NET calls.
 The probe invokes the imports through Wasm. Pass the path to the self-hosted

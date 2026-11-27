@@ -26,6 +26,9 @@ namespace PortableCompiler
                 methodArguments: methodArguments);
             if (type < 0) return type;
             int location = LocationFromIdentity(objects, type);
+            // A managed out enum with 32-bit storage uses the existing scalar cell.
+            if (location == 0 && ObjectLayouts.IsEnumKey(type) && ObjectLayouts.SignatureStorage(objects, type) == I32)
+                location = Int32Location;
             return location != 0 ? location : -2;
         }
 

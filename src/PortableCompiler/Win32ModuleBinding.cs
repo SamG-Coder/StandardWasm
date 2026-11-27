@@ -10,7 +10,7 @@ namespace PortableCompiler
             IsValidDpiContext = 7, SetProcessDpiContext = 8, SetLegacyDpi = 9, SetProcessAwareness = 10,
             GetThreadDpiContext = 11, EqualDpiContexts = 12, GetDpiAwareness = 13, IsProcessDpiAware = 14,
             IsWindowEnabled = 15, EnableWindow = 16, GetWindowLong = 17, GetWindowLongPtr = 18,
-            BCryptGenRandom = 19, Count = BCryptGenRandom;
+            BCryptGenRandom = 19, GetProcessAwareness = 20, Count = GetProcessAwareness;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -21,7 +21,8 @@ namespace PortableCompiler
             member == EqualDpiContexts ? "AreDpiAwarenessContextsEqual" : member == GetDpiAwareness ? "GetAwarenessFromDpiAwarenessContext" :
             member == IsProcessDpiAware ? "IsProcessDPIAware" :
             member == IsWindowEnabled ? "IsWindowEnabled" : member == EnableWindow ? "EnableWindow" :
-            member == GetWindowLong ? "GetWindowLongW" : member == GetWindowLongPtr ? "GetWindowLongPtrW" : "BCryptGenRandom";
+            member == GetWindowLong ? "GetWindowLongW" : member == GetWindowLongPtr ? "GetWindowLongPtrW" :
+            member == GetProcessAwareness ? "GetProcessDpiAwareness" : "BCryptGenRandom";
 
         private static string Library(int member) => member <= ReleaseContext ? "KERNEL32.dll" :
             member == SetProcessAwareness ? "api-ms-win-shcore-scaling-l1-1-1.dll" :
@@ -41,8 +42,8 @@ namespace PortableCompiler
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return 0;
             for (int member = 1; member <= Count; member++)
-                if (UsesLastError(member) ? IsWindowLongImport(image, heaps, methods, counts, row, member) :
-                    NativeImports.Find(image, heaps, methods, counts, Library(member), EntryName(member), row, 0x101) == row)
+                if (member != GetProcessAwareness && (UsesLastError(member) ? IsWindowLongImport(image, heaps, methods, counts, row, member) :
+                    NativeImports.Find(image, heaps, methods, counts, Library(member), EntryName(member), row, 0x101) == row))
                     return member;
             return 0;
         }
@@ -60,8 +61,11 @@ namespace PortableCompiler
 
         internal static bool MatchesSignature(BundleImages bundle, int[] objects, int member, int[] types, int offset, int arity)
         {
-            if (arity != Arity(member)) return false;
             int result = types[offset];
+            if (member == GetProcessAwareness)
+                return arity == 2 && IsAbiShape(bundle, objects, types[offset + 1], Native, "HANDLE") &&
+                    types[offset + 2] == Int32Location && IsAbiShape(bundle, objects, result, I32, "HRESULT");
+            if (arity != Arity(member)) return false;
             if (member == BCryptGenRandom)
                 return types[offset + 1] == Native && types[offset + 2] == Native &&
                     types[offset + 3] == I32 && types[offset + 4] == I32 && result == I32;

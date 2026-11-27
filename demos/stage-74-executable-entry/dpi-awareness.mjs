@@ -1,7 +1,7 @@
 export const dpiImportNames = [
     "isValidDpiAwarenessContext", "setProcessDpiAwarenessContext", "setProcessDPIAware",
     "setProcessDpiAwareness", "getThreadDpiAwarenessContext", "areDpiAwarenessContextsEqual",
-    "getAwarenessFromDpiAwarenessContext", "isProcessDPIAware"
+    "getAwarenessFromDpiAwarenessContext", "isProcessDPIAware", "getProcessDpiAwareness"
 ];
 
 const unaware = -1;
@@ -26,6 +26,12 @@ export function createDpiAwareness(setSystemError) {
         return 0;
     }
 
+    function awareness(value) {
+        if (!isValid(value)) return -1;
+        if (value === unaware || value === unawareGdiScaled) return 0;
+        return value === systemAware ? 1 : 2;
+    }
+
     return {
         isValidDpiAwarenessContext: value => Number(isValid(value)),
         setProcessDpiAwarenessContext(value) {
@@ -45,10 +51,11 @@ export function createDpiAwareness(setSystemError) {
         },
         getThreadDpiAwarenessContext: current,
         areDpiAwarenessContextsEqual: (first, second) => Number(first === second && isValid(first)),
-        getAwarenessFromDpiAwarenessContext(value) {
-            if (!isValid(value)) return -1;
-            if (value === unaware || value === unawareGdiScaled) return 0;
-            return value === systemAware ? 1 : 2;
+        getAwarenessFromDpiAwarenessContext: awareness,
+        getProcessDpiAwareness(handle) {
+            const valid = handle === 0 || handle === -1;
+            if (!valid) setSystemError(invalidParameter);
+            return valid ? [0, awareness(current())] : [hresultInvalidParameter, -1];
         },
         isProcessDPIAware: () => Number(current() !== unaware && current() !== unawareGdiScaled)
     };

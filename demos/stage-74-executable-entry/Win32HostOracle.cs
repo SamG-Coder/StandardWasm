@@ -17,10 +17,15 @@ if (args.Length > 0 && args[0] == "dpi")
     int[] valid = contexts.Select(DpiProbe.DpiValid).ToArray();
     int[] awareness = contexts.Select(DpiProbe.DpiAwareness).ToArray();
     int initial = DpiProbe.DpiCurrent();
+    int[] handles = [0, -1, 1, 17];
+    var processQueries = new List<int[]> { handles.Select(DpiProbe.DpiReadProcessAwareness).ToArray() };
     var steps = new List<int[]>();
     foreach (int mode in args.Skip(1).Select(int.Parse))
+    {
         steps.Add([DpiProbe.DpiApply(mode), Win32ErrorProbe.Read(), DpiProbe.DpiCurrent(), DpiProbe.DpiIsAware()]);
-    Console.WriteLine(JsonSerializer.Serialize(new { valid, awareness, initial, steps }));
+        processQueries.Add(handles.Select(DpiProbe.DpiReadProcessAwareness).ToArray());
+    }
+    Console.WriteLine(JsonSerializer.Serialize(new { valid, awareness, initial, steps, processQueries }));
     return;
 }
 
