@@ -686,6 +686,9 @@ namespace PortableCompiler
                     EnumFlagTests.Lower(bundle, image, layout, heaps, owner, objects, records, catchRegion);
                     ExactManagedReads.FoldExactManagedReads(bundle, image, layout, heaps, owner, context,
                         methodArguments, objects, frame, records, catchRegion);
+                    status = CurrentThreadBinding.Lower(image, heaps, layout, owner, source,
+                        records, catchRegion, frame, parameters, locals, body[2], objects, globals);
+                    if (status < 0) return status;
                     byte[] frameRoots = null;
                     if (tracksFinalizers)
                     {
@@ -1017,6 +1020,11 @@ namespace PortableCompiler
                             if (capacity > int.MaxValue - 320) return -3;
                             capacity += 320;
                         }
+                        if (kind == BranchIl.SetCurrentThreadHandle && depths[slot / BranchIl.Width] != 0)
+                        {
+                            if (capacity > int.MaxValue - CurrentThreadWasm.Capacity) return -3;
+                            capacity += CurrentThreadWasm.Capacity;
+                        }
                         int pc = slot / BranchIl.Width;
                         int operation = records[slot + 1];
                         if ((kind == BranchIl.CallNativeIndirect || kind == BranchIl.CallDynamicNative) && depths[pc] != 0)
@@ -1225,6 +1233,7 @@ namespace PortableCompiler
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection || kind == BranchIl.GetObjectType ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.ReadStaticUInt16 || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
                                 kind == BranchIl.LoadManagedCell || kind == BranchIl.StoreManagedCell || kind == BranchIl.ClearManagedCell ||
+                                kind == BranchIl.SetCurrentThreadHandle ||
                                 kind == BranchIl.LoadObjectIndirect || kind == BranchIl.StoreObjectIndirect ||
                                 kind == BranchIl.LoadObject || kind == BranchIl.StoreObject || kind == BranchIl.InitializeNative ||
                                 (kind == BranchIl.PinString && records[slot + 3] != 0) ||

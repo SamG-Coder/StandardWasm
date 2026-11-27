@@ -1135,6 +1135,16 @@ namespace PortableCompiler
                         used = ManagedValueLocationWasm.WriteSnapshot(code, used, projections, frameShape[7]);
                     }
                 }
+                else if (kind == SetCurrentThreadHandle)
+                {
+                    int location = records[slot + 3];
+                    int type = CellValue(location);
+                    int target = temporaries + type - FirstClass;
+                    used = CurrentThreadWasm.Load(code, used, type, target, records[slot + Width + 1],
+                        records[slot + Width + 2], records[slot + Width + 3], records[slot + 2 * Width + 1]);
+                    int address = Spill(spills, maximum, spillFlags, location, top);
+                    used = ValueFieldProjectionWasm.Write(code, used, frameShape[7], address, target, operand, location, projections);
+                }
                 else if (kind == LoadManagedCell || kind == StoreManagedCell || kind == ClearManagedCell)
                 {
                     int type = records[slot + 3];

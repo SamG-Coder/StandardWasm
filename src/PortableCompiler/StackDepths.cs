@@ -282,7 +282,7 @@ namespace PortableCompiler
             if (kind == StoreManagedCell)
                 return depth >= 2 && Match(stack, depth - 1, extra) &&
                     Assignable(stack[depth - 1], CellValue(extra), objects) ? depth - 2 : -2;
-            if (kind == ClearManagedCell)
+            if (kind == ClearManagedCell || kind == SetCurrentThreadHandle)
                 return Match(stack, depth, extra) ? depth - 1 : -2;
             if (kind == LoadObject || kind == StoreObject || kind == InitializeNative)
             {
