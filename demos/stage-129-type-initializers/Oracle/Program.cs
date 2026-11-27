@@ -23,7 +23,8 @@ foreach (string name in new[]
 {
     "ReachedOnce", "CallAfterArgument", "StoreAfterRightHand", "BeforeFieldInitOnce", "ConstructorTriggers",
     "InheritedField", "Recursion", "CatchInsideInitializer", "BundledDependency", "RelaxedGenericCall",
-    "DistinctObjects", "StaticFieldAlias", "NotNominalClass", "ObjectFailureCaught", "NestedObjectFailure"
+    "DistinctObjects", "StaticFieldAlias", "NotNominalClass", "ObjectFailureCaught", "NestedObjectFailure",
+    "NonAsciiNameFailure"
 })
 {
     var (kernels, context) = Load(name);

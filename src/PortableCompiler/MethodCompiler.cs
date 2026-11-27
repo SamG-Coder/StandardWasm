@@ -1624,21 +1624,24 @@ namespace PortableCompiler
         // Issue #170: binds CoreLib's internal TypeInitializationException(string, string, Exception)
         // for the initializer `source`, writes its type-name and message literals, and registers the
         // global that records the failure. failure[FailureCache] stays 0 (no wrapping, the trap
-        // remains) when the bundle has no such constructor or the name cannot be written exactly.
+        // remains) only when the bundle has no CoreLib TypeInitializationException constructor.
+        // Anything else that prevents wrapping is a diagnostic, never a silent trap.
         private static int BindInitializerFailure(BundleImages bundle, byte[] image, int[] heaps, int[] layout, int owner,
             int source, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets,
             int[] signatures, int[] objects, int functions, int[] globals, byte[] literals, int[] literalSize, int[] failure)
         {
             var found = new int[2];
-            if (InitializerFailures.FindConstructor(bundle, found) < 0 || found[0] < 0) return functions;
+            if (InitializerFailures.FindConstructor(bundle, found) < 0) return -1;
+            if (found[0] < 0) return functions;
             int typeRow = ObjectLayouts.Owner(image, heaps, layout, source, false);
-            if (typeRow < 1) return functions;
+            if (typeRow < 1) return -1;
             int nameStart = literalSize[0];
             int nameLength = InitializerFailures.WriteFullName(image, heaps, layout, typeRow, literals, nameStart);
-            if (nameLength <= 0) return functions;
+            if (nameLength < 0) return nameLength; // malformed metadata or literal capacity, never a silent trap
+            if (nameLength == 0) return -1;
             int messageStart = nameStart + 2 * nameLength;
             int messageLength = InitializerFailures.WriteMessage(literals, messageStart, nameStart, nameLength);
-            if (messageLength <= 0) return functions;
+            if (messageLength < 0) return messageLength;
             byte[] coreLib = bundle.Get(found[0]);
             var coreLayout = new int[4];
             var coreHeaps = new int[8];
@@ -1652,11 +1655,11 @@ namespace PortableCompiler
                 constructor = functions - 1;
             }
             int shape = offsets[constructor];
-            if (arities[constructor] != 4) return functions;
+            if (arities[constructor] != 4) return -1;
             int exceptionType = signatures[shape + 4];
             // Owner 0 with a reserved negative row, as the shadow-stack and pin globals use: an
             // owner of -2 or below would be read as a runtime type descriptor.
-            if (owner > 255 || source >= 1 << 22) return functions;
+            if (owner > 255 || source >= 1 << 22) return -2; // beyond the reserved cache rows
             int cache = StaticFields.Register(globals, 0, int.MinValue + 4096 + (owner << 22) + source, ObjectReference);
             if (cache < 0) return cache;
             literalSize[0] = messageStart + 2 * messageLength;

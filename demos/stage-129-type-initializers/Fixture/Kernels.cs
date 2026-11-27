@@ -59,6 +59,13 @@ namespace TypeInitializerFixture
             public static int Value = Fail();
             static int Fail() => throw new System.NotSupportedException();
         }
+
+        // A valid non-ASCII identifier: its UTF-8 metadata name becomes the UTF-16 FullName.
+        public static class CaféFailure
+        {
+            public static int Value = Fail();
+            static int Fail() => throw new System.InvalidOperationException();
+        }
     }
 
     public static class Unrelated
@@ -300,6 +307,12 @@ namespace TypeInitializerFixture
         public static int NestedObjectFailure()
         {
             try { return Outer.InnerThrows.Value; }
+            catch (TypeInitializationException) { return 3; }
+        }
+
+        public static int NonAsciiNameFailure()
+        {
+            try { return Outer.CaféFailure.Value; }
             catch (TypeInitializationException) { return 3; }
         }
 

@@ -113,8 +113,13 @@ async function runCases(compiler, images, cases) {
                 [name, value === "TypeInitializationException" ? "managed exception" : value]);
             if (JSON.stringify(observed) !== JSON.stringify(expected))
                 throw Error(test.name + " observed " + JSON.stringify(observed) + ", expected " + JSON.stringify(expected));
-            if (thrown.length > 1 && thrown.some(payload => payload !== thrown[0]) && test.name === "ReadFailing")
-                throw Error(test.name + " raised different exception objects on repeated triggers");
+            // Every expected managed exception must have arrived on the object tag (a payload was
+            // observed), and the repeated triggers of ReadFailing must carry one and the same object.
+            const managed = expected.filter(([, value]) => value === "managed exception").length;
+            if (thrown.length !== managed)
+                throw Error(test.name + " observed " + thrown.length + " object-tag payloads, expected " + managed);
+            if (test.name === "ReadFailing" && (managed < 2 || thrown.some(payload => payload !== thrown[0])))
+                throw Error(test.name + " did not raise one exception object on its repeated triggers");
             results.push({ name: test.name, sequence: observed });
             continue;
         }

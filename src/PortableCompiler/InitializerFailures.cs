@@ -112,17 +112,16 @@ namespace PortableCompiler
             return used < 0 ? used : (used - start) / 2;
         }
 
+        // Appends the #Strings entry at index (UTF-8, NUL-terminated within the heap) as UTF-16.
         private static int Copy(byte[] image, int[] heaps, uint index, byte[] literals, int used)
         {
-            uint at = (uint)heaps[2] + index;
-            while (at < image.Length && image[at] != 0)
-            {
-                // A non-ASCII UTF-8 name is not transcoded here; the guard then keeps its trap.
-                if (image[at] >= 0x80) return -2;
-                used = Put(literals, used, image[at++]);
-                if (used < 0) return used;
-            }
-            return used;
+            uint limit = (uint)heaps[3];
+            if (index >= limit) return -1;
+            int start = heaps[2] + (int)index, end = start;
+            while (end < heaps[2] + (int)limit && image[end] != 0) end++;
+            if (end == heaps[2] + (int)limit) return -1; // unterminated entry
+            int bytes = Utf8Scalars.CopyUtf16(image, start, end - start, literals, used);
+            return bytes < 0 ? bytes : used + bytes;
         }
 
         private static int Put(byte[] literals, int used, int unit)
