@@ -2474,6 +2474,21 @@ namespace PortableCompiler
                     records[slot + 3] = CharacterSpan;
                     continue;
                 }
+                if (kind == BranchIl.NewObject && records[slot + 3] == 0 ||
+                    kind == BranchIl.MemberCall && records[slot + 3] == 0x73 && records[slot + BranchIl.Width + 1] == 0)
+                {
+                    int conversion = NativePointerMetadata.ConstructorOperation(image, heaps, layout, target, kind == BranchIl.MemberCall);
+                    if (conversion != 0)
+                    {
+                        // A primitive native integer has scalar storage. The
+                        // wide constructors still perform their original overflow check.
+                        records[slot] = conversion == NativePointerMetadata.IdentityConstructor
+                            ? BranchIl.NativePointerConstructor : BranchIl.CheckedConversion;
+                        records[slot + 1] = conversion;
+                        records[slot + 3] = 0;
+                        continue;
+                    }
+                }
                 if ((kind == BranchIl.Call || kind == BranchIl.MemberCall) && records[slot + 3] ==
                     (kind == BranchIl.Call ? 0 : 0x28) && records[slot + BranchIl.Width + 1] == 0)
                 {
@@ -2637,12 +2652,6 @@ namespace PortableCompiler
                     {
                         records[slot] = BranchIl.MathCall;
                         records[slot + 1] = intrinsic;
-                        continue;
-                    }
-                    if (opcode == 0x73 && !addressed && NativePointerMetadata.IsPointerConstructor(image, heaps, layout, member))
-                    {
-                        // A native address and IntPtr/UIntPtr share the native stack representation.
-                        records[slot] = BranchIl.NativePointerConstructor;
                         continue;
                     }
                     int constructorType = Delegate;

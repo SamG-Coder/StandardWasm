@@ -1,0 +1,5 @@
+# Stage 239 · Checked native integer construction
+
+On wasm32, the compiler lowers `new IntPtr(long)` and `new UIntPtr(ulong)` through the existing checked native integer conversion. It verifies the exact platform MemberRef signature or the original CoreLib MethodDef body and its owned native storage field. This preserves the scalar pointer representation used by the original `GCHandle.GetHandleValue` return. The numeric constructors throw a typed `OverflowException` for values outside the corresponding 32-bit range. The existing `void*` constructors retain their native bit patterns.
+
+Run `npm run demo -- stage-239-checked-native-integer-construction` with the generated compiler from `npm test`, or set `STANDARDWASM_COMPILER_PATH` to a frozen compiler. The fixture compares signed and unsigned boundaries, typed overflow and catch dispatch, a masked native handle, and existing pointer overloads on Windows x86 CLR, Node, and Edge. Engine versions and binary hashes go to `artifacts/stage-239-checked-native-integer-construction/results.json`.
