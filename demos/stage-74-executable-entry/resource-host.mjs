@@ -1,4 +1,5 @@
-import { isNativeImportModule, nativeImports, windowsScalars } from "../../scripts/native-imports.mjs";
+import { comImportModule, isNativeImportModule, nativeImports, windowsScalars } from "../../scripts/native-imports.mjs";
+import { comDispatchSignature, createComHost } from "./com-host.mjs";
 import { createWin32Host, win32ImportModule, win32ImportNames, win32MemoryImports } from "./win32-host.mjs";
 
 export const resourceImportModule = "standardwasm:resources";
@@ -106,12 +107,13 @@ const resourceImportKinds = new Map([
     ["memory", "memory"], ["reserveName", "function"], ["locate", "function"]
 ]);
 
-export function instantiateManagedModule(module, compiler, assets, runtimeImports = {}, executablePath, windows) {
+export function instantiateManagedModule(module, compiler, assets, runtimeImports = {}, executablePath, windows, configureCom) {
     const requestedResources = new Set();
     const requestedWin32 = new Set();
     let wantsMonitor = false;
     let wantsDebugger = false;
     let wantsNative = false;
+    let wantsCom = false;
     for (const { module: owner, name, kind } of WebAssembly.Module.imports(module)) {
         if (owner === resourceImportModule) {
             if (resourceImportKinds.get(name) !== kind || requestedResources.has(name))
@@ -137,6 +139,12 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
             requestedWin32.add(name);
             continue;
         }
+        if (owner === comImportModule) {
+            if (kind !== "function" || name !== comDispatchSignature || wantsCom)
+                throw Error("The generated module requests an invalid COM dispatch import.");
+            wantsCom = true;
+            continue;
+        }
         if (isNativeImportModule(owner)) {
             wantsNative = true;
             continue;
@@ -151,6 +159,8 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     }
     if ([...requestedWin32].some(name => win32MemoryImports.has(name)) && !requestedResources.has("memory"))
         throw Error("The requested Win32 functions require the StandardWasm memory import.");
+    if (wantsCom && !requestedResources.has("memory"))
+        throw Error("COM dispatch requires the StandardWasm memory import.");
 
     let memory;
     // Both import families run on the same emulated CLR thread. Keep the
@@ -172,6 +182,13 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     if (requestedWin32.size) {
         const usesModules = requestedWin32.has("getModuleHandleW") || requestedWin32.has("createActCtxW");
         imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : [], windows, errors);
+    }
+    if (wantsCom) {
+        const { imports: dispatch, registerInterface } = createComHost(memory);
+        // The platform host is the sole registrar. Managed imports only
+        // receive the dispatch entry point.
+        configureCom?.({ registerInterface });
+        imports[comImportModule] = dispatch;
     }
     if (wantsMonitor) imports[threadingModule] = createMonitorHost();
     if (wantsDebugger) {

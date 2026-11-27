@@ -4,8 +4,9 @@
 //   module "native:<dll>"          name = DllImport entry point     (P/Invoke and CoreLib QCall)
 //   module "internalcall"          name = "Namespace.Type::Method"
 //   module "standardwasm:native"   present, library, clearLastError, saveLastError (host helpers)
-// These imports form one table in import order; entry k is the k-th of them. Before each call
-// the module asks present(k), then library(k). As the CLR does at the call, it raises CoreLib's
+// The dynamic imports share a table in import order. For a native call, the module asks
+// present(k), then library(k). COM entries keep their ordinals and resolve separately.
+// Native lookup raises CoreLib's
 // DllNotFoundException when the registry has no entry at all for that DLL, and
 // EntryPointNotFoundException when the DLL is known but lacks the entry. A missing entry is
 // therefore never a silent stub and never a raw trap.
@@ -14,6 +15,7 @@
 // JavaScript function over Wasm values: i32 as Number, i64 as BigInt, f32/f64 as Number.
 
 const nativeHelperModule = "standardwasm:native";
+export const comImportModule = "standardwasm:com";
 const nativeHelperNames = new Set(["present", "library", "clearLastError", "saveLastError"]);
 
 export function isNativeImportModule(name) {
@@ -21,7 +23,8 @@ export function isNativeImportModule(name) {
 }
 
 function nativeDeclarations(module) {
-    return WebAssembly.Module.imports(module).filter(entry => isNativeImportModule(entry.module));
+    return WebAssembly.Module.imports(module)
+        .filter(entry => isNativeImportModule(entry.module) || entry.module === comImportModule);
 }
 
 // A DLL name as the Windows loader compares it: case-insensitive, with ".dll" optional.
@@ -47,7 +50,10 @@ export function nativeEntries(module) {
 export function nativeImports(module, registry, state = { system: 0, pinvoke: 0 }) {
     const imports = Object.create(null);
     const helpers = new Set();
+    let nativeCount = 0;
     const entries = nativeDeclarations(module).map(({ module: owner, name, kind }) => {
+        // COM has a separate registry but occupies this index in the compiler's table.
+        if (owner === comImportModule) return null;
         const separator = name.lastIndexOf("::");
         if (kind !== "function" || !name || name.includes("\0") || owner.includes("\0") ||
             (owner.startsWith("native:") && !normalizeDll(owner.slice("native:".length))) ||
@@ -57,22 +63,24 @@ export function nativeImports(module, registry, state = { system: 0, pinvoke: 0 
             if (!nativeHelperNames.has(name) || helpers.has(name))
                 throw Error("The generated module requests an invalid native runtime helper.");
             helpers.add(name);
-        }
+        } else nativeCount++;
         return { module: owner, name, key: nativeKey(owner, name) };
     });
     // Keep every declaration in order. Distinct MethodDefs can import the same
     // entry, and their presence checks use individual table slots.
-    if (entries.length !== 0 && (helpers.size === entries.length ||
+    if ((nativeCount !== 0 || helpers.size !== 0) && (nativeCount === 0 ||
         !helpers.has("present") || !helpers.has("library") ||
         helpers.has("clearLastError") !== helpers.has("saveLastError")))
         throw Error("The generated module requires the complete typed native import contract.");
-    const implemented = entries.map(entry => entry.module === nativeHelperModule || Object.hasOwn(registry, entry.key));
+    const implemented = entries.map(entry => entry !== null &&
+        (entry.module === nativeHelperModule || Object.hasOwn(registry, entry.key)));
     // A library is available when the registry implements any of its entries. InternalCalls
     // belong to the runtime itself, which is always loaded.
     const libraries = new Set(Object.keys(registry).map(key => key.slice(0, key.indexOf("!"))));
-    const available = entries.map(entry => !entry.module.startsWith("native:") || libraries.has(entry.key.slice(0, entry.key.indexOf("!"))));
+    const available = entries.map(entry => entry !== null &&
+        (!entry.module.startsWith("native:") || libraries.has(entry.key.slice(0, entry.key.indexOf("!")))));
     for (const entry of entries) {
-        if (entry.module === nativeHelperModule) continue;
+        if (entry === null || entry.module === nativeHelperModule) continue;
         imports[entry.module] ??= Object.create(null);
         imports[entry.module][entry.name] = Object.hasOwn(registry, entry.key)
             ? (...args) => registry[entry.key](state, ...args)
