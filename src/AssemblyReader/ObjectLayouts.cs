@@ -78,7 +78,8 @@ namespace PeLibrary
 
         // Aggregate shapes fill the descriptor. An enum instead returns its
         // scalar storage tag and never reserves a GC aggregate.
-        internal static int ReadShape(byte[] image, int[] streams, int[] methods, int row, int[] shape, bool valueType = false)
+        internal static int ReadShape(byte[] image, int[] streams, int[] methods, int row, int[] shape,
+            bool valueType = false, bool allowFixedBuffer = true)
         {
             var counts = new int[45];
             int start = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
@@ -145,6 +146,19 @@ namespace PeLibrary
                     if (attributed < 0) return attributed;
                     inlineLength = attributed;
                 }
+                if (layout != 0x10)
+                {
+                    int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]),
+                        layout == 0x08 ? fields : 0, first, end);
+                    if (supported < 0)
+                    {
+                        if (!allowFixedBuffer || supported != -2 || layout != 0x08 || end - first != 1 ||
+                            inlineLength != 0 || (flags & ByRefLikeShape) != 0) return supported;
+                        inlineLength = FixedBufferMetadata.ManagedLength(image, methods, streams, counts, start,
+                            row, fields, (int)first);
+                        if (inlineLength < 0) return inlineLength;
+                    }
+                }
                 if (inlineLength != 0)
                 {
                     // Supported V8 engines accept at most 10,000 fields in
@@ -156,12 +170,6 @@ namespace PeLibrary
                     if ((U16(image, (uint)(fields + ((int)first - 1) * fieldWidth)) & 0x10) != 0)
                         return -2;
                     flags |= InlineArrayShape;
-                }
-                if (layout != 0x10)
-                {
-                    int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]),
-                        layout == 0x08 ? fields : 0, first, end);
-                    if (supported < 0) return supported;
                 }
                 baseType = 0;
                 flags |= ValueShape;
@@ -207,6 +215,8 @@ namespace PeLibrary
             registry[2] = registry[2] + arguments.Length;
             return FirstClass + index;
         }
+
+        internal static int DeclaredShapeFieldCount(int[] shape) => (shape[4] & InlineArrayShape) != 0 ? 1 : shape[2];
 
         internal static int RegisterArray(int[] registry, int element)
         {

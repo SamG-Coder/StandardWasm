@@ -38,15 +38,19 @@ namespace PortableCompiler
             int fields = FieldCount(objects, type), stored = 0;
             for (int i = 0; i < fields; i++) if (FieldTypeAt(objects, type, i) != 0) stored++;
             var entries = new int[stored * Entry];
-            int first = FirstRow(objects, type), ordinal = 0, declared = DeclaredFieldCount(objects, type);
+            int first = FirstRow(objects, type), ordinal = 0;
+            bool repeated = IsInlineArray(objects, type);
+            int stride = repeated ? measured[0] / fields : 0;
+            if (repeated && (stride == 0 || measured[0] % fields != 0)) return -2;
             var field = new int[2];
             // Registry storage uses the declared row index, including gaps
             // for static fields. The Wasm aggregate omits those gaps.
-            for (int index = 0; index < declared; index++)
+            for (int index = 0; index < fields; index++)
             {
                 int storage = FieldTypeAt(objects, type, index);
                 if (storage == 0) continue;
-                status = NativeValueLayouts.Field(bundle, owner, definition, first + index, field, scopedFrame);
+                if (!repeated || index == 0)
+                    status = NativeValueLayouts.Field(bundle, owner, definition, first + index, field, scopedFrame);
                 if (status < 0) return status;
                 int nested = 0;
                 if (field[1] == 0)
@@ -56,7 +60,9 @@ namespace PortableCompiler
                     nested++;
                 }
                 int slot = ordinal * Entry;
-                entries[slot] = field[0];
+                // Fixed buffers and inline arrays have one metadata field and
+                // one native slot per element. Snapshot all elements on copies.
+                entries[slot] = field[0] + index * stride;
                 entries[slot + 1] = field[1];
                 entries[slot + 2] = nested;
                 ordinal++;

@@ -137,22 +137,15 @@ namespace PortableCompiler
             int target, int[] found, int[] result)
         {
             if (layoutKind != 0x08 || inlineLength != 0 || end - first != 1) return -2;
-            var field = new int[3];
-            AssemblyReferences.ReadField(image, layout, table, first, field);
-            int blob = field[2];
-            if ((field[0] & 0x10) != 0 || blob <= 0 || !Fits((uint)blob, 3, (uint)heaps[1])) return -2;
-            int at = heaps[0] + blob;
-            if (image[at] != 2 || image[at + 1] != 6) return -2;
-            int element = image[at + 2];
-            int alignment = PrimitiveSize(element);
-            int extent = FixedBufferMetadata.Extent(image, layout, heaps, counts, metadata, type, element, alignment);
+            var element = new int[2];
+            int extent = FixedBufferMetadata.Read(image, layout, heaps, counts, metadata, type, table, first, element);
             if (extent < 0) return extent;
             result[0] = extent;
-            result[1] = alignment;
+            result[1] = element[1];
             if (target == first)
             {
                 found[0] = 0;
-                found[1] = LoadOpcode(element);
+                found[1] = LoadOpcode(element[0]);
             }
             return 0;
         }

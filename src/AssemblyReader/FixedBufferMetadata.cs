@@ -6,7 +6,34 @@ namespace PeLibrary
     // actual enclosing field declares that exact primitive and element count.
     internal static class FixedBufferMetadata
     {
-        internal static int Extent(byte[] image, int[] layout, int[] heaps, int[] counts,
+        internal static int ManagedLength(byte[] image, int[] layout, int[] heaps, int[] counts,
+            int first, int row, int fieldTable, int fieldRow)
+        {
+            var element = new int[2];
+            int bytes = Read(image, layout, heaps, counts, first, row, fieldTable, fieldRow, element);
+            return bytes < 0 ? bytes : bytes / element[1];
+        }
+
+        // The result also identifies the primitive and alignment for the native visitor.
+        internal static int Read(byte[] image, int[] layout, int[] heaps, int[] counts,
+            int first, int row, int fieldTable, int fieldRow, int[] element)
+        {
+            var field = new int[3];
+            AssemblyReferences.ReadField(image, layout, fieldTable, fieldRow, field);
+            int blob = field[2];
+            if ((field[0] & 0x10) != 0 || blob <= 0 || !Fits((uint)blob, 3, (uint)heaps[1])) return -2;
+            int at = heaps[0] + blob;
+            if (image[at] != 2 || image[at + 1] != 6) return -2;
+            int primitive = image[at + 2];
+            int width = primitive == 3 || primitive == 6 || primitive == 7 ? 2 :
+                primitive == 8 || primitive == 9 || primitive == 12 ? 4 :
+                primitive == 10 || primitive == 11 || primitive == 13 ? 8 : 1;
+            element[0] = primitive;
+            element[1] = width;
+            return Extent(image, layout, heaps, counts, first, row, primitive, width);
+        }
+
+        private static int Extent(byte[] image, int[] layout, int[] heaps, int[] counts,
             int first, int row, int element, int elementSize)
         {
             string name = PrimitiveName(element);
@@ -19,12 +46,15 @@ namespace PeLibrary
             int enclosing = NestedTypes.Enclosing(image, heaps, layout, counts, row);
             if (enclosing <= 0) return enclosing < 0 ? enclosing : -2;
             var parent = new int[5];
-            if (ObjectLayouts.ReadShape(image, heaps, layout, enclosing, parent, true) != 0) return -2;
+            // The enclosing type must have an independently valid field table.
+            // Disable the fixed-buffer fallback to avoid recursive type proofs.
+            if (ObjectLayouts.ReadShape(image, heaps, layout, enclosing, parent, true, false) != 0) return -2;
             var member = new int[3];
             int limit = heaps[0] + heaps[1];
             var cursor = new int[1];
             int matched = 0;
-            for (int outer = parent[1]; outer < parent[1] + parent[2]; outer++)
+            int endField = parent[1] + ObjectLayouts.DeclaredShapeFieldCount(parent);
+            for (int outer = parent[1]; outer < endField; outer++)
             {
                 AssemblyReferences.ReadField(image, layout, parent[0], outer, member);
                 int blob = member[2];
