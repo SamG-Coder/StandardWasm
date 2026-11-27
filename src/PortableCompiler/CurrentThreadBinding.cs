@@ -44,7 +44,7 @@ namespace PortableCompiler
                 var fields = new int[3];
                 int status = BindFields(image, heaps, layout, objects, type, fields);
                 if (status < 0) return status;
-                int root = StaticFields.Register(globals, owner, RuntimeThreadRoot, type);
+                int root = StaticFields.Register(globals, owner, CurrentThreadWasm.RootKey, type);
                 if (root < 0) return root;
                 int vector = ObjectLayouts.RegisterArray(objects, ObjectLayouts.ObjectReference);
                 if (vector < 0) return vector;

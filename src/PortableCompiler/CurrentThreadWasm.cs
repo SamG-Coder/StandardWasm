@@ -8,6 +8,7 @@ namespace PortableCompiler
         // to the managed Thread runtime and has no meaning to Win32 or linear memory.
         private const int ManagedId = 1, NormalPriority = 2, BackingMarker = int.MinValue;
         internal const int Capacity = 160;
+        internal const int RootKey = int.MinValue + 25;
 
         // Result is stored in a typed local to share allocation/identity with other admitted
         // CoreLib entry points. Desktop's QCall will then write it into its caller's slot.

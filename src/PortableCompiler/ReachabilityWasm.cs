@@ -28,10 +28,10 @@ namespace PortableCompiler
             used = Call(code, used, first + Clear);
             for (int index = 0; index < globals[0]; index++)
             {
-                // CLI statics and cached type-initialization failures both keep their payloads alive.
+                // CLI statics, cached initialization failures and the runtime current thread are roots.
                 int owner = StaticFields.Owner(globals, index), row = StaticFields.Row(globals, index);
                 int storage = StaticFields.Storage(globals, index);
-                if (owner < 0 || (row <= 0 && !InitializerFailures.IsCacheRow(owner, row)) ||
+                if (owner < 0 || (row <= 0 && row != CurrentThreadWasm.RootKey && !InitializerFailures.IsCacheRow(owner, row)) ||
                     (!IsObjectReference(storage) && !StaticFields.IsReferenceCell(storage))) continue;
                 used = Index(code, used, 0x23, index);
                 if (StaticFields.IsReferenceCell(storage))
