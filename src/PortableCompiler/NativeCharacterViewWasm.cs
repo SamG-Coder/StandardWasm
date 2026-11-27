@@ -54,6 +54,26 @@ namespace PortableCompiler
             return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.NullTag);
         }
 
+        internal static int GuardExtent(byte[] code, int used, int view, int length)
+        {
+            // Compare the exclusive end in i64 so neither a wasm32 address
+            // rollover nor memory.size == 65,536 pages can wrap a bound.
+            used = SpanWasm.LoadField(code, used, view, 1);
+            code[used++] = 0xad; // i64.extend_i32_u
+            used = Local(code, used, 0x20, length);
+            code[used++] = 0xad;
+            code[used++] = 0x42; code[used++] = 1;
+            code[used++] = 0x86; // i64.shl
+            code[used++] = 0x7c; // i64.add
+            code[used++] = 0x3f; code[used++] = 0; // memory.size 0
+            code[used++] = 0xad;
+            code[used++] = 0x42; code[used++] = 16;
+            code[used++] = 0x86;
+            code[used++] = 0x56; // i64.gt_u
+            code[used++] = 0x04; code[used++] = 0x40; code[used++] = 0x00; code[used++] = 0x0b;
+            return used;
+        }
+
         // The caller has verified that this is a native descriptor and
         // established its non-null base and element bounds.
         internal static int ReadWithinSpan(byte[] code, int used, int view, int index) =>

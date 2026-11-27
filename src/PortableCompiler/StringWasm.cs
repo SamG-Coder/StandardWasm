@@ -295,6 +295,7 @@ namespace PortableCompiler
             // Read exact UTF-16 units before publishing an immutable string.
             // The span length bounds the loop and each byte offset is scaled by 2.
             used = NativeCharacterViewWasm.GuardBase(code, used, span);
+            used = NativeCharacterViewWasm.GuardExtent(code, used, span, length);
             used = Local(code, Zero(code, used), 0x21, index);
             code[used++] = 0x02; code[used++] = 0x40;
             code[used++] = 0x03; code[used++] = 0x40;

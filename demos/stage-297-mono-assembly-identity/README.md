@@ -2,6 +2,6 @@
 
 Canonical Assembly receivers follow the original Mono GetName forwarding body, GetName(bool) override, and AssemblyName.Create. The browser supplies an instance-local native identity record built from the loaded assembly metadata. The upstream FillName body reads that record and follows the authenticated native UTF-8 path from Stage 302.
 
-The three ordinary GetName cases link through the original readonly ordinal generic call, Mono locale membership and ReadOnlySpan<char>.Empty. The next dependency is the UTF-16 pointer and length string constructor inside CultureData.JSGetLocaleInfo. The remaining cases verify independent managed AssemblyName values and authored virtual overrides.
+The three ordinary GetName cases link through the original readonly ordinal generic call, Mono locale membership and ReadOnlySpan<char>.Empty. The UTF-16 pointer string constructor now binds to its original CLR factory. The next verifier dependency is the readonly character reference stored into a pinned local in CultureData.JSGetLocaleInfo. The remaining cases verify independent managed AssemblyName values and authored virtual overrides.
 
 Set STANDARDWASM_COMPILER_PATH to an exact compiler image and run npm run demo -- stage-297-mono-assembly-identity. Set STANDARDWASM_MONO_CORELIB when the exact browser metadata differs from the installed x86 CLR version.

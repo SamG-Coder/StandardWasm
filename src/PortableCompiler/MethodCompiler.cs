@@ -760,6 +760,7 @@ namespace PortableCompiler
                     CoreStringCreation.Lower(bundle, image, layout, heaps, owner, source, methodArguments,
                         frame, records, objects, catchRegion);
                     CoreStringConcat.Lower(image, layout, heaps, source, frame, parameters, locals, records, catchRegion);
+                    CoreStringPointerConstructor.LowerCopy(image, layout, heaps, source, frame, parameters, locals, records, catchRegion);
                     if (falseBooleans.IsClone(bases[owner] + source, current))
                     {
                         bool instance = (MethodDefinitions.ReadColumn(image, layout, source, 2) & 0x10) == 0;
@@ -2971,6 +2972,11 @@ namespace PortableCompiler
                     records[slot + 1] = empty;
                     continue;
                 }
+                if (kind == BranchIl.NativeCharacterSpan)
+                {
+                    hostUse[0] = hostUse[0] | WasmImports.NativeCharacterViews;
+                    continue;
+                }
                 if (kind == BranchIl.LoadString)
                 {
                     int status = StringLiterals.Lower(image, heaps, records, slot, literals, literalSize, globals);
@@ -2990,6 +2996,32 @@ namespace PortableCompiler
                     records[slot] = BranchIl.StringFromSpan;
                     records[slot + 1] = empty;
                     records[slot + 3] = CharacterSpan;
+                    continue;
+                }
+                if ((kind == BranchIl.NewObject && records[slot + 3] == 0 ||
+                    kind == BranchIl.MemberCall && records[slot + 3] == 0x73) &&
+                    CoreStringPointerConstructor.Matches(image, layout, heaps, target, kind == BranchIl.MemberCall))
+                {
+                    var identity = new int[2];
+                    int found = RuntimeTypeTokens.FindCoreType(bundle, "String", identity);
+                    if (found < 0) return found;
+                    byte[] core = bundle.Get(identity[0]);
+                    var coreLayout = new int[4];
+                    var coreHeaps = new int[8];
+                    if (CompressedTables.FindWithHeaps(core, coreLayout, coreHeaps) < 0) return -1;
+                    int factory = CoreStringPointerConstructor.FindFactory(core, coreLayout, coreHeaps, identity[1]);
+                    if (factory < 0) return factory;
+                    int linked = Lookup(owners, rows, contexts, bases, indices, functions, identity[0], factory, 0);
+                    if (linked < 0)
+                    {
+                        linked = functions;
+                        functions = Register(bundle, core, coreLayout, coreHeaps, identity[0], factory, 0,
+                            owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions);
+                        if (functions < 0) return functions;
+                    }
+                    records[slot] = BranchIl.Call;
+                    records[slot + 1] = linked;
+                    records[slot + 3] = 0;
                     continue;
                 }
                 if (kind == BranchIl.NewObject && records[slot + 3] == 0 ||
