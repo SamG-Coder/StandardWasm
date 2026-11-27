@@ -168,8 +168,9 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[20];
+            var frameShape = new int[21];
             var shadowStack = new int[3]; // $sp, base, limit globals + 1
+            var pinRegistry = new int[1]; // the live-pin count global + 1 (decision 0077)
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * 3];
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
@@ -276,6 +277,7 @@ namespace PortableCompiler
                 int signature = offsets[current];
                 int result = signatures[signature];
                 bool resourceOpen = reflection.ResourceOwner == owner && reflection.ResourceOpen == source;
+                var pinned = new int[0]; // Stage 149: pinned local kinds (PinnedLocals), by local index
                 // The Wasm result of a value constructor is its receiver's final
                 // value. Its IL returns void, so stack analysis checks void.
                 bool valueConstructor = IsValueConstructor(image, layout, heaps, source, signatures, signature, parameters, objects);
@@ -303,7 +305,8 @@ namespace PortableCompiler
                     int localBlob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, body[3]);
                     if (localBlob < 0)
                         return -1;
-                    locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context);
+                    pinned = new int[frame.Length];
+                    locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context, pinned);
                     if (locals < 0)
                         return locals;
                     // CorILMethod_InitLocals (body[4]) is deliberately not required. Without it
@@ -330,6 +333,11 @@ namespace PortableCompiler
                     status = ArrayInitializers.Lower(image, heaps, layout, records, literals, literalSize, location);
                     if (status < 0)
                         return status;
+                    if (pinned.Length != 0)
+                    {
+                        status = PinnedStrings.Lower(image, heaps, layout, records, pinned, parameters, locals, location);
+                        if (status < 0) return status;
+                    }
                     virtualUsed[0] = 0;
                     functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
                         parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod, valueMethod, records, owners, rows, contexts,
@@ -397,7 +405,7 @@ namespace PortableCompiler
                         if (capacity > int.MaxValue - 320) return -3;
                         capacity += 320;
                     }
-                    bool allocates = false;
+                    bool allocates = false, pins = false;
                     int classBytes = objects[0] * 12;
                     if (classBytes > int.MaxValue - capacity) return -3;
                     capacity += classBytes;
@@ -433,7 +441,7 @@ namespace PortableCompiler
                             records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
                             IsNativeInteger(states[pc * maximum + depths[pc] - 1 - (kind == BranchIl.SetField ? 2 : 1)]))
                             linearMemory = true;
-                        if (kind == BranchIl.LocalAllocate && depths[pc] != 0)
+                        if ((kind == BranchIl.LocalAllocate || kind == BranchIl.PinString) && depths[pc] != 0)
                         {
                             // An initializer's guard and a shadow-stack frame both wrap the
                             // body; combining them is not supported yet.
@@ -451,8 +459,19 @@ namespace PortableCompiler
                                     if (global < 0) return global;
                                     shadowStack[g] = global + 1;
                                 }
-                            if (capacity > int.MaxValue - StackAllocationWasm.Capacity) return -3;
-                            capacity += StackAllocationWasm.Capacity;
+                            if (kind == BranchIl.PinString)
+                            {
+                                pins = true;
+                                if (pinRegistry[0] == 0)
+                                {
+                                    int global = StaticFields.Register(globals, 0, PinRegistryWasm.GlobalKey, I32);
+                                    if (global < 0) return global;
+                                    pinRegistry[0] = global + 1;
+                                }
+                            }
+                            int allocationBytes = kind == BranchIl.PinString ? Utf16MemoryWasm.PinCapacity : StackAllocationWasm.Capacity;
+                            if (capacity > int.MaxValue - allocationBytes) return -3;
+                            capacity += allocationBytes;
                         }
                         if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField)
                         {
@@ -506,6 +525,7 @@ namespace PortableCompiler
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect ||
                                 kind == BranchIl.LoadObject || kind == BranchIl.StoreObject || kind == BranchIl.InitializeNative ||
+                                (kind == BranchIl.PinString && records[slot + 3] != 0) ||
                                 kind == BranchIl.ExchangeHandlerField || (kind == BranchIl.Call && records[slot + 3] != 0))
                                 tags = ExceptionTypes.NullReference;
                             else if (kind == BranchIl.Binary)
@@ -551,12 +571,13 @@ namespace PortableCompiler
                     frameShape[16] = allocates ? shadowStack[0] : 0;
                     frameShape[17] = allocates ? shadowStack[1] : 0;
                     frameShape[18] = allocates ? shadowStack[2] : 0;
+                    frameShape[20] = pins ? pinRegistry[0] : 0;
                     frameShape[19] = resourceOpen ? ((hostFeatures & WasmImports.Console) != 0 ? ConsoleWasm.ImportCount + 1 : 1) : 0;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals ||
-                            kind == BranchIl.ConsoleWrite) frameShape[5] = 1;
+                            kind == BranchIl.ConsoleWrite || kind == BranchIl.PinString) frameShape[5] = 1;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
                             frameShape[6] = 1;
@@ -598,7 +619,7 @@ namespace PortableCompiler
                     offsets[functions] = offset;
                     bodyOffsets[functions] = length;
                     length = TypeInitializerWasm.ExportEntry(moduleCode, length, initializers.Epoch, initializers.Active,
-                        hostImports + target, arity, shadowStack[0] - 1, shadowStack[2] - 1);
+                        hostImports + target, arity, shadowStack[0] - 1, shadowStack[2] - 1, pinRegistry[0] - 1);
                     if (length < 0) return length;
                     sizes[functions] = length - bodyOffsets[functions];
                     exports[export] = functions++;

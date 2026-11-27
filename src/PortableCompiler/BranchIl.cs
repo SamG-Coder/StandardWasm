@@ -37,6 +37,10 @@ namespace PortableCompiler
         // ldobj / stobj / initobj of a blittable struct through a native address (decision 0073).
         // Operand: the registry value type; auxiliary: native plan index + 1.
         internal const int LoadObject = 113, StoreObject = 114, InitializeNative = 115; // clear of Stage 131
+        // A fixed string's address (decision 0077): [String] -> [Native], a frame-owned UTF-16
+        // copy with a NUL terminator, or 0 for null. Auxiliary 1: null raises NullReferenceException.
+        // 118 matches the integration line, where 116 and 117 are runtime-type kinds.
+        internal const int PinString = 118;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;

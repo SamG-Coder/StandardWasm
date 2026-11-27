@@ -150,7 +150,9 @@ namespace PortableCompiler
                     return -3;
                 exportSize += metadata + name;
             }
-            int tableSize = 3 + UnsignedSize(thunks[0]);
+            bool pinTable = PinRegistryWasm.Present(globals);
+            bool tables = thunks[0] != 0 || pinTable;
+            int tableSize = 3 + UnsignedSize(thunks[0]) + (pinTable ? 3 : 0);
             int elementSize = 5 + UnsignedSize(thunks[0]);
             for (int i = 0; i < thunks[0]; i++)
             {
@@ -170,7 +172,7 @@ namespace PortableCompiler
             if (hostFeatures != 0)
                 remaining = Reserve(remaining, importSize);
             remaining = Reserve(remaining, functionSize);
-            if (thunks[0] != 0)
+            if (tables)
                 remaining = Reserve(remaining, tableSize);
             if (tagCount != 0)
                 remaining = Reserve(remaining, tagSize);
@@ -359,13 +361,21 @@ namespace PortableCompiler
             if (argumentArray != 0)
                 for (int i = 0; i < EntryArgumentsWasm.FunctionCount; i++)
                     cursor = Unsigned(output, cursor, builderType + i);
-            if (thunks[0] != 0)
+            if (tables)
             {
+                // Table 0 holds delegate thunks (possibly none); table 1 is the
+                // live-pin registry of decision 0077, which starts empty and grows.
                 cursor = Section(output, cursor, 4, tableSize);
-                output[cursor++] = 1;
+                output[cursor++] = (byte)(pinTable ? 2 : 1);
                 output[cursor++] = 0x70;
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, thunks[0]);
+                if (pinTable)
+                {
+                    output[cursor++] = 0x6d; // eqref
+                    output[cursor++] = 0;
+                    output[cursor++] = 0;
+                }
             }
             if (tagCount != 0)
             {

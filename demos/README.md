@@ -140,6 +140,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [138 · Inline-array layouts](stage-138-inline-array-layouts/README.md) | `npm run demo -- stage-138-inline-array-layouts` | Preserve the declared element and value copies of managed inline arrays |
 | [143 · Struct pointers and sizeof](stage-143-struct-pointers/README.md) | `npm run demo -- stage-143-struct-pointers` | 32-bit CLR `sizeof`; `p->F`, `&p->F` and `p[i]` on blittable sequential structs in memory 0 |
 | [145 · Struct copies through pointers](stage-145-struct-copies/README.md) | `npm run demo -- stage-145-struct-copies` | `Rect r = *p`, `*p = r`, `*p = default` and nested struct copies between memory 0 and managed values |
+| [149 · Fixed strings](stage-149-fixed-strings/README.md) | `npm run demo -- stage-149-fixed-strings` | `fixed (char* p = s)` in the netstandard2.0 and net10.0 IL forms, read through a frame-owned UTF-16 copy |
 
 ## Adding a stage
 

@@ -5,6 +5,8 @@ namespace PeLibrary
     internal static class StringMetadata
     {
         internal const int Length = 1, Character = 2, Concat = 3, FromChars = 4, OrdinalEquals = 5;
+        // Stage 149 (decision 0077): 7 matches the integration line, where Empty is 6.
+        internal const int PinnableReference = 7;
 
         internal static int CopyLiteral(byte[] image, int[] streams, int tokenOffset, byte[] bytes, int used)
         {
@@ -64,6 +66,9 @@ namespace PeLibrary
             uint name = Index(image, at + (uint)parentWidth, strings);
             uint sig = Index(image, at + (uint)(parentWidth + strings), blobs);
             if (!Fits(name, 6, (uint)streams[3]) || !Fits(sig, 4, (uint)streams[1])) return 0;
+            if (MatchesAscii(image, streams, name, "GetPinnableReference") &&
+                PinnableSignature(image, streams, methods, counts, (int)(streams[0] + sig)))
+                return PinnableReference;
             n = (uint)streams[2] + name;
             uint signature = (uint)streams[0] + sig;
             if (Fits(name, 7, (uint)streams[3]) && U32(image, n) == 0x636e6f43 &&
@@ -93,6 +98,50 @@ namespace PeLibrary
                 image[signature + 4] == 8)
                 return Character;
             return 0;
+        }
+
+        // instance char& modreq(InAttribute) GetPinnableReference(): ref readonly char.
+        private static bool PinnableSignature(byte[] image, int[] heaps, int[] methods, int[] counts, int offset)
+        {
+            var next = new int[1];
+            int end = heaps[0] + heaps[1];
+            int length = CompressedUnsigned(image, offset, end, next);
+            int at = next[0];
+            if (length < 6 || length > end - at || image[at] != 0x20 ||
+                image[at + 1] != 0 || image[at + 2] != 0x1f) return false;
+            end = at + length;
+            int modifier = CompressedUnsigned(image, at + 3, end, next);
+            int tail = next[0];
+            if ((modifier & 3) != 1 || end - tail != 2 || U16(image, (uint)tail) != 0x0310) return false;
+            var reference = new int[AssemblyReferences.SymbolWidth];
+            return AssemblyReferences.ReadType(image, heaps, methods, modifier >> 2, reference) >= 0 &&
+                reference[AssemblyReferences.Depth] == 0 &&
+                MatchesAscii(image, heaps, (uint)reference[2], "InAttribute") &&
+                MatchesAscii(image, heaps, (uint)reference[3], "System.Runtime.InteropServices") &&
+                PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, methods, counts, reference[AssemblyReferences.AssemblyRow]);
+        }
+
+        // static int32 RuntimeHelpers.get_OffsetToStringData(): the netstandard fixed-string
+        // form adds it to the pinned string's address (decision 0077).
+        internal static bool IsOffsetToStringData(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            var member = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadMember(image, heaps, layout, row, member) < 0 || member[AssemblyReferences.Depth] != 0 ||
+                !MatchesAscii(image, heaps, (uint)member[4], "get_OffsetToStringData") ||
+                !MatchesAscii(image, heaps, (uint)member[2], "RuntimeHelpers") ||
+                !MatchesAscii(image, heaps, (uint)member[3], "System.Runtime.CompilerServices"))
+                return false;
+            var counts = new int[45];
+            if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0 ||
+                !PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, layout, counts, member[AssemblyReferences.AssemblyRow]))
+                return false;
+            int blob = member[5], limit = heaps[0] + heaps[1];
+            if (blob <= 0 || blob >= heaps[1]) return false;
+            var next = new int[1];
+            int bytes = CompressedUnsigned(image, heaps[0] + blob, limit, next);
+            int start = next[0];
+            return bytes == 3 && bytes <= limit - start &&
+                image[start] == 0 && image[start + 1] == 0 && image[start + 2] == 8;
         }
 
         private static uint Index(byte[] image, uint at, int width) => width == 2 ? U16(image, at) : U32(image, at);
