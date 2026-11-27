@@ -264,15 +264,14 @@ namespace PortableCompiler
             }
             if (kind == LoadObjectIndirect)
             {
-                if (Match(stack, depth, StringLocation)) return Push(stack, allocated, depth - 1, String);
-                return Match(stack, depth, ObjectLocation) ? Push(stack, allocated, depth - 1, ObjectReference) : -2;
+                if (depth < 1 || !IsReferenceLocation(stack[depth - 1])) return -2;
+                return Push(stack, allocated, depth - 1, CellValue(stack[depth - 1]));
             }
             if (kind == StoreObjectIndirect)
             {
                 if (depth < 2) return -2;
                 int type = stack[depth - 2];
-                int item = type == StringLocation ? String : type == ObjectLocation ? ObjectReference : 0;
-                return item != 0 && Assignable(stack[depth - 1], item, objects) ? depth - 2 : -2;
+                return IsReferenceLocation(type) && Assignable(stack[depth - 1], CellValue(type), objects) ? depth - 2 : -2;
             }
             if (kind == LoadIndirect)
             {

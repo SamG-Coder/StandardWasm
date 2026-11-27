@@ -75,6 +75,45 @@ namespace ManagedObjectByrefs
             catch (IndexOutOfRangeException) { return trace[0] == null ? 13 : -2; }
             return vector[index] != null && vector[index] == trace[0] ? 37 : -3;
         }
+
+        private sealed class Marker
+        {
+            internal int Value;
+        }
+
+        private static void Create(out Marker slot, int value)
+        {
+            slot = new Marker { Value = value };
+        }
+
+        private static int ClearAndRead(ref Marker target, ref Marker alias)
+        {
+            target = null;
+            return alias == null ? -1 : alias.Value;
+        }
+
+        public static int TypedLocal(int value, int share)
+        {
+            Create(out Marker first, value);
+            Marker other = first;
+            ref Marker alias = ref other;
+            if (share != 0) alias = ref first;
+            int observed = ClearAndRead(ref first, ref alias);
+            return first == null && other.Value == value ? observed : -2;
+        }
+
+        private static int ReplaceParameter(Marker input, int value)
+        {
+            Create(out input, value);
+            return input.Value;
+        }
+
+        public static int TypedParameter(int value)
+        {
+            var marker = new Marker { Value = 17 };
+            int observed = ReplaceParameter(marker, value);
+            return marker.Value == 17 ? observed : -1;
+        }
     }
 
     // These methods are CLR-callable, but a managed location stays inside

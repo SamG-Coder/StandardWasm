@@ -14,16 +14,26 @@ namespace PortableCompiler
         internal const int ObjectLocation = 0x80, ObjectSpan = 0x81, CharacterSpan = 0x82;
         internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84, BooleanLocation = 0x86, StringLocation = 0x87;
         internal const int ReadOnlyByteSpan = 0x88;
+        // Reference locations retain their nominal element type in the verifier,
+        // even when their Wasm representation is the shared object cell.
+        private const int ReferenceLocationBase = 32768;
         internal static bool IsManagedLocation(int type) =>
-            type == ObjectLocation || type == CharacterLocation || type == BooleanLocation || type == StringLocation;
+            IsReferenceLocation(type) || type == CharacterLocation || type == BooleanLocation;
+
+        internal static bool IsReferenceLocation(int type) =>
+            type == ObjectLocation || type == StringLocation ||
+            type >= ReferenceLocationBase + ObjectLayouts.FirstClass &&
+            type < ReferenceLocationBase + ObjectLayouts.FirstClass + ObjectLayouts.MaxClasses;
 
         internal static int LocationFromIdentity(int[] objects, int type) =>
             type == ObjectLayouts.ObjectReference ? ObjectLocation : type == String ? StringLocation :
             type == GenericScalar.Key(3) ? CharacterLocation : type == GenericScalar.Key(2) ? BooleanLocation :
-            ObjectLayouts.IsValueType(objects, type) && !ObjectLayouts.IsByRefLikeValue(objects, type) ? ValueLocation(type) : 0;
+            ObjectLayouts.IsValueType(objects, type) ? (ObjectLayouts.IsByRefLikeValue(objects, type) ? 0 : ValueLocation(type)) :
+            type >= ObjectLayouts.FirstClass && type - ObjectLayouts.FirstClass < objects[0] ? ReferenceLocationBase + type : 0;
         internal static int CellValue(int location) =>
             IsValueLocation(location) ? LocatedValue(location) :
-            location == BooleanLocation ? I32 : location == StringLocation ? String : ObjectLayouts.ObjectReference;
+            location == BooleanLocation ? I32 : location == StringLocation ? String :
+            location == ObjectLocation ? ObjectLayouts.ObjectReference : location - ReferenceLocationBase;
 
         internal static bool IsSpan(int type) => type == ObjectSpan || type == CharacterSpan || type == WritableCharacterSpan || type == ReadOnlyByteSpan;
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
@@ -57,7 +67,7 @@ namespace PortableCompiler
         // Boxing and other CLR reference conversions use separate IL operations.
         internal static bool IsObjectReference(int type) =>
             type == String || type == ObjectLayouts.DelegateReference || RuntimeTypeMetadata.IsReference(type) || IsArray(type) ||
-            type >= ObjectLayouts.FirstClass && type < ConstructorAddress ||
+            type >= ObjectLayouts.FirstClass && type < ObjectLayouts.FirstClass + ObjectLayouts.MaxClasses ||
             type >= ObjectLayouts.ObjectReference && type <= ObjectLayouts.EventHandlerReference;
 
         // Zero denotes the CLI null literal in a live stack slot and void in a method signature.
@@ -76,6 +86,7 @@ namespace PortableCompiler
         {
             int expected = StackType(target);
             if (source == expected) return true;
+            if (IsManagedLocation(source) || IsManagedLocation(expected)) return false;
             if (source >= ConstructorAddress || expected >= ConstructorAddress) return false;
             if (ObjectLayouts.IsValueType(objects, source) || ObjectLayouts.IsValueType(objects, expected)) return false;
             return source == NullValue && IsReference(expected) ||

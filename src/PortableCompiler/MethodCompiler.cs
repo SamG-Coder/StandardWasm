@@ -953,13 +953,14 @@ namespace PortableCompiler
                         continue;
                     }
                     bool booleanSlot = type == I32 && local >= parameterCount && booleanLocals[local - parameterCount] != 0;
-                    if (booleanSlot || type == String)
+                    int referenceLocation = LocationFromIdentity(objects, type);
+                    if (booleanSlot || IsReferenceLocation(referenceLocation))
                     {
                         int vector = booleanSlot ? Bytes : ObjectLayouts.RegisterArray(objects, ObjectReference);
                         if (vector < 0) return vector;
                         frameCells[local] = vector;
                         records[slot] = BranchIl.LoadFrameLocation;
-                        records[slot + 3] = booleanSlot ? BooleanLocation : StringLocation;
+                        records[slot + 3] = booleanSlot ? BooleanLocation : referenceLocation;
                         continue;
                     }
                     if (IsSpan(type))
@@ -1115,7 +1116,7 @@ namespace PortableCompiler
                             owner, row, context, objects, methodArguments);
                         if (locationType < 0) return locationType;
                         if (!IsValueLocation(locationType) && locationType != BooleanLocation &&
-                            locationType != StringLocation && locationType != ObjectLocation) return -2;
+                            !IsReferenceLocation(locationType)) return -2;
                         int vector = IsValueLocation(locationType) ? 0 :
                             locationType == BooleanLocation ? Bytes : ObjectLayouts.RegisterArray(objects, ObjectReference);
                         if (vector < 0) return vector;

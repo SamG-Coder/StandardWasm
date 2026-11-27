@@ -19,6 +19,13 @@ internal static class ManagedObjectByrefCases
             for (int useNull = 0; useNull <= 1; useNull++)
                 Check(nameof(Kernels.AddressChecks), [index, useNull], Kernels.AddressChecks(index, useNull));
 
+        foreach (int value in new[] { int.MinValue, 7, int.MaxValue })
+        {
+            Check(nameof(Kernels.TypedParameter), [value], Kernels.TypedParameter(value));
+            for (int share = 0; share <= 1; share++)
+                Check(nameof(Kernels.TypedLocal), [value, share], Kernels.TypedLocal(value, share));
+        }
+
         void Check(string method, int[] inputs, int expected) =>
             cases.Add(new { module = "ManagedObjectByrefs", method, inputs, expected });
     }

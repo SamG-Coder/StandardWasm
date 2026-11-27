@@ -240,7 +240,7 @@ namespace PortableCompiler
                         if (IsValueLocation(frameCells[operand]))
                             used = ManagedValueLocationWasm.ReadLocation(code, used, cellLocals[operand], pushed);
                         else if (frameCells[operand] != 0)
-                            used = ManagedLocationWasm.LoadCell(code, used, cellLocals[operand], frameCells[operand], pushed);
+                            used = ManagedLocationWasm.LoadCell(code, used, cellLocals[operand], frameCells[operand], Representation(objects, pushed));
                         else used = inlineLocations[operand] == 0 ? Local(code, used, 0x20, operand) :
                             InlineObjectStorageWasm.Snapshot(code, used, pushed, inlineLocations[operand], operand, FieldCount(objects, pushed));
                     }
@@ -771,7 +771,8 @@ namespace PortableCompiler
                     if (kind == LoadManagedCell)
                     {
                         used = Gc(code, used, operand == Bytes ? 0x0d : 0x0b, operand);
-                        if (type == StringLocation) used = ManagedLocationWasm.CastString(code, used);
+                        if (IsReferenceLocation(type))
+                            used = ManagedLocationWasm.CastCellValue(code, used, Representation(objects, CellValue(type)));
                         used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, CellValue(type), top));
                     }
                     else
@@ -906,9 +907,9 @@ namespace PortableCompiler
                     int address = Spill(spills, maximum, spillFlags, type, top);
                     used = ManagedLocationWasm.AccessElement(code, used, address, operand);
                     used = Gc(code, used, 0x0b, operand); // array.get
-                    if (type == StringLocation) used = ManagedLocationWasm.CastString(code, used);
-                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags,
-                        type == StringLocation ? String : ObjectReference, top));
+                    int value = CellValue(type);
+                    used = ManagedLocationWasm.CastCellValue(code, used, Representation(objects, value));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, value, top));
                 }
                 else if (kind == StoreObjectIndirect)
                 {

@@ -43,14 +43,15 @@ namespace PortableCompiler
             used = Local(code, used, 0x20, cell);
             used = Const(code, used, 0);
             used = Gc(code, used, vector == Bytes ? 0x0d : 0x0b, vector);
-            return type == String ? CastString(code, used) : used;
+            return vector == Bytes ? used : CastCellValue(code, used, type);
         }
 
-        internal static int CastString(byte[] code, int used)
+        internal static int CastCellValue(byte[] code, int used, int representation)
         {
+            if (representation == PeLibrary.ObjectLayouts.ObjectReference) return used;
             code[used++] = 0xfb;
-            code[used++] = 0x17; // ref.cast null string heap
-            return WasmBinary.Signed(code, used, WasmBinary.HeapType(String));
+            code[used++] = 0x17; // Restore the typed reference from eqref.
+            return WasmBinary.Signed(code, used, WasmBinary.HeapType(representation));
         }
 
         // Leave [owner, index] for the array instruction. The owner and its
