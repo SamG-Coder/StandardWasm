@@ -7,16 +7,16 @@ namespace PortableCompiler
 {
     internal sealed class RuntimeInterfaceTests
     {
-        private const int BoundPrimitivePlan = 1;
+        private const int BoundPlan = 1, StringMatch = 2;
         internal const int RequiresExactStackType = 1;
-        private int[] heads, boxMatches;
+        private int[] heads, interfaceMatches;
 
         internal int Bind(BundleImages bundle, int[] objects, int type)
         {
             int owner = AssemblyOf(objects, type);
             if (owner < 0 || owner >= bundle.Count) return -2;
             int index = type - FirstClass;
-            if (boxMatches != null && boxMatches[index] != 0) return 0;
+            if (interfaceMatches != null && interfaceMatches[index] != 0) return 0;
             byte[] image = bundle.Get(owner);
             var layout = new int[4];
             var heaps = new int[8];
@@ -29,9 +29,9 @@ namespace PortableCompiler
             int row = TypeDef(objects, type);
             if (!InterfaceImplementations.HasDefinitionReference(image, heaps, layout, row)) return 0;
             var required = new[] { owner, row };
-            // These references use dedicated Wasm layouts. Until each has an
-            // interface matcher, preserve the diagnostic if it could match.
-            if (BundleConstraints.ImplementsCoreReference(bundle, objects, required, "String", "System") != 0 ||
+            int stringMatch = BundleConstraints.ImplementsCoreReference(bundle, objects, required, "String", "System");
+            // These other dedicated reference layouts still require their own matchers.
+            if (stringMatch < 0 ||
                 BundleConstraints.ImplementsCoreReference(bundle, objects, required, "Array", "System") != 0 ||
                 BundleConstraints.ImplementsCoreReference(bundle, objects, required, "MulticastDelegate", "System") != 0 ||
                 BundleConstraints.ImplementsCoreReference(bundle, objects, required, "RuntimeType", "System") != 0 ||
@@ -39,7 +39,8 @@ namespace PortableCompiler
                 BundleConstraints.ImplementsCoreReference(bundle, objects, required, "RuntimeModule", "System.Reflection") != 0)
                 return -2;
 
-            int matches = BoundPrimitivePlan;
+            // Bits zero and one are reserved; primitive element keys start at two.
+            int matches = BoundPlan | (stringMatch == 0 ? 0 : StringMatch);
             for (int element = 2; element < 32; element++)
             {
                 int primitive = GenericScalar.Key(element);
@@ -48,8 +49,8 @@ namespace PortableCompiler
                 if (result < 0) return result;
                 if (result != 0) matches |= 1 << element;
             }
-            if (boxMatches == null) boxMatches = new int[MaxClasses];
-            boxMatches[index] = matches;
+            if (interfaceMatches == null) interfaceMatches = new int[MaxClasses];
+            interfaceMatches[index] = matches;
             return 0;
         }
 
@@ -76,7 +77,7 @@ namespace PortableCompiler
                 offsets[functions] = signature;
                 arities[functions] = 1;
                 bodyOffsets[functions] = used;
-                int matches = boxMatches == null ? 0 : boxMatches[index] & ~BoundPrimitivePlan;
+                int matches = interfaceMatches == null ? 0 : interfaceMatches[index];
                 int end = WriteTest(bundle, code, used, objects, FirstClass + index, matches, aggregateBoxes);
                 if (end < 0) return end;
                 WasmIndexFixups.Resolve(code, heads[index], hostImports + functions);
@@ -88,7 +89,7 @@ namespace PortableCompiler
         }
 
         private static int WriteTest(BundleImages bundle, byte[] code, int used, int[] objects,
-            int target, int boxElements, AggregateBoxPlan aggregateBoxes)
+            int target, int matches, AggregateBoxPlan aggregateBoxes)
         {
             if (code.Length - used < 5) return -3;
             code[used++] = 0; // no additional locals
@@ -102,6 +103,12 @@ namespace PortableCompiler
                 used = WriteHeapMatch(code, used, type);
                 if (used < 0) return used;
             }
+            if ((matches & StringMatch) != 0)
+            {
+                used = WriteHeapMatch(code, used, String);
+                if (used < 0) return used;
+            }
+            int boxElements = matches & ~(BoundPlan | StringMatch);
             if (boxElements != 0)
             {
                 int layout = PrimitiveBoxing.FindLayout(objects);
