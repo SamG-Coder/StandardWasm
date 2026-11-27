@@ -246,6 +246,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [250 · Direct Int32 receivers](stage-250-direct-int32-receiver/README.md) | `npm run demo -- stage-250-direct-int32-receiver` | Execute original Int32 instance bodies on tracked managed addresses |
 | [252 · SZ-array arguments to generic lists](stage-252-sz-array-list-arguments/README.md) | `npm run demo -- stage-252-sz-array-list-arguments` | Compare exact array interface arguments and preservation of original array identity |
 | [253 · Constraints on another type parameter](stage-253-dependent-type-constraints/README.md) | `npm run demo -- stage-253-dependent-type-constraints` | Check substituted bounds for closed generic methods |
+| [255 · Generic method constructor constraints](stage-255-method-default-constructors/README.md) | `npm run demo -- stage-255-method-default-constructors` | Validate real closed type constructors before specializing methods |
 
 ## Adding a stage
 

@@ -2124,9 +2124,12 @@ namespace PortableCompiler
                     bool assemblyMetadata = !instance && !checkReceiver && types.Length == 1 &&
                         RuntimeAssemblyMetadata.IsQuery(targetImage, targetLayout, targetHeaps, targetOwner, row, objects, types[0]);
                     var deferred = new int[8];
+                    var constructors = new int[types.Length];
                     int constraints = GenericParameters.Check(targetImage, targetHeaps, targetLayout, row,
-                        types, objects, deferred, method: true);
+                        types, objects, deferred, method: true, constructors: constructors);
                     if (constraints < 0) return constraints;
+                    status = GenericConstructorConstraints.Check(bundle, objects, types, constructors);
+                    if (status < 0) return status;
                     if (constraints != 0)
                     {
                         constraints = assemblyMetadata ? RuntimeAssemblyMetadata.CheckConstraint(targetImage, targetLayout,
