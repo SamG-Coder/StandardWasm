@@ -21,14 +21,20 @@ namespace PortableCompiler
         }
 
         internal static int Emit(byte[] code, int used, int vector, int source, int sourceIndex,
-            int destination, int destinationIndex, int length, bool aggregate, bool tracksRoots,
+            int destination, int destinationIndex, int length, bool aggregate, bool indicesFirst, bool tracksRoots,
             int cursor, int direction, int snapshot)
         {
             used = CheckNull(code, used, source);
             used = CheckNull(code, used, destination);
             used = CheckNonNegative(code, used, length);
-            used = CheckRange(code, used, source, sourceIndex, length);
-            used = CheckRange(code, used, destination, destinationIndex, length);
+            bool precheck = aggregate && indicesFirst;
+            if (precheck)
+            {
+                used = CheckNonNegative(code, used, sourceIndex);
+                used = CheckNonNegative(code, used, destinationIndex);
+            }
+            used = CheckRange(code, used, source, sourceIndex, length, !precheck);
+            used = CheckRange(code, used, destination, destinationIndex, length, !precheck);
             if (aggregate)
                 return AggregateArrayCopyWasm.Emit(code, used, vector, source, sourceIndex, destination,
                     destinationIndex, length, cursor, direction, snapshot, tracksRoots);
@@ -57,9 +63,9 @@ namespace PortableCompiler
             return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.ArgumentOutOfRangeTag);
         }
 
-        private static int CheckRange(byte[] code, int used, int array, int index, int length)
+        private static int CheckRange(byte[] code, int used, int array, int index, int length, bool checkIndex)
         {
-            if (index >= 0) used = CheckNonNegative(code, used, index);
+            if (index >= 0 && checkIndex) used = CheckNonNegative(code, used, index);
             used = LoadIndex(code, used, index);
             used = Local(code, used, 0x20, length);
             code[used++] = 0x6a;

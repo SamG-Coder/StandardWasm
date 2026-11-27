@@ -1405,7 +1405,7 @@ namespace PortableCompiler
                     // does not use its eqref position. These slots are dead after Copy.
                     used = ArrayCopyWasm.Emit(code, used, vector, source, sourceIndex, destination, destinationIndex,
                         Spill(spills, maximum, spillFlags, I32, top), IsValueType(objects, ArrayElement(objects, vector)),
-                        tracksRoots, Spill(spills, maximum, spillFlags, I32, first),
+                        records[slot + 3] != 0, tracksRoots, Spill(spills, maximum, spillFlags, I32, first),
                         Spill(spills, maximum, spillFlags, I32, target), Spill(spills, maximum, spillFlags, ObjectReference, top));
                 }
                 else if (kind == SpanRead)

@@ -2787,7 +2787,7 @@ namespace PortableCompiler
                     {
                         records[slot] = BranchIl.ArrayCopy;
                         records[slot + 1] = arity;
-                        records[slot + 3] = 0;
+                        records[slot + 3] = arity == 5 && ArrayCopyMetadata.ChecksIndicesBeforeRanges(bundle) ? 1 : 0;
                         continue;
                     }
                 }
