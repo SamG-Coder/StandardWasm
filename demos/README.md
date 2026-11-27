@@ -161,6 +161,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [155 · Bound catch variables](stage-155-bound-catch-variables/README.md) | `npm run demo -- stage-155-bound-catch-variables` | `catch (X e)` handlers reading the caught exception, including runtime-raised CoreLib exceptions and rethrow identity, matched with the x86 CLR in Node and Edge |
 | [156 · Native imports](stage-156-native-imports/README.md) | `npm run demo -- stage-156-native-imports` | blittable `[DllImport]`s into kernel32 and ucrtbase, SetLastError and a missing entry point as typed Wasm imports, matched with the x86 CLR in Node and Edge |
 | [157 · Boxed primitive interface dispatch](stage-157-boxed-primitive-interface-dispatch/README.md) | `npm run demo -- stage-157-boxed-primitive-interface-dispatch` | Match primitive boxes to CoreLib interface contracts and execute the original boxed `Char.TryFormat` body in Node and Edge |
+| [158 · Managed interior field aliases](stage-158-managed-interior-field-aliases/README.md) | `npm run demo -- stage-158-managed-interior-field-aliases --no-rebuild` | Compare escaping field references, nested value replacement, and copy isolation across Windows CLR, Node, and Edge |
 
 ## Adding a stage
 
