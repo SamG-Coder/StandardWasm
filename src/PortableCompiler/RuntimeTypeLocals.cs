@@ -48,7 +48,7 @@ namespace PortableCompiler
             }
         }
 
-        private static bool IsLinkedSystemType(BundleImages bundle, int[] objects, int type)
+        internal static bool IsLinkedSystemType(BundleImages bundle, int[] objects, int type)
         {
             int owner = ObjectLayouts.AssemblyOf(objects, type);
             byte[] image = bundle.Get(owner);

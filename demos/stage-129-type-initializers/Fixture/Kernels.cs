@@ -292,6 +292,20 @@ namespace TypeInitializerFixture
             return result;
         }
 
+        public static int LinkedRuntimeTypeArgument() => ReceiveRuntimeType(typeof(Kernels)) * 10 + ReceiveRuntimeType(null);
+
+        private static int ReceiveRuntimeType(Type source) => new RuntimeTypeConsumer(source).Result;
+
+        private sealed class RuntimeTypeConsumer
+        {
+            internal readonly int Result;
+
+            internal RuntimeTypeConsumer(Type source)
+            {
+                Result = source == typeof(Kernels) ? 2 : source == null ? 3 : 4;
+            }
+        }
+
         public static int RuntimeTypeLock()
         {
             Type target = typeof(Kernels);

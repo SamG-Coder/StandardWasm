@@ -56,10 +56,23 @@ namespace PortableCompiler
 
         // Imported functions precede defined functions. Discovery can add
         // a host feature, so re-emit with its function indices reserved.
-        private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location,
-            int hostFeatures, NativeStaticFields nativeStatics = null)
+        private const int Reemit = -1000;
+
+        private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location, int hostFeatures)
         {
-            if (nativeStatics == null) nativeStatics = new NativeStaticFields();
+            var features = new int[] { hostFeatures };
+            var nativeStatics = new NativeStaticFields();
+            var typeCalls = new RuntimeTypeCalls();
+            int status = Reemit;
+            while (status == Reemit)
+                status = CompileProgramPass(bundle, entries, output, location, features, nativeStatics, typeCalls);
+            return status;
+        }
+
+        private static int CompileProgramPass(BundleImages bundle, byte[] entries, byte[] output, int[] location,
+            int[] features, NativeStaticFields nativeStatics, RuntimeTypeCalls typeCalls)
+        {
+            int hostFeatures = features[0];
             int knownNativeStatics = nativeStatics.Count;
             int hostImports = WasmImports.FunctionCount(hostFeatures);
             CompileLocation.Clear(location);
@@ -394,6 +407,7 @@ namespace PortableCompiler
                     if (functions < 0)
                         return functions;
 
+                    typeCalls.Apply(bases, indices, offsets, signatures);
                     RuntimeTypeLocals.Specialize(bundle, records, frame, parameters, locals, objects, catchRegion);
                     if (location.Length != 0) location[2] = -1;
                     int maximum = body[2];
@@ -413,10 +427,26 @@ namespace PortableCompiler
                         exceptionLocals = ExceptionClauses.Validate(records, catchRegion, location);
                         if (exceptionLocals < 0) return exceptionLocals;
                     }
+                    var descriptorMismatch = new int[2];
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
-                        result, signatures, offsets, arities, location, catchRegion, outgoingNulls, objects, virtualTypes, allocatedStates);
+                        result, signatures, offsets, arities, location, catchRegion, outgoingNulls, objects, virtualTypes, allocatedStates,
+                        descriptorMismatch);
                     if (status < 0)
+                    {
+                        int target = descriptorMismatch[0] - 1;
+                        if (target >= 0 && contexts[target] == 0 && instantiations.Arguments(target) == null &&
+                            !IsExported(exports, target))
+                        {
+                            int argument = descriptorMismatch[1];
+                            if (typeCalls.Require(bundle, owners[target], rows[target], argument,
+                                signatures[offsets[target] + 1 + argument], objects))
+                            {
+                                features[0] = hostFeatures | hostUse[0];
+                                return Reemit;
+                            }
+                        }
                         return resourceOpen && status == -1 ? -2 : status;
+                    }
                     if (resourceOpen)
                     {
                         hostUse[0] = hostUse[0] | WasmImports.Resources;
@@ -688,7 +718,10 @@ namespace PortableCompiler
             // Earlier references to a newly discovered static need the same
             // native backing as its address-taking use.
             if ((hostUse[0] & ~hostFeatures) != 0 || nativeStatics.Count != knownNativeStatics)
-                return CompileProgram(bundle, entries, output, location, hostFeatures | hostUse[0], nativeStatics);
+            {
+                features[0] = hostFeatures | hostUse[0];
+                return Reemit;
+            }
             length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, length, hostImports, location);
             if (length < 0) return length;
             if (reflection.ObjectTypes.Fixups[0] != 0)
@@ -736,6 +769,13 @@ namespace PortableCompiler
             if (linearMemory) hostFeatures |= WasmImports.Memory;
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
                 moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0]);
+        }
+
+        private static bool IsExported(int[] exports, int target)
+        {
+            for (int i = 0; i < exports.Length; i++)
+                if (exports[i] == target) return true;
+            return false;
         }
 
         private static int LinkOperands(BundleImages bundle, byte[] image, int[] layout,

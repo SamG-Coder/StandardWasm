@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal static int Analyze(int[] records, int[] depths, int[] states, int maximum,
             int[] frame, int result, int[] signatures, int[] offsets, int[] arities, int[] location, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects, int[] virtualTypes, byte[] allocatedStates)
+            byte[] outgoingNulls, int[] objects, int[] virtualTypes, byte[] allocatedStates, int[] descriptorMismatch)
         {
             if (depths.Length == 0)
                 return -1;
@@ -116,7 +116,27 @@ namespace PortableCompiler
                 else next = Transition(stack, allocated, depth, kind, operand, records[slot + 3], frame,
                     signatures, offsets, arities, objects);
                 if (next < 0)
+                {
+                    if (kind == Call || kind == NewObject)
+                    {
+                        int first = kind == NewObject ? 1 : 0;
+                        int count = arities[operand], start = depth - count;
+                        if (start + first >= 0)
+                        {
+                            for (int i = first; i < count; i++)
+                            {
+                                int expected = signatures[offsets[operand] + 1 + i];
+                                if (stack[start + i] == PeLibrary.RuntimeTypeMetadata.Type && expected >= FirstClass)
+                                {
+                                    descriptorMismatch[0] = operand + 1;
+                                    descriptorMismatch[1] = i;
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     return next;
+                }
                 if (outgoingNulls.Length != 0)
                     for (int i = 0; i < next; i++)
                         outgoingNulls[pc * maximum + i] = stack[i] == NullValue ? (byte)1 :

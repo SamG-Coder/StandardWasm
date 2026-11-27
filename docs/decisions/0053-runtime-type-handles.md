@@ -13,8 +13,12 @@ the default handle. Descriptor identity is allocation identity. An ordinary
 integer supplied as a Wasm `eqref` is distinct, including when the Type
 reference is widened to `System.Object`.
 
-Linked nominal System.Type signatures retain the upstream layout and ABI.
-Descriptors are available for libraries without that linked definition.
+Linked nominal System.Type signatures use the upstream layout at the module
+boundary. An internal direct call can use the descriptor representation for
+a parameter if every reached call supplies a descriptor or null. Discovery
+triggers a new emission pass to check all callers against the same
+representation. Descriptors are also available for libraries without the
+linked definition.
 
 The supported runtime binder accepts the exact platform TypeRef and
 `GetTypeFromHandle` signature. The raw Wasm ABI rejects these internal
