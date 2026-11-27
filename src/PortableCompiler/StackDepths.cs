@@ -194,6 +194,7 @@ namespace PortableCompiler
                     ? Push(stack, allocated, depth - 1, PeLibrary.RuntimeTypeMetadata.Type) : -1;
             // [] -> [writer]; [writer, string-or-null] -> []; [writer] -> [] for WriteLine().
             if (kind == ConsoleWriter) return Push(stack, allocated, depth, PeLibrary.ConsoleStorage.Writer);
+            if (kind == ConsoleReadLine) return Push(stack, allocated, depth, String);
             if (kind == ConsoleWrite)
             {
                 int writer = operand == PeLibrary.ConsoleMetadata.WriteEmptyLine ? depth - 1 : depth - 2;

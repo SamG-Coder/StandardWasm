@@ -207,7 +207,7 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[21];
+            var frameShape = new int[22];
             var shadowStack = new int[3]; // $sp, base, limit globals + 1
             var pinRegistry = new int[1]; // the live-pin count global + 1 (decision 0077)
             // Each emitted global needs at least five bytes in the destination.
@@ -460,13 +460,19 @@ namespace PortableCompiler
                         if (capacity > int.MaxValue - 320) return -3;
                         capacity += 320;
                     }
-                    bool allocates = false, pins = false;
+                    bool allocates = false, pins = false, readsLine = false;
                     int classBytes = objects[0] * 12;
                     if (classBytes > int.MaxValue - capacity) return -3;
                     capacity += classBytes;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
+                        if (kind == BranchIl.ConsoleReadLine && depths[slot / BranchIl.Width] != 0)
+                        {
+                            readsLine = true;
+                            if (capacity > int.MaxValue - ConsoleInputWasm.ReadCapacity) return -3;
+                            capacity += ConsoleInputWasm.ReadCapacity;
+                        }
                         if (kind == BranchIl.ConsoleWrite && depths[slot / BranchIl.Width] != 0)
                         {
                             if (capacity > int.MaxValue - ConsoleWasm.WriteCapacity) return -3;
@@ -627,12 +633,14 @@ namespace PortableCompiler
                     frameShape[17] = allocates ? shadowStack[1] : 0;
                     frameShape[18] = allocates ? shadowStack[2] : 0;
                     frameShape[20] = pins ? pinRegistry[0] : 0;
+                    // Stage 151 (decision 0079): readLine's function index + 1, when the body reads a line.
+                    frameShape[21] = readsLine ? WasmImports.InputFunction(hostFeatures) + 1 : 0;
                     frameShape[19] = resourceOpen ? ((hostFeatures & WasmImports.Console) != 0 ? ConsoleWasm.ImportCount + 1 : 1) : 0;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals ||
-                            kind == BranchIl.ConsoleWrite || kind == BranchIl.PinString) frameShape[5] = 1;
+                            kind == BranchIl.ConsoleWrite || kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine) frameShape[5] = 1;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
                             frameShape[6] = 1;
@@ -1009,6 +1017,14 @@ namespace PortableCompiler
                     }
                     int consoleMember = addressed ? 0 : ConsoleMetadata.Member(image, heaps, layout, member);
                     if (consoleMember == ConsoleMetadata.Unsupported) return -2;
+                    if (consoleMember == ConsoleMetadata.ReadLine)
+                    {
+                        // A static call; the host supplies the line (decision 0079).
+                        if (opcode != 0x28) return -2;
+                        records[slot] = BranchIl.ConsoleReadLine;
+                        hostUse[0] = hostUse[0] | WasmImports.ConsoleInput;
+                        continue;
+                    }
                     if (consoleMember != 0)
                     {
                         // Accessors are static calls. Writes must dispatch virtually:
