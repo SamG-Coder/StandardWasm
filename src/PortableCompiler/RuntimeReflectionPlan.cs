@@ -16,6 +16,10 @@ namespace PortableCompiler
         internal readonly int[] TypeNamespaceFixups = new int[1];
         internal readonly int[] TypeGenericKindFixups = new int[1];
         internal readonly int[] TypeEnumKindFixups = new int[1];
+        internal readonly int[] TypeValueKindFixups = new int[1];
+
+        internal int[] TypePredicateFixups(int operation) => operation == BranchIl.RuntimeTypeIsGeneric ? TypeGenericKindFixups :
+            operation == BranchIl.RuntimeTypeIsEnum ? TypeEnumKindFixups : TypeValueKindFixups;
         internal readonly RuntimeGenericArguments GenericArguments = new RuntimeGenericArguments();
         internal readonly RuntimeGenericDefinitions GenericDefinitions = new RuntimeGenericDefinitions();
         internal readonly int[] HeapFixups = new int[1];

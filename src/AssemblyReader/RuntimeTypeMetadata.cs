@@ -55,15 +55,18 @@ namespace PeLibrary
                 ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2, "System", "RuntimeType");
         }
 
-        internal const int GenericKind = 1, GenericDefinition = 2, GenericArguments = 3, EnumKind = 4;
+        internal const int GenericKind = 1, GenericDefinition = 2, GenericArguments = 3, EnumKind = 4, ValueKind = 5;
 
         internal static int CoreTypeDescriptorOperation(byte[] image, int[] heaps, int[] layout, int row)
         {
             int flags = MethodDefinitions.ReadColumn(image, layout, row, 2);
-            if ((flags & 0x2057) != 0x0046) return 0;
+            int access = flags & 0x2057;
             uint name = (uint)MethodDefinitions.ReadColumn(image, layout, row, 3);
             int operation;
-            if ((flags & 0x0800) != 0)
+            if (access == 6 && (flags & 0x0800) != 0 && MatchesAscii(image, heaps, name, "get_IsValueType"))
+                operation = ValueKind;
+            else if (access != 0x0046) return 0;
+            else if ((flags & 0x0800) != 0)
                 operation = MatchesAscii(image, heaps, name, "get_IsGenericType") ? GenericKind :
                     MatchesAscii(image, heaps, name, "get_IsEnum") ? EnumKind : 0;
             else operation = MatchesAscii(image, heaps, name, "GetGenericTypeDefinition") ? GenericDefinition :
@@ -78,10 +81,11 @@ namespace PeLibrary
             int end = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), 0, cursor);
             if (end < 0) return 0;
             if (operation == GenericArguments && !SignatureReader.TakeElement(image, cursor, end, 0x1d)) return 0;
-            bool result = operation == GenericKind || operation == EnumKind ?
+            bool result = operation == GenericKind || operation == EnumKind || operation == ValueKind ?
                 SignatureReader.TakeElement(image, cursor, end, SignatureReader.Boolean) :
                 SignatureReader.ReadClass(image, cursor, end) == declaring << 2;
-            return result && cursor[0] == end ? operation : 0;
+            return result && cursor[0] == end &&
+                (operation != ValueKind || IsValueKindWrapper(image, layout, heaps, counts, declaring, row)) ? operation : 0;
         }
 
         internal static bool ValidDefinition(byte[] image, int[] heaps, int row)
@@ -376,6 +380,26 @@ namespace PeLibrary
                     ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, handle, "System", "RuntimeTypeHandle")
                 : (result & 3) == 1 &&
                     PlatformTypeReferences.Identify(image, heaps, layout, counts, first, handle) == PlatformTypeReferences.TypeHandle;
+        }
+
+        private static bool IsValueKindWrapper(byte[] image, int[] layout, int[] heaps, int[] counts, int type, int method)
+        {
+            // The original nonvirtual getter is only a call to its protected virtual slot.
+            var body = new int[6];
+            uint rva = (uint)MethodDefinitions.ReadColumn(image, layout, method, 0);
+            if (MethodBodies.Read(image, rva, body) != 0 || body[1] != 7 || body[3] != 0 || body[5] != 0) return false;
+            int at = body[0];
+            if (U16(image, (uint)at) != 0x6f02 || image[at + 6] != 0x2a) return false;
+            uint token = U32(image, (uint)(at + 2));
+            int row = (int)(token & 0xffffff);
+            if ((token >> 24) != 6 || row < 1 || row > counts[6] ||
+                ObjectLayouts.Owner(image, heaps, layout, row, false) != type ||
+                (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x2057) != 0x0044 ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "IsValueTypeImpl"))
+                return false;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), 0, cursor);
+            return end >= 0 && SignatureReader.TakeElement(image, cursor, end, SignatureReader.Boolean) && cursor[0] == end;
         }
 
         internal const int ValueTypeProperty = 1, EnumProperty = 2;

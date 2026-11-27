@@ -1325,7 +1325,7 @@ namespace PortableCompiler
                                 kind == BranchIl.ObjectElementAddress)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.RuntimeTypeDisplayName || kind == BranchIl.RuntimeTypeIsGeneric || kind == BranchIl.RuntimeTypeIsEnum ||
-                                kind == BranchIl.RuntimeTypeGenericDefinition || kind == BranchIl.RuntimeTypeGenericArguments || kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
+                                kind == BranchIl.RuntimeTypeGenericDefinition || kind == BranchIl.RuntimeTypeGenericArguments || kind == BranchIl.RuntimeTypeIsValue || kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || kind == BranchIl.ClearInteriorField || kind == BranchIl.TakeProjectedFieldAddress ||
                                 nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit ||
                                 kind == BranchIl.GetReferenceField || kind == BranchIl.SetReferenceField || kind == BranchIl.TakeReferenceFieldAddress ||
@@ -1514,10 +1514,11 @@ namespace PortableCompiler
                 sizes[functions] = length - bodyOffsets[functions];
                 functions++;
             }
-            for (int predicate = 0; predicate < 2; predicate++)
+            var predicates = new[] { BranchIl.RuntimeTypeIsGeneric, BranchIl.RuntimeTypeIsEnum, BranchIl.RuntimeTypeIsValue };
+            for (int index = 0; index < predicates.Length; index++)
             {
-                bool enumeration = predicate != 0;
-                int[] fixups = enumeration ? reflection.TypeEnumKindFixups : reflection.TypeGenericKindFixups;
+                int predicate = predicates[index];
+                int[] fixups = reflection.TypePredicateFixups(predicate);
                 if (fixups[0] == 0) continue;
                 if (functions >= owners.Length) return -3;
                 int offset = NextSignature(offsets, arities, functions);
@@ -1527,7 +1528,7 @@ namespace PortableCompiler
                 arities[functions] = 1;
                 offsets[functions] = offset;
                 bodyOffsets[functions] = length;
-                length = RuntimeTypePredicates.Write(bundle, moduleCode, length, objects, globals, enumeration);
+                length = RuntimeTypePredicates.Write(bundle, moduleCode, length, objects, globals, predicate);
                 if (length < 0) return length;
                 WasmIndexFixups.Resolve(moduleCode, fixups[0], hostImports + functions);
                 sizes[functions] = length - bodyOffsets[functions];
@@ -3086,24 +3087,32 @@ namespace PortableCompiler
                         // Keep callvirt's null check even when dispatch cannot select another body.
                         bool finalClosedMethod = targetContext > 0 && (symbol[4] & 0x20) != 0;
                         bool deferred = opcode == 0x6f && virtualMethod && !finalClosedMethod;
-                        if (deferred || linked < 0)
+                        bool valueKindCandidate = !addressed && (opcode == 0x28 || opcode == 0x6f) &&
+                            RuntimeTypeMetadata.ClosedTypeProperty(image, heaps, layout, member, false) ==
+                                RuntimeTypeMetadata.ValueTypeProperty;
+                        if (deferred || valueKindCandidate || linked < 0)
                         {
                             byte[] targetImage = bundle.Get(targetOwner);
                             var targetLayout = new int[4];
                             var targetHeaps = new int[8];
                             if (CompressedTables.FindWithHeaps(targetImage, targetLayout, targetHeaps) < 0) return -1;
-                            if (deferred)
+                            if (deferred || valueKindCandidate &&
+                                RuntimeTypeMetadata.CoreTypeDescriptorOperation(targetImage, targetHeaps, targetLayout, targetRow) ==
+                                    RuntimeTypeMetadata.ValueKind)
                             {
                                 int staged = StageVirtualCall(bundle, targetImage, targetLayout, targetHeaps,
                                     targetOwner, targetRow, objects, records, slot, virtualTypes, virtualUsed, typeCalls, targetContext);
                                 if (staged < 0) return staged;
                                 continue;
                             }
-                            functions = Register(bundle, targetImage, targetLayout, targetHeaps, targetOwner, targetRow,
-                                targetContext, owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions,
-                                allowVirtual: virtualMethod, receiverOverride: primitiveReceiver);
-                            if (functions < 0) return functions;
-                            linked = functions - 1;
+                            if (linked < 0)
+                            {
+                                functions = Register(bundle, targetImage, targetLayout, targetHeaps, targetOwner, targetRow,
+                                    targetContext, owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions,
+                                    allowVirtual: virtualMethod, receiverOverride: primitiveReceiver);
+                                if (functions < 0) return functions;
+                                linked = functions - 1;
+                            }
                         }
                         if (!IsSharedBundleSignature(signatures, offsets[linked], arities[linked]) ||
                             primitiveReceiver != 0 && signatures[offsets[linked] + 1] != primitiveReceiver) return -2;
@@ -3289,9 +3298,12 @@ namespace PortableCompiler
                     records[slot] = kind == BranchIl.NewObject ? BranchIl.NewRootObject : BranchIl.BaseCtor;
                     continue;
                 }
-                bool virtualMethodLocal = (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x40) != 0;
+                int targetFlags = MethodDefinitions.ReadColumn(image, layout, target, 2);
+                bool virtualMethodLocal = (targetFlags & 0x40) != 0;
                 if (virtualMethodLocal && kind == BranchIl.LoadFunction) return -2;
-                if (virtualMethodLocal && kind == BranchIl.Call && records[slot + 3] != 0)
+                if (kind == BranchIl.Call && (virtualMethodLocal && records[slot + 3] != 0 ||
+                    (targetFlags & 0x2857) == 0x0806 &&
+                    RuntimeTypeMetadata.CoreTypeDescriptorOperation(image, heaps, layout, target) == RuntimeTypeMetadata.ValueKind))
                 {
                     int staged = StageVirtualCall(bundle, image, layout, heaps, owner, target,
                         objects, records, slot, virtualTypes, virtualUsed, typeCalls);
@@ -3618,6 +3630,8 @@ namespace PortableCompiler
                 records[slot + BranchIl.Width + 2] = BranchIl.RuntimeTypeGenericDefinition;
             if (operation == RuntimeTypeMetadata.EnumKind)
                 records[slot + BranchIl.Width + 2] = BranchIl.RuntimeTypeIsEnum;
+            if (operation == RuntimeTypeMetadata.ValueKind)
+                records[slot + BranchIl.Width + 2] = BranchIl.RuntimeTypeIsValue;
             if (operation == RuntimeTypeMetadata.GenericArguments)
             {
                 int vector = RegisterArray(objects, RuntimeTypeMetadata.Type);
@@ -3648,7 +3662,7 @@ namespace PortableCompiler
                 int owner = records[slot + BranchIl.Width + 1], row = records[slot + BranchIl.Width + 3];
                 int operation = records[slot + BranchIl.Width + 2];
                 if ((operation == BranchIl.RuntimeTypeIsGeneric || operation == BranchIl.RuntimeTypeGenericDefinition ||
-                    operation == BranchIl.RuntimeTypeGenericArguments || operation == BranchIl.RuntimeTypeIsEnum) &&
+                    operation == BranchIl.RuntimeTypeGenericArguments || operation == BranchIl.RuntimeTypeIsEnum || operation == BranchIl.RuntimeTypeIsValue) &&
                     RuntimeTypeGenericKind.IsDescriptorReceiver(actual))
                 {
                     // Select the descriptor path only after dataflow has seen
@@ -3684,7 +3698,26 @@ namespace PortableCompiler
                 }
                 bool allocated = allocatedStates[receiver] != 0;
                 int function;
-                if (allocated || bound == String || ObjectLayouts.IsSealed(objects, bound))
+                if (operation == BranchIl.RuntimeTypeIsValue)
+                {
+                    // A nominal receiver still executes the original wrapper.
+                    // Its protected virtual call selects a user-defined override.
+                    function = Lookup(owners, rows, contexts, bases, indices, functions, owner, row, 0);
+                    if (function < 0)
+                    {
+                        byte[] source = bundle.Get(owner);
+                        var layout = new int[4];
+                        var heaps = new int[8];
+                        if (CompressedTables.FindWithHeaps(source, layout, heaps) < 0) return -1;
+                        int status = Register(bundle, source, layout, heaps, owner, row, 0,
+                            owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions);
+                        if (status < 0) return status;
+                        function = functions;
+                    }
+                    if (!VirtualSignaturesMatch(arities, offsets, signatures, function, types, shape, arity, actual, objects))
+                        return -2;
+                }
+                else if (allocated || bound == String || ObjectLayouts.IsSealed(objects, bound))
                 {
                     function = BindVirtualBody(bundle, objects, actual, allocated, declared, owner, row,
                         owners, rows, contexts, bases, indices, arities, offsets, signatures, functions, instantiations);

@@ -6,15 +6,21 @@ namespace PortableCompiler
 {
     internal static class RuntimeTypePredicates
     {
-        internal static int Write(BundleImages bundle, byte[] code, int used, int[] objects, int[] globals, bool enumeration)
+        internal static int Write(BundleImages bundle, byte[] code, int used, int[] objects, int[] globals, int operation)
         {
             if (code.Length - used < 3) return -3;
             code[used++] = 0; // no local declarations
             var enumIdentity = new int[2];
-            if (enumeration)
+            var valueIdentity = new int[2];
+            if (operation != BranchIl.RuntimeTypeIsGeneric)
             {
                 int status = RuntimeTypeTokens.FindCoreType(bundle, "Enum", enumIdentity);
                 if (status < 0) return status;
+                if (operation == BranchIl.RuntimeTypeIsValue)
+                {
+                    status = RuntimeTypeTokens.FindCoreType(bundle, "ValueType", valueIdentity);
+                    if (status < 0) return status;
+                }
             }
             var layout = new int[4];
             var heaps = new int[8];
@@ -24,8 +30,9 @@ namespace PortableCompiler
                 int owner = StaticFields.Owner(globals, index), row = StaticFields.Row(globals, index);
                 if (!RuntimeTypeTokens.IsDescriptorOwner(owner) || row < 0) continue;
                 int module = RuntimeTypeTokens.ModuleSlot(owner) - 1;
-                int result = enumeration ? EnumKind(bundle, objects, module, row, layout, heaps, enumIdentity, parent) :
-                    RuntimeTypeGenericKind.Definition(bundle, objects, module, row, layout, heaps);
+                int result = operation == BranchIl.RuntimeTypeIsGeneric ?
+                    RuntimeTypeGenericKind.Definition(bundle, objects, module, row, layout, heaps) :
+                    ValueKind(bundle, objects, module, row, layout, heaps, enumIdentity, valueIdentity, parent, operation);
                 if (result == -1) return -1;
                 if (result < 0) continue;
                 if (code.Length - used < 18) return -3;
@@ -44,8 +51,8 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int EnumKind(BundleImages bundle, int[] objects, int owner, int row, int[] layout, int[] heaps,
-            int[] enumIdentity, int[] parent)
+        private static int ValueKind(BundleImages bundle, int[] objects, int owner, int row, int[] layout, int[] heaps,
+            int[] enumIdentity, int[] valueIdentity, int[] parent, int operation)
         {
             if (row >= RuntimeTypeTokens.PrimitiveVectorKey)
                 return owner == AssemblyBundle.ObjectOwner &&
@@ -65,8 +72,8 @@ namespace PortableCompiler
             int baseType = TypeDefinitionBase(image, heaps, layout, row);
             if (baseType <= 0) return baseType;
 
-            // CLR enum definitions directly extend the genuine System.Enum.
-            // Constructed generic bases are distinct from that nongeneric type.
+            // Actual value types extend genuine ValueType or Enum. Enum itself
+            // is a reference type even though its parent is ValueType.
             bool constructed = (baseType & 3) == 2;
             if (constructed)
             {
@@ -75,7 +82,10 @@ namespace PortableCompiler
             }
             int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, baseType, parent);
             if (status < 0) return status;
-            if (parent[0] != enumIdentity[0] || parent[1] != enumIdentity[1]) return 0;
+            if (parent[0] == enumIdentity[0] && parent[1] == enumIdentity[1]) return constructed ? -2 : 1;
+            if (operation == BranchIl.RuntimeTypeIsEnum ||
+                parent[0] != valueIdentity[0] || parent[1] != valueIdentity[1] ||
+                owner == enumIdentity[0] && row == enumIdentity[1]) return 0;
             return constructed ? -2 : 1;
         }
 
