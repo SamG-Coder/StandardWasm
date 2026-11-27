@@ -101,6 +101,7 @@ namespace PortableCompiler
         internal const int PinScopedValue = 241; // [traced value address] -> [] and store a borrowed native address
         internal const int CopyConstructionString = 245; // [fresh String, offset, source String] -> []
         internal const int LoadStaticRvaPointer = 246; // [] -> [stable native address of immutable PE bytes]
+        internal const int CallComCookieLookup = 247; // [receiver, cookie, id, out pointer, token] -> [HRESULT]
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

@@ -290,7 +290,7 @@ namespace PortableCompiler
 
                 int tracked = 0;
                 bool publishesRoots = tracksRoots && (kind == Call || kind == NewObject || kind == ConstructValue ||
-                    kind == ResourceLookup || kind == InvokeDelegate || kind == CallNativeIndirect ||
+                    kind == ResourceLookup || kind == InvokeDelegate || kind == CallNativeIndirect || kind == CallComCookieLookup ||
                     kind == CallDynamicNative || kind == CallPinnedCharacterNative ||
                     TypeInitializerWasm.HasFieldTrigger(kind, operand, fieldInitializers));
                 if (publishesRoots)
@@ -1046,17 +1046,19 @@ namespace PortableCompiler
                     used = WasmBinary.Unsigned(code, used, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top - 2));
                 }
-                else if (kind == CallNativeIndirect)
+                else if (kind == CallNativeIndirect || kind == CallComCookieLookup)
                 {
-                    // IL already evaluated [receiver, token]. The host validates
-                    // the issued token first, then dispatches on the receiver.
+                    // IL evaluates the token last. The host validates it first,
+                    // then receives the original arguments in their IL order.
+                    int first = top - (kind == CallComCookieLookup ? 4 : 1);
                     used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, Native, top));
-                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, Native, top - 1));
+                    for (int argument = first; argument < top; argument++)
+                        used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + argument], argument));
                     code[used++] = 0x10;
                     used = WasmBinary.Unsigned(code, used, operand);
                     int returned = records[slot + 3];
                     if (returned != I32) used = Gc(code, used, 0, returned);
-                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, returned, top - 1));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, returned, first));
                 }
                 else if (kind == CallIndirect)
                 {

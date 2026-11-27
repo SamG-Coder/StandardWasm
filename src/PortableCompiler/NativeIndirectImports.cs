@@ -40,12 +40,22 @@ namespace PortableCompiler
             return imports.Add(-2, 1, module, module.Length, entry, entry.Length, new byte[] { 0x7f, 0x7f }, 2, 0x7f);
         }
 
-        // The initial host signature accepts one wasm32 pointer and a four-byte
-        // integer result. HRESULT-like wrappers keep their nominal managed type.
+        internal static int RegisterCookieLookup(NativeImportTable imports)
+        {
+            int existing = imports.Find(-2, 4);
+            if (existing >= 0) return existing;
+            byte[] module = NativeImportTable.Ascii("standardwasm:com");
+            byte[] entry = NativeImportTable.Ascii("stdcall:i32(p32,u32,p32,p32)");
+            return imports.Add(-2, 4, module, module.Length, entry, entry.Length,
+                new byte[] { 0x7f, 0x7f, 0x7f, 0x7f, 0x7f }, 5, 0x7f);
+        }
+
+        // The host signatures preserve HRESULT-like wrappers as nominal managed
+        // types. The stdcall parameter shape is checked before Wasm retyping.
         // Zero means a different convention; malformed blobs and unsupported
         // stdcall shapes remain distinct diagnostic statuses.
         internal static int ReadResult(BundleImages bundle, byte[] image, int[] heaps, int[] layout,
-            int blob, int owner, int[] objects)
+            int blob, int owner, int[] objects, int[] nativeArity)
         {
             if (blob < 1 || blob >= heaps[1]) return -1;
             var next = new int[1];
@@ -70,7 +80,7 @@ namespace PortableCompiler
                 if (storage < 0) return storage;
                 return storage == Native && next[0] == end ? DynamicUInt32 : -2;
             }
-            if (count != 1) return -2;
+            if (count != 1 && count != 4) return -2;
 
             int element = image[at++], coded = 0;
             if (element == 0x11)
@@ -81,17 +91,20 @@ namespace PortableCompiler
             }
             else if (element != 0x08 && element != 0x09) return -2;
 
-            if (at >= end) return -1;
-            int parameter = image[at++];
-            if (parameter == PointerStorage.Element)
+            next[0] = at;
+            int receiver = ReadPointer(bundle, image, heaps, layout, owner, next, end, allowNativeWord: count == 1);
+            if (receiver < 0) return receiver;
+            if (count == 4)
             {
-                int storage = PointerSignatures.ReadStorage(bundle, image, layout, heaps, owner, at, end, next);
-                if (storage < 0) return storage;
-                if (storage != Native) return -2;
-                at = next[0];
+                if (!SignatureReader.TakeElement(image, next, end, 0x09)) return -2;
+                int identifier = ReadPointer(bundle, image, heaps, layout, owner, next, end, allowNativeWord: false);
+                if (identifier < 0) return identifier;
+                if (!SignatureReader.TakeElement(image, next, end, PointerStorage.Element) ||
+                    !SignatureReader.TakeElement(image, next, end, PointerStorage.Element) ||
+                    !SignatureReader.TakeElement(image, next, end, 1)) return -2;
             }
-            else if (parameter != 0x18 && parameter != 0x19) return -2;
-            if (at != end) return -2;
+            if (next[0] != end) return -2;
+            nativeArity[0] = count;
             if (coded == 0) return I32;
 
             int type = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, valueType: true);
@@ -110,6 +123,17 @@ namespace PortableCompiler
             int status = NativeValueLayouts.Measure(bundle, AssemblyOf(objects, type), TypeDef(objects, type), measured);
             if (status < 0) return status;
             return measured[0] == 4 && measured[1] == 4 ? type : -2;
+        }
+
+        private static int ReadPointer(BundleImages bundle, byte[] image, int[] heaps, int[] layout,
+            int owner, int[] cursor, int end, bool allowNativeWord)
+        {
+            if (cursor[0] >= end) return -1;
+            int element = image[cursor[0]++];
+            if (allowNativeWord && (element == 0x18 || element == 0x19)) return 0;
+            if (element != PointerStorage.Element) return -2;
+            int storage = PointerSignatures.ReadStorage(bundle, image, layout, heaps, owner, cursor[0], end, cursor);
+            return storage == Native ? 0 : storage < 0 ? storage : -2;
         }
     }
 }

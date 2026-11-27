@@ -597,6 +597,12 @@ namespace PortableCompiler
                 if (depth < 2 || !IsNativeInteger(stack[depth - 1]) || !IsNativeInteger(stack[depth - 2])) return -2;
                 return Push(stack, allocated, depth - 2, extra);
             }
+            if (kind == CallComCookieLookup)
+            {
+                if (depth < 5 || !IsNativeInteger(stack[depth - 1]) || !IsNativeInteger(stack[depth - 2]) ||
+                    !IsNativeInteger(stack[depth - 3]) || stack[depth - 4] != I32 || !IsNativeInteger(stack[depth - 5])) return -2;
+                return Push(stack, allocated, depth - 5, extra);
+            }
             if (kind == CallIndirect)
             {
                 int arity = arities[operand], shape = offsets[operand];

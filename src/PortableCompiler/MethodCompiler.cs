@@ -1138,7 +1138,7 @@ namespace PortableCompiler
                         }
                         int pc = slot / BranchIl.Width;
                         int operation = records[slot + 1];
-                        if ((kind == BranchIl.CallNativeIndirect || kind == BranchIl.CallDynamicNative) && depths[pc] != 0)
+                        if ((kind == BranchIl.CallNativeIndirect || kind == BranchIl.CallComCookieLookup || kind == BranchIl.CallDynamicNative) && depths[pc] != 0)
                             linearMemory = true;
                         if ((kind == BranchIl.Load || kind == BranchIl.Store) && frameCells[operation] < 0 && depths[pc] != 0)
                         {
@@ -4140,7 +4140,8 @@ namespace PortableCompiler
                 if (location.Length != 0) location[2] = slot / BranchIl.Width;
                 int blob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, 0x11000000 | records[slot + 1]);
                 if (blob < 0) return -1;
-                int nativeResult = NativeIndirectImports.ReadResult(bundle, image, heaps, layout, blob, owner, objects);
+                var nativeArity = new int[1];
+                int nativeResult = NativeIndirectImports.ReadResult(bundle, image, heaps, layout, blob, owner, objects, nativeArity);
                 if (nativeResult < 0) return nativeResult;
                 if (nativeResult == NativeIndirectImports.DynamicUInt32)
                 {
@@ -4150,8 +4151,10 @@ namespace PortableCompiler
                 }
                 if (nativeResult != 0)
                 {
-                    records[slot] = BranchIl.CallNativeIndirect;
-                    records[slot + 1] = nativeBase + NativeIndirectImports.Register(natives);
+                    bool cookieLookup = nativeArity[0] == 4;
+                    records[slot] = cookieLookup ? BranchIl.CallComCookieLookup : BranchIl.CallNativeIndirect;
+                    records[slot + 1] = nativeBase + (cookieLookup ? NativeIndirectImports.RegisterCookieLookup(natives) :
+                        NativeIndirectImports.Register(natives));
                     records[slot + 3] = nativeResult;
                     continue;
                 }

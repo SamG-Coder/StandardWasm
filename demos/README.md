@@ -296,6 +296,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [301 · Scoped pinning of static pointers](stage-301-static-pointer-pinning/README.md) | `npm run demo -- stage-301-static-pointer-pinning` | Compare borrowed writes and direct accesses to one static field |
 | [303 · Same-assembly static interface slots](stage-303-local-static-interface/README.md) | `npm run demo -- stage-303-local-static-interface` | Compare local MethodDef dispatch and readonly reference identity |
 | [305 · Native addresses of immutable PE data](stage-305-static-rva-pointers/README.md) | `npm run demo -- stage-305-static-rva-pointers` | Verify original bytes and module-lifetime native address identity |
+| [307 · COM cookie lookup dispatch](stage-307-com-cookie-lookup/README.md) | `npm run demo -- stage-307-com-cookie-lookup` | Compare four-argument COM dispatch and HRESULT/out-pointer behavior |
 
 ## Adding a stage
 
