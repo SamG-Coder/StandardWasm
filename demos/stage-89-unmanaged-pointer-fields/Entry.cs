@@ -28,7 +28,8 @@ namespace PointerFieldDemo
         }
         public static int DereferenceNullAddress() => *(int*)new NativeSlot(0).Address;
         public static void* ExportNull() => null;
-        public static int RejectCallbackLayout() => new CallbackSlot().Marker;
+        // A function-pointer field is a native int since Stage 150 (decision 0078).
+        public static int CallbackLayout() => new CallbackSlot().Marker;
     }
 
     public static class Demo
