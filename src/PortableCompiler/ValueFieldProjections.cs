@@ -123,7 +123,10 @@ namespace PortableCompiler
                 int type = ManagedReferenceSignatures.Read(bundle, image, layout, heaps,
                     AssemblyOf(objects, owner), next, end, owner, objects, 0);
                 if (type < 0) return type;
-                return type == GenericScalar.Key(8) && next[0] == end ? Int32Location : -2;
+                // Preserve the declared identity for binding, then use the
+                // verification location of its exact four-byte representation.
+                if (next[0] != end || type != GenericScalar.Key(8) && !IsEnumKey(type)) return -2;
+                return ManagedReferenceSignatures.ElementLocation(objects, type) == Int32Location ? Int32Location : -2;
             }
             int location = ManagedReferenceSignatures.ReadLocation(bundle, image, layout, heaps,
                 AssemblyOf(objects, owner), next, end, owner, objects);
