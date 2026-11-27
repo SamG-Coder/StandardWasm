@@ -72,8 +72,9 @@ export async function runConsoleEntry(compilerBytes, selection) {
     const module = await WebAssembly.compile(code);
     const imports = WebAssembly.Module.imports(module);
     const host = createConsoleHost(selection.console);
-    const { exports } = await instantiateManagedModule(module, compiler, [selection.entry, ...companions],
+    const instance = await instantiateManagedModule(module, compiler, [selection.entry, ...companions],
         host.imports, selection.executablePath);
+    const { exports } = instance;
     if (typeof exports.run !== "function" || exports.run.length > 1)
         throw Error("This entry host supports Main() and Main(string[]).");
     const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", code));
@@ -85,7 +86,7 @@ export async function runConsoleEntry(compilerBytes, selection) {
     // WebAssembly.promising and returns a Promise (decision 0079). Others stay synchronous.
     const reads = imports.some(entry => entry.module === "standardwasm:console" && entry.name === "readLine");
     if (reads && !selection.console?.input) throw Error("This entry reads standard input; provide console.input.");
-    const run = reads ? WebAssembly.promising(exports.run) : exports.run;
+    const run = reads ? (instance.promising?.("run") ?? WebAssembly.promising(exports.run)) : exports.run;
     let returned;
     try {
         returned = exports.run.length ? run(buildArguments(exports, selection.arguments ?? [])) : run();

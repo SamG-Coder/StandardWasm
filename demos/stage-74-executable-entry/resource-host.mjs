@@ -87,6 +87,8 @@ export function createResourceHost(compiler, images) {
 
 const threadingModule = "standardwasm:threading";
 const runtimeModule = "standardwasm:runtime";
+const fatalImportModule = "standardwasm:fatal";
+const fatalImportNames = new Set(["write", "terminate"]);
 
 export function createMonitorHost() {
     // Compiled managed execution is synchronous on one Wasm agent. Identity
@@ -109,6 +111,7 @@ const resourceImportKinds = new Map([
 ]);
 
 export function instantiateManagedModule(module, compiler, assets, runtimeImports = {}, executablePath, windows, configureCom, platform = {}) {
+    const requestedFatal = new Set();
     const requestedResources = new Set();
     const requestedWin32 = new Set();
     let wantsMonitor = false;
@@ -118,6 +121,12 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     let wantsNativeSymbol = false;
     const nativeIndirectRequests = new Set();
     for (const { module: owner, name, kind } of WebAssembly.Module.imports(module)) {
+        if (owner === fatalImportModule) {
+            if (kind !== "function" || !fatalImportNames.has(name) || requestedFatal.has(name))
+                throw Error("The generated module requests an invalid fatal runtime import.");
+            requestedFatal.add(name);
+            continue;
+        }
         if (owner === resourceImportModule) {
             if (resourceImportKinds.get(name) !== kind || requestedResources.has(name))
                 throw Error("The generated module requests an invalid resource import.");
@@ -242,6 +251,15 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         imports[runtimeModule] = {
             isDebuggerAttached: () => typeof debuggerHost?.isDebuggerAttached === "function" && debuggerHost.isDebuggerAttached() ? 1 : 0
         };
+    }
+    if (requestedFatal.size) {
+        if (requestedFatal.size !== fatalImportNames.size)
+            throw Error("The generated module requires the complete fatal runtime contract.");
+        return import("./fatal-host.mjs").then(({ createFatalHost }) => {
+            const fatal = createFatalHost();
+            imports[fatalImportModule] = fatal.imports;
+            return fatal.instantiate(module, imports);
+        });
     }
     return WebAssembly.instantiate(module, imports);
 }

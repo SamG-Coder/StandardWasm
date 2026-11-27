@@ -16,6 +16,7 @@ export function serveConsoleLaunch(port, compiler) {
             script("stage-110-console-arguments/host/" + name + ".mjs")),
         script("stage-74-executable-entry/companions.mjs"),
         script("stage-74-executable-entry/resource-host.mjs"),
+        script("stage-74-executable-entry/fatal-host.mjs"),
         script("stage-74-executable-entry/com-host.mjs"),
         script("stage-74-executable-entry/dynamic-library-host.mjs"),
         script("stage-74-executable-entry/win32-host.mjs"),

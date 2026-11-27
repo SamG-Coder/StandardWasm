@@ -523,6 +523,17 @@ namespace PortableCompiler
                     sizes[current] = length - bodyOffsets[current];
                     continue;
                 }
+                if (stub < 0 && RuntimeTerminationMetadata.IsMonoFailFast(image, heaps, layout, source))
+                {
+                    if (moduleCode.Length - length < RuntimeTerminationWasm.BodyCapacity) return -3;
+                    int write = nativeBase + RuntimeTerminationWasm.RegisterWrite(natives);
+                    int terminate = nativeBase + RuntimeTerminationWasm.RegisterTerminate(natives);
+                    int initialize = initializerPrologue < 0 ? -1 : hostImports + initializerPrologue;
+                    bodyOffsets[current] = length;
+                    length = RuntimeTerminationWasm.WriteBody(moduleCode, length, write, terminate, initialize);
+                    sizes[current] = length - bodyOffsets[current];
+                    continue;
+                }
                 uint rva = 0;
                 int nativeKind = stub >= 0 ? NativeThunks.None : NativeThunks.Kind(image, heaps, layout, source);
                 int nativeDescription = 0;
