@@ -251,7 +251,7 @@ namespace PortableCompiler
                 int kind = records[slot], operand = records[slot + 1];
                 if (kind == Load || kind == Constant) depth++;
                 else if (kind == Binary && depth >= 2 &&
-                    (operand == 0x6a || operand == 0x6b || operand >= 0x71 && operand <= 0x76))
+                    (operand >= 0x6a && operand <= 0x6c || operand >= 0x71 && operand <= 0x76))
                     depth--;
                 else if (kind != LoadIndirect || operand != 0x47 || depth < 1)
                     return depth == 1 && IsDirectMemberCall(records, slot) ? slot : -1;
