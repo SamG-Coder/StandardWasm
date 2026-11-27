@@ -176,26 +176,6 @@ async function observeRoots(bytes) {
         clear();
         return divisor === 0 ? "DivideByZeroException" : "ProbeException";
     });
-    initializerSnapshots = [];
-    const entry = ObserveInitializerEntry(41);
-    assertEmpty();
-    const field = ObserveInitializerField(43);
-    assertEmpty();
-    let failures = 0;
-    for (let attempt = 0; attempt < 2; attempt++) {
-        try { ObserveInitializerFailure(47); }
-        catch (error) {
-            if (!(error instanceof WebAssembly.RuntimeError)) throw error;
-            failures++;
-        }
-        assertEmpty();
-        if (mark() !== 0) throw new Error("A trapped initializer retained an abandoned frame root");
-        clear();
-    }
-    if (failures !== 2 || initializerSnapshots.join(",") !== "1,1,2")
-        throw new Error("Type initialization changed its live arguments, field operand, or failure caching");
-    initializerSnapshots = null;
-    const initializerResults = { entry, field, failures };
     let exception;
     try { ThrowWithRoot(11); }
     catch (error) { exception = error; }
@@ -314,6 +294,39 @@ async function observeRoots(bytes) {
     if (duplicate !== 1 || runNext() !== 1 || runNext() !== 0 || mark() !== 0)
         throw new Error("Suppression should consume one registration and leave no root afterward");
     const suppression = { nullException, registered, pending, duplicate, total: get_Total() - allocationFinalizers.total };
+    initializerSnapshots = [];
+    const entry = ObserveInitializerEntry(41);
+    assertEmpty();
+    const field = ObserveInitializerField(43);
+    assertEmpty();
+    // A failed type keeps the exception globally reachable after its callers unwind.
+    const initializationTag = instance.exports["\0object"];
+    let cachedFailure = null;
+    let failures = 0;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try { ObserveInitializerFailure(47); }
+        catch (error) {
+            if (!(error instanceof WebAssembly.Exception) || !error.is(initializationTag)) throw error;
+            const failure = error.getArg(initializationTag, 0);
+            if (failure === null || (cachedFailure !== null && cachedFailure !== failure))
+                throw new Error("The initializer did not rethrow the same managed exception");
+            cachedFailure = failure;
+            failures++;
+        }
+        assertEmpty();
+        mark();
+        if (contains(cachedFailure) !== 1)
+            throw new Error("The cached initialization exception was not marked");
+        const children = Array.from({ length: edges(cachedFailure) }, (_, index) => read(cachedFailure, index))
+            .filter(child => child !== null);
+        if (children.length === 0 || children.some(child => contains(child) !== 1))
+            throw new Error("The cached initialization exception lost a referenced object");
+        clear();
+    }
+    if (failures !== 2 || initializerSnapshots.join(",") !== "1,1,2")
+        throw new Error("Type initialization changed its live arguments, field operand, or failure caching");
+    initializerSnapshots = null;
+    const initializerResults = { entry, field, failures };
     return { values: [value, constructed, constructedValue, addressedValue, cellValue], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph, staticRoot: true,
         discovered, allocationReceivers, allocationFinalizers, suppression, pin, protectedExceptions, initializerResults };
 }

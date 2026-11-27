@@ -46,6 +46,32 @@ namespace TypeInitializerFixture
     }
 
     // Never reached at run time, but compiled into a kernel's untaken branch.
+    // The security attribute gives this image a DeclSecurity table, which CoreLib lacks. The
+    // bundle lists this image before CoreLib, so finding CoreLib's TypeInitializationException must
+    // read each image's own table counts (a regression found in Codex's #306 review).
+    [System.Security.Permissions.SecurityPermission(System.Security.Permissions.SecurityAction.Demand, UnmanagedCode = true)]
+    public static class ThrowsObject
+    {
+        public static int Value = Fail();
+        static int Fail() => throw new System.InvalidOperationException();
+    }
+
+    public static class Outer
+    {
+        public static class InnerThrows
+        {
+            public static int Value = Fail();
+            static int Fail() => throw new System.NotSupportedException();
+        }
+
+        // A valid non-ASCII identifier: its UTF-8 metadata name becomes the UTF-16 FullName.
+        public static class CaféFailure
+        {
+            public static int Value = Fail();
+            static int Fail() => throw new System.InvalidOperationException();
+        }
+    }
+
     public static class Unrelated
     {
         public static int Value;
@@ -247,6 +273,17 @@ namespace TypeInitializerFixture
 
         public static int ReadFailing() => Failing.Value;
 
+        private static class GenericFailure<T>
+        {
+            internal static readonly int Value;
+
+            static GenericFailure() => throw new InvalidOperationException();
+        }
+
+        public static int ReadIntFailure() => GenericFailure<int>.Value;
+
+        public static int ReadStringFailure() => GenericFailure<string>.Value;
+
         public static int ReadOuterFailing() => OuterFailing.Value;
 
         public static int ReadTrace() => Trace.Log;
@@ -266,6 +303,33 @@ namespace TypeInitializerFixture
         }
 
         public static int NotNominalClass() => Fresh() is Empty ? 0 : 1;
+
+        // Issue #170: an initializer that throws a managed exception object. The CLR wraps it in
+        // TypeInitializationException, raised again on every later trigger; the compiler builds
+        // CoreLib's own TypeInitializationException when the bundle supplies CoreLib.
+        public static int ObjectFailureCaught()
+        {
+            int score = 0;
+            for (int i = 0; i < 2; i++)
+            {
+                try { score += ThrowsObject.Value; }
+                catch (TypeInitializationException) { score += 10; }
+                catch (InvalidOperationException) { score += 1000; }
+            }
+            return score + Unrelated.Value;
+        }
+
+        public static int NestedObjectFailure()
+        {
+            try { return Outer.InnerThrows.Value; }
+            catch (TypeInitializationException) { return 3; }
+        }
+
+        public static int NonAsciiNameFailure()
+        {
+            try { return Outer.CaféFailure.Value; }
+            catch (TypeInitializationException) { return 3; }
+        }
 
         // Object members on a root object stay explicit diagnostics.
         public static int RootHashCode() => Fresh().GetHashCode() == 0 ? 0 : 1;

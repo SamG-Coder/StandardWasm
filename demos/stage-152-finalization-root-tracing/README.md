@@ -113,7 +113,8 @@ type and a managed operand to a static field store. Each reference is visible
 to the mark pass while the associated initializer is running. The failing
 initializer invokes its observer once, keeps the failure cached, and clears
 the abandoned roots from both caller frames. The CLR reports
-`TypeInitializationException`. The current Wasm initializer guard reports a trap.
+`TypeInitializationException`. Node and Edge rethrow the same managed exception
+object and the mark pass retains its referenced objects after the frame unwinds.
 
 The pinning test observes a string whose only managed root is its active pin.
 The mark pass visits the owner in each pin registry pair. The paired native

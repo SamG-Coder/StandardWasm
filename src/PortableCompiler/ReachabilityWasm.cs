@@ -28,10 +28,10 @@ namespace PortableCompiler
             used = Call(code, used, first + Clear);
             for (int index = 0; index < globals[0]; index++)
             {
-                // Positive rows are CLI storage. Synthetic reference globals have
-                // independent lifetime rules and need their own root provider.
+                // CLI statics and cached type-initialization failures both keep their payloads alive.
+                int owner = StaticFields.Owner(globals, index), row = StaticFields.Row(globals, index);
                 int storage = StaticFields.Storage(globals, index);
-                if (StaticFields.Owner(globals, index) < 0 || StaticFields.Row(globals, index) <= 0 ||
+                if (owner < 0 || (row <= 0 && !InitializerFailures.IsCacheRow(owner, row)) ||
                     (!IsObjectReference(storage) && !StaticFields.IsReferenceCell(storage))) continue;
                 used = Index(code, used, 0x23, index);
                 if (StaticFields.IsReferenceCell(storage))

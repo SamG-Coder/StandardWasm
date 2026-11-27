@@ -750,6 +750,30 @@ namespace PortableCompiler
                     capacity += narrowParameters * 16;
                     if (initializerGuard >= 0 || initializerPrologue >= 0)
                         capacity += TypeInitializerWasm.Capacity;
+                    // Issue #170: an initializer body wraps an escaping managed exception in CoreLib's
+                    // TypeInitializationException when the bundle supplies it.
+                    int[] failure = null;
+                    bool wrapsFailure = false;
+                    if (initializerGuard >= 0)
+                    {
+                        failure = new int[TypeInitializerWasm.FailureWidth];
+                        functions = BindInitializerFailure(bundle, image, heaps, layout, owner, source, context, owners, rows, contexts,
+                            bases, indices, arities, offsets, signatures, objects, functions, globals, literals, literalSize, failure);
+                        if (functions < 0) return functions;
+                        wrapsFailure = failure[TypeInitializerWasm.FailureCache] != 0;
+                        if (wrapsFailure)
+                        {
+                            failure[TypeInitializerWasm.FailureCache] = failure[TypeInitializerWasm.FailureCache] - 1; // stored as index + 1
+                            failure[TypeInitializerWasm.FailureConstructor] = failure[TypeInitializerWasm.FailureConstructor] + hostImports;
+                            for (int i = 0; i < TypeInitializerWasm.FixedFailureCount; i++)
+                                if (failure[TypeInitializerWasm.FailureFixed + 2 * i] >= 0)
+                                    failure[TypeInitializerWasm.FailureFixed + 2 * i] = failure[TypeInitializerWasm.FailureFixed + 2 * i] + hostImports;
+                            // Every tag the guard catches must be declared by the module.
+                            exceptionTags |= ExceptionTypes.Object | ExceptionTypes.Supported;
+                            if (capacity > int.MaxValue - 192) return -3;
+                            capacity += 192;
+                        }
+                    }
                     if (resourceOpen)
                     {
                         if (capacity > int.MaxValue - 320) return -3;
@@ -1002,7 +1026,7 @@ namespace PortableCompiler
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
                         arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers,
                         reflection, inlineLocations, nativePlans.Plans, filters, frameCells, pointers, rootCount, frameRoots,
-                        tracksFinalizers ? finalizers : null);
+                        tracksFinalizers ? finalizers : null, wrapsFailure ? failure : null);
                 }
 
                 if (used < 0) return used;
@@ -2207,6 +2231,8 @@ namespace PortableCompiler
                     records[slot + 3] = records[pointer + 3];
                     continue;
                 }
+                if (kind != BranchIl.Call && kind != BranchIl.NewObject && kind != BranchIl.LoadFunction)
+                    continue;
                 // Issue #304: ldstr "key"; call SR.GetResourceString(string) in CoreLib folds to the
                 // neutral resource string, so SR properties compile without ResourceManager.
                 if (kind == BranchIl.Call && records[slot + 3] == 0)
@@ -2215,8 +2241,6 @@ namespace PortableCompiler
                     if (folded < 0) return folded;
                     if (folded > 0) continue;
                 }
-                if (kind != BranchIl.Call && kind != BranchIl.NewObject && kind != BranchIl.LoadFunction)
-                    continue;
                 if (kind == BranchIl.Call)
                 {
                     if (records[slot + 3] == 0 && finalizers != null && finalizers.IsSuppression(owner, target))
@@ -2714,6 +2738,95 @@ namespace PortableCompiler
             int at = next[0];
             return size == 5 && image[at] == 0x20 && image[at + 1] == 2 && image[at + 2] == 1 &&
                 image[at + 3] == 0x1c && image[at + 4] == 0x18;
+        }
+
+        // Issue #170: binds CoreLib's internal TypeInitializationException(string, string, Exception)
+        // for the initializer `source`, writes its type-name and message literals, and registers the
+        // global that records the failure. failure[FailureCache] stays 0 (no wrapping, the trap
+        // remains) only when the bundle has no CoreLib TypeInitializationException constructor.
+        // Anything else that prevents wrapping is a diagnostic, never a silent trap.
+        private static int BindInitializerFailure(BundleImages bundle, byte[] image, int[] heaps, int[] layout, int owner,
+            int source, int context, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets,
+            int[] signatures, int[] objects, int functions, int[] globals, byte[] literals, int[] literalSize, int[] failure)
+        {
+            var found = new int[2];
+            if (InitializerFailures.FindConstructor(bundle, found) < 0) return -1;
+            if (found[0] < 0) return functions;
+            int typeRow = ObjectLayouts.Owner(image, heaps, layout, source, false);
+            if (typeRow < 1) return -1;
+            int nameStart = literalSize[0];
+            int nameLength = InitializerFailures.WriteInitializerName(image, heaps, layout, typeRow, literals, nameStart);
+            if (nameLength < 0) return nameLength; // malformed metadata or literal capacity, never a silent trap
+            if (nameLength == 0) return -1;
+            int messageStart = nameStart + 2 * nameLength;
+            int messageLength = InitializerFailures.WriteMessage(literals, messageStart, nameStart, nameLength);
+            if (messageLength < 0) return messageLength;
+            byte[] coreLib = bundle.Get(found[0]);
+            var coreLayout = new int[4];
+            var coreHeaps = new int[8];
+            if (CompressedTables.FindWithHeaps(coreLib, coreLayout, coreHeaps) < 0) return -1;
+            int constructor = indices[bases[found[0]] + found[1]] - 1;
+            if (constructor < 0)
+            {
+                functions = Register(bundle, coreLib, coreLayout, coreHeaps, found[0], found[1], 0, owners, rows, contexts,
+                    bases, indices, arities, offsets, signatures, objects, functions);
+                if (functions < 0) return functions;
+                constructor = functions - 1;
+            }
+            int shape = offsets[constructor];
+            if (arities[constructor] != 4) return -1;
+            int exceptionType = signatures[shape + 4];
+            // Owner 0 with a reserved negative row, as the shadow-stack and pin globals use: an
+            // owner of -2 or below would be read as a runtime type descriptor.
+            int cacheRow = InitializerFailures.CacheRow(owner, source);
+            if (cacheRow == 0) return -2;
+            // Each closed declaring layout owns its cached failure object.
+            int cache = StaticFields.Register(globals, 0, cacheRow, ObjectReference, context);
+            if (cache < 0) return cache;
+            literalSize[0] = messageStart + 2 * messageLength;
+            failure[TypeInitializerWasm.FailureConstructor] = constructor;
+            failure[TypeInitializerWasm.FailureClass] = signatures[shape + 1];
+            failure[TypeInitializerWasm.FailureNameStart] = nameStart;
+            failure[TypeInitializerWasm.FailureNameLength] = nameLength;
+            failure[TypeInitializerWasm.FailureMessageStart] = messageStart;
+            failure[TypeInitializerWasm.FailureMessageLength] = messageLength;
+            failure[TypeInitializerWasm.FailureExceptionClass] = exceptionType;
+            failure[TypeInitializerWasm.FailureCache] = cache + 1;
+            // Step 2: the CoreLib exception for each fixed tag, built with its parameterless
+            // constructor (default message from SR, decision 0081). Unbound ones keep the trap.
+            for (int i = 0; i < TypeInitializerWasm.FixedFailureCount; i++)
+            {
+                failure[TypeInitializerWasm.FailureFixed + 2 * i] = -1;
+                // Only where the CLR's runtime-raised exception carries that same default message.
+                // A failed cast names its types and the argument checks name their parameter, so
+                // those tags keep the explicit trap rather than an object with a different Message.
+                if (!TypeInitializerWasm.DefaultMessageMatches(i)) continue;
+                int type = ObjectLayouts.FindTypeDefinition(coreLib, coreHeaps, coreLayout, "System", FixedFailureTypeName(i));
+                int row = type == 0 ? 0 : InitializerFailures.FindDefaultConstructor(coreLib, coreHeaps, coreLayout, type);
+                if (row == 0) continue;
+                int linked = indices[bases[found[0]] + row] - 1;
+                if (linked < 0)
+                {
+                    functions = Register(bundle, coreLib, coreLayout, coreHeaps, found[0], row, 0, owners, rows, contexts,
+                        bases, indices, arities, offsets, signatures, objects, functions);
+                    if (functions < 0) return functions;
+                    linked = functions - 1;
+                }
+                failure[TypeInitializerWasm.FailureFixed + 2 * i] = linked;
+                failure[TypeInitializerWasm.FailureFixed + 2 * i + 1] = signatures[offsets[linked] + 1];
+            }
+            return functions;
+        }
+
+        private static string FixedFailureTypeName(int i)
+        {
+            if (i == 0) return "OverflowException";
+            if (i == 1) return "DivideByZeroException";
+            if (i == 2) return "IndexOutOfRangeException";
+            if (i == 3) return "NullReferenceException";
+            if (i == 4) return "InvalidCastException";
+            if (i == 5) return "ArgumentException";
+            return "ArgumentNullException";
         }
 
         // Decision 0078: link each calli to the carrier for its StandAloneSig. Only the

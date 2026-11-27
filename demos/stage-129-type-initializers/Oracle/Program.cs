@@ -24,23 +24,51 @@ foreach (string name in new[]
     "ReachedOnce", "CallAfterArgument", "StoreAfterRightHand", "BeforeFieldInitOnce", "ConstructorTriggers",
     "InheritedField", "Recursion", "CatchInsideInitializer", "BundledDependency", "RelaxedGenericCall",
     "DistinctObjects", "StaticFieldAlias", "NotNominalClass", "Locked", "RuntimeTypeLock", "StaticAutoProperty",
-    "LinkedRuntimeTypeArgument", "RootGetType", "PreciseGenericCall"
+    "LinkedRuntimeTypeArgument", "RootGetType", "PreciseGenericCall",
+    "ObjectFailureCaught", "NestedObjectFailure", "NonAsciiNameFailure"
 })
 {
     var (kernels, context) = Load(name);
     MethodInfo method = kernels.GetMethod(name)!;
     string value = ((int)method.Invoke(null, null)!).ToString();
-    cases.Add(new { name, row = Row(method), images, clr = value, wasm = value });
+    // Issue #170: the CLR's TypeName and Message for the exception the kernel caught. The compiled
+    // module must carry exactly these strings for CoreLib's TypeInitializationException constructor.
+    string? failing = name switch
+    {
+        "ObjectFailureCaught" => "TypeInitializerFixture.ThrowsObject",
+        "NestedObjectFailure" => "TypeInitializerFixture.Outer+InnerThrows",
+        "NonAsciiNameFailure" => "TypeInitializerFixture.Outer+Caf\u00e9Failure",
+        _ => null
+    };
+    if (failing == null) cases.Add(new { name, row = Row(method), images, clr = value, wasm = value });
+    else
+    {
+        Type type = kernels.Assembly.GetType(failing, throwOnError: true)!;
+        try
+        {
+            System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(type.TypeHandle);
+            throw new InvalidOperationException(name + ": the initializer did not fail.");
+        }
+        catch (TypeInitializationException error)
+        {
+            cases.Add(new
+            {
+                name, row = Row(method), images, clr = value, wasm = value,
+                initializerTypeName = error.TypeName, initializerMessage = error.Message
+            });
+        }
+    }
     context.Unload();
 }
 
 // An exception escaping an initializer. The CLR makes one attempt and raises the same
 // TypeInitializationException (with the same inner exception) on every later trigger.
-// The compiler cannot construct that exception yet, so each trigger must trap instead,
-// on the same instance, without a second attempt and without partial success.
+// A closed generic initializer owns a separate exception for each instantiation.
 Failure("ReadFailing", [("run", "ReadFailing"), ("trace", "ReadTrace"), ("run", "ReadFailing"), ("trace", "ReadTrace")]);
 Failure("ReadOuterFailing", [("run", "ReadOuterFailing"), ("inner", "ReadFailing"), ("trace", "ReadTrace"),
     ("run", "ReadOuterFailing"), ("trace", "ReadTrace")]);
+Failure("ReadGenericFailures", [("int", "ReadIntFailure"), ("string", "ReadStringFailure"),
+    ("int", "ReadIntFailure"), ("string", "ReadStringFailure"), ("steady", "PreciseGenericCall")]);
 
 // A raw engine trap (Wasm stack exhaustion) inside an initializer. No CLR comparison:
 // the CLR ends the process on stack overflow. The next host entry must retire the
@@ -79,6 +107,8 @@ void Failure(string name, (string export, string method)[] calls)
     var (kernels, context) = Load(name);
     var thrown = new Dictionary<string, Exception>();
     var sequence = new List<string[]>();
+    var distinctFailures = new List<Exception>();
+    var exceptionIdentities = new List<int>();
     foreach (var (export, methodName) in calls)
     {
         MethodInfo method = kernels.GetMethod(methodName)!;
@@ -92,16 +122,23 @@ void Failure(string name, (string export, string method)[] calls)
             // Every later trigger of one type raises the identical exception object.
             if (thrown.TryGetValue(methodName, out Exception? first) && !ReferenceEquals(first, initialization))
                 throw new InvalidOperationException(name + ": the CLR raised a different TypeInitializationException.");
-            if (initialization.InnerException is not (DivideByZeroException or TypeInitializationException))
+            if (initialization.InnerException is not (DivideByZeroException or TypeInitializationException or InvalidOperationException))
                 throw new InvalidOperationException(name + ": unexpected inner exception " + initialization.InnerException);
             thrown[methodName] = initialization;
+            int index = distinctFailures.FindIndex(failure => ReferenceEquals(failure, initialization));
+            if (index < 0)
+            {
+                index = distinctFailures.Count;
+                distinctFailures.Add(initialization);
+            }
+            exceptionIdentities.Add(index);
             sequence.Add([export, "TypeInitializationException"]);
         }
     }
     var exports = calls.Select(call => call.export).Distinct()
         .Select(export => new { name = export, row = Row(kernels.GetMethod(calls.First(call => call.export == export).method)!) })
         .ToArray();
-    cases.Add(new { name, row = exports[0].row, images, exports, sequence });
+    cases.Add(new { name, row = exports[0].row, images, exports, sequence, exceptionIdentities });
     context.Unload();
 }
 

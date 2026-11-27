@@ -12,7 +12,7 @@ namespace PortableCompiler
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
             byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection,
             int[] inlineLocations, int[] nativePlans, int[] filters, int[] frameCells,
-            FunctionPointerPlan pointers, int rootCount, byte[] frameRoots, FinalizerSlots finalizers)
+            FunctionPointerPlan pointers, int rootCount, byte[] frameRoots, FinalizerSlots finalizers, int[] failure)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -58,7 +58,7 @@ namespace PortableCompiler
             int spills = arguments + locals + (hasNull ? 1 : 0);
             int fixedLocals = spills + classes + (stringScratch ? 5 : 0) +
                 (eventScratch ? 6 : 0) + (resourceFunction >= 0 ? 7 : 0) + 1 + 2 * exceptionLocals + continuations +
-                (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0) + (staticRegion >= 0 ? 1 : 0) + cellCount + (tracksRoots ? 1 : 0);
+                (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0) + (staticRegion >= 0 ? 1 : 0) + cellCount + (tracksRoots ? 1 : 0) + (failure != null ? 1 : 0);
             if (fixedLocals > MaxLocals || maximum > (MaxLocals - fixedLocals) / spillKinds) return -2;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
@@ -72,11 +72,12 @@ namespace PortableCompiler
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
                 (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
                 (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0) +
-                (staticRegion >= 0 ? 1 : 0) + cellCount + (tracksRoots ? 1 : 0));
+                (staticRegion >= 0 ? 1 : 0) + cellCount + (tracksRoots ? 1 : 0) + (failure != null ? 1 : 0));
             // The saved shadow-stack pointer follows every other local.
             int stackFrame = objectBase + exceptionLocals, pinFrame = stackFrame + 1;
             int staticAddress = stackFrame + (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0);
             int rootFrame = staticAddress + (staticRegion >= 0 ? 1 : 0) + cellCount;
+            if (failure != null) failure[TypeInitializerWasm.FailureInner] = rootFrame + (tracksRoots ? 1 : 0);
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < arguments + locals; i++)
             {
@@ -173,6 +174,11 @@ namespace PortableCompiler
                 code[used++] = 1;
                 code[used++] = 0x7f;
             }
+            if (failure != null)
+            {
+                code[used++] = 1;
+                code[used++] = 0x6d; // eqref: the escaped managed object
+            }
             int[] cellLocals = null;
             if (cellCount != 0)
             {
@@ -224,7 +230,7 @@ namespace PortableCompiler
             if (prologue >= 0 && !tracksRoots)
                 used = TypeInitializerWasm.CallInitializer(code, used, hostImports + prologue);
             if (guard >= 0) used = TypeInitializerWasm.Begin(code, used, guard, epoch, activeInitializers, pcLocal,
-                tracksRoots ? rootCount : -1);
+                tracksRoots ? rootCount : -1, failure);
             if (stackPointer >= 0)
             {
                 used = StackAllocationWasm.Begin(code, used, stackPointer, stackFrame);
@@ -1583,9 +1589,9 @@ namespace PortableCompiler
                 if (stackPointer >= 0) used = StackAllocationWasm.Release(code, used, stackPointer, stackLimit, stackFrame);
                 code[used++] = 0x0a; // throw_ref
             }
-            // Unwind the initializer frame before the guard turns the exception into a trap.
+            // Restore the frame before the initializer guard wraps the exception or traps.
             if (guard >= 0) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers,
-                tracksRoots ? rootCount : -1);
+                tracksRoots ? rootCount : -1, failure);
             code[used++] = 0x0b;
             return used;
         }
