@@ -15,12 +15,15 @@ namespace PortableCompiler
 
         internal const int Monitor = FirstNativeFeature << Win32ModuleBinding.Count;
         internal const int Debugger = Monitor << 1;
+        internal const int ConsoleInput = Debugger << 1;
 
         internal static int MonitorSlot(int features) => Win32NativeSlot(features, Win32ModuleBinding.Count + 1);
 
         internal static int DebuggerSlot(int features) => MonitorSlot(features) + ((features & Monitor) != 0 ? 1 : 0);
 
-        internal static int FunctionCount(int features) => DebuggerSlot(features) + ((features & Debugger) != 0 ? 1 : 0);
+        internal static int InputFunction(int features) => DebuggerSlot(features) + ((features & Debugger) != 0 ? 1 : 0);
+
+        internal static int FunctionCount(int features) => InputFunction(features) + ((features & ConsoleInput) != 0 ? ConsoleInputWasm.ImportCount : 0);
 
         internal static int Win32NativeSlot(int features, int member)
         {
@@ -39,7 +42,8 @@ namespace PortableCompiler
                 ((features & Resources) != 0 ? ResourceWasm.TypeBytes : 0) +
                 ((features & Win32Errors) != 0 ? Win32ErrorWasm.TypeBytes : 0) +
                 ((features & Monitor) != 0 ? MonitorWasm.TypeBytes : 0) +
-                ((features & Debugger) != 0 ? RuntimeDebuggerWasm.TypeBytes : 0);
+                ((features & Debugger) != 0 ? RuntimeDebuggerWasm.TypeBytes : 0) +
+                ((features & ConsoleInput) != 0 ? ConsoleInputWasm.TypeBytes : 0);
             for (int member = 1; member <= Win32ModuleBinding.Count; member++)
                 if ((features & Win32NativeFeature(member)) != 0) size += Win32ModuleWasm.TypeBytes(member);
             return size;
@@ -64,6 +68,7 @@ namespace PortableCompiler
                     size += Win32ModuleWasm.ImportEntryBytes(firstType + Win32NativeSlot(features, member), member);
             if ((features & Monitor) != 0) size += MonitorWasm.EntryBytes(firstType + MonitorSlot(features));
             if ((features & Debugger) != 0) size += RuntimeDebuggerWasm.EntryBytes(firstType + DebuggerSlot(features));
+            if ((features & ConsoleInput) != 0) size += ConsoleInputWasm.ImportEntryBytes(firstType + InputFunction(features));
             return size;
         }
 
@@ -77,6 +82,7 @@ namespace PortableCompiler
                     cursor = Win32ModuleWasm.WriteType(output, cursor, member);
             if ((features & Monitor) != 0) cursor = MonitorWasm.WriteType(output, cursor);
             if ((features & Debugger) != 0) cursor = RuntimeDebuggerWasm.WriteType(output, cursor);
+            if ((features & ConsoleInput) != 0) cursor = ConsoleInputWasm.WriteTypes(output, cursor);
             return cursor;
         }
 
@@ -92,6 +98,7 @@ namespace PortableCompiler
                     cursor = Win32ModuleWasm.WriteEntry(output, cursor, firstType + Win32NativeSlot(features, member), member);
             if ((features & Monitor) != 0) cursor = MonitorWasm.WriteEntry(output, cursor, firstType + MonitorSlot(features));
             if ((features & Debugger) != 0) cursor = RuntimeDebuggerWasm.WriteEntry(output, cursor, firstType + DebuggerSlot(features));
+            if ((features & ConsoleInput) != 0) cursor = ConsoleInputWasm.WriteEntries(output, cursor, firstType + InputFunction(features));
             return cursor;
         }
     }

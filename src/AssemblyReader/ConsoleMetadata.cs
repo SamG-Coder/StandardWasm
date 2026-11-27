@@ -9,7 +9,9 @@ namespace PeLibrary
     internal static class ConsoleMetadata
     {
         internal const int Unsupported = -1, StandardOutput = 1, StandardError = 2,
-            Write = 3, WriteLine = 4, WriteEmptyLine = 5;
+            Write = 3, WriteLine = 4, WriteEmptyLine = 5,
+            // static string Console.ReadLine() (Stage 151, decision 0079).
+            ReadLine = 6;
 
         internal static int Member(byte[] image, int[] streams, int[] methods, int row)
         {
@@ -39,6 +41,10 @@ namespace PeLibrary
 
             if (owner == PlatformTypeReferences.Console)
             {
+                // static string ReadLine(): a line without its terminator, or null at EOF.
+                if (PlatformTypeReferences.Named(image, heap, heapSize, name, 8, 0x64616552, 0x656e694c, 0))
+                    return size == 3 && image[signature] == 0 && image[signature + 1] == 0 && image[signature + 2] == 0x0e
+                        ? ReadLine : Unsupported;
                 // static class TextWriter get_Out() / get_Error()
                 bool output = PlatformTypeReferences.Named(image, heap, heapSize, name, 7, 0x5f746567, 0x0074754f, 0);
                 bool error = PlatformTypeReferences.Named(image, heap, heapSize, name, 9, 0x5f746567, 0x6f727245, 0x72);

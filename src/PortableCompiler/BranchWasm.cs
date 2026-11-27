@@ -481,6 +481,12 @@ namespace PortableCompiler
                     }
                     used = Local(code, used, 0x21, spills + at);
                 }
+                else if (kind == ConsoleReadLine)
+                {
+                    // The String scratch bank supplies the Char[] and two i32 locals.
+                    used = ConsoleInputWasm.ReadLine(code, used, frameShape[26] - 1, scratch, scratch + 3, scratch + 4,
+                        Spill(spills, maximum, spillFlags, String, depth));
+                }
                 else if (kind == ConsoleWriter)
                 {
                     used = Const(code, used, operand); // host stream number

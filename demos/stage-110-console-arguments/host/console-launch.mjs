@@ -68,9 +68,15 @@ export async function runConsoleEntry(compilerBytes, selection) {
         ...result, moduleBytes: length, moduleSha256: hex(digest), imports: imports.map(entry => entry.name),
         console: { encoding: host.encoding, newLine: host.newLine }
     };
+    // A module that reads stdin calls a suspending import, so its entry runs through
+    // WebAssembly.promising and returns a Promise (decision 0079). Others stay synchronous.
+    const reads = imports.some(entry => entry.module === "standardwasm:console" && entry.name === "readLine");
+    if (reads && !selection.console?.input) throw Error("This entry reads standard input; provide console.input.");
+    const run = reads ? WebAssembly.promising(exports.run) : exports.run;
     let returned;
     try {
-        returned = exports.run.length ? exports.run(buildArguments(exports, selection.arguments ?? [])) : exports.run();
+        returned = exports.run.length ? run(buildArguments(exports, selection.arguments ?? [])) : run();
+        if (reads) returned = await returned;
     } catch (error) {
         // An unhandled managed exception prints a CLR report and sets a Windows
         // exit status that this host does not reproduce, so it is not "finished".

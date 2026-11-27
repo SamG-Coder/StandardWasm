@@ -61,7 +61,10 @@ namespace StringVectors
             return 1;
         }
 
+        // Console.ReadLine is supported since Stage 151 (decision 0079); Console.Read() is not.
         public static int ReadLine() => Console.ReadLine() == null ? 0 : 1;
+
+        public static int Read() => Console.Read();
 
         public static int Flush()
         {
