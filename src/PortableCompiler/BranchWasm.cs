@@ -607,8 +607,11 @@ namespace PortableCompiler
                 else if (kind == CastClass || kind == TestClass)
                 {
                     int type = operand;
-                    used = ReferenceCastWasm.Emit(code, used, Spill(spills, maximum, spillFlags, states[state + top], top),
-                        Spill(spills, maximum, spillFlags, type, top), type, kind == CastClass);
+                    used = records[slot + 3] == 0 ?
+                        ReferenceCastWasm.Emit(code, used, Spill(spills, maximum, spillFlags, states[state + top], top),
+                            Spill(spills, maximum, spillFlags, type, top), type, kind == CastClass) :
+                        ReferenceCastWasm.EmitInterface(code, used, Spill(spills, maximum, spillFlags, states[state + top], top),
+                            Spill(spills, maximum, spillFlags, type, top), type, kind == CastClass, frameShape[7], reflection.InterfaceTests);
                 }
                 else if (kind == Unary || kind == Narrow || kind == ConvertInteger || kind == ConvertFloat)
                 {

@@ -28,6 +28,7 @@ internal static class ValueConstructionCases
         Check(nameof(ClosedClassProbe.CheckClosedClassNull), ClosedClassProbe.CheckClosedClassNull);
         Check(nameof(ClosedInterfaceProbe.CheckClosedInterface), ClosedInterfaceProbe.CheckClosedInterface);
         Check(nameof(ClosedInterfaceProbe.CheckClosedInterfaceNull), ClosedInterfaceProbe.CheckClosedInterfaceNull);
+        Check(nameof(InterfaceCastProbe.CheckInterfaceCasts), InterfaceCastProbe.CheckInterfaceCasts);
         Check(nameof(EntryArrayProbe.UpdateEntryArray), EntryArrayProbe.UpdateEntryArray);
         Check(nameof(EntryArrayProbe.ClearInteriorFields), EntryArrayProbe.ClearInteriorFields);
         Check(nameof(MutableReceiverProbe.CheckMutableReceiver), MutableReceiverProbe.CheckMutableReceiver);
@@ -80,7 +81,8 @@ internal static class ValueConstructionCases
     private static MethodInfo Method(string name) =>
         typeof(Kernels).GetMethod(name) ?? typeof(BucketProbe).GetMethod(name) ??
         typeof(EntryArrayProbe).GetMethod(name) ?? typeof(ClosedInterfaceProbe).GetMethod(name) ??
-        typeof(ClosedClassProbe).GetMethod(name) ?? typeof(MutableReceiverProbe).GetMethod(name)!;
+        typeof(ClosedClassProbe).GetMethod(name) ?? typeof(MutableReceiverProbe).GetMethod(name) ??
+        typeof(InterfaceCastProbe).GetMethod(name)!;
     private static int Row(MethodBase method) => method.MetadataToken & 0xffffff;
 
     private static byte[] Manifest(MethodBase method)

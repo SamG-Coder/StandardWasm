@@ -874,6 +874,11 @@ namespace PortableCompiler
             }
             length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, length, hostImports, location);
             if (length < 0) return length;
+            var interfacePosition = new[] { length };
+            functions = reflection.InterfaceTests.Write(moduleCode, interfacePosition, objects, offsets, signatures,
+                sizes, bodyOffsets, arities, functions, hostImports);
+            if (functions < 0) return functions;
+            length = interfacePosition[0];
             if (reflection.ObjectTypes.Fixups[0] != 0)
             {
                 if (functions >= owners.Length) return -3;
@@ -1107,7 +1112,12 @@ namespace PortableCompiler
                     if (type < 0) return type;
                     if (kind == BranchIl.CastClass && type == EventHandlerReference)
                         records[slot] = BranchIl.CastHandler;
-                    else if (type != String && (type < ObjectLayouts.FirstClass || ObjectLayouts.IsInterface(objects, type) ||
+                    else if (ObjectLayouts.IsInterface(objects, type))
+                    {
+                        if (!RuntimeInterfaceTests.UsesClassLayouts(bundle, objects, type)) return -2;
+                        records[slot + 3] = 1;
+                    }
+                    else if (type != String && (type < ObjectLayouts.FirstClass ||
                         ObjectLayouts.ArrayElement(objects, type) != 0)) return -2;
                     records[slot + 1] = type;
                     continue;
@@ -2444,7 +2454,7 @@ namespace PortableCompiler
             return functions;
         }
 
-        private static int NextSignature(int[] offsets, int[] arities, int functions) =>
+        internal static int NextSignature(int[] offsets, int[] arities, int functions) =>
             functions == 0 ? 0 : offsets[functions - 1] + arities[functions - 1] + 1;
 
         private static bool LinkExchange(byte[] image, int[] heaps, int[] layout, int[] records, int slot)

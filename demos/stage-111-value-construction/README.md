@@ -60,6 +60,10 @@ compares a reused getter result and distinguishes `Int32` from `UInt32`.
 The closed interface fixture checks implicit and explicit implementations,
 including different `int` and `uint` instantiations on one class, a closed
 generic implementer, polymorphic calls, and a typed null receiver failure.
+The interface cast fixture checks `isinst` and `castclass` against a
+nongeneric interface. It covers implementations inherited through a class
+and an interface, dispatch after the test, reference identity, null, and
+the typed invalid-cast exception.
 
 The primitive hash fixture invokes the original CoreLib `Int32` and `UInt32`
 `GetHashCode` overrides through constrained generic calls. It covers signed

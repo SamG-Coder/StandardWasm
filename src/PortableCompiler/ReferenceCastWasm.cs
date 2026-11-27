@@ -31,6 +31,34 @@ namespace PortableCompiler
             return used;
         }
 
+        internal static int EmitInterface(byte[] code, int used, int source, int target, int type, bool cast,
+            int bodyStart, RuntimeInterfaceTests tests)
+        {
+            // Interface locals use eqref. Keep the original reference when
+            // the membership test succeeds, including a null cast.
+            used = Local(code, used, 0x20, source);
+            used = tests.Call(code, used, bodyStart, type);
+            if (cast)
+            {
+                code[used++] = 0x45; // i32.eqz
+                used = ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.InvalidCastTag);
+            }
+            else
+            {
+                code[used++] = 0x04; // if (result eqref)
+                code[used++] = 0x6d;
+            }
+            used = Local(code, used, 0x20, source);
+            if (!cast)
+            {
+                code[used++] = 0x05; // else
+                code[used++] = 0xd0; // ref.null none
+                code[used++] = NullSpillWasm.NullRef;
+                code[used++] = 0x0b;
+            }
+            return Local(code, used, 0x21, target);
+        }
+
         private static int Copy(byte[] code, int used, int source, int target, int heap)
         {
             used = Local(code, used, 0x20, source);
