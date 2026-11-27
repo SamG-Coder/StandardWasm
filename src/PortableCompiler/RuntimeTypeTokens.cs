@@ -6,7 +6,7 @@ namespace PortableCompiler
     {
         // Static field owners are nonnegative. EventArgs.Empty has owner -1.
         // TypeDef rows, closed layouts and primitive vectors use disjoint keys.
-        private const int ClosedTypeKey = 0x1000000, PrimitiveVectorKey = 0x2000000;
+        internal const int ClosedTypeKey = 0x1000000, PrimitiveVectorKey = 0x2000000;
         internal static bool IsDescriptorOwner(int owner) => owner <= -2;
         internal static int ModuleSlot(int owner) => -owner - 2;
 
@@ -72,7 +72,7 @@ namespace PortableCompiler
             return found < 0 ? -6 : 0;
         }
 
-        private static int ReadClosedIdentity(BundleImages bundle, int[] objects, int type, int[] identity, int depth = 0)
+        internal static int ReadClosedIdentity(BundleImages bundle, int[] objects, int type, int[] identity, int depth = 0)
         {
             if (depth >= ObjectLayouts.MaxTypeDepth) return -2;
             if (type == SignatureTypes.String) return FindCoreType(bundle, "String", identity);

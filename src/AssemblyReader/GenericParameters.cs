@@ -85,6 +85,32 @@ namespace PeLibrary
             return 1;
         }
 
+        internal static int[] TypeParameterNames(byte[] image, int[] heaps, int[] methods, int[] counts, int typeRow)
+        {
+            if (counts[42] == 0) return new int[0];
+            int table = MetadataTableRows.TableStart(heaps, methods, counts, 42);
+            if (table < 0) return null;
+            int ownerWidth = counts[2] < 32768 && counts[6] < 32768 ? 2 : 4;
+            int width = 4 + ownerWidth + methods[2];
+            int owner = typeRow << 1;
+            int first = 0, end = counts[42];
+            while (first < end)
+            {
+                int mid = first + (end - first) / 2;
+                if (Index(image, (uint)(table + mid * width + 4), ownerWidth) < owner) first = mid + 1;
+                else end = mid;
+            }
+            while (end < counts[42] && Index(image, (uint)(table + end * width + 4), ownerWidth) == owner) end++;
+            var names = new int[end - first];
+            for (int i = 0; i < names.Length; i++)
+            {
+                uint at = (uint)(table + (first + i) * width);
+                if (U16(image, at) != i) return null;
+                names[i] = Index(image, at + (uint)(4 + ownerWidth), methods[2]);
+            }
+            return names;
+        }
+
         internal static int ReadDeferred(byte[] image, int[] table, int index, int[] parameter)
         {
             uint at = (uint)(table[0] + index * (table[1] + table[2]));

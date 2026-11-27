@@ -99,6 +99,18 @@ namespace PeLibrary
             return cursor != end ? 0 : getType ? 1 : equality ? 2 : 3;
         }
 
+        // Runtime descriptors dispatch ToString through the canonical Object slot.
+        internal static bool IsCoreObjectToString(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x50) != 0x40 ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "ToString")) return false;
+            int blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
+            if (blob < 1 || !Fits((uint)blob, 4, (uint)heaps[1]) ||
+                U32(image, (uint)(heaps[0] + blob)) != 0x0e002003) return false;
+            int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+            return owner > 0 && ObjectLayouts.IsCoreObjectType(image, heaps, layout, owner << 2);
+        }
+
         // CoreLib itself calls Object.GetType by MethodDef rather than MemberRef.
         internal static bool IsCoreObjectGetType(byte[] image, int[] heaps, int[] layout, int row)
         {

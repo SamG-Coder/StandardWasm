@@ -24,7 +24,8 @@ internal static class Program
             ImplicitByteView, ConstructedByteView, ReturnedByteView, NullByteView, EmptyByteView, ByteViewBounds,
             WritableSpanReference, ClosedGenericSpanReference, DefaultSpanReference,
             StringObjectSlot, StringOwnSlot, NullStringObjectSlot,
-            OriginalExceptionGetType, OriginalDerivedExceptionGetType, NullExceptionGetType
+            OriginalExceptionGetType, OriginalDerivedExceptionGetType, NullExceptionGetType, OriginalObjectDisplayName,
+            ClosedTypeDisplayName, OpenTypeDisplayName, ArrayTypeDisplayName, RepeatedTypeDisplayName, NamespacedTypeDisplayName, NullTypeDisplayName
         };
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
@@ -37,6 +38,48 @@ internal static class Program
                 Path.Combine(runtime, "System.Memory.dll")
             }, cases = results
         }));
+    }
+
+    public static int OriginalObjectDisplayName() =>
+        new NominalNameProbe().Read() == "Program+NominalNameProbe" ? 19 : 0;
+
+    public static int ClosedTypeDisplayName() =>
+        typeof(NominalNameProbe.Élément<int>).ToString() ==
+            "Program+NominalNameProbe+Élément`1[System.Int32]" ? 23 : 0;
+
+    public static int OpenTypeDisplayName() =>
+        typeof(NominalNameProbe.Élément<>).ToString() ==
+            "Program+NominalNameProbe+Élément`1[T]" ? 29 : 0;
+
+    public static int ArrayTypeDisplayName() =>
+        typeof(byte[]).ToString() == "System.Byte[]" &&
+        typeof(NominalNameProbe[]).ToString() == "Program+NominalNameProbe[]" ? 31 : 0;
+
+    public static int RepeatedTypeDisplayName()
+    {
+        Type descriptor = typeof(NominalNameProbe);
+        return ReferenceEquals(descriptor.ToString(), descriptor.ToString()) ? 37 : 0;
+    }
+
+    public static int NamespacedTypeDisplayName() =>
+        typeof(Exception).ToString() == "System.Exception" ? 41 : 0;
+
+    public static int NullTypeDisplayName()
+    {
+        try { return ReadTypeName(false).Length; }
+        catch (NullReferenceException) { return 43; }
+    }
+
+    private static string ReadTypeName(bool useType)
+    {
+        Type? descriptor = useType ? typeof(NominalNameProbe) : null;
+        return descriptor!.ToString();
+    }
+
+    private sealed class NominalNameProbe
+    {
+        internal string Read() => base.ToString()!;
+        internal sealed class Élément<T> { }
     }
 
     public static int OriginalExceptionGetType() =>

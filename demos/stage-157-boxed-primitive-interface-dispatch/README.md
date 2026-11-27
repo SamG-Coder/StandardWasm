@@ -28,6 +28,10 @@ The runtime type cases compile CoreLib's unchanged `Exception.GetType` body.
 They verify exact descriptors for base and derived exceptions, plus its
 typed null-receiver failure.
 
+The display-name cases execute the original base call to
+`Object.ToString`. They check names for nested, open and closed generic
+types and arrays, UTF-16 names, cached string identity, and a null receiver.
+
 Both `Int32` cases have CLR answers. The compiler now binds the original
 `Number.TryFormatInt32<char>` generic method. Until the formatting pipeline
 lowers, the verifier accepts only the located diagnostic at the pinned local

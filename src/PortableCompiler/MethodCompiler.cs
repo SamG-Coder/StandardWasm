@@ -968,7 +968,7 @@ namespace PortableCompiler
                             else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet || kind == BranchIl.StringCharacter ||
                                 kind == BranchIl.ObjectElementAddress)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
-                            else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
+                            else if (kind == BranchIl.RuntimeTypeDisplayName || kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || kind == BranchIl.ClearInteriorField || nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit ||
                                 kind == BranchIl.GetReferenceField || kind == BranchIl.SetReferenceField || kind == BranchIl.TakeReferenceFieldAddress ||
                                 kind == BranchIl.StringRange || kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.InvokeDelegate ||
@@ -1084,6 +1084,22 @@ namespace PortableCompiler
                 length = reflection.ObjectTypes.Write(bundle, moduleCode, length, objects, globals);
                 if (length < 0) return length;
                 WasmIndexFixups.Resolve(moduleCode, reflection.ObjectTypes.Fixups[0], hostImports + functions);
+                sizes[functions] = length - bodyOffsets[functions];
+                functions++;
+            }
+            if (reflection.TypeNameFixups[0] != 0)
+            {
+                if (functions >= owners.Length) return -3;
+                int offset = NextSignature(offsets, arities, functions);
+                if (offset + 1 >= signatures.Length) return -3;
+                signatures[offset] = String;
+                signatures[offset + 1] = RuntimeTypeMetadata.Type;
+                arities[functions] = 1;
+                offsets[functions] = offset;
+                bodyOffsets[functions] = length;
+                length = RuntimeTypeNames.Write(bundle, moduleCode, length, objects, globals, literals, literalSize);
+                if (length < 0) return length;
+                WasmIndexFixups.Resolve(moduleCode, reflection.TypeNameFixups[0], hostImports + functions);
                 sizes[functions] = length - bodyOffsets[functions];
                 functions++;
             }
@@ -2621,6 +2637,18 @@ namespace PortableCompiler
                 int actual = states[receiver], declared = types[shape + 1];
                 int bound = actual == NullValue ? declared : actual;
                 int owner = records[slot + BranchIl.Width + 1], row = records[slot + BranchIl.Width + 3];
+                if (actual == RuntimeTypeMetadata.Type && declared == ObjectReference && arity == 1 && types[shape] == String)
+                {
+                    byte[] source = bundle.Get(owner);
+                    var layout = new int[4];
+                    var heaps = new int[8];
+                    if (CompressedTables.FindWithHeaps(source, layout, heaps) < 0) return -1;
+                    if (RuntimeTypeMetadata.IsCoreObjectToString(source, heaps, layout, row))
+                    {
+                        records[slot] = BranchIl.RuntimeTypeDisplayName;
+                        continue;
+                    }
+                }
                 bool allocated = allocatedStates[receiver] != 0;
                 int function;
                 if (allocated || bound == String || ObjectLayouts.IsSealed(objects, bound))

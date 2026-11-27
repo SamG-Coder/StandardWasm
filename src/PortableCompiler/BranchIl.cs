@@ -76,7 +76,7 @@ namespace PortableCompiler
         internal const int SpanIsEmpty = 157;
         internal const int ArrayCopy = 158;
         internal const int StringFromSpan = 159;
-        internal const int ByteArrayAsSpan = 160, TakeCharacterSpanLocation = 161;
+        internal const int ByteArrayAsSpan = 160, TakeCharacterSpanLocation = 161, RuntimeTypeDisplayName = 162;
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
