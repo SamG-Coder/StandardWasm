@@ -379,7 +379,7 @@ namespace PortableCompiler
                     // Newly selected overrides can allocate additional runtime
                     // classes. Compile them and revisit only the new allocations.
                     int expanded = dispatch.Expand(bundle, objects, owners, rows, contexts, bases, indices,
-                        arities, offsets, signatures, functions, location);
+                        arities, offsets, signatures, functions, location, instantiations);
                     if (expanded < 0) return expanded;
                     dispatch.ObserveReceiverDemand(receiverDemand, contexts);
                     for (int i = 0; i < exports.Length; i++) receiverDemand.Require(exports[i], contexts);
@@ -899,7 +899,7 @@ namespace PortableCompiler
                     {
                         functions = LinkVirtualCalls(bundle, records, depths, states, allocatedStates, maximum, virtualTypes,
                             owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions, location,
-                            dispatch, externalObjects, owner, source);
+                            dispatch, externalObjects, owner, source, instantiations);
                         if (functions < 0) return functions;
                     }
 
@@ -1560,6 +1560,8 @@ namespace PortableCompiler
             FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers, int scopedReceiver)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
+            bool arrayEnumerator = ArrayElementKey(objects, callerReceiver) != 0 &&
+                SzArrayEnumeration.IsFactory(image, layout, heaps, callerRow);
             bool classConstructor = context != 0 && callerReceiver == context && !ObjectLayouts.IsValueType(objects, context) &&
                 (MethodDefinitions.ReadColumn(image, layout, callerRow, 2) & 0x1850) == 0x1800 &&
                 ObjectLayouts.IsConstructor(image, heaps, layout, callerRow);
@@ -2009,6 +2011,19 @@ namespace PortableCompiler
                     if (status < 0) return status;
                     if (!checkReceiver)
                     {
+                        if (arrayEnumerator && spec[MethodSpecifications.Arity] == 1 &&
+                            SzArrayEnumeration.IsArrayCast(image, layout, heaps, counts, spec[MethodSpecifications.Target]))
+                        {
+                            var cast = new int[1];
+                            status = MethodInstantiations.ReadArguments(bundle, image, layout, heaps, owner,
+                                context, objects, methodArguments, spec, cast);
+                            if (status < 0) return status;
+                            if (cast[0] != callerReceiver || slot < BranchIl.Width ||
+                                records[slot - BranchIl.Width] != BranchIl.Load || records[slot - BranchIl.Width + 1] != 0 ||
+                                ValueOperands.Entry(records, slot / BranchIl.Width, clauses)) return -2;
+                            records[slot] = BranchIl.Nop;
+                            continue;
+                        }
                         int addressIntrinsic = NativeAddressIntrinsics.Identify(image, layout, heaps, counts, spec);
                         if (addressIntrinsic != 0)
                         {
@@ -2955,6 +2970,12 @@ namespace PortableCompiler
                 }
                 if (kind == BranchIl.Call)
                 {
+                    if (arrayEnumerator && records[slot + 3] == 0 && SzArrayEnumeration.IsArrayLength(image, layout, heaps, target))
+                    {
+                        records[slot] = BranchIl.ArrayLength;
+                        records[slot + 1] = I32; // Array.Length returns int, unlike ldlen.
+                        continue;
+                    }
                     if (records[slot + 3] == 0 && finalizers != null && finalizers.IsSuppression(owner, target))
                     {
                         if (!tracksFinalizers) return Reemit;
@@ -3343,7 +3364,7 @@ namespace PortableCompiler
         private static int LinkVirtualCalls(BundleImages bundle, int[] records,
             int[] depths, int[] states, byte[] allocatedStates, int maximum, int[] types, int[] owners, int[] rows, int[] contexts, int[] bases,
             int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int functions, int[] location,
-            VirtualDispatch dispatch, bool externalObjects, int callerOwner, int callerRow)
+            VirtualDispatch dispatch, bool externalObjects, int callerOwner, int callerRow, MethodInstantiations instantiations)
         {
             for (int pc = 0; pc < depths.Length; pc++)
             {
@@ -3372,7 +3393,7 @@ namespace PortableCompiler
                 if (allocated || bound == String || ObjectLayouts.IsSealed(objects, bound))
                 {
                     function = BindVirtualBody(bundle, objects, actual, allocated, declared, owner, row,
-                        owners, rows, contexts, bases, indices, arities, offsets, signatures, functions);
+                        owners, rows, contexts, bases, indices, arities, offsets, signatures, functions, instantiations);
                     if (function < 0) return function;
                     int signatureStatus = dispatch.BindShape(bundle, objects, types, shape, arity, signatures, offsets,
                         owners, rows, contexts, function);
@@ -3417,8 +3438,11 @@ namespace PortableCompiler
 
         internal static int BindVirtualBody(BundleImages bundle, int[] objects, int actual, bool allocated,
             int declared, int owner, int row, int[] owners, int[] rows, int[] contexts, int[] bases,
-            int[] indices, int[] arities, int[] offsets, int[] signatures, int functions)
+            int[] indices, int[] arities, int[] offsets, int[] signatures, int functions, MethodInstantiations instantiations = null)
         {
+            if (IsExactArrayEnumerable(objects, actual, declared))
+                return SzArrayEnumeration.Bind(bundle, objects, actual, declared, owner, row,
+                    owners, rows, contexts, bases, indices, arities, offsets, signatures, functions, instantiations);
             var symbol = new int[3];
             int status = VirtualSlots.SelectVirtualBody(bundle, objects, actual, allocated, declared, owner, row, symbol);
             if (status < 0) return status;

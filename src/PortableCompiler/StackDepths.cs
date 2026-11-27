@@ -828,7 +828,7 @@ namespace PortableCompiler
             {
                 if (depth < 1 || (stack[depth - 1] != NullValue && !IsArray(stack[depth - 1]) &&
                     ArrayElement(objects, stack[depth - 1]) == 0)) return -1;
-                stack[depth - 1] = Native;
+                stack[depth - 1] = operand == I32 ? I32 : Native;
             }
             else if (kind == ArrayGet)
             {
