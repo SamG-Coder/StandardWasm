@@ -83,6 +83,8 @@ namespace PortableCompiler
         internal const int NativeAddressView = 172, NullManagedLocation = 173, TestNullLocation = 174;
         internal const int BoxAggregate = 175, UnboxAggregate = 176, TestAggregateBox = 177, UnboxAggregateAddress = 178;
         internal const int CallDynamicNative = 179, CallPinnedCharacterNative = 180, ReinterpretPacked16Location = 181, CopyCharacterSpan = 182, PinStaticBytes = 183, ArrayClear = 184;
+        // [ReadOnlySpan<char>, char, char] -> [first matching index or -1].
+        internal const int FindCharacterSpanAny = 186;
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

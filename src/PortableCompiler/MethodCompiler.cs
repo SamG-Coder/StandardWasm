@@ -1131,6 +1131,12 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - CharacterSpanCopyWasm.Capacity) return -3;
                                 capacity += CharacterSpanCopyWasm.Capacity;
                             }
+                            else if (kind == BranchIl.FindCharacterSpanAny)
+                            {
+                                if ((hostFeatures & WasmImports.NativeCharacterViews) != 0) tags = ExceptionTypes.NullReference;
+                                if (capacity > int.MaxValue - CharacterSpanSearchWasm.Capacity) return -3;
+                                capacity += CharacterSpanSearchWasm.Capacity;
+                            }
                             else if (kind == BranchIl.ArrayClear)
                             {
                                 tags = ExceptionTypes.ArgumentNull | ExceptionTypes.IndexOutOfRange;
@@ -1220,7 +1226,8 @@ namespace PortableCompiler
                         int kind = records[slot];
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
                             kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.StringFromSpan || kind == BranchIl.ConsoleWrite ||
-                            kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine || kind == BranchIl.CopyCharacterSpan) frameShape[5] |= 1;
+                            kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine || kind == BranchIl.CopyCharacterSpan ||
+                            kind == BranchIl.FindCharacterSpanAny) frameShape[5] |= 1;
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
@@ -1789,6 +1796,19 @@ namespace PortableCompiler
                                 records[slot] = BranchIl.ReinterpretPacked16Location;
                                 records[slot + 1] = sourceLocation;
                                 records[slot + 3] = targetLocation;
+                                continue;
+                            }
+                        }
+                        if (spec[MethodSpecifications.Arity] == 1 &&
+                            SpanMetadata.IsSpanIndexOfAny(image, layout, heaps, counts, spec[MethodSpecifications.Target]))
+                        {
+                            var element = new int[1];
+                            status = MethodInstantiations.ReadArguments(bundle, image, layout, heaps, owner,
+                                context, objects, methodArguments, spec, element);
+                            if (status < 0) return status;
+                            if (element[0] == GenericScalar.Key(3))
+                            {
+                                records[slot] = BranchIl.FindCharacterSpanAny;
                                 continue;
                             }
                         }

@@ -169,6 +169,46 @@ namespace PortableCompiler
             return at + 3;
         }
 
+        internal static bool IsSpanIndexOfAny(byte[] image, int[] layout, int[] heaps, int[] counts, int target)
+        {
+            int row = target >> 1;
+            int blob;
+            if ((target & 1) == 0)
+            {
+                if (row < 1 || row > counts[6] ||
+                    !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "IndexOfAny") ||
+                    (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x10) == 0) return false;
+                int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+                if (owner < 1 || !IsPlatformType(image, layout, heaps, owner << 2, "System", "MemoryExtensions"))
+                    return false;
+                blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
+            }
+            else
+            {
+                var reference = new int[AssemblyReferences.SymbolWidth];
+                if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference) < 0 ||
+                    !MatchesAscii(image, heaps, (uint)reference[4], "IndexOfAny") ||
+                    !MatchReference(image, layout, heaps, counts, reference, "System", "MemoryExtensions", includeMemory: true))
+                    return false;
+                blob = reference[5];
+            }
+            var cursor = new int[1];
+            int limit = heaps[0] + heaps[1];
+            if (blob < 1 || blob >= heaps[1]) return false;
+            int size = CompressedUnsigned(image, heaps[0] + blob, limit, cursor);
+            int at = cursor[0];
+            // static int IndexOfAny<T>(ReadOnlySpan<T>, T, T)
+            if (size < 14 || size > limit - at || U32(image, (uint)at) != 0x08030110) return false;
+            cursor[0] = at + 4;
+            int end = at + size;
+            int span = SignatureReader.ReadSingleArgumentValue(image, cursor, end);
+            if (span < 1 || !IsDefinition(image, layout, heaps, span)) return false;
+            for (int element = 0; element < 3; element++)
+                if (!SignatureReader.TakeElement(image, cursor, end, 0x1e) ||
+                    !SignatureReader.TakeElement(image, cursor, end, 0)) return false;
+            return cursor[0] == end;
+        }
+
         internal static bool IsCharacterCopyTo(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int member, int context, int[] methodArguments, int sourceType, int[] objects)
         {

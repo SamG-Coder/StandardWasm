@@ -522,6 +522,15 @@ namespace PortableCompiler
                         Spill(spills, maximum, spillFlags, WritableCharacterSpan, top),
                         scratch + 3, scratch + 4, frameShape[25] != 0);
                 }
+                else if (kind == FindCharacterSpanAny)
+                {
+                    used = CharacterSpanSearchWasm.FindAny(code, used,
+                        Spill(spills, maximum, spillFlags, CharacterSpan, top - 2),
+                        Spill(spills, maximum, spillFlags, I32, top - 1),
+                        Spill(spills, maximum, spillFlags, I32, top),
+                        Spill(spills, maximum, spillFlags, I32, top - 2),
+                        scratch + 3, scratch + 4, frameShape[25] != 0);
+                }
                 else if (kind == StringRange)
                 {
                     int source = Spill(spills, maximum, spillFlags, String, top - 2);
