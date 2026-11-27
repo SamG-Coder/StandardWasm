@@ -217,6 +217,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [216 · Comparable managed reference joins](stage-216-managed-reference-joins/README.md) | `npm run demo -- stage-216-managed-reference-joins` | Preserve reference identity across typed evaluation-stack merges |
 | [217 · Constrained enum formatting](stage-217-constrained-enum-format/README.md) | `npm run demo -- stage-217-constrained-enum-format` | Compare enum names, invariant decimal fallback and string identity across runtimes |
 | [219 · Exact TypeHandle round-trips](stage-219-exact-type-handle/README.md) | `npm run demo -- stage-219-exact-type-handle` | Preserve descriptor identity through TypeHandle on proven typeof receivers |
+| [222 · Explicit type initialization](stage-222-explicit-type-initialization/README.md) | `npm run demo -- stage-222-explicit-type-initialization` | Verify explicit calls to guarded managed initializers |
 
 ## Adding a stage
 

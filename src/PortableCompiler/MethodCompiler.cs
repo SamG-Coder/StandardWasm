@@ -1526,6 +1526,27 @@ namespace PortableCompiler
                     RuntimeTypeTokens.LowerExactHandleGetter(image, layout, heaps, records, slot, clauses)) continue;
                 if (kind == BranchIl.LoadTypeToken)
                 {
+                    int explicitCall = ExactTypeInitialization.MatchCall(image, layout, heaps, records, slot, clauses);
+                    if (explicitCall >= 0)
+                    {
+                        if (location.Length != 0) location[2] = explicitCall / BranchIl.Width;
+                        var initializedType = new int[3];
+                        int initializerRow = ExactTypeInitialization.Resolve(bundle, image, layout, heaps, owner,
+                            records[slot + 1], context, objects, methodArguments, initializedType);
+                        if (initializerRow < 0) return initializerRow;
+                        int initializerFunction = -1;
+                        if (initializerRow > 0)
+                        {
+                            var functionSlot = new int[1];
+                            functions = initializers.Ensure(bundle, initializedType[0], initializedType[1], initializerRow, owners, rows, contexts,
+                                bases, indices, arities, offsets, signatures, objects, globals, functions, functionSlot, initializedType[2]);
+                            if (functions < 0) return functions;
+                            initializerFunction = functionSlot[0];
+                        }
+                        ExactTypeInitialization.Rewrite(records, slot, explicitCall, initializerFunction);
+                        slot = explicitCall;
+                        continue;
+                    }
                     int global = RuntimeTypeTokens.Bind(bundle, image, layout, heaps, owner, records[slot + 1],
                         globals, context, objects, methodArguments);
                     if (global < 0) return global;
@@ -2466,6 +2487,8 @@ namespace PortableCompiler
                         records[slot] = BranchIl.TypeFromHandle;
                         continue;
                     }
+                    if (opcode == 0x28 && !addressed &&
+                        RuntimeInitializerMetadata.IsRunClassConstructor(image, layout, heaps, member, false)) return -2;
                     int objectTypeMember = addressed ? 0 : RuntimeTypeMetadata.ObjectTypeMember(image, heaps, layout, member);
                     if (objectTypeMember == 1 && (opcode == 0x28 || opcode == 0x6f))
                     {
@@ -2776,6 +2799,8 @@ namespace PortableCompiler
                         records[slot] = BranchIl.TypeFromHandle;
                         continue;
                     }
+                    if (records[slot + 3] == 0 &&
+                        RuntimeInitializerMetadata.IsRunClassConstructor(image, layout, heaps, target, true)) return -2;
                     if (RuntimeTypeMetadata.IsCoreObjectGetType(image, heaps, layout, target))
                     {
                         records[slot] = BranchIl.GetObjectType;
