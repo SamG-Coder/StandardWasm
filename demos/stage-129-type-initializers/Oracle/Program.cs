@@ -24,7 +24,7 @@ foreach (string name in new[]
     "ReachedOnce", "CallAfterArgument", "StoreAfterRightHand", "BeforeFieldInitOnce", "ConstructorTriggers",
     "InheritedField", "Recursion", "CatchInsideInitializer", "BundledDependency", "RelaxedGenericCall",
     "DistinctObjects", "StaticFieldAlias", "NotNominalClass", "Locked", "RuntimeTypeLock", "StaticAutoProperty",
-    "LinkedRuntimeTypeArgument", "RootGetType", "PreciseGenericCall",
+    "LinkedRuntimeTypeArgument", "RootGetType", "RootToString", "PreciseGenericCall",
     "ObjectFailureCaught", "NestedObjectFailure", "NonAsciiNameFailure"
 })
 {
@@ -86,7 +86,7 @@ Failure("ReadGenericFailures", [("int", "ReadIntFailure"), ("string", "ReadStrin
 }
 
 // Object members without a supported root layout still report the original call.
-foreach (string name in new[] { "RootHashCode", "RootToString", "RootEquals" })
+foreach (string name in new[] { "RootHashCode", "RootEquals" })
 {
     var (kernels, context) = Load(name);
     MethodInfo method = kernels.GetMethod(name)!;

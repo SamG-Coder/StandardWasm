@@ -331,7 +331,7 @@ namespace TypeInitializerFixture
             catch (TypeInitializationException) { return 3; }
         }
 
-        // Object members on a root object stay explicit diagnostics.
+        // Root hash codes still require an object-identity implementation.
         public static int RootHashCode() => Fresh().GetHashCode() == 0 ? 0 : 1;
 
         public static int RootToString() => Fresh().ToString().Length;
