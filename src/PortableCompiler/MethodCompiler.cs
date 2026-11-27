@@ -417,7 +417,7 @@ namespace PortableCompiler
                     if (rootProbe)
                     {
                         if (location.Length != 0) location[2] = -1;
-                        if (resourceOpen || initializerPrologue >= 0 || filterEnds != null) return -2;
+                        if (initializerPrologue >= 0 || filterEnds != null) return -2;
                         for (int clause = 0; clause < catchRegion.Length; clause += ExceptionClauses.Width)
                             if (!ExceptionClauses.IsFinally(catchRegion, clause)) return -2;
                         frameRoots = RootStackWasm.MapFrame(records, frame, parameters + locals, catchRegion.Length != 0);

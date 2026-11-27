@@ -34,7 +34,9 @@ namespace PortableCompiler
                     if (kind == 0 || kind == Return || kind == ThrowNull || live[pc] != 0) continue;
                     int operand = records[at + 1];
                     if (kind == Store && operand == slot) continue;
-                    bool used = kind == Load && operand == slot;
+                    // The verified resource prelude reads its Assembly and name
+                    // directly from the first two parameters while calling the host.
+                    bool used = kind == Load && operand == slot || kind == ResourceLookup && slot < 2;
                     if (kind != Branch)
                     {
                         int next = records[at + 2];

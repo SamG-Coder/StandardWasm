@@ -254,9 +254,10 @@ namespace PortableCompiler
                 code[used++] = 0x40;
 
                 int tracked = 0;
-                if (tracksRoots && (kind == Call || kind == NewObject || kind == ConstructValue))
+                bool publishesRoots = tracksRoots && (kind == Call || kind == NewObject || kind == ConstructValue || kind == ResourceLookup);
+                if (publishesRoots)
                 {
-                    int first = depth - arities[operand] + (kind == NewObject ? 1 : 0);
+                    int first = kind == ResourceLookup ? depth : depth - arities[operand] + (kind == NewObject ? 1 : 0);
                     int frameStart = pc * (arguments + locals);
                     for (int local = 0; local < arguments + locals; local++) tracked += frameRoots[frameStart + local];
                     for (int index = 0; index < first; index++)

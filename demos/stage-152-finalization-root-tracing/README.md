@@ -100,3 +100,10 @@ The pinning test observes a string whose only managed root is its active pin.
 The mark pass visits the owner in each pin registry pair. The paired native
 address is used for memory access. Both engines read the CLR's UTF-16 code
 unit and release the pin on normal return and managed exception unwind.
+
+The host oracle also binds the original CoreLib resource prelude and checks
+its two implicit roots. The assembly descriptor and name are live during
+lookup. The managed tail continues to use the assembly when it constructs
+the stream. The name has no further uses. This is a compiler check against
+the installed CoreLib IL. The standalone resource-opening fixture still
+reaches an unsupported dependency in CoreLib's resource-string path.

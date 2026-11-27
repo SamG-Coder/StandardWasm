@@ -94,7 +94,10 @@ The mark pass includes active pin owners, and one unwind path releases the
 frame's managed roots and native pin storage. The unchanged sample's
 experimental compile proceeds past `Control.Dock` and the pinned Win32
 `GetModuleHandle` wrapper to CoreLib's `RuntimeAssembly.GetManifestResourceStream`.
-The resource-opening path still needs integration with root tracking.
+The verified resource prelude now publishes both the assembly descriptor
+and name across the host lookup. Compilation of the same sample in probe
+mode gets past the prelude and stops at the exception filter in
+`ThemingScope.CreateActivationContext`. Browser startup remains unverified.
 JavaScript cleanup notifications can release independent host resources, but
 notification timing and delivery alone cannot satisfy the managed queue and
 resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)
