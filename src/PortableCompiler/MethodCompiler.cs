@@ -3402,6 +3402,17 @@ namespace PortableCompiler
                     int folded = ResourceStringFolding.FoldResourceCall(image, heaps, layout, records, slot, clauses, literals, literalSize);
                     if (folded < 0) return folded;
                     if (folded > 0) continue;
+                    int comparison = RuntimeTypeMetadata.CoreTypeComparison(image, heaps, layout, target);
+                    int previous = comparison != 0 ? RuntimeTypeRelations.Previous(records, slot, clauses) : -1;
+                    if (previous >= 0 && records[previous] == BranchIl.TypeFromHandle)
+                    {
+                        // The right operand is a runtime type or null. The
+                        // managed operator cannot dispatch a custom Equals.
+                        records[slot] = BranchIl.EqualRuntimeDescriptors;
+                        records[slot + 1] = RuntimeTypeMetadata.Type;
+                        records[slot + 3] = comparison == 3 ? 1 : 0;
+                        continue;
+                    }
                     // Stage 181 (issue #256): CoreLib's own event accessors call Delegate.Combine/Remove
                     // by MethodDef and cast the result to EventHandler. Lower exactly that shape to the
                     // EventHandler composition records; any other Combine keeps its original body.
