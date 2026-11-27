@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework Condition="'$(STAGE293_FIXTURE_FRAMEWORK)' == ''">netstandard2.0</TargetFramework>
+    <TargetFramework Condition="'$(STAGE293_FIXTURE_FRAMEWORK)' != ''">$(STAGE293_FIXTURE_FRAMEWORK)</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+</Project>
