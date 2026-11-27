@@ -40,8 +40,8 @@ public static class ScopedSpanProbe
     {
         view.Count++;
         view.Characters = replacement;
-        Span<char> alias = view.Characters;
-        alias[1] = (char)view.Count;
+        int index = view.Characters.Length - 1;
+        view.Characters[index] = (char)view.Count;
     }
 
     public static int CheckScopedReceiverReset(int seed)
@@ -53,10 +53,8 @@ public static class ScopedSpanProbe
         var direct = view;
         ResetView(ref view);
         direct.Reset();
-        Span<char> cleared = view.Characters;
-        Span<char> clearedDirect = direct.Characters;
         Span<char> prior = snapshot.Characters;
-        return view.Count + cleared.Length + direct.Count + clearedDirect.Length +
+        return view.Count + view.Characters.Length + direct.Count + direct.Characters.Length +
             snapshot.Count + prior.Length + prior[0];
     }
 

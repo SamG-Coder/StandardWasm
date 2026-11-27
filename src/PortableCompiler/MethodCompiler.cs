@@ -1698,6 +1698,13 @@ namespace PortableCompiler
                         if (ObjectLayouts.IsByRefLikeValue(objects, FieldAccess.Owner(descriptor)) &&
                             FieldAccess.Storage(descriptor) == I32 && ValueOperands.LowerScopedIntField(records, slot, clauses))
                             continue;
+                        if (ObjectLayouts.IsByRefLikeValue(objects, fieldOwner) && IsSpan(fieldStorage))
+                        {
+                            int span = SpanOperands.Bind(bundle, image, layout, heaps, owner, context, methodArguments,
+                                records, slot, fieldStorage, objects, clauses, field: true);
+                            if (span < 0) return span;
+                            if (span != 0) continue;
+                        }
                         if (pointerField && !ObjectLayouts.IsValueType(objects, FieldAccess.Storage(descriptor)))
                             continue; // &p->F of a primitive field: native address arithmetic
                         if (ObjectLayouts.IsValueType(objects, FieldAccess.Storage(descriptor)) &&
