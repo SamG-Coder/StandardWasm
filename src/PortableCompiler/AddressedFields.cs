@@ -1,10 +1,10 @@
 namespace PortableCompiler
 {
     // An addressed field keeps its backing choice across emission retries.
-    // Aggregate addresses use linear memory. Int32 and reference byrefs use traced cells.
+    // Native aggregates use linear memory. Managed aggregates, Int32 and references use cells.
     internal sealed class AddressedFields
     {
-        internal const int Int32Cell = -2, ReferenceCell = -3;
+        internal const int Int32Cell = -2, ReferenceCell = -3, ValueCell = -4;
         private const int PageBytes = 65536, FieldWidth = 3;
         private int[] fields = new int[12];
         internal int Count;
@@ -32,6 +32,8 @@ namespace PortableCompiler
         internal void AddInt32Cell(int owner, int row) => Record(owner, row, Int32Cell);
 
         internal void AddReferenceCell(int owner, int row) => Record(owner, row, ReferenceCell);
+
+        internal void AddValueCell(int owner, int row) => Record(owner, row, ValueCell);
 
         // FieldDef row IDs are positive. Negative keys keep the instance-cell
         // entries distinct from the static backing map.

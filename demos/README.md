@@ -277,6 +277,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [278 · Writable byte spans](stage-278-writable-byte-spans/README.md) | `npm run demo -- stage-278-writable-byte-spans` | Compare ranged byte views and original array aliasing with Windows |
 | [280 · Enum type classification](stage-280-runtime-type-enum-kind/README.md) | `npm run demo -- stage-280-runtime-type-enum-kind` | Verify exact Enum ancestry and nominal virtual overrides |
 | [281 · Closed reference boxes at interface calls](stage-281-reference-box-provenance/README.md) | `npm run demo -- stage-281-reference-box-provenance` | Preserve reference identity, null, and verified interface call arguments |
+| [282 · Readonly static value locations](stage-282-readonly-static-value-location/README.md) | `npm run demo -- stage-282-readonly-static-value-location` | Preserve initonly aggregate addresses and value snapshots across assemblies |
 | [283 · CoreLib ordinal string comparison](stage-283-string-ordinal-sequence/README.md) | `npm run demo -- stage-283-string-ordinal-sequence` | Compare original linked string inequality, UTF-16 data and ordinary null and length checks |
 
 ## Adding a stage

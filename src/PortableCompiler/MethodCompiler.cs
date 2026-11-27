@@ -1188,7 +1188,7 @@ namespace PortableCompiler
                             capacity += bytes;
                         }
                         if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField ||
-                            kind == BranchIl.StaticInt32 || kind == BranchIl.StaticReference)
+                            kind == BranchIl.StaticInt32 || kind == BranchIl.StaticReference || kind == BranchIl.StaticValue)
                         {
                             if (capacity > int.MaxValue - TypeInitializerWasm.TriggerCapacity) return -3;
                             capacity += TypeInitializerWasm.TriggerCapacity;
@@ -2625,7 +2625,7 @@ namespace PortableCompiler
                 }
                 if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField || kind == BranchIl.StaticFieldAddress)
                 {
-                    var symbol = new int[6];
+                    var symbol = new int[7];
                     int field = records[slot + 1];
                     bool addressOf = kind == BranchIl.StaticFieldAddress;
                     bool write = kind == BranchIl.StoreStaticField || addressOf;
@@ -2657,13 +2657,19 @@ namespace PortableCompiler
                     if (linked && bundle.Length == 0) return -2;
                     if (linked && callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
                     if (callerType < 0) return -1;
-                    bool callerInitializer = write && !addressOf && MethodNames.IsInitializer(image, layout, heaps, callerRow);
+                    bool store = kind == BranchIl.StoreStaticField;
+                    bool callerInitializer = store && MethodNames.IsInitializer(image, layout, heaps, callerRow);
                     int status = linked ? AssemblyBundle.ResolveField(bundle, image, layout, heaps, owner,
-                        field, write, true, objects, globals, symbol, context, callerType, methodArguments, callerInitializer: callerInitializer) :
-                        StaticFields.ResolveLocal(bundle, image, layout, heaps, owner, field, write, objects, globals, symbol, callerRow, context);
+                        field, store, true, objects, globals, symbol, context, callerType, methodArguments, callerInitializer: callerInitializer) :
+                        StaticFields.ResolveLocal(bundle, image, layout, heaps, owner, field, store, objects, globals, symbol, callerRow, context);
                     if (status < 0) return status;
                     int fieldContext = StaticFields.Context(globals, symbol[0]);
                     bool referenceCell = IsReferenceLocation(LocationFromIdentity(objects, symbol[1]));
+                    bool readOnly = (symbol[6] & StaticFields.InitOnly) != 0;
+                    bool valueCell = readOnly && fieldContext == 0 &&
+                        ObjectLayouts.IsValueType(objects, symbol[1]) && !ObjectLayouts.IsByRefLikeValue(objects, symbol[1]);
+                    if (addressOf && readOnly && !valueCell && !(!linked &&
+                        StaticFields.IsDeclaringInitializer(image, layout, heaps, field, callerRow))) return -2;
                     // A reference-cell demand is keyed by FieldDef across retries.
                     // Each reference-compatible closed layout still gets its own global.
                     // Scalar and native storage retain their existing generic boundary.
@@ -2680,6 +2686,13 @@ namespace PortableCompiler
                     int staticOwner = StaticFields.Owner(globals, symbol[0]);
                     int staticRow = StaticFields.Row(globals, symbol[0]);
                     int address = fieldContext == 0 || referenceCell ? addressedFields.Find(staticOwner, staticRow) : -1;
+                    if (address == AddressedFields.ValueCell || addressOf && valueCell)
+                    {
+                        if (address == -1) addressedFields.AddValueCell(staticOwner, staticRow);
+                        StaticFields.UseValueCell(globals, symbol[0], symbol[1], records, slot,
+                            addressOf ? StaticReferenceWasm.Address : store ? StaticReferenceWasm.Write : StaticReferenceWasm.Read);
+                        continue;
+                    }
                     if (address == AddressedFields.Int32Cell || addressOf && symbol[5] == 8)
                     {
                         if (address == -1) addressedFields.AddInt32Cell(staticOwner, staticRow);

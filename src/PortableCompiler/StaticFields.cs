@@ -7,6 +7,7 @@ namespace PortableCompiler
     {
         internal const int EventOwner = -1;
         internal const int Width = 4;
+        internal const int InitOnly = 0x20;
 
         internal static int Owner(int[] globals, int index) => globals[1 + index * Width];
         internal static int Row(int[] globals, int index) => globals[2 + index * Width];
@@ -33,6 +34,15 @@ namespace PortableCompiler
             records[slot + BranchIl.Width + 1] = type;
             records[slot + BranchIl.Width + 2] = vector;
             return 0;
+        }
+
+        internal static void UseValueCell(int[] globals, int index, int type, int[] records, int slot, int action)
+        {
+            globals[3 + index * Width] = ValueLocation(type);
+            records[slot] = BranchIl.StaticValue;
+            records[slot + 1] = index;
+            records[slot + 3] = action;
+            records[slot + BranchIl.Width + 1] = type;
         }
 
         internal static int Register(int[] globals, int owner, int row, int storage, int context = 0)
@@ -88,8 +98,15 @@ namespace PortableCompiler
                 result[4] = initializer == 0 ? 0 : declaringType;
             }
             if (result.Length > 5) result[5] = reference[2];
+            if (result.Length > 6) result[6] = flags;
             return 0;
         }
+
+        internal static bool IsDeclaringInitializer(byte[] image, int[] layout, int[] heaps, int row, int callerRow,
+            int declaring = 0) =>
+            MethodNames.IsInitializer(image, layout, heaps, callerRow) &&
+            ObjectLayouts.Owner(image, heaps, layout, callerRow, false) ==
+                (declaring == 0 ? ObjectLayouts.Owner(image, heaps, layout, row, true) : declaring);
 
         internal static int ResolveLocal(BundleImages bundle, byte[] image, int[] layout,
             int[] heaps, int owner, int row, bool write, int[] objects, int[] globals, int[] result, int callerRow, int context)
@@ -98,9 +115,7 @@ namespace PortableCompiler
             if (declaring < 1) return -1;
             // ECMA-335 II.16.1.2: the declaring type's own initializer may write an
             // initonly static field. Every other write stays rejected.
-            if (write && MethodNames.IsInitializer(image, layout, heaps, callerRow) &&
-                ObjectLayouts.Owner(image, heaps, layout, callerRow, false) == declaring)
-                write = false;
+            if (write && IsDeclaringInitializer(image, layout, heaps, row, callerRow, declaring)) write = false;
             int table = AssemblyReferences.FieldTable(image, heaps, layout);
             if (table < 0) return table;
             var definition = new int[3];

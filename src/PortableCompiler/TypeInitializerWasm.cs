@@ -263,7 +263,7 @@ namespace PortableCompiler
         internal static bool HasFieldTrigger(int kind, int global, int[] fieldInitializers) =>
             (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField ||
              kind == BranchIl.StaticFieldAddress || kind == BranchIl.LoadNativeStatic || kind == BranchIl.StoreNativeStatic ||
-             kind == BranchIl.StaticInt32 || kind == BranchIl.StaticReference) &&
+             kind == BranchIl.StaticInt32 || kind == BranchIl.StaticReference || kind == BranchIl.StaticValue) &&
             global >= 0 && global < fieldInitializers.Length && fieldInitializers[global] != 0;
 
         // A static field access of a type with an initializer runs it first.

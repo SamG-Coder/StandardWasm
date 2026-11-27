@@ -34,7 +34,7 @@ namespace PortableCompiler
                 int owner = StaticFields.Owner(globals, index), row = StaticFields.Row(globals, index);
                 int storage = StaticFields.Storage(globals, index);
                 if (owner < 0 || (row <= 0 && row != CurrentThreadWasm.RootKey && !InitializerFailures.IsCacheRow(owner, row)) ||
-                    (!IsObjectReference(storage) && !StaticFields.IsReferenceCell(storage))) continue;
+                    (!IsObjectReference(storage) && !StaticFields.IsReferenceCell(storage) && !IsValueLocation(storage))) continue;
                 used = Index(code, used, 0x23, index);
                 if (StaticFields.IsReferenceCell(storage))
                 {
@@ -43,6 +43,8 @@ namespace PortableCompiler
                     used = Const(code, used, 0);
                     used = Gc(code, used, 0x0b, StaticFields.CellVector(storage));
                 }
+                else if (IsValueLocation(storage))
+                    used = ManagedValueLocationWasm.ReadRawSnapshot(code, used);
                 used = Call(code, used, first + Add);
             }
 

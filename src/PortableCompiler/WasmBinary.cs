@@ -245,7 +245,7 @@ namespace PortableCompiler
                 remaining = Reserve(remaining, tableSize);
             if (tagCount != 0)
                 remaining = Reserve(remaining, tagSize);
-            int globalSize = WasmGlobals.Size(globals, objects, descriptorHeap);
+            int globalSize = WasmGlobals.Size(globals, objects, descriptorHeap, rootCount >= 0);
             if (globalSize != 0)
                 remaining = Reserve(remaining, globalSize);
             remaining = Reserve(remaining, exportSize);
@@ -511,7 +511,7 @@ namespace PortableCompiler
             if (globalSize != 0)
             {
                 cursor = Section(output, cursor, 6, globalSize);
-                cursor = WasmGlobals.Write(output, cursor, globals, objects, descriptorHeap);
+                cursor = WasmGlobals.Write(output, cursor, globals, objects, descriptorHeap, rootCount >= 0);
             }
             cursor = Section(output, cursor, 7, exportSize);
             cursor = Unsigned(output, cursor, exportCount);

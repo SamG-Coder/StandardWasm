@@ -92,7 +92,7 @@ namespace PortableCompiler
                     if (catchRegion.Length == 0) return -2;
                     next = 0; // leave clears the CIL evaluation stack.
                 }
-                else if (kind == StaticReference)
+                else if (kind == StaticReference || kind == StaticValue)
                 {
                     int type = records[slot + Width + 1], action = records[slot + 3];
                     if (action == StaticReferenceWasm.Write)

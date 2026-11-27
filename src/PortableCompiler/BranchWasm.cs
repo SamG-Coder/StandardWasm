@@ -1522,6 +1522,12 @@ namespace PortableCompiler
                     used = StaticReferenceWasm.Emit(code, used, records, slot, objects,
                         depth == 0 ? NullValue : states[state + top], depth, spills, maximum, spillFlags);
                 }
+                else if (kind == StaticValue)
+                {
+                    used = TypeInitializerWasm.Trigger(code, used, fieldInitializers, operand, hostImports);
+                    used = StaticValueWasm.Emit(code, used, records, slot,
+                        depth == 0 ? NullValue : states[state + top], depth, spills, maximum, spillFlags);
+                }
                 else if (kind == StaticFieldAddress || kind == LoadNativeStatic || kind == StoreNativeStatic)
                 {
                     int type = records[slot + 3];
