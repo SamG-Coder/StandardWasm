@@ -55,10 +55,19 @@ namespace FunctionPointerFixture
 
         public static int Void(int value)
         {
-            int target = 0;
+            int* target = stackalloc int[1];
             delegate*<int*, int, void> store = &Store;
-            store(&target, value);
-            return target;
+            store(target, value);
+            return *target;
+        }
+
+        // Calling a null function pointer is an access violation on the CLR, which ends the
+        // process. Wasm raises an engine trap (call_indirect of table slot 0), not a managed
+        // exception. The runner checks this case in Wasm only.
+        public static int CallNull(int value)
+        {
+            delegate*<int, int, int> function = null;
+            return function(value, value);
         }
 
         // Recursion through a pointer.
