@@ -384,9 +384,11 @@ namespace PortableCompiler
                 if (used < 0)
                 {
                     var records = new int[body[1] * BranchIl.Width];
-                    status = resourceOpen
-                        ? ResourceOpenIl.Decode(image, body, records, location, parameters)
-                        : BranchIl.Decode(image, body[0], body[1], parameters, locals, records, location, catchRegion.Length != 0, filterEnds: filterEnds);
+                    if (resourceOpen) status = ResourceOpenIl.Decode(image, body, records, location, parameters);
+                    else if (parameters == 3 && locals == 1 && frame[parameters] == Native &&
+                        CoreStringRange.Lower(image, layout, heaps, source, body, records)) status = 0;
+                    else status = BranchIl.Decode(image, body[0], body[1], parameters, locals, records,
+                        location, catchRegion.Length != 0, filterEnds: filterEnds);
                     if (status < 0)
                         return status;
                     if (filterEnds != null)
@@ -671,7 +673,8 @@ namespace PortableCompiler
                                 kind == BranchIl.ObjectElementAddress)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
-                                kind == BranchIl.SetField || nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit || kind == BranchIl.InvokeDelegate ||
+                                kind == BranchIl.SetField || nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit ||
+                                kind == BranchIl.StringRange || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection || kind == BranchIl.GetObjectType ||
                                 kind == BranchIl.LoadIndirect || kind == BranchIl.ReadStaticUInt16 || kind == BranchIl.StoreIndirect || kind == BranchIl.TakeValueFieldAddress ||
                                 kind == BranchIl.LoadManagedCell || kind == BranchIl.StoreManagedCell || kind == BranchIl.ClearManagedCell ||
@@ -730,7 +733,7 @@ namespace PortableCompiler
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
-                        if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals ||
+                        if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
                             kind == BranchIl.ConsoleWrite || kind == BranchIl.PinString) frameShape[5] = 1;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))

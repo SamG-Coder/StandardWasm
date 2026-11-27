@@ -356,6 +356,9 @@ namespace PortableCompiler
                     ? Push(stack, allocated, depth - 2, String) : -1;
             if (kind == StringFromChars)
                 return Match(stack, depth, Chars) ? Push(stack, allocated, depth - 1, String) : -1;
+            if (kind == StringRange)
+                return Match(stack, depth - 2, String) && Match(stack, depth - 1, I32) && Match(stack, depth, I32)
+                    ? Push(stack, allocated, depth - 3, String) : -2;
             if (kind == StringLength || kind == StringFirstCodeUnit)
                 return Match(stack, depth, String) ? Push(stack, allocated, depth - 1, I32) : -1;
             if (kind == StringCharacter)

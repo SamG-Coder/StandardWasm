@@ -98,6 +98,9 @@ checks unsigned byte values and typed bounds failures. A readonly location
 keeps that backing field alive across calls and supports byte offsets and
 unaligned little-endian reads. The compiler tests these operations directly
 and through the original CoreLib Unicode tables used by `Char.IsWhiteSpace`.
+The string trim check runs the original CoreLib trimming logic. Its verified
+substring helper copies UTF-16 into a fresh Wasm GC backing array. The checks
+cover reference identity, Unicode whitespace, a surrogate pair and embedded NUL.
 
 The monitor probe checks the CLR's reentrant lock behavior on the launch
 worker's single managed execution agent. It verifies lockTaken and typed

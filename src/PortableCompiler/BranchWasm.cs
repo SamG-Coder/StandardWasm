@@ -382,6 +382,15 @@ namespace PortableCompiler
                     used = StringWasm.FirstCodeUnit(code, used, reference);
                     used = Local(code, used, 0x21, spills + top);
                 }
+                else if (kind == StringRange)
+                {
+                    int source = Spill(spills, maximum, spillFlags, String, top - 2);
+                    int start = Spill(spills, maximum, spillFlags, I32, top - 1);
+                    int length = Spill(spills, maximum, spillFlags, I32, top);
+                    used = GuardNull(code, used, source);
+                    used = StringWasm.CopyRange(code, used, source, start, length, scratch);
+                    used = Local(code, used, 0x21, source);
+                }
                 else if (kind == StringLength || kind == StringCharacter)
                 {
                     int at = top - (kind == StringCharacter ? 1 : 0);

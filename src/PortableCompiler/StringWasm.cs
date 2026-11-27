@@ -186,6 +186,22 @@ namespace PortableCompiler
             return used;
         }
 
+        internal static int CopyRange(byte[] code, int used, int source, int start, int length, int scratch)
+        {
+            // The caller checked the range. Initialize the new UTF-16 owner
+            // before constructing the publishable String wrapper.
+            used = Local(code, used, 0x20, length);
+            used = BranchWasm.Gc(code, used, 7, SignatureTypes.Chars); // array.new_default
+            used = Local(code, used, 0x22, scratch);
+            used = Zero(code, used);
+            used = Unwrap(code, Local(code, used, 0x20, source));
+            used = Local(code, used, 0x20, start);
+            used = Local(code, used, 0x20, length);
+            used = BranchWasm.Gc(code, used, 0x11, SignatureTypes.Chars); // array.copy
+            used = WasmBinary.Unsigned(code, used, WasmBinary.HeapType(SignatureTypes.Chars));
+            return Wrap(code, Local(code, used, 0x20, scratch));
+        }
+
         internal static int FirstCodeUnit(byte[] code, int used, int reference)
         {
             used = Unwrap(code, Local(code, used, 0x20, reference));

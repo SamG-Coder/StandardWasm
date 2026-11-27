@@ -52,6 +52,7 @@ Console.WriteLine(JsonSerializer.Serialize(new { executable, results, errors = n
     compiledWhitespace = new[] { 0, 32, 133, 160, 5760, 8192, 8203, 8232, 12288, 65535 }
         .Select(StaticByteSpanProbe.CheckCoreWhitespace).ToArray(),
     compiledStringField = Enumerable.Range(0, 5).Select(CoreStringFieldProbe.CheckCoreStringFirstCharacter).ToArray(),
+    compiledStringTrim = Enumerable.Range(0, 8).Select(CoreStringFieldProbe.CheckCoreStringTrim).ToArray(),
     compiledTypeReturn = Enumerable.Range(0, 2).Select(TypeReturnProbe.CompareReturnedType).ToArray(),
     compiledRootDispatch = Enumerable.Range(0, 4).Select(RootDispatchProbe.CompareThroughRoot).ToArray(),
     compiledValueAliases = Enumerable.Range(0, 3).Select(ValueAliasProbe.CheckValueAlias).ToArray(),
