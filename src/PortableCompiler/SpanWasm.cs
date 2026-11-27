@@ -116,12 +116,22 @@ namespace PortableCompiler
             return Gc(code, used, vector == Chars || vector == Bytes ? 0x0d : 0x0b, vector);
         }
 
-        internal static int Address(byte[] code, int used, int vector, int view, int index)
+        internal static int CheckIndex(byte[] code, int used, int view, int index)
         {
             used = Local(code, used, 0x20, index);
             used = Length(code, used, view);
             code[used++] = 0x4f; // i32.ge_u rejects negative indices too
-            used = ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.IndexTag);
+            return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.IndexTag);
+        }
+
+        internal static int Address(byte[] code, int used, int vector, int view, int index)
+        {
+            used = CheckIndex(code, used, view, index);
+            return CheckedArrayAddress(code, used, vector, view, index);
+        }
+
+        internal static int CheckedArrayAddress(byte[] code, int used, int vector, int view, int index)
+        {
             used = LoadField(code, used, view, 0);
             code[used++] = 0xfb;
             code[used++] = 0x16; // ref.cast nonnull
@@ -132,7 +142,7 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int LoadField(byte[] code, int used, int view, byte field)
+        internal static int LoadField(byte[] code, int used, int view, byte field)
         {
             used = Local(code, used, 0x20, view);
             used = Gc(code, used, 2, ObjectSpan); // struct.get

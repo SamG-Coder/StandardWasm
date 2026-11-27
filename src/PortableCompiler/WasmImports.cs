@@ -5,6 +5,9 @@ namespace PortableCompiler
     internal static class WasmImports
     {
         internal const int Console = 1, Resources = 2, Memory = 4, Win32Errors = 8;
+        // A module with pointer-backed spans enables linear accesses in every
+        // character-view consumer, including callees compiled before discovery.
+        internal const int NativeCharacterViews = 1 << 29;
         private const int FirstNativeFeature = 16;
         private const int NativeMemoryFeatures = ((1 << Win32ModuleBinding.ReleaseContext) - 1) * FirstNativeFeature;
 
@@ -41,7 +44,7 @@ namespace PortableCompiler
         private static int ConsoleFunctions(int features) => (features & Console) != 0 ? ConsoleWasm.ImportCount : 0;
 
         // Resource calls and native indirection share one memory index.
-        private static bool HasMemory(int features) => (features & (Resources | Memory | NativeMemoryFeatures)) != 0;
+        private static bool HasMemory(int features) => (features & (Resources | Memory | NativeMemoryFeatures | NativeCharacterViews)) != 0;
 
         private static int EntryCount(int features) => FunctionCount(features) + (HasMemory(features) ? 1 : 0);
 

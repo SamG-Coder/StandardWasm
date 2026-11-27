@@ -251,6 +251,9 @@ namespace PortableCompiler
                 if (!Match(stack, depth, Chars)) return -2;
                 return extra == 0 ? Push(stack, allocated, depth - 1, WritableCharacterSpan) : depth - 1;
             }
+            if (kind == NativeCharacterSpan)
+                return depth >= 2 && IsNativeInteger(stack[depth - 2]) && stack[depth - 1] == I32
+                    ? Push(stack, allocated, depth - 2, WritableCharacterSpan) : -2;
             if (kind == SpanAsReadOnly)
                 return Match(stack, depth, WritableCharacterSpan) ? Push(stack, allocated, depth - 1, CharacterSpan) : -2;
             if (kind == SpanAddress)

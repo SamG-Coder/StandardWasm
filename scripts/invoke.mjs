@@ -13,6 +13,7 @@ const managedTags = [
     ["\0invalidCast", "System.InvalidCastException"],
     ["\0argument", "System.ArgumentException"],
     ["\0argumentNull", "System.ArgumentNullException"],
+    ["\0argumentOutOfRange", "System.ArgumentOutOfRangeException"],
     ["\0synchronizationLock", "System.Threading.SynchronizationLockException"]
 ];
 

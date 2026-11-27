@@ -128,6 +128,9 @@ namespace PortableCompiler
             if (size < 3 || size > limit - start) return 0;
             if (constructor)
             {
+                // instance void .ctor(void*, int).
+                if (size == 6 && U32(image, (uint)start) == 0x0f010220 &&
+                    U16(image, (uint)(start + 4)) == 0x0801) return BranchIl.NativeCharacterSpan;
                 // instance void .ctor(!0[]).
                 return size == 6 && U32(image, (uint)start) == 0x1d010120 &&
                     U16(image, (uint)(start + 4)) == 0x0013 ? BranchIl.CharacterArrayAsSpan : 0;

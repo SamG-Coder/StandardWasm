@@ -193,7 +193,7 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[25];
+            var frameShape = new int[26];
             var shadowStack = new int[3]; // $sp, base, limit globals + 1
             var pinRegistry = new int[1]; // the live-pin count global + 1 (decision 0077)
             // Each emitted global needs at least five bytes in the destination.
@@ -754,8 +754,11 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.InvalidCast | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.CastClass)
                                 tags = ExceptionTypes.InvalidCast;
+                            else if (kind == BranchIl.NativeCharacterSpan)
+                                tags = ExceptionTypes.ArgumentOutOfRange;
                             else if (kind == BranchIl.SpanRead || kind == BranchIl.SpanAddress)
-                                tags = ExceptionTypes.IndexOutOfRange;
+                                tags = ExceptionTypes.IndexOutOfRange |
+                                    ((hostFeatures & WasmImports.NativeCharacterViews) != 0 ? ExceptionTypes.NullReference : 0);
                             else if (kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet || kind == BranchIl.StringCharacter ||
                                 kind == BranchIl.ObjectElementAddress)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
@@ -816,6 +819,7 @@ namespace PortableCompiler
                     frameShape[17] = allocates ? shadowStack[1] : 0;
                     frameShape[18] = allocates ? shadowStack[2] : 0;
                     frameShape[24] = pins ? pinRegistry[0] : 0;
+                    frameShape[25] = hostFeatures & WasmImports.NativeCharacterViews;
                     frameShape[19] = resourceOpen ? ((hostFeatures & WasmImports.Console) != 0 ? ConsoleWasm.ImportCount + 1 : 1) : 0;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
@@ -1530,6 +1534,12 @@ namespace PortableCompiler
                     {
                         int span = SpanMetadata.ClassifyCharacterSpanCall(bundle, image, layout, heaps,
                             owner, member, context, methodArguments, objects);
+                        if (span == BranchIl.NativeCharacterSpan && opcode == 0x73)
+                        {
+                            records[slot] = span;
+                            hostUse[0] = hostUse[0] | WasmImports.NativeCharacterViews;
+                            continue;
+                        }
                         if (span == BranchIl.CharacterArrayAsSpan && opcode == 0x73 ||
                             span == BranchIl.SpanAsReadOnly && opcode == 0x28)
                         {

@@ -95,7 +95,7 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int LoadField(byte[] code, int used, int location, byte field)
+        internal static int LoadField(byte[] code, int used, int location, byte field)
         {
             used = Local(code, used, 0x20, location);
             used = Gc(code, used, 2, ObjectLocation); // struct.get

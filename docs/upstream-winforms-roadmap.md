@@ -106,8 +106,10 @@ call in `ThreadContext.RunMessageLoopInner`. The original window-state calls
 now bind to the browser host's per-instance HWND table. The unchanged bundle
 gets past both calls and reaches CoreLib's `System.IO.Path.GetTempPath`.
 The compiler resolves its `ValueStringBuilder` local, whose `Span<char>` field
-uses the existing owner-carrying Wasm representation. Compilation then stops
-at `Span<char>(void*, int)`, which needs a view over the Wasm shadow stack.
+uses the existing owner-carrying Wasm representation. The pointer-based
+`Span<char>` constructor now produces a view over the Wasm shadow stack.
+The next diagnostic is the call to `Path.GetTempPath(ref ValueStringBuilder)`,
+which requires an addressable scoped aggregate across a managed call.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

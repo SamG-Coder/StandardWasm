@@ -77,7 +77,9 @@ notifications. The browser host keeps this state per application instance.
 The scoped-span fixture stores an array-backed `Span<char>` in a `ref struct`
 and copies the struct. Writes through the copy still reach the original array.
 The CLR, Node, and Edge compare the alias, the length of a default span, and
-UTF-16 values at the wraparound boundary.
+UTF-16 values at the wraparound boundary. The same compiled module exercises
+a pointer-backed span over the shadow stack, a readonly view over the same
+memory, and typed exceptions for a negative length and invalid indices.
 
 The managed probe also checks pinned addresses of blittable static structs.
 A direct managed store and a pointer store use the same stable linear-memory

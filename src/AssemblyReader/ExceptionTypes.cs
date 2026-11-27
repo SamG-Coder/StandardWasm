@@ -7,12 +7,12 @@ namespace PeLibrary
         internal const int Overflow = 1, DivideByZero = 2, Arithmetic = Overflow | DivideByZero;
 
         internal const int IndexOutOfRange = 4, NullReference = 8, InvalidCast = 16, Argument = 32;
-        internal const int ArgumentNull = 128, SynchronizationLock = 256;
-        internal const int Supported = Arithmetic | IndexOutOfRange | NullReference | InvalidCast | Argument | ArgumentNull | SynchronizationLock;
+        internal const int ArgumentNull = 128, SynchronizationLock = 256, ArgumentOutOfRange = 512;
+        internal const int Supported = Arithmetic | IndexOutOfRange | NullReference | InvalidCast | Argument | ArgumentNull | SynchronizationLock | ArgumentOutOfRange;
 
         // A thrown managed object (Stage 126, decision 0054) travels on its own tag.
         // A clause that can receive it also carries its class type above the tag bits.
-        internal const int Object = 64, ClassShift = 9;
+        internal const int Object = 64, ClassShift = 10;
 
         internal static int CatchMask(byte[] image, int[] heaps, int[] methods, int token)
         {
@@ -73,9 +73,11 @@ namespace PeLibrary
                 return Supported;
             if (MatchesAscii(image, heaps, name, "ArgumentNullException"))
                 return ArgumentNull;
+            if (MatchesAscii(image, heaps, name, "ArgumentOutOfRangeException"))
+                return ArgumentOutOfRange;
             if (Fits(name, 18, limit) && U32(image, n) == 0x75677241 && U32(image, n + 4) == 0x746e656d &&
                 U32(image, n + 8) == 0x65637845 && U32(image, n + 12) == 0x6f697470 && U16(image, n + 16) == 0x006e)
-                return Argument | ArgumentNull;
+                return Argument | ArgumentNull | ArgumentOutOfRange;
             if (Fits(name, 18, limit) && U32(image, n) == 0x7265764f && U32(image, n + 4) == 0x776f6c66 &&
                 U32(image, n + 8) == 0x65637845 && U32(image, n + 12) == 0x6f697470 && U16(image, n + 16) == 0x006e)
                 return Overflow;

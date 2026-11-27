@@ -62,6 +62,7 @@ namespace PortableCompiler
         internal const int CallIndirect = 138, FunctionAddress = 139;
         internal const int StringRange = 140;
         internal const int SuppressFinalizer = 141; // [object] -> []
+        internal const int NativeCharacterSpan = 142;
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.

@@ -1008,6 +1008,12 @@ namespace PortableCompiler
                     used = SpanWasm.FromOwner(code, used, source, false);
                     used = Local(code, used, 0x21, target >= 0 ? target : Spill(spills, maximum, spillFlags, WritableCharacterSpan, top));
                 }
+                else if (kind == NativeCharacterSpan)
+                {
+                    used = NativeCharacterViewWasm.Create(code, used,
+                        Spill(spills, maximum, spillFlags, Native, top - 1), Spill(spills, maximum, spillFlags, I32, top));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, WritableCharacterSpan, top - 1));
+                }
                 // A SpanAsReadOnly operation only changes the logical type.
                 // Both descriptors occupy the same Wasm spill bank.
                 else if (kind == SpanLength)
@@ -1020,8 +1026,12 @@ namespace PortableCompiler
                 {
                     int view = Spill(spills, maximum, spillFlags, WritableCharacterSpan, top - 1);
                     int index = Spill(spills, maximum, spillFlags, I32, top);
-                    used = SpanWasm.Address(code, used, Chars, view, index);
-                    used = Gc(code, used, 0, CharacterLocation); // struct.new traced location
+                    if (frameShape[25] != 0) used = NativeCharacterViewWasm.ElementLocation(code, used, view, index);
+                    else
+                    {
+                        used = SpanWasm.Address(code, used, Chars, view, index);
+                        used = Gc(code, used, 0, CharacterLocation); // struct.new traced location
+                    }
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, CharacterLocation, top - 1));
                 }
                 else if (kind == SpanRead)
@@ -1029,7 +1039,9 @@ namespace PortableCompiler
                     int type = records[slot + 3];
                     int view = Spill(spills, maximum, spillFlags, type, top - 1);
                     int index = Spill(spills, maximum, spillFlags, I32, top);
-                    used = SpanWasm.Read(code, used, operand, view, index);
+                    used = frameShape[25] != 0 && type == CharacterSpan
+                        ? NativeCharacterViewWasm.Read(code, used, view, index)
+                        : SpanWasm.Read(code, used, operand, view, index);
                     int resultType = type == ObjectSpan ? ObjectReference : I32;
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, resultType, top - 1));
                 }
@@ -1061,7 +1073,9 @@ namespace PortableCompiler
                 {
                     int type = states[state + top];
                     int address = Spill(spills, maximum, spillFlags, type, top);
-                    if (type == CharacterLocation || type == BooleanLocation || type == StaticByteLocation)
+                    if (frameShape[25] != 0 && type == CharacterLocation)
+                        used = NativeCharacterViewWasm.ReadLocation(code, used, address);
+                    else if (type == CharacterLocation || type == BooleanLocation || type == StaticByteLocation)
                     {
                         int vector = type == CharacterLocation ? Chars : Bytes;
                         used = ManagedLocationWasm.AccessElement(code, used, address, vector);
@@ -1082,7 +1096,9 @@ namespace PortableCompiler
                     int type = states[state + top - 1], value = states[state + top];
                     int address = Spill(spills, maximum, spillFlags, type, top - 1);
                     int source = Spill(spills, maximum, spillFlags, value, top);
-                    if (type == CharacterLocation || type == BooleanLocation)
+                    if (frameShape[25] != 0 && type == CharacterLocation)
+                        used = NativeCharacterViewWasm.WriteLocation(code, used, address, source);
+                    else if (type == CharacterLocation || type == BooleanLocation)
                     {
                         int vector = type == CharacterLocation ? Chars : Bytes;
                         used = ManagedLocationWasm.AccessElement(code, used, address, vector);
