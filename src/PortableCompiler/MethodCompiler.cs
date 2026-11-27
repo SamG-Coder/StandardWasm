@@ -444,6 +444,19 @@ namespace PortableCompiler
                 int status = 0;
                 if (stub < 0 && initializerPrologue < 0)
                 {
+                    if (arities[current] == 1 && signatures[offsets[current]] == String &&
+                        signatures[offsets[current] + 1] == String &&
+                        AsciiCaseMetadata.IsOriginalLowercase(bundle, image, layout, heaps, owner, source, objects))
+                    {
+                        int empty = StringLiterals.Empty(globals);
+                        if (empty < 0) return empty;
+                        if (moduleCode.Length - length < AsciiCaseWasm.BodyCapacity) return -3;
+                        bodyOffsets[current] = length;
+                        length = AsciiCaseWasm.Lowercase(moduleCode, length, empty);
+                        sizes[current] = length - bodyOffsets[current];
+                        exceptionTags |= ExceptionTypes.NullReference;
+                        continue;
+                    }
                     int intrinsic = PlatformMembers.CoreMathInternalCall(image, heaps, layout, source);
                     if (intrinsic != 0)
                     {
