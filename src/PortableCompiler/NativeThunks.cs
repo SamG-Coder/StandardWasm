@@ -22,7 +22,8 @@ namespace PortableCompiler
     // loaded, EntryPointNotFoundException when it loads but lacks the entry. The host answers
     // present and library from what it implements, so the module raises the same CoreLib
     // exception with the CLR's message, and the same catch clause runs as on the CLR.
-    // Only blittable scalar signatures are lowered (see Blittable); anything else is a located -2.
+    // Only blittable scalar and unmanaged pointer signatures are lowered (see Blittable); anything
+    // else is a located -2.
     internal static class NativeThunks
     {
         internal const int None = 0, PlatformInvoke = 1, InternalCall = 2, SymbolLookup = 3;
@@ -131,8 +132,9 @@ namespace PortableCompiler
         }
 
         // ECMA-335 II.23.2.1 MethodDefSig of a static method: default calling convention, then
-        // blittable scalar element types only. bool (4-byte Win32 BOOL) and char (ANSI by default)
-        // need marshalling, so they are rejected rather than passed through as integers.
+        // blittable scalar element types and unmanaged pointers (Stage 365) only. bool (4-byte Win32
+        // BOOL) and char (ANSI by default) need marshalling, so they are rejected rather than passed
+        // through as integers; so are byrefs, strings, arrays, delegates and by-value structs.
         private static int Blittable(byte[] image, int[] heaps, int[] layout, int row, byte[] types, int[] shape)
         {
             int blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
@@ -143,18 +145,70 @@ namespace PortableCompiler
             int end = at + length;
             if (image[at++] != 0) return -2; // generic, varargs or instance
             int count = image[at++];
-            if (count >= 0x80 || count > types.Length || at + 1 + count != end) return -2;
-            int result = WasmType(image[at++], true);
-            if (result < 0) return -2;
+            if (count >= 0x80 || count > types.Length) return -2;
+            var cursor = new int[] { at };
+            int result = SignatureType(image, end, cursor, true);
+            if (result < 0) return result;
             for (int i = 0; i < count; i++)
             {
-                int type = WasmType(image[at++], false);
-                if (type <= 0) return -2;
+                int type = SignatureType(image, end, cursor, false);
+                if (type < 0) return type;
+                if (type == 0) return -2;
                 types[i] = (byte)type;
             }
+            if (cursor[0] != end) return -2;
             shape[0] = count;
             shape[1] = result;
             return 0;
+        }
+
+        // Stage 365 (decision 0083, step 2): one parameter or result type at cursor[0] within
+        // [.., end), advanced past it. A scalar maps through WasmType. An unmanaged pointer
+        // (ELEMENT_TYPE_PTR) becomes a wasm32 i32 address into memory 0, passed unchanged. The CLR
+        // never marshals a T* either: it hands the callee the address the caller computed, so no
+        // copy or pin is involved. Only the callee's view of the pointee must agree with ours,
+        // so the pointee needs a layout the compiler reproduces (see Pointee). Returns the Wasm
+        // value type, 0 for a void result, -2 for a type this step does not lower, or -1 for a
+        // malformed signature.
+        private static int SignatureType(byte[] image, int end, int[] cursor, bool result)
+        {
+            if (cursor[0] >= end) return -1;
+            int element = image[cursor[0]++];
+            if (element != 0x0f)
+            {
+                int scalar = WasmType(element, result);
+                return scalar < 0 ? -2 : scalar;
+            }
+            int pointee = Pointee(image, end, cursor, 0);
+            return pointee < 0 ? pointee : 0x7f;
+        }
+
+        // The type after an ELEMENT_TYPE_PTR. Admitted: void, the integer and floating-point
+        // primitives, IntPtr/UIntPtr, another pointer, and a value type defined in the same
+        // assembly whose sequential layout NativeValueLayouts measures exactly as the x86 CLR
+        // does (Stage 143). bool* and char* stay -2: Win32 declarations usually mean a 4-byte BOOL*
+        // or a wide string there, and nothing needs them yet. Custom modifiers, function pointers,
+        // generic instances, value types from other assemblies, and Pack/Size or auto-layout
+        // structs are -2 too.
+        private static int Pointee(byte[] image, int end, int[] cursor, int depth)
+        {
+            if (cursor[0] >= end) return -1;
+            if (depth > 8) return -2;
+            int element = image[cursor[0]++];
+            if (element == 0x01) return 0;                                       // void*
+            if (element == 0x0f) return Pointee(image, end, cursor, depth + 1);  // T**
+            if (element == 0x11)                                                 // VALUETYPE TypeDefOrRef
+            {
+                var read = new int[1];
+                int coded = ImageBytes.CompressedUnsigned(image, cursor[0], end, read);
+                if (coded < 0) return -1;
+                cursor[0] = read[0];
+                if ((coded & 3) != 0) return -2; // a TypeRef or TypeSpec
+                var measured = new int[3];
+                int status = NativeValueLayouts.Measure(BundleImages.Single(image), 0, coded >> 2, measured);
+                return status == -1 ? -1 : status < 0 ? -2 : 0;
+            }
+            return WasmType(element, false) > 0 ? 0 : -2;
         }
 
         // Element type to Wasm value type: 0 for a void result, -1 when not blittable.
