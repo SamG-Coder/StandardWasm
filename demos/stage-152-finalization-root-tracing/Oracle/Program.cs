@@ -36,6 +36,7 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     nativeBytes = IntPtr.Size,
     actualClrCases = 3,
     frameRootCases = FrameRootCases.Verify(),
+    rootProbeResult = EmitRootProbe.Write(Path.Combine(Path.GetDirectoryName(args[0])!, "root-probe.wasm")),
 }));
 
 [MethodImpl(MethodImplOptions.NoInlining)]

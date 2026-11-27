@@ -33,3 +33,17 @@ overwriting an argument. An address-exposed slot or an exception region needs
 additional analysis. The live bits describe frame slots before a given IL
 instruction. Values already loaded onto the evaluation stack are handled
 separately as part of runtime integration.
+
+An internal compiler mode emits a root stack around direct managed calls
+and constructors in the probe fixture. It records live frame slots, references
+in the evaluation stack that survive the call, and a newly allocated receiver
+while its constructor is running. Node and Edge observe three occupied slots
+with two distinct objects during a nested call. They observe one slot during
+the throwing call and an empty stack after each normal return or managed
+exception unwind. The normal compilation entry point keeps the diagnostic
+table private by omitting it entirely.
+
+The emitted probe validates root publication for direct references. Binding
+the queue to the original CoreLib APIs still needs static and host roots,
+managed addresses, runtime traversal, protected regions, indirect calls and
+a cleanup policy for raw Wasm traps.

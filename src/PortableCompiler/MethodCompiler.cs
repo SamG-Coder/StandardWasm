@@ -47,6 +47,15 @@ namespace PortableCompiler
             return CompileBundleCore(bundle, entries, output, location);
         }
 
+        // Internal experiment. Normal application compilation does not expose the root table.
+        internal static int CompileBundleWithRootProbe(byte[] bundle, byte[] entries, byte[] output, int[] location)
+        {
+            if (location.Length < CompileLocation.Size) return -3;
+            CompileLocation.Clear(location);
+            BundleImages images = BundleImages.Unpack(bundle);
+            return images == null ? -1 : CompileProgram(images, entries, output, location, 0, true);
+        }
+
         private static int CompileBundleCore(byte[] bundle, byte[] entries, byte[] output, int[] location)
         {
             CompileLocation.Clear(location);
@@ -58,19 +67,19 @@ namespace PortableCompiler
         // a host feature, so re-emit with its function indices reserved.
         private const int Reemit = -1000;
 
-        private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location, int hostFeatures)
+        private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location, int hostFeatures, bool rootProbe = false)
         {
             var features = new int[] { hostFeatures };
             var nativeStatics = new NativeStaticFields();
             var typeCalls = new RuntimeTypeCalls();
             int status = Reemit;
             while (status == Reemit)
-                status = CompileProgramPass(bundle, entries, output, location, features, nativeStatics, typeCalls);
+                status = CompileProgramPass(bundle, entries, output, location, features, nativeStatics, typeCalls, rootProbe);
             return status;
         }
 
         private static int CompileProgramPass(BundleImages bundle, byte[] entries, byte[] output, int[] location,
-            int[] features, NativeStaticFields nativeStatics, RuntimeTypeCalls typeCalls)
+            int[] features, NativeStaticFields nativeStatics, RuntimeTypeCalls typeCalls, bool rootProbe)
         {
             int hostFeatures = features[0];
             int knownNativeStatics = nativeStatics.Count;
@@ -189,6 +198,8 @@ namespace PortableCompiler
             var pinRegistry = new int[1]; // the live-pin count global + 1 (decision 0077)
             // Each emitted global needs at least five bytes in the destination.
             var globals = new int[1 + output.Length / 5 * 3];
+            int rootCount = rootProbe ? StaticFields.Register(globals, 0, RootStackWasm.GlobalKey, I32) : -1;
+            if (rootProbe && rootCount < 0) return -3;
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
             var nativePlans = new NativeAggregatePlans();
             var pointers = new FunctionPointerPlan();
@@ -391,6 +402,13 @@ namespace PortableCompiler
                         location, catchRegion.Length != 0, filterEnds: filterEnds);
                     if (status < 0)
                         return status;
+                    byte[] frameRoots = null;
+                    if (rootProbe)
+                    {
+                        if (catchRegion.Length != 0 || resourceOpen || initializerPrologue >= 0) return -2;
+                        frameRoots = RootStackWasm.MapFrame(records, frame, parameters + locals);
+                        if (frameRoots == null) return -2;
+                    }
                     if (filterEnds != null)
                     {
                         status = ExceptionFilters.ValidateLocals(records, filters, parameters, locals, location);
@@ -487,6 +505,12 @@ namespace PortableCompiler
 
                     if (location.Length != 0) location[2] = -1;
                     int capacity = body[1] * 64 + 32;
+                    if (rootProbe)
+                    {
+                        long extra = (long)body[1] * (96L + 20L * (parameters + locals + maximum));
+                        if (extra > int.MaxValue - capacity) return -3;
+                        capacity += (int)extra;
+                    }
                     for (int local = parameters; local < inlineLocations.Length; local++)
                     {
                         if (inlineLocations[local] == 0) continue;
@@ -742,7 +766,7 @@ namespace PortableCompiler
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
                         arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers,
-                        reflection, inlineLocations, nativePlans.Plans, filters, frameCells, pointers);
+                        reflection, inlineLocations, nativePlans.Plans, filters, frameCells, pointers, rootCount, frameRoots);
                 }
 
                 if (used < 0) return used;
@@ -815,7 +839,7 @@ namespace PortableCompiler
             CompileLocation.Clear(location);
             if (linearMemory) hostFeatures |= WasmImports.Memory;
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0], pointers);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0], pointers, rootCount);
         }
 
         private static bool IsExported(int[] exports, int target)

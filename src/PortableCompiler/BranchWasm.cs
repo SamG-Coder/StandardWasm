@@ -12,7 +12,7 @@ namespace PortableCompiler
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
             byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection,
             int[] inlineLocations, int[] nativePlans, int[] filters, int[] frameCells,
-            FunctionPointerPlan pointers)
+            FunctionPointerPlan pointers, int rootCount, byte[] frameRoots)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -32,6 +32,7 @@ namespace PortableCompiler
             int staticRegion = frameShape[21] - 1, staticPages = frameShape[22];
             // Stage 149 (decision 0077): a pinning frame also saves the live-pin count.
             int pins = frameShape[24] - 1;
+            bool tracksRoots = frameRoots != null;
             bool hasNull = outgoingNulls.Length != 0;
             int spillFlags = 0;
             // Only verified stack types need banks. Unused view types must not
@@ -57,7 +58,7 @@ namespace PortableCompiler
             int spills = arguments + locals + (hasNull ? 1 : 0);
             int fixedLocals = spills + classes + (stringScratch ? 5 : 0) +
                 (eventScratch ? 6 : 0) + (resourceFunction >= 0 ? 7 : 0) + 1 + 2 * exceptionLocals + continuations +
-                (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0) + (staticRegion >= 0 ? 1 : 0) + cellCount;
+                (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0) + (staticRegion >= 0 ? 1 : 0) + cellCount + (tracksRoots ? 1 : 0);
             if (fixedLocals > MaxLocals || maximum > (MaxLocals - fixedLocals) / spillKinds) return -2;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
@@ -71,10 +72,11 @@ namespace PortableCompiler
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
                 (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
                 (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0) +
-                (staticRegion >= 0 ? 1 : 0) + cellCount);
+                (staticRegion >= 0 ? 1 : 0) + cellCount + (tracksRoots ? 1 : 0));
             // The saved shadow-stack pointer follows every other local.
             int stackFrame = objectBase + exceptionLocals, pinFrame = stackFrame + 1;
             int staticAddress = stackFrame + (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0);
+            int rootFrame = staticAddress + (staticRegion >= 0 ? 1 : 0) + cellCount;
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < arguments + locals; i++)
             {
@@ -189,6 +191,17 @@ namespace PortableCompiler
                     used = Local(code, used, 0x21, cell);
                     cellLocals[i] = cell++;
                 }
+            }
+            if (tracksRoots)
+            {
+                // Runtime probe only supports direct GC references in ordinary frames.
+                if (cellCount != 0 || stackPointer >= 0 || guard >= 0) return -2;
+                code[used++] = 1;
+                code[used++] = 0x7f;
+                used = RootStackWasm.SaveBase(code, used, rootCount, rootFrame);
+                code[used++] = 0x02; code[used++] = ExceptionDispatchWasm.ExceptionReference;
+                code[used++] = 0x1f; code[used++] = 0x40; code[used++] = 1;
+                code[used++] = 0x03; code[used++] = 0; // catch_all_ref to the cleanup block
             }
             // Raw Wasm callers supply i32. Enforce the CLI argument width before
             // the first instruction, including on entry from a managed call.
@@ -632,6 +645,34 @@ namespace PortableCompiler
                     int first = depth - arity + receiver;
                     int temp = 0;
                     bool valueObject = kind == NewObject && IsValueType(objects, signatures[shape + 1]);
+                    int tracked = 0;
+                    if (tracksRoots)
+                    {
+                        if (valueObject) return -2;
+                        int frameStart = pc * (arguments + locals);
+                        for (int local = 0; local < arguments + locals; local++) tracked += frameRoots[frameStart + local];
+                        for (int index = 0; index < first; index++)
+                        {
+                            int type = states[state + index];
+                            if (IsManagedLocation(type) || IsValueLocation(type) || IsSpan(type)) return -2;
+                            if (IsObjectReference(type)) tracked++;
+                        }
+                        if (kind == NewObject) tracked++;
+                        if (tracked != 0)
+                        {
+                            used = RootStackWasm.Enter(code, used, rootCount, rootFrame, tracked);
+                            int root = 0;
+                            for (int local = 0; local < arguments + locals; local++)
+                                if (frameRoots[frameStart + local] != 0) used = RootStackWasm.Store(code, used, rootFrame, root++, local);
+                            // The callee owns its consumed arguments. Only the surviving prefix stays in this frame.
+                            for (int index = 0; index < first; index++)
+                            {
+                                int type = states[state + index];
+                                if (IsObjectReference(type))
+                                    used = RootStackWasm.Store(code, used, rootFrame, root++, Spill(spills, maximum, spillFlags, type, index));
+                            }
+                        }
+                    }
                     if (valueObject)
                     {
                         // CLI newobj on a value type constructs a fresh zeroed
@@ -646,6 +687,7 @@ namespace PortableCompiler
                         temp = temporaries + type - FirstClass;
                         used = Gc(code, used, 1, type); // struct.new_default
                         used = Local(code, used, 0x22, temp);
+                        if (tracksRoots) used = RootStackWasm.Store(code, used, rootFrame, tracked - 1, temp);
                     }
                     if (kind == Call && (records[slot + 3] & 1) != 0)
                     {
@@ -664,7 +706,7 @@ namespace PortableCompiler
                     // Preserve the current frame whenever it can handle an exception.
                     // With the same result type, the callee already normalizes its return value.
                     // An initializer must observe its callee's failure, so it never tail-calls.
-                    if (kind == Call && catchRegion.Length == 0 && guard < 0 && stackPointer < 0 && first == 0 && returned == result &&
+                    if (kind == Call && tracked == 0 && catchRegion.Length == 0 && guard < 0 && stackPointer < 0 && first == 0 && returned == result &&
                         next < depths.Length && records[next * Width] == Return)
                     {
                         code[used++] = 0x12; // return_call
@@ -681,6 +723,7 @@ namespace PortableCompiler
                     }
                     if (returned != Void)
                         used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, StackType(returned), first));
+                    if (tracked != 0) used = RootStackWasm.Leave(code, used, rootCount, rootFrame);
                 }
                 else if (kind == FunctionAddress)
                 {
@@ -1347,6 +1390,14 @@ namespace PortableCompiler
             code[used++] = 0x0b;
             code[used++] = 0;
             if (guard >= 0) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers);
+            if (tracksRoots)
+            {
+                code[used++] = 0x0b; // end try_table
+                code[used++] = 0x00;
+                code[used++] = 0x0b; // the caught exnref is on the stack
+                used = RootStackWasm.Leave(code, used, rootCount, rootFrame);
+                code[used++] = 0x0a; // throw_ref
+            }
             if (stackPointer >= 0)
             {
                 code[used++] = 0x0b; // end try_table

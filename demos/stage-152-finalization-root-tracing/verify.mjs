@@ -15,6 +15,7 @@ const oracle = JSON.parse(readFileSync(oraclePath, "utf8"));
 const assets = {
     compiler: readFileSync(process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts", "StandardWasm.Compiler.wasm")),
     fixture: readFileSync(join(stage, "Fixture", "bin", "Release", "netstandard2.0", "Fixture.dll")),
+    rootProbe: readFileSync(join(evidence, "root-probe.wasm")),
     row: oracle.row,
     count: oracle.result.length
 };
@@ -40,12 +41,51 @@ async function probe({ compiler, fixture, row, count }) {
         [0, 1, 2].map(i => tool.ReadDiagnostic(diagnostic, i)));
     const module = await WebAssembly.compile(Uint8Array.from({ length: size }, (_, i) => tool.ReadByte(bytes, i)));
     if (WebAssembly.Module.imports(module).length !== 0) throw new Error("The experiment must run without host imports");
+    if (WebAssembly.Module.exports(module).some(entry => entry.name.startsWith("__root_probe_")))
+        throw new Error("Ordinary compilation exposed the diagnostic root stack");
     const instance = await WebAssembly.instantiate(module);
     return Array.from({ length: count }, (_, i) => instance.exports.run(i));
 }
 
+async function observeRoots(bytes) {
+    const snapshots = [];
+    const { instance } = await WebAssembly.instantiate(bytes, {
+        "standardwasm:console": {
+            write() { throw new Error("The probe emits only line breaks"); },
+            newLine() {
+                const { __root_probe_count: count, __root_probe_table: table } = instance.exports;
+                const roots = Array.from({ length: count.value }, (_, index) => table.get(index));
+                if (roots.some(value => value === null)) throw new Error("Expected a live object in every snapshot slot");
+                snapshots.push({ count: roots.length, unique: new Set(roots).size });
+            }
+        }
+    });
+    const { __root_probe_table: table, __root_probe_count: count, ObserveFrames, ThrowWithRoot } = instance.exports;
+    function assertEmpty() {
+        if (count.value !== 0) throw new Error("Root scope was not restored");
+        for (let i = 0; i < table.length; i++)
+            if (table.get(i) !== null) throw new Error("Root slot was not cleared");
+    }
+    const value = ObserveFrames(11);
+    assertEmpty();
+    let exception;
+    try { ThrowWithRoot(11); }
+    catch (error) { exception = error; }
+    if (!(exception instanceof WebAssembly.Exception) || !exception.is(instance.exports["\0nullReference"]))
+        throw new Error("Expected the managed NullReferenceException tag");
+    assertEmpty();
+    if (ObserveFrames(11) !== value) throw new Error("Failed to reuse the module after unwinding");
+    assertEmpty();
+    return { value, snapshots, clearedOnReturn: true, clearedOnUnwind: true };
+}
+
+const expectedRoots = { value: oracle.rootProbeResult,
+    snapshots: [{ count: 3, unique: 2 }, { count: 1, unique: 1 }, { count: 3, unique: 2 }],
+    clearedOnReturn: true, clearedOnUnwind: true };
 const node = await probe(assets);
 assert.deepEqual(node, oracle.result);
+const nodeRoots = await observeRoots(assets.rootProbe);
+assert.deepEqual(nodeRoots, expectedRoots);
 const browser = await chromium.launch({ channel: "msedge" });
 try {
     const page = await browser.newPage();
@@ -61,9 +101,15 @@ try {
         return (0, eval)("(" + source + ")")({ compiler, fixture, row, count });
     }, { source: probe.toString(), row: assets.row, count: assets.count });
     assert.deepEqual(edge, oracle.result);
-    const result = { nodeVersion: process.version, edgeVersion: browser.version(), oracle, node, edge,
+    const edgeRoots = await page.evaluate(async source => {
+        const bytes = await (await fetch("/rootProbe")).arrayBuffer();
+        return (0, eval)("(" + source + ")")(bytes);
+    }, observeRoots.toString());
+    assert.deepEqual(edgeRoots, expectedRoots);
+    const result = { nodeVersion: process.version, edgeVersion: browser.version(), oracle, node, edge, nodeRoots, edgeRoots,
         compilerSha256: createHash("sha256").update(assets.compiler).digest("hex"),
-        fixtureSha256: createHash("sha256").update(assets.fixture).digest("hex") };
+        fixtureSha256: createHash("sha256").update(assets.fixture).digest("hex"),
+        rootProbeSha256: createHash("sha256").update(assets.rootProbe).digest("hex") };
     writeFileSync(join(evidence, "results.json"), JSON.stringify(result, null, 2) + "\n");
     console.log(JSON.stringify(result));
 } finally {

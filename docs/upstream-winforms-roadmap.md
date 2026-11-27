@@ -74,6 +74,10 @@ At the real `ApplicationContext` constructor's suppression call, both `this`
 and `mainForm` remain live in the frame. `this` is also the call argument.
 The collector must include evaluation-stack references even when the slot
 that provided a reference has no later uses.
+Stage 152 also verifies compiler-emitted root publication around direct calls.
+It preserves the caller's live future uses and the surviving stack prefix,
+then clears its entries on return and managed exception unwind. The test
+table is available only in the internal probe compilation mode.
 JavaScript cleanup notifications can release independent host resources, but
 notification timing and delivery alone cannot satisfy the managed queue and
 resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)

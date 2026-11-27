@@ -20,7 +20,7 @@ namespace PortableCompiler
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
             byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, int hostFeatures, int reflectionHeapFixup,
-            FunctionPointerPlan pointers)
+            FunctionPointerPlan pointers, int rootCount)
         {
             // Imported functions precede defined functions in the Wasm index
             // space. Emitted bodies already include this offset in their calls.
@@ -149,6 +149,7 @@ namespace PortableCompiler
                 (overflow ? 1 : 0) + (divide ? 1 : 0) + (bounds ? 1 : 0) +
                 (nullReference ? 1 : 0) + (invalidCast ? 1 : 0) + (argumentException ? 1 : 0) + (objectTag ? 1 : 0) +
                 (argumentNull ? 1 : 0) + (synchronizationLock ? 1 : 0);
+            if (rootCount >= 0) exportCount += 2;
             int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
                 (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
                 (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0) +
@@ -156,6 +157,7 @@ namespace PortableCompiler
                 (argumentNull ? ExceptionTagsWasm.ArgumentNullExportSize : 0) +
                 (synchronizationLock ? ExceptionTagsWasm.SynchronizationLockExportSize : 0);
             if (argumentArray != 0) exportSize += EntryArgumentsWasm.ExportBytes(builderIndex);
+            if (rootCount >= 0) exportSize += RootStackWasm.ExportSize(rootCount);
             int tagSize = 1 + (tagCount - (objectTag ? 1 : 0)) * (1 + UnsignedSize(tagType)) +
                 (objectTag ? 1 + UnsignedSize(objectTagType) : 0);
             for (int i = 0; i < exports.Length; i++)
@@ -169,11 +171,11 @@ namespace PortableCompiler
             // Tables: 0 delegate thunks, 1 the pin registry (decision 0077), 2 function-pointer
             // targets (decision 0078). A lower table is emitted, possibly empty, when a higher
             // one exists, so the indices stay fixed.
-            bool pointerTable = pointers.TargetCount != 0 || pointers.CarrierCount != 0;
+            bool pointerTable = pointers.TargetCount != 0 || pointers.CarrierCount != 0 || rootCount >= 0;
             bool pinTable = PinRegistryWasm.Present(globals) || pointerTable;
             bool tables = thunks[0] != 0 || pinTable;
             int tableSize = 3 + UnsignedSize(thunks[0]) + (pinTable ? 3 : 0) +
-                (pointerTable ? 2 + UnsignedSize(pointers.TargetCount + 1) : 0);
+                (pointerTable ? 2 + UnsignedSize(pointers.TargetCount + 1) : 0) + (rootCount >= 0 ? 3 : 0);
             bool elements = thunks[0] != 0 || pointers.TargetCount != 0;
             int elementSize = 5 + UnsignedSize(thunks[0]);
             for (int i = 0; i < thunks[0]; i++)
@@ -407,7 +409,7 @@ namespace PortableCompiler
                 // Table 0 holds delegate thunks (possibly none); table 1 is the
                 // live-pin registry of decision 0077, which starts empty and grows.
                 cursor = Section(output, cursor, 4, tableSize);
-                output[cursor++] = (byte)(pointerTable ? 3 : pinTable ? 2 : 1);
+                output[cursor++] = (byte)(rootCount >= 0 ? 4 : pointerTable ? 3 : pinTable ? 2 : 1);
                 output[cursor++] = 0x70;
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, thunks[0]);
@@ -422,6 +424,12 @@ namespace PortableCompiler
                     output[cursor++] = 0x70; // funcref; slot 0 stays null
                     output[cursor++] = 0;
                     cursor = Unsigned(output, cursor, pointers.TargetCount + 1);
+                }
+                if (rootCount >= 0)
+                {
+                    output[cursor++] = 0x6d; // eqref, initially empty
+                    output[cursor++] = 0;
+                    output[cursor++] = 0;
                 }
             }
             if (tagCount != 0)
@@ -463,6 +471,7 @@ namespace PortableCompiler
             if (argumentNull) cursor = ExceptionTagsWasm.WriteArgumentNullExport(output, cursor);
             if (synchronizationLock) cursor = ExceptionTagsWasm.WriteSynchronizationLockExport(output, cursor);
             if (objectTag) cursor = ExceptionTagsWasm.WriteObjectExport(output, cursor);
+            if (rootCount >= 0) cursor = RootStackWasm.WriteExports(output, cursor, rootCount);
 
             if (elements)
             {
