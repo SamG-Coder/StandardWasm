@@ -68,6 +68,10 @@ same storage as a returned reference and two `ref` parameters. It covers
 two references to one field, references to distinct fields, and initializers.
 The frame `Int32` fixture forwards a local alias through a returned byref
 and checks updates to both that local and an ordinary parameter.
+The closed generic static fixture checks independent storage and initializer
+state for two type arguments. It exercises a precise initializer, a
+`beforefieldinit` initializer, an init-only field, and different storage
+types for the same generic field declaration.
 The runtime type fixture compares `Object.GetType` for a derived instance,
 a plain object, a string, and boxed `Int32` and `UInt32` against the CLR.
 It includes an interface receiver, a null receiver, and the identity shared

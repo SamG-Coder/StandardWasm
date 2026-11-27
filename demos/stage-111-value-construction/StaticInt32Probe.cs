@@ -23,6 +23,39 @@ namespace ValueConstructionDemo
 
         private static ref int Forward(ref int value) => ref value;
 
+        private static class PreciseSlot<T>
+        {
+            internal static readonly int Initial;
+            internal static int Current;
+
+            static PreciseSlot()
+            {
+                Current = 31;
+                Initial = ++Current;
+            }
+
+            internal static int Observe() => Current + Initial;
+        }
+
+        private static class DeferredSlot<T>
+        {
+            internal static int Count = 7;
+            internal static T Value;
+        }
+
+        public static int CheckClosedGenericStatics(int input)
+        {
+            int initial = PreciseSlot<int>.Observe();
+            PreciseSlot<int>.Current = unchecked(initial + input);
+            int independent = PreciseSlot<string>.Observe();
+            DeferredSlot<int>.Count++;
+            DeferredSlot<int>.Value = input;
+            DeferredSlot<string>.Value = "abc";
+            return unchecked(PreciseSlot<int>.Observe() * 10000 + independent * 100 +
+                DeferredSlot<int>.Count * 10 + DeferredSlot<string>.Count +
+                DeferredSlot<int>.Value + DeferredSlot<string>.Value.Length);
+        }
+
         public static int CheckFrameInt32Aliases(int input)
         {
             int local = unchecked(input * 3);

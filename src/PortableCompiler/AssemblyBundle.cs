@@ -139,7 +139,8 @@ namespace PortableCompiler
         }
 
         internal static int ResolveField(BundleImages bundle, byte[] caller,
-            int[] layout, int[] heaps, int owner, int member, bool write, bool staticField, int[] objects, int[] globals, int[] field, int context, int callerType, int[] methodArguments = null, bool valueConstructorReceiver = false)
+            int[] layout, int[] heaps, int owner, int member, bool write, bool staticField, int[] objects, int[] globals, int[] field, int context, int callerType, int[] methodArguments = null, bool valueConstructorReceiver = false,
+            bool callerInitializer = false)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedParent: true);
@@ -153,7 +154,6 @@ namespace PortableCompiler
             int parent = reference[AssemblyReferences.GenericParent];
             if (parent != 0)
             {
-                if (staticField) return -2;
                 type = ManagedReferenceSignatures.ReadInstantiation(bundle, caller, layout, heaps,
                     owner, parent, objects, context, methodArguments);
                 if (type < ObjectLayouts.FirstClass) return type < 0 ? type : -2;
@@ -201,15 +201,18 @@ namespace PortableCompiler
                 }
                 bool initializesReceiver = valueConstructorReceiver && type == context &&
                     matched == owner && declaringType == callerType;
+                bool initializesStatic = staticField && callerInitializer && type == context &&
+                    matched == owner && declaringType == callerType;
                 if (((flags & 0x10) != 0) != staticField || (access != 6 && !local) ||
-                    (write && (flags & 0x20) != 0 && !initializesReceiver)) return -2;
+                    (write && (flags & 0x20) != 0 && !initializesReceiver && !initializesStatic)) return -2;
+                if (initializesStatic) write = false;
                 if (row != 0) return -5;
                 row = candidate;
             }
             if (row == 0) return -6;
             if (staticField)
                 return StaticFields.Bind(bundle, target, targetLayout, targetHeaps, matched, declaringType,
-                    row, table, flags, write, objects, globals, field);
+                    row, table, flags, write, objects, globals, field, type);
             if (type == 0) type = ObjectLayouts.Find(objects, matched, declaringType, new int[0]);
             if (type == 0)
                 type = BundleLayouts.Register(bundle, target, targetLayout, targetHeaps, matched, declaringType, objects);

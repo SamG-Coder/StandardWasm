@@ -265,7 +265,7 @@ namespace PortableCompiler
             var shadowStack = new int[3]; // $sp, base, limit globals + 1
             var pinRegistry = new int[1]; // the live-pin count global + 1 (decision 0077)
             // Each emitted global needs at least five bytes in the destination.
-            var globals = new int[1 + output.Length / 5 * 3];
+            var globals = new int[1 + output.Length / 5 * StaticFields.Width];
             int rootCount = tracksFinalizers ? StaticFields.Register(globals, 0, RootStackWasm.GlobalKey, I32) : -1;
             int markedCount = tracksFinalizers ? StaticFields.Register(globals, 0, ReachabilityWasm.GlobalKey, I32) : -1;
             int registeredCount = tracksFinalizers ? StaticFields.Register(globals, 0, FinalizerQueueWasm.RegisteredKey, I32) : -1;
@@ -349,7 +349,7 @@ namespace PortableCompiler
                         ((memberFlags & 0x10) != 0 || ObjectLayouts.IsConstructor(image, heaps, layout, source)))
                     {
                         functions = initializers.Ensure(bundle, owner, declaringType, initializer, owners, rows, contexts,
-                            bases, indices, arities, offsets, signatures, objects, globals, functions, initializerSlot);
+                            bases, indices, arities, offsets, signatures, objects, globals, functions, initializerSlot, context);
                         if (functions < 0) return functions;
                         initializerPrologue = initializerSlot[0];
                     }
@@ -1784,22 +1784,29 @@ namespace PortableCompiler
                     }
 
                     if (linked && bundle.Length == 0) return -2;
+                    if (linked && callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
+                    if (callerType < 0) return -1;
+                    bool callerInitializer = write && !addressOf && MethodNames.IsInitializer(image, layout, heaps, callerRow);
                     int status = linked ? AssemblyBundle.ResolveField(bundle, image, layout, heaps, owner,
-                        field, write, true, objects, globals, symbol, context, callerType, methodArguments) :
-                        StaticFields.ResolveLocal(bundle, image, layout, heaps, owner, field, write, objects, globals, symbol, callerRow);
+                        field, write, true, objects, globals, symbol, context, callerType, methodArguments, callerInitializer: callerInitializer) :
+                        StaticFields.ResolveLocal(bundle, image, layout, heaps, owner, field, write, objects, globals, symbol, callerRow, context);
                     if (status < 0) return status;
+                    int fieldContext = StaticFields.Context(globals, symbol[0]);
+                    // Generic backing globals are per instantiation. Addressable
+                    // native or traced backing needs a stable context across passes.
+                    if (addressOf && fieldContext != 0) return -2;
                     if (symbol[3] != 0)
                     {
                         // Bound declaring owner, so an inherited field initializes only its base.
                         var initializer = new int[1];
                         functions = initializers.Ensure(bundle, symbol[2], symbol[4], symbol[3], owners, rows, contexts,
-                            bases, indices, arities, offsets, signatures, objects, globals, functions, initializer);
+                            bases, indices, arities, offsets, signatures, objects, globals, functions, initializer, fieldContext);
                         if (functions < 0) return functions;
                         initializers.SetFieldInitializer(symbol[0], initializer[0]);
                     }
                     int staticOwner = StaticFields.Owner(globals, symbol[0]);
                     int staticRow = StaticFields.Row(globals, symbol[0]);
-                    int address = addressedFields.Find(staticOwner, staticRow);
+                    int address = fieldContext == 0 ? addressedFields.Find(staticOwner, staticRow) : -1;
                     if (address == AddressedFields.Int32Cell || addressOf && symbol[5] == 8)
                     {
                         if (address == -1) addressedFields.AddInt32Cell(staticOwner, staticRow);
@@ -2800,14 +2807,6 @@ namespace PortableCompiler
             var initializerFlags = new int[1];
             int initialization = TypeInitializers.Find(image, layout, heaps, owner, initializerFlags);
             if (initialization < 0) return initialization;
-            // A generic type has one initializer per closed instantiation, which needs
-            // per-instantiation guards. Only a precise type runs it on a method call; a
-            // beforefieldinit generic type waits for a static field access, and generic
-            // static fields are still diagnosed (Stage 108). A precise value type also
-            // triggers on instance methods. Both stay explicit diagnostics.
-            if (initialization != 0 && initializerFlags[0] == 0 && (context != 0 ||
-                GenericParameters.Check(image, heaps, layout, owner, new int[0], objects, new int[8]) != 0))
-                return -2;
             if (context != 0)
             {
                 // The closed layout must instantiate this method's own definition.
@@ -2838,9 +2837,9 @@ namespace PortableCompiler
                     receiver = BundleLayouts.RegisterValue(bundle, image, layout, heaps, assembly, owner, objects);
                 if (receiver < 0) return receiver;
                 if (ObjectLayouts.IsInterface(objects, receiver)) return -2;
-                if (initialization != 0 && initializerFlags[0] == 0 && ObjectLayouts.IsValueType(objects, receiver) &&
-                    !ObjectLayouts.IsConstructor(image, heaps, layout, row)) return -2;
             }
+            if (!isStatic && initialization != 0 && initializerFlags[0] == 0 && ObjectLayouts.IsValueType(objects, receiver) &&
+                !ObjectLayouts.IsConstructor(image, heaps, layout, row)) return -2;
             int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
             int arity = SignatureTypes.Read(bundle, image, heaps, signature, types, offset, receiver, layout, objects, assembly, context, methodArguments);
             if (imported && arity >= 0 && (debuggerQuery ? arity != 0 || types[offset] != I32 :

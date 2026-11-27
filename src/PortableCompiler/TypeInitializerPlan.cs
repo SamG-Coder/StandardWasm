@@ -41,16 +41,16 @@ namespace PortableCompiler
         // Returns the updated function count; initializer[0] receives the slot.
         internal int Ensure(BundleImages bundle, int module, int type, int row,
             int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities,
-            int[] offsets, int[] signatures, int[] objects, int[] globals, int functions, int[] initializer)
+            int[] offsets, int[] signatures, int[] objects, int[] globals, int functions, int[] initializer, int context = 0)
         {
-            int existing = indices[bases[module] + row] - 1;
+            int existing = MethodCompiler.Lookup(owners, rows, contexts, bases, indices, functions, module, row, context);
             if (existing < 0)
             {
                 byte[] image = bundle.Get(module);
                 var layout = new int[4];
                 var heaps = new int[8];
                 if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
-                functions = MethodCompiler.Register(bundle, image, layout, heaps, module, row, 0, owners, rows, contexts,
+                functions = MethodCompiler.Register(bundle, image, layout, heaps, module, row, context, owners, rows, contexts,
                     bases, indices, arities, offsets, signatures, objects, functions, initializer: true);
                 if (functions < 0) return functions;
                 existing = functions - 1;
@@ -68,7 +68,7 @@ namespace PortableCompiler
             if (guards[existing] == 0)
             {
                 // Negative rows never name a field, so the guard cannot alias static storage.
-                int global = StaticFields.Register(globals, module, -type, I32);
+                int global = StaticFields.Register(globals, module, -type, I32, context);
                 if (global < 0) return global;
                 if (global >= fields.Length) return -3;
                 guards[existing] = global + 1;
