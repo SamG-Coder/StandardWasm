@@ -184,8 +184,11 @@ uses Web Crypto through the system-preferred `BCryptGenRandom` import.
 The compiler now supplies a writable span over the newly allocated string
 for the verified CoreLib `String.Create` body with native-integer callback
 state. The original branches and delegate invocation remain in the compiled
-body. The replay next reports a diagnostic at the first span address in
-CoreLib's `Path.JoinInternal` at `IL_0000`.
+body. The compiler now preserves the duplicated span receiver in CoreLib's
+`Path.JoinInternal` when the method computes the element index from the span
+length. The startup replay advances to `Path.GetFullPath` at `IL_002a`,
+where the original method calls `String.Contains(char)` to check for embedded
+nulls.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

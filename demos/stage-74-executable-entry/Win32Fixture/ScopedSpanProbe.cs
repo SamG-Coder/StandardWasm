@@ -62,6 +62,20 @@ public static class ScopedSpanProbe
 
     private static void ResetView(ref MutableCharacterView view) => view.Reset();
 
+    public static unsafe int CheckSpanFromEnd(int length)
+    {
+        if (length < 0 || length > 3) return -101;
+        char* storage = stackalloc char[3];
+        storage[0] = 'a';
+        storage[1] = '\u2000';
+        storage[2] = '\ud800';
+        ReadOnlySpan<char> view = new Span<char>(storage, length);
+        try { return ReadLast(view); }
+        catch (IndexOutOfRangeException) { return -102; }
+    }
+
+    private static int ReadLast(ReadOnlySpan<char> view) => view[^1];
+
     public static unsafe int CheckStackBackedSpan(int scenario)
     {
         char* storage = stackalloc char[3];

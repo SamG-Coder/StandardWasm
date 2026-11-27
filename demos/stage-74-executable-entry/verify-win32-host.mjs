@@ -266,7 +266,8 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
     const byteLocations = [0, 1, 2].map(bundledExports.ReadStaticByteLocation);
     const rootModule = await compile(["CompareThroughRoot", "CompareReturnedType", "CheckCoreStringFirstCharacter",
         "CheckCoreWhitespace", "CheckCoreStringTrim", "ScopedWritableSpan", "CheckStackBackedSpan", "CheckScopedReference",
-        "CheckScopedReceiverReset", "CheckCharacterCallback", "CheckStringCreation", "CheckStaticEventCallback", "ExactValueRead"], runtimeAssets);
+        "CheckScopedReceiverReset", "CheckSpanFromEnd", "CheckCharacterCallback", "CheckStringCreation",
+        "CheckStaticEventCallback", "ExactValueRead"], runtimeAssets);
     const { exports: rootExports } = await instantiate(rootModule, compiler, []);
     const rootDispatch = [0, 1, 2, 3].map(rootExports.CompareThroughRoot);
     const typeReturn = [0, 1].map(rootExports.CompareReturnedType);
@@ -274,6 +275,7 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
     const stringTrim = [0, 1, 2, 3, 4, 5, 6, 7].map(rootExports.CheckCoreStringTrim);
     const scopedWritableSpan = [0, 65, 0x2000, 0xffff].map(rootExports.ScopedWritableSpan);
     const scopedReceiverReset = [0, 65, 0x2000, 0xffff].map(rootExports.CheckScopedReceiverReset);
+    const spanFromEnd = [0, 1, 2, 3].map(rootExports.CheckSpanFromEnd);
     const stackBackedSpan = [0, 1, 2, 3, 4, 5].map(rootExports.CheckStackBackedSpan);
     const scopedReference = [0, -1, 65, 0xffff].map(rootExports.CheckScopedReference);
     const characterCallbacks = [-1, 0, 1, 2, 17].map(rootExports.CheckCharacterCallback);
@@ -308,7 +310,7 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, enumVectors, windowEnabled, systemRandom, randomStatuses, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringTrim, scopedWritableSpan, scopedReceiverReset, stackBackedSpan, scopedReference, characterCallbacks, stringCreation, staticEventCallbacks, debuggerStatus, exactValueReads, byteSpan, byteLocations, whitespace, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, enumVectors, windowEnabled, systemRandom, randomStatuses, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringTrim, scopedWritableSpan, scopedReceiverReset, spanFromEnd, stackBackedSpan, scopedReference, characterCallbacks, stringCreation, staticEventCallbacks, debuggerStatus, exactValueReads, byteSpan, byteLocations, whitespace, dpi };
 }
 
 function readOracle(...args) {
@@ -333,7 +335,7 @@ const expectedCompiler = {
     genericDescriptors: oracle.compiledGenericDescriptors, valueAliases: oracle.compiledValueAliases, rootDispatch: oracle.compiledRootDispatch,
     typeReturn: oracle.compiledTypeReturn, stringField: oracle.compiledStringField, byteSpan: oracle.compiledByteSpan,
     stringTrim: oracle.compiledStringTrim, scopedWritableSpan: oracle.scopedWritableSpan, stackBackedSpan: oracle.stackBackedSpan, scopedReference: oracle.scopedReference,
-    scopedReceiverReset: oracle.scopedReceiverReset,
+    scopedReceiverReset: oracle.scopedReceiverReset, spanFromEnd: oracle.spanFromEnd,
     systemRandom: oracle.systemRandom, randomStatuses: oracle.randomStatuses,
     characterCallbacks: oracle.characterCallbacks, staticEventCallbacks: oracle.staticEventCallbacks,
     stringCreation: oracle.stringCreation,
