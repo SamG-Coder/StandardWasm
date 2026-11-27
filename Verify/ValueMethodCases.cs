@@ -35,16 +35,15 @@ internal static class ValueMethodCases
         byte[] reset = typeof(Counter).GetMethod(nameof(Counter.Reset))!.GetMethodBody()!.GetILAsByteArray()!;
         if (IlOffsets.Find(reset, OpCodes.Initobj) < 0)
             throw new InvalidOperationException("Counter.Reset did not emit initobj.");
+        byte[] replace = typeof(Counter).GetMethod(nameof(Counter.Replace))!.GetMethodBody()!.GetILAsByteArray()!;
+        if (IlOffsets.Find(replace, OpCodes.Stobj) < 0)
+            throw new InvalidOperationException("Counter.Replace did not emit stobj.");
         foreach (int value in samples)
         {
             Check(nameof(Kernels.RejectStore), [value], Kernels.RejectStore(value));
             Check(nameof(Kernels.ResetReceiver), [value], Kernels.ResetReceiver(value));
+            Check(nameof(Kernels.ReplaceReceiver), [value], Kernels.ReplaceReceiver(value));
         }
-
-        // Whole-receiver replacement still requires a supported storage operation.
-        if (Kernels.RejectReplace(5) != 5)
-            throw new InvalidOperationException("CLR did not replace the value receiver.");
-        Reject(nameof(Kernels.RejectReplace), nameof(Counter.Replace), 7);
 
         void Check(string name, object[] arguments, object expected)
         {
@@ -62,26 +61,6 @@ internal static class ValueMethodCases
                 inputs = new[] { Encode(bundle), Encode(fixture.Entries) },
                 generated = new { capacity, bundle = true, arguments, hex = fixture.Hex },
                 expected
-            });
-        }
-
-        // Each rejection is located at the mutating instruction in the callee,
-        // which is assembly 1 of the bundle.
-        void Reject(string name, string callee, int offset)
-        {
-            MethodInfo method = Method(name);
-            byte[] entries = Manifest(method);
-            int[] diagnostic = [1, typeof(Counter).GetMethod(callee)!.MetadataToken & 0xffffff, offset];
-            Array.Fill(output, (byte)0xa5);
-            int status = CompilerExports.CompileBundleDetailed(bundle, entries, output, location);
-            if (status != -2 || !location.SequenceEqual(diagnostic) || output.Any(value => value != 0xa5))
-                throw new InvalidOperationException($"{name} returned {status} at [{string.Join(", ", location)}].");
-            cases.Add(new
-            {
-                module = "BootstrapLibrary", method = "CompileBundle", fixture = "value method " + name,
-                inputs = new[] { Encode(bundle), Encode(entries) },
-                generated = new { capacity, bundle = true, arguments = new object[] { 1 }, reject = true, diagnostic },
-                expected = status
             });
         }
     }

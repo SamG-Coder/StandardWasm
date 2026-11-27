@@ -13,8 +13,8 @@ Run `npm run demo -- stage-121-value-instance-methods`. The demo compiles
 
 Read-only calls pass the location's current immutable aggregate. Supported
 mutating calls keep the managed receiver location so `Store` (a field
-write) and `Reset` (`this = default`) update the caller's value. The
-cross-assembly `Replace` case (`this = new Counter(value)`) still returns
-`-2` at the unsupported write in the dependency.
+write), `Reset` (`this = default`) and `Replace` (`this = new Counter(value)`)
+update the caller's value. The cross-assembly replacement case exercises
+a named `stobj` through the managed receiver.
 
 See [decision 0049](../../docs/decisions/0049-read-only-value-methods.md).

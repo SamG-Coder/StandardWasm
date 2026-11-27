@@ -75,7 +75,7 @@ namespace ValueMethodDemo
             return counter.Value;
         }
 
-        public static int RejectReplace(int value)
+        public static int ReplaceReceiver(int value)
         {
             var counter = new Counter(1);
             counter.Replace(value);
