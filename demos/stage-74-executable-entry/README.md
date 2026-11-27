@@ -197,3 +197,26 @@ Run `node demos/stage-74-executable-entry/verify-com-host.mjs` to exercise
 the loader in Node and Edge with pure COM and mixed COM/P/Invoke imports.
 The probe checks the callback result, binding isolation, corrupt vtables,
 import validation, and preservation of the P/Invoke error slots.
+## Virtual temporary directory query
+
+A browser filesystem provider supplies the current instance's temporary
+directory as a canonical, fully qualified Windows path with a trailing
+backslash. The temp-path adapter writes that path into the instance's Wasm
+memory. The provider owns the directory, its isolation and cleanup, and any
+file operations on it. The adapter is an opt-in host capability and requires
+the caller to supply the directory. It has no default mount.
+
+The Node and Edge probe compares both native exports with the Windows x86
+CLR, including UTF-16 surrogate pairs, zero-capacity queries, short-buffer
+retries, an exact-fit buffer, padding and out-of-range guest destinations.
+It also verifies that the saved P/Invoke error remains separate from the
+system error. CoreLib still needs a route to resolve and invoke the export.
+The public managed method subsequently calls `GetFullPathNameW` through
+`PathHelper.Normalize`. Creating a temporary file separately requires a
+filesystem adapter for the original Windows file operations.
+[CoreLib temp path](https://github.com/dotnet/runtime/blob/v10.0.10/src/libraries/System.Private.CoreLib/src/System/IO/Path.Windows.cs#L132-L229) ·
+[CoreLib path normalization](https://github.com/dotnet/runtime/blob/v10.0.10/src/libraries/System.Private.CoreLib/src/System/IO/PathHelper.Windows.cs#L45-L84)
+
+Run `node demos/stage-74-executable-entry/verify-temp-path-host.mjs` on
+Windows with both Kernel32 exports, matching x86 and default-host .NET 10
+runtimes, Node and Edge. Results go under `artifacts/temp-path-host/`.
