@@ -87,5 +87,5 @@ try {
     }, null, 2) + "\n");
     console.log("Node " + process.version + " and Edge " + browser.version() + " matched " + node.length +
         " multicast delegate results from the x86 CLR " + oracle.runtime +
-        " (order, removal, events, Delegate slots and nominal casts; Func<int> and equality diagnosed).");
+        " (order, removal, events, Delegate slots, nominal casts and equality; Func<int> diagnosed).");
 } finally { await browser.close(); }

@@ -86,5 +86,5 @@ try {
     }, null, 2) + "\n");
     console.log("Node " + process.version + " and Edge " + browser.version() + " matched " + node.length +
         " general delegate results from the x86 CLR " + oracle.runtime +
-        " (Func, Action and delegate TypeDefs; casts, multicast and self-reference diagnosed).");
+        " (Func, Action and delegate TypeDefs, casts and multicast; self-reference diagnosed).");
 } finally { await browser.close(); }
