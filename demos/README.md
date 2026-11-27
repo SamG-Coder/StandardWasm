@@ -286,6 +286,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [289 · Closed type guards and Boolean branches](stage-289-closed-type-boolean-guards/README.md) | `npm run demo -- stage-289-closed-type-boolean-guards` | Eliminate impossible generic branches and preserve operand evaluation |
 | [290 · Direct private calls with a known false argument](stage-290-private-bool-specialization/README.md) | `npm run demo -- stage-290-private-bool-specialization` | Reuse a private Boolean method body with proven normal-flow reachability |
 | [291 · Managed native-word class fields](stage-291-native-word-class-fields/README.md) | `npm run demo -- stage-291-native-word-class-fields` | Verify traced mutable native-word fields and typed null handling |
+| [292 · Nested value fields in constructors](stage-292-ctor-nested-value-fields/README.md) | `npm run demo -- stage-292-ctor-nested-value-fields` | Preserve nested overlay bytes and outer value snapshots |
 
 ## Adding a stage
 
