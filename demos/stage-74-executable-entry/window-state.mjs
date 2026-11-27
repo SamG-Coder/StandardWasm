@@ -6,7 +6,7 @@ const invalidWindow = 1400, invalidIndex = 1413, invalidParameter = 87;
 const procedureIndex = -4; // GWL_WNDPROC
 let nextOwnerId = 1;
 export const windowImportNames = [
-    "isWindowEnabled", "enableWindow", "getWindowLongW", "getWindowLongPtrW", "setWindowLongW", "setWindowLongPtrW"
+    "isWindow", "isWindowEnabled", "enableWindow", "getWindowLongW", "getWindowLongPtrW", "setWindowLongW", "setWindowLongPtrW"
 ];
 
 export function createWindowState() {

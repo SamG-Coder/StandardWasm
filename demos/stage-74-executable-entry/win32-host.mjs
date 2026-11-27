@@ -205,6 +205,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         ...createActivationContexts(memory, findManifest, value => { errors.system = value; }),
         ...createDpiAwareness(value => { errors.system = value; }),
         ...createDisplayContexts(windows, hwnd => classes.style(windows.getWindowClass(hwnd)), displayCapabilities),
+        isWindow: handle => windows.hasWindow(handle) ? 1 : 0,
         isWindowEnabled: handle => windows.isWindowEnabled(handle),
         enableWindow: (handle, enable) => windows.enableWindow(handle, enable),
         getWindowLongW: getWindowLong,

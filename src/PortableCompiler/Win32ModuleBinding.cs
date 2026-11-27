@@ -18,7 +18,8 @@ namespace PortableCompiler
             DuplicateHandle = 36, GetExitCodeThread = 37, CloseHandle = 38,
             GetProcessWindowStation = 39, GetUserObjectInformation = 40,
             GetLongPathName = 41, SetClassLong = 42, GetDeviceCaps = 43,
-            GetDC = 44, ReleaseDC = 45, InvalidateRect = 46, AdjustWindowRectForDpi = 47, Count = AdjustWindowRectForDpi;
+            GetDC = 44, ReleaseDC = 45, InvalidateRect = 46, AdjustWindowRectForDpi = 47, IsWindow = 48,
+            Count = IsWindow;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -48,7 +49,8 @@ namespace PortableCompiler
             member == SetClassLong ? "SetClassLongW" : member == GetDeviceCaps ? "GetDeviceCaps" :
             member == GetDC ? "GetDC" : member == ReleaseDC ? "ReleaseDC" :
             member == InvalidateRect ? "InvalidateRect" :
-            member == AdjustWindowRectForDpi ? "AdjustWindowRectExForDpi" : "BCryptGenRandom";
+            member == AdjustWindowRectForDpi ? "AdjustWindowRectExForDpi" :
+            member == IsWindow ? "IsWindow" : "BCryptGenRandom";
 
         private static string Library(int member) => member == LoadLibrary || member == GetFullPathName ||
             member == GetLongPathName ? "kernel32.dll" :
@@ -112,9 +114,20 @@ namespace PortableCompiler
                         return 0;
                     if (member == InvalidateRect && !MatchesInvalidateRect(bundle, image, heaps, methods, owner, row)) return 0;
                     if (member == AdjustWindowRectForDpi && !MatchesAdjustWindowRect(bundle, image, heaps, methods, owner, row)) return 0;
+                    if (member == IsWindow && !MatchesIsWindow(image, heaps, methods, row)) return 0;
                     return member;
                 }
             return 0;
+        }
+
+        private static bool MatchesIsWindow(byte[] image, int[] heaps, int[] methods, int row)
+        {
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4), 1, cursor);
+            // BOOL is a signed word and HWND is a native word. Check the raw
+            // signature before both become Wasm i32. The layout check verifies SDK wrappers.
+            return end >= 0 && ReadAbiWord(image, cursor, end, 0x08) >= 0 &&
+                ReadAbiWord(image, cursor, end, 0x18) >= 0 && cursor[0] == end;
         }
 
         private static bool MatchesInvalidateRect(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int owner, int row)
@@ -334,10 +347,10 @@ namespace PortableCompiler
             if (UsesLastError(member))
                 return IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
                     types[offset + 2] == I32 && (result == Native || member == GetWindowLong && result == I32);
-            if (member == IsWindowEnabled || member == EnableWindow)
+            if (member == IsWindow || member == IsWindowEnabled || member == EnableWindow)
                 return IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
                     IsAbiShape(bundle, objects, result, I32, "BOOL") &&
-                    (member == IsWindowEnabled || IsAbiShape(bundle, objects, types[offset + 2], I32, "BOOL"));
+                    (member != EnableWindow || IsAbiShape(bundle, objects, types[offset + 2], I32, "BOOL"));
             if (member >= IsValidDpiContext) return MatchesDpiSignature(bundle, objects, member, types, offset, arity);
             int input = types[offset + 1];
             if (member == Module)
