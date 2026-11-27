@@ -22,3 +22,5 @@ owners, a previously borrowed pointer, and the release side effect. A
 method that returns the interior pointer is diagnosed when called on a
 native-backed frame owner. Results are written to
 `artifacts/stage-214-scoped-native-receiver/results.json`.
+
+A declaring type initializer on the static borrow helper also produces a located diagnostic so the compiler preserves initialization semantics.

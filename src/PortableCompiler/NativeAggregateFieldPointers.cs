@@ -79,7 +79,8 @@ namespace PortableCompiler
             if (ObjectLayouts.Owner(image, heaps, layout, row, false) != definition ||
                 MethodDefinitions.ReadColumn(image, layout, row, 1) != 0 &&
                 MethodDefinitions.ReadColumn(image, layout, row, 1) != 0x100 ||
-                (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x2010) != 0x10) return -2;
+                (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x2010) != 0x10 ||
+                TypeInitializers.Find(image, layout, heaps, definition, new int[1]) != 0) return -2;
             int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
             if (!ReturnsPointer(image, heaps, signature)) return -2;
 

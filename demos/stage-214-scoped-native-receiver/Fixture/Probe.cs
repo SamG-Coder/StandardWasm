@@ -24,9 +24,20 @@ public readonly unsafe ref struct Scope<T>
     public void** OpenBorrow() => Borrow(in this);
 }
 
+public readonly unsafe ref struct InitializedBorrowScope
+{
+    public readonly nint Item;
+
+    static InitializedBorrowScope() => Probe.ObserveInitialization();
+
+    public static void** Borrow(in InitializedBorrowScope owner) =>
+        (void**)Unsafe.AsPointer(ref Unsafe.AsRef(in owner.Item));
+}
+
 public static unsafe class Probe
 {
     private static int released;
+    private static int initialized;
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Scope<T> Create<T>(int value) => new((void*)value);
@@ -92,6 +103,17 @@ public static unsafe class Probe
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Release(nint value) => released += (int)value;
+
+    public static int InitializedBorrowDiagnostic()
+    {
+        initialized = 0;
+        InitializedBorrowScope scope = default;
+        void** pointer = InitializedBorrowScope.Borrow(in scope);
+        return *pointer == null && initialized == 1 ? 919 : 0;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ObserveInitialization() => initialized++;
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static int CheckedIncrement(int value) => checked(value + 1);
