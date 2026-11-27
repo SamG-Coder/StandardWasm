@@ -77,7 +77,8 @@ invocation lists. That lifts the type-identity and multicast limits below.
   assembly, or a lambda in a closed generic class) resolves through `AssemblyBundle.Resolve` like a
   non-virtual call. It then shares the MethodDef path's delegate-target checks
   (`LinkFunctionPointer`). A virtual target stays -2.
-- **Not yet:** generic delegate TypeDefs, `ldvirtftn` targets, closed static targets, delegate
+- **Not yet:** generic delegate TypeDefs, `ldvirtftn` of a MemberRef or MethodSpec (decision 0093 covers
+  MethodDef `ldvirtftn`), closed static targets, delegate
   equality, `Target`/`Method`, `BeginInvoke`/`EndInvoke` and interface-typed parameters. All are
   diagnosed.
 
