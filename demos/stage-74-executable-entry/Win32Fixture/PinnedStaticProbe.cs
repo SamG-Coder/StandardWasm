@@ -16,7 +16,7 @@ public static unsafe class PinnedStaticProbe
         {
             pointer->First = value;
             int direct = ReadPair(s_value);
-            s_value = new Pair { First = 7, Second = 11 };
+            s_value = new Pair { First = sizeof(Pair), Second = 11 };
             other->Second = 13;
             int indirect = pointer->First * 100 + pointer->Second;
             return initial * 1000000 + direct * 10000 + indirect * 10 + ReadPair(s_other);

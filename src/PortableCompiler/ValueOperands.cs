@@ -136,7 +136,7 @@ namespace PortableCompiler
                     return 0;
                 }
                 if (kind == Load || kind == LoadStaticField || kind == Constant || kind == WideConstant || kind == SingleConstant ||
-                    kind == DoubleConstant || kind == NullLiteral || kind == LoadString) depth++;
+                    kind == DoubleConstant || kind == NullLiteral || kind == LoadString || kind == SizeOf) depth++;
                 else if (kind == Binary || kind == CheckedInteger)
                 {
                     if (depth < 2) return -2;
