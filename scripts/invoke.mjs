@@ -24,12 +24,16 @@ export function managedExceptionType(exports, error) {
     return null;
 }
 
+// Byte inputs arrive as number arrays or, from the binary oracle store, as Uint8Array views.
+export const isBytes = value => Array.isArray(value) || value instanceof Uint8Array;
+
 export function invoke(exports, method, inputs) {
     const args = inputs.map(input => {
-        if (!Array.isArray(input?.bytes)) return decode(input);
+        if (!isBytes(input?.bytes)) return decode(input);
         // Typed Wasm GC arrays are opaque to JavaScript. Populate the array with fixture exports.
         const buffer = exports.CreateBytes(input.bytes.length);
-        for (const [index, value] of input.bytes.entries()) exports.SetByte(buffer, index, value);
+        const bytes = input.bytes;
+        for (let index = 0; index < bytes.length; index++) exports.SetByte(buffer, index, bytes[index]);
         return buffer;
     });
     return exports[method](...args);
