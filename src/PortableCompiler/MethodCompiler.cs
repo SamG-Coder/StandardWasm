@@ -65,7 +65,7 @@ namespace PortableCompiler
 
         // Imported functions precede defined functions. Discovery can add
         // a host feature, so re-emit with its function indices reserved.
-        private const int Reemit = -1000;
+        internal const int Reemit = -1000;
 
         private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location, int hostFeatures, bool rootProbe = false)
         {
@@ -160,7 +160,7 @@ namespace PortableCompiler
             bool externalObjects = false;
             // Any reachable ldind/stind needs the host-lent memory 0 (decision 0060).
             bool linearMemory = false;
-            var dispatch = new VirtualDispatch(output.Length);
+            var dispatch = new VirtualDispatch(output.Length, typeCalls);
             for (int export = 0; export < exportCount; export++)
             {
                 uint row = ImageBytes.U32(entries, (uint)entryOffsets[export]);
@@ -476,7 +476,7 @@ namespace PortableCompiler
                     typeCalls.ApplyDescriptorSignatures(bases, indices, offsets, signatures);
                     typeCalls.ApplyClosedResults(bundle, owners, rows, contexts, instantiations, offsets, signatures, objects, closedResultsThrough, functions);
                     closedResultsThrough = functions;
-                    RuntimeTypeLocals.Specialize(bundle, records, frame, parameters, locals, objects, catchRegion, signatures, offsets);
+                    RuntimeTypeLocals.Specialize(bundle, records, frame, parameters, locals, objects, catchRegion, signatures, offsets, virtualTypes);
                     if (location.Length != 0) location[2] = -1;
                     int maximum = body[2];
                     if (maximum > 0 && body[1] > int.MaxValue / maximum)
@@ -2252,6 +2252,8 @@ namespace PortableCompiler
             int arity = SignatureTypes.Read(bundle, image, heaps, blob, types, shape,
                 receiver, layout, objects, owner, closed);
             if (arity < 1) return arity < 0 ? arity : -1;
+            if (RuntimeTypeLocals.IsLinkedSystemType(bundle, objects, types[shape]))
+                types[shape] = RuntimeTypeMetadata.Type;
             if (!IsSharedBundleSignature(types, shape, arity)) return -2;
             used[0] = shape + arity + 1;
             records[slot] = BranchIl.VirtualCall;
@@ -2286,6 +2288,9 @@ namespace PortableCompiler
                     function = BindVirtualBody(bundle, objects, actual, allocated, declared, owner, row,
                         owners, rows, contexts, bases, indices, arities, offsets, signatures, functions);
                     if (function < 0) return function;
+                    int resultStatus = dispatch.BindResult(bundle, objects, types[shape], signatures, offsets,
+                        owners, rows, contexts, function);
+                    if (resultStatus < 0) return resultStatus;
                     if (!VirtualSignaturesMatch(arities, offsets, signatures, function, types, shape, arity, actual, objects)) return -2;
                 }
                 else

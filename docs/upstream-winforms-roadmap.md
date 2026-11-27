@@ -155,7 +155,11 @@ that share a Wasm heap still needs exact allocation identity. Internal calls
 now carry supported managed locations as results,
 which lets the replay bind the by-reference `FindValue` return in
 `Dictionary.TryGetValue`. The replay binds the `Byte[]` token in the
-original `Value.get_Type` and next stops at that method's return.
+original `Value.get_Type` and carries the descriptor through its local and
+return. The `TypeFlag.get_Type` dispatch and its resolved overrides now
+share the descriptor result representation. The unchanged bundle next
+reports a missing member at the generic `get_Value` call in
+`ActiveXImpl.UpdateAccelTable` at `IL_002b`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

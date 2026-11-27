@@ -14,15 +14,22 @@ namespace PortableCompiler
         private readonly byte[] known = new byte[MaxClasses];
         private readonly int[] allocations = new int[MaxClasses];
         private readonly int capacity;
+        private readonly RuntimeTypeCalls typeCalls;
         private int[] sites = new int[0];
         private int[] cases = new int[0];
         private int allocationsCount, sitesUsed, casesUsed = CaseWidth;
 
-        internal VirtualDispatch(int capacity)
+        internal VirtualDispatch(int capacity, RuntimeTypeCalls typeCalls)
         {
             // Both a function and each type-test arm use at least one output byte.
             this.capacity = capacity;
+            this.typeCalls = typeCalls;
         }
+
+        internal int BindResult(BundleImages bundle, int[] objects, int expected, int[] signatures, int[] offsets,
+            int[] owners, int[] rows, int[] contexts, int target)
+            => typeCalls.BindVirtualResult(bundle, objects, expected, signatures, offsets[target],
+                owners[target], rows[target], contexts[target] != 0);
 
         internal void AddAllocation(int type)
         {
@@ -74,6 +81,9 @@ namespace PortableCompiler
                         sites[site + Owner], sites[site + Row], owners, rows, contexts, bases, indices,
                         arities, offsets, signatures, functions);
                     if (target < 0) return target;
+                    int resultStatus = BindResult(bundle, objects, signatures[shape], signatures, offsets,
+                        owners, rows, contexts, target);
+                    if (resultStatus < 0) return resultStatus;
                     if (!MethodCompiler.VirtualSignaturesMatch(arities, offsets, signatures, target,
                         signatures, shape, arities[dispatcher], type, objects)) return -2;
                     if (target == functions) functions++;

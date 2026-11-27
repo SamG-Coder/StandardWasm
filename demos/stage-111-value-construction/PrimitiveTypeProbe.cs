@@ -52,6 +52,43 @@ namespace ValueConstructionDemo
             return result;
         }
 
+        private abstract class TypeFlag
+        {
+            public abstract Type Read();
+        }
+
+        private sealed class TypeFlag<T> : TypeFlag
+        {
+            public override Type Read() => typeof(T);
+        }
+
+        private static Type ReadVirtual(TypeFlag flag, int mode)
+        {
+            Type value;
+            if (mode == 0)
+                value = null;
+            else if (mode < 0)
+                value = flag.Read();
+            else
+                value = typeof(byte[]);
+
+            if (value == typeof(int[]))
+                value = typeof(bool[]);
+            return value;
+        }
+
+        public static int CheckVirtualTypeResults(int mode)
+        {
+            if (mode == int.MinValue) return ClassifyVirtual(new TypeFlag<byte[]>(), mode);
+            return ClassifyVirtual(new TypeFlag<int[]>(), mode);
+        }
+
+        private static int ClassifyVirtual(TypeFlag flag, int mode)
+        {
+            Type value = ReadVirtual(flag, mode);
+            return value == null ? 2 : value == typeof(bool[]) ? 4 : value == typeof(byte[]) ? 8 : -1;
+        }
+
         private static int PrimitiveHash<T>(T value) => value.GetHashCode();
         private static int PrimitiveHashReference<T>(ref T value) => value.GetHashCode();
 

@@ -8,12 +8,12 @@ namespace PortableCompiler
     internal static class RuntimeTypeLocals
     {
         internal static void Specialize(BundleImages bundle, int[] records, int[] frame, int parameters, int locals,
-            int[] objects, int[] clauses, int[] signatures, int[] offsets)
+            int[] objects, int[] clauses, int[] signatures, int[] offsets, int[] virtualTypes)
         {
             if (locals == 0 || bundle.Length == 0) return;
             bool hasDescriptor = false;
             for (int slot = 0; slot < records.Length && !hasDescriptor; slot += Width)
-                hasDescriptor = ProducesDescriptor(records, slot, signatures, offsets);
+                hasDescriptor = ProducesDescriptor(records, slot, signatures, offsets, virtualTypes);
             if (!hasDescriptor) return;
 
             int[] writes = null;
@@ -32,7 +32,7 @@ namespace PortableCompiler
                             !ValueOperands.Entry(records, slot / Width, clauses);
                         int producer = fallthrough ? records[previous] : 0;
                         if (writes == null) writes = new int[locals];
-                        if (fallthrough && ProducesDescriptor(records, previous, signatures, offsets)) writes[local] = writes[local] | 1;
+                        if (fallthrough && ProducesDescriptor(records, previous, signatures, offsets, virtualTypes)) writes[local] = writes[local] | 1;
                         else if (producer != NullLiteral) writes[local] = writes[local] | 2;
                     }
                 }
@@ -48,10 +48,11 @@ namespace PortableCompiler
             }
         }
 
-        private static bool ProducesDescriptor(int[] records, int slot, int[] signatures, int[] offsets)
+        private static bool ProducesDescriptor(int[] records, int slot, int[] signatures, int[] offsets, int[] virtualTypes)
         {
             int kind = records[slot];
             return kind == TypeFromHandle || kind == GetObjectType ||
+                kind == VirtualCall && virtualTypes[records[slot + 1]] == RuntimeTypeMetadata.Type ||
                 kind == Call && signatures[offsets[records[slot + 1]]] == RuntimeTypeMetadata.Type;
         }
 

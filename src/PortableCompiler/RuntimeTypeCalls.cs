@@ -35,6 +35,19 @@ namespace PortableCompiler
             return (flags & 0x2040) == 0 && Add(owner, row, specialized ? ClosedResultSlot : ResultSlot);
         }
 
+        // A dispatcher and each reachable override must agree on the result
+        // representation. An override discovered after analysis still needs
+        // the ABI selected in a previous pass.
+        internal int BindVirtualResult(BundleImages bundle, int[] objects, int expected, int[] signatures,
+            int offset, int owner, int row, bool specialized)
+        {
+            if (signatures[offset] == expected || expected != RuntimeTypeMetadata.Type) return 0;
+            if (!RuntimeTypeLocals.IsLinkedSystemType(bundle, objects, signatures[offset])) return -2;
+            if (Add(owner, row, specialized ? ClosedResultSlot : ResultSlot)) return MethodCompiler.Reemit;
+            signatures[offset] = expected;
+            return 0;
+        }
+
         private bool Add(int owner, int row, int argument)
         {
             for (int entry = 0; entry < used; entry += Width)

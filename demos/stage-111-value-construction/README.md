@@ -60,6 +60,9 @@ checks the `IsValueType` branch on both a primitive and a reference type.
 Descriptor results from direct calls on closed generic structs and classes
 preserve nulls and the identity of each instantiated type. The fixture
 compares a reused getter result and distinguishes `Int32` from `UInt32`.
+The virtual descriptor fixture calls the same abstract slot with two closed
+generic receivers. It compares the resulting array types after the returned
+descriptor, null, and a type token have flowed through the same local.
 The runtime type fixture compares `Object.GetType` for a derived instance,
 a plain object, a string, and boxed `Int32` and `UInt32` against the CLR.
 It includes an interface receiver, a null receiver, and the identity shared
