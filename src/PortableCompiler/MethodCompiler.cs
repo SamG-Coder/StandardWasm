@@ -1550,7 +1550,21 @@ namespace PortableCompiler
                         records[slot + 3] = descriptor;
                         continue;
                     }
-                    if (kind != BranchIl.TestClass) return -2;
+                    if (kind == BranchIl.UnboxValue && (operand >> 24) == 0x1b && IsObjectReference(type))
+                    {
+                        // For a closed reference T, unbox.any T has castclass
+                        // semantics, including identity, null and InvalidCastException.
+                        if (type == ObjectReference)
+                        {
+                            records[slot] = BranchIl.WidenReference;
+                            records[slot + 1] = type;
+                            continue;
+                        }
+                        kind = BranchIl.CastClass;
+                        records[slot] = kind;
+                        records[slot + 1] = ((operand & 0xffffff) << 2) | 2; // TypeSpec coded index
+                    }
+                    else if (kind != BranchIl.TestClass) return -2;
                 }
                 if ((kind == BranchIl.ArrayGet || kind == BranchIl.ArraySet) && records[slot + 3] != 0)
                 {
