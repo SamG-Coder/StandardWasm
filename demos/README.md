@@ -257,6 +257,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [270 · Assignability to factory-created interfaces](stage-270-runtime-interface-assignability/README.md) | `npm run demo -- stage-270-runtime-interface-assignability` | Compare canonical interface relations and diagnose incomplete graphs |
 | [273 · Runtime generic type classification](stage-273-runtime-type-generic-kind/README.md) | `npm run demo -- stage-273-runtime-type-generic-kind` | Verify generic metadata, arrays, null and nominal virtual overrides |
 | [276 · Runtime generic type definitions](stage-276-runtime-generic-definitions/README.md) | `npm run demo -- stage-276-runtime-generic-definitions` | Verify exact definition identity, fresh typed failures and nominal dispatch |
+| [277 · Runtime generic type arguments](stage-277-runtime-generic-arguments/README.md) | `npm run demo -- stage-277-runtime-generic-arguments` | Verify ordered canonical generic arguments and independent reflection arrays |
 
 ## Adding a stage
 
