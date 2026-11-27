@@ -251,6 +251,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [257 · 64-bit managed references](stage-257-wide-managed-byrefs/README.md) | `npm run demo -- stage-257-wide-managed-byrefs` | Compare aliased 64-bit locals and instance fields with the CLR |
 | [260 · Identical interface constraints](stage-260-identical-interface-constraints/README.md) | `npm run demo -- stage-260-identical-interface-constraints` | Accept an interface as its own exact nominal bound |
 | [265 · Mono Interlocked increment](stage-265-mono-interlocked-increment/README.md) | `npm run demo -- stage-265-mono-interlocked-increment` | Preserve alias-visible Int32 updates and original TaskScheduler IDs |
+| [268 · Fieldless explicit-size values](stage-268-fieldless-explicit-size/README.md) | `npm run demo -- stage-268-fieldless-explicit-size` | Preserve managed padding, nominal identity and exact declared size |
 
 ## Adding a stage
 
