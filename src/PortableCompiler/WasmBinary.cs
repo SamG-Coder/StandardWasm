@@ -151,9 +151,15 @@ namespace PortableCompiler
                     return -3;
                 exportSize += metadata + name;
             }
-            bool pinTable = PinRegistryWasm.Present(globals);
+            // Tables: 0 delegate thunks, 1 the pin registry (decision 0077), 2 function-pointer
+            // targets (decision 0078). A lower table is emitted, possibly empty, when a higher
+            // one exists, so the indices stay fixed.
+            bool pointerTable = pointers.TargetCount != 0 || pointers.CarrierCount != 0;
+            bool pinTable = PinRegistryWasm.Present(globals) || pointerTable;
             bool tables = thunks[0] != 0 || pinTable;
-            int tableSize = 3 + UnsignedSize(thunks[0]) + (pinTable ? 3 : 0);
+            int tableSize = 3 + UnsignedSize(thunks[0]) + (pinTable ? 3 : 0) +
+                (pointerTable ? 2 + UnsignedSize(pointers.TargetCount + 1) : 0);
+            bool elements = thunks[0] != 0 || pointers.TargetCount != 0;
             int elementSize = 5 + UnsignedSize(thunks[0]);
             for (int i = 0; i < thunks[0]; i++)
             {
@@ -165,6 +171,13 @@ namespace PortableCompiler
                     return -3;
                 codeSize += 1 + thunkSize;
                 elementSize += UnsignedSize(hostImports + functions + i);
+            }
+            if (pointers.TargetCount != 0)
+            {
+                // A second segment: flags 2, table 2, offset 1, elemkind funcref.
+                elementSize += 6 + UnsignedSize(pointers.TargetCount);
+                for (int i = 0; i < pointers.TargetCount; i++)
+                    elementSize += UnsignedSize(hostImports + pointers.Targets[i]);
             }
 
             int remaining = output.Length - 8;
@@ -181,7 +194,7 @@ namespace PortableCompiler
             if (globalSize != 0)
                 remaining = Reserve(remaining, globalSize);
             remaining = Reserve(remaining, exportSize);
-            if (thunks[0] != 0)
+            if (elements)
                 remaining = Reserve(remaining, elementSize);
             if (literalSize != 0)
                 remaining = Reserve(remaining, 1); // DataCount
@@ -369,7 +382,7 @@ namespace PortableCompiler
                 // Table 0 holds delegate thunks (possibly none); table 1 is the
                 // live-pin registry of decision 0077, which starts empty and grows.
                 cursor = Section(output, cursor, 4, tableSize);
-                output[cursor++] = (byte)(pinTable ? 2 : 1);
+                output[cursor++] = (byte)(pointerTable ? 3 : pinTable ? 2 : 1);
                 output[cursor++] = 0x70;
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, thunks[0]);
@@ -378,6 +391,12 @@ namespace PortableCompiler
                     output[cursor++] = 0x6d; // eqref
                     output[cursor++] = 0;
                     output[cursor++] = 0;
+                }
+                if (pointerTable)
+                {
+                    output[cursor++] = 0x70; // funcref; slot 0 stays null
+                    output[cursor++] = 0;
+                    cursor = Unsigned(output, cursor, pointers.TargetCount + 1);
                 }
             }
             if (tagCount != 0)
@@ -419,10 +438,11 @@ namespace PortableCompiler
             if (argumentNull) cursor = ExceptionTagsWasm.WriteArgumentNullExport(output, cursor);
             if (objectTag) cursor = ExceptionTagsWasm.WriteObjectExport(output, cursor);
 
-            if (thunks[0] != 0)
+            if (elements)
             {
                 cursor = Section(output, cursor, 9, elementSize);
-                output[cursor++] = 1; // one segment
+                // The thunk segment is always present (possibly empty) so table 0 keeps it.
+                output[cursor++] = (byte)(pointers.TargetCount != 0 ? 2 : 1);
                 output[cursor++] = 0; // active, table zero
                 output[cursor++] = 0x41;
                 output[cursor++] = 0;
@@ -430,6 +450,18 @@ namespace PortableCompiler
                 cursor = Unsigned(output, cursor, thunks[0]);
                 for (int i = 0; i < thunks[0]; i++)
                     cursor = Unsigned(output, cursor, hostImports + functions + i);
+                if (pointers.TargetCount != 0)
+                {
+                    output[cursor++] = 2; // active, explicit table index
+                    output[cursor++] = FunctionPointerPlan.Table;
+                    output[cursor++] = 0x41;
+                    output[cursor++] = 1; // slot 0 stays null
+                    output[cursor++] = 0x0b;
+                    output[cursor++] = 0; // elemkind funcref
+                    cursor = Unsigned(output, cursor, pointers.TargetCount);
+                    for (int i = 0; i < pointers.TargetCount; i++)
+                        cursor = Unsigned(output, cursor, hostImports + pointers.Targets[i]);
+                }
             }
 
             if (literalSize != 0)
