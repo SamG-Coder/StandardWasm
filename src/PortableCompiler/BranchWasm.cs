@@ -1556,8 +1556,16 @@ namespace PortableCompiler
                     }
                     else if (kind == LoadNativeStatic)
                     {
-                        used = NativeAggregates.Load(code, used, nativePlans, plan, staticAddress, 0);
+                        used = plan == NativeStaticWasm.PointerWordPlan ?
+                            LinearMemoryWasm.Load(code, Local(code, used, 0x20, staticAddress), 0x4d) :
+                            NativeAggregates.Load(code, used, nativePlans, plan, staticAddress, 0);
                         used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, type, depth));
+                    }
+                    else if (plan == NativeStaticWasm.PointerWordPlan)
+                    {
+                        used = Local(code, used, 0x20, staticAddress);
+                        used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
+                        used = LinearMemoryWasm.Store(code, used, 0xdf);
                     }
                     else
                     {

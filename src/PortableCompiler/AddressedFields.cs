@@ -1,7 +1,8 @@
 namespace PortableCompiler
 {
     // An addressed field keeps its backing choice across emission retries.
-    // Native aggregates use linear memory. Managed aggregates, Int32 and references use cells.
+    // Native aggregates and borrowed pointer words use linear memory. Managed aggregates,
+    // Int32 and references use cells.
     internal sealed class AddressedFields
     {
         internal const int Int32Cell = -2, ReferenceCell = -3, ValueCell = -4;
@@ -62,6 +63,9 @@ namespace PortableCompiler
 
     internal static class NativeStaticWasm
     {
+        // A zero plan denotes a wasm32 pointer word. Aggregate plan indices start at one.
+        internal const int PointerWordPlan = 0, PointerWordBytes = 4;
+
         internal static int Address(byte[] code, int used, int region, int pages, int offset, int address)
         {
             code[used++] = 0x23; // global.get region

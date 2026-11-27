@@ -237,6 +237,18 @@ namespace PortableCompiler
                         types[target] = Native;
                         continue;
                     }
+                    if (kind == 0 && locals && pinned != null && end - cursor > 2 &&
+                        image[cursor] == 0x10 && image[cursor + 1] == PointerStorage.Element)
+                    {
+                        int storage = PointerSignatures.ReadStorage(bundle, image, methods, heap, assembly, cursor + 2, end, next);
+                        if (storage != Native) return storage < 0 ? storage : -2;
+                        // Unlike a managed object, a proven static pointer word can live
+                        // at a stable address in the module's linear memory.
+                        pinned[i] = PinnedLocals.StaticPointer;
+                        cursor = next[0];
+                        types[target] = Native;
+                        continue;
+                    }
                     if (kind == 0) return -2;
                     pinned[i] = kind;
                     cursor += kind == PinnedLocals.Text ? 1 : 2;

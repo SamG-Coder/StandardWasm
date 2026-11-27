@@ -785,6 +785,9 @@ namespace PortableCompiler
                             objects, records, pinned, frame, parameters, locals, catchRegion, literals);
                         status = PinnedStrings.Lower(image, heaps, layout, records, pinned, parameters, locals, location);
                         if (status < 0) return status;
+                        status = ScopedStaticPointerPins.Lower(image, layout, heaps, source, count,
+                            records, catchRegion, pinned, parameters, locals, location);
+                        if (status < 0) return status;
                         ScopedValuePins.Lower(bundle, image, layout, heaps, owner, source, count, localBlob,
                             records, catchRegion, frame, parameters, locals, objects, nativePlans);
                     }
@@ -1208,7 +1211,8 @@ namespace PortableCompiler
                             if (region < 0) return region;
                             frameShape[21] = region + 1;
                             int plan = records[slot + BranchIl.Width + 1];
-                            int bytes = 160 + 24 * (ObjectLayouts.FieldCount(objects, records[slot + 3]) + NativeAggregates.Size(nativePlans.Plans, plan));
+                            int bytes = plan == NativeStaticWasm.PointerWordPlan ? 160 :
+                                160 + 24 * (ObjectLayouts.FieldCount(objects, records[slot + 3]) + NativeAggregates.Size(nativePlans.Plans, plan));
                             if (capacity > int.MaxValue - bytes) return -3;
                             capacity += bytes;
                         }
@@ -2763,9 +2767,15 @@ namespace PortableCompiler
                     }
                     if (addressOf || address >= 0)
                     {
-                        int plan = NativeAggregates.Plan(bundle, objects, symbol[1], nativePlans);
+                        bool pointerWord = symbol[1] == Native && symbol[5] == PointerStorage.Element;
+                        if (pointerWord && addressOf && (linked || records[slot + BranchIl.Width + 3] != ScopedStaticPointerPins.BorrowedAddress ||
+                            !StaticFields.IsDeclaringInitializer(image, layout, heaps, field, callerRow))) return -2;
+                        int plan = pointerWord ? NativeStaticWasm.PointerWordPlan :
+                            NativeAggregates.Plan(bundle, objects, symbol[1], nativePlans);
                         if (plan < 0) return plan;
-                        if (address < 0) address = addressedFields.Add(staticOwner, staticRow, NativeAggregates.Size(nativePlans.Plans, plan));
+                        if (address < 0)
+                            address = addressedFields.Add(staticOwner, staticRow,
+                                pointerWord ? NativeStaticWasm.PointerWordBytes : NativeAggregates.Size(nativePlans.Plans, plan));
                         if (address < 0) return address;
                         records[slot] = addressOf ? BranchIl.StaticFieldAddress : write ? BranchIl.StoreNativeStatic : BranchIl.LoadNativeStatic;
                         records[slot + BranchIl.Width + 1] = plan;

@@ -293,6 +293,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [296 · Win32 window handle lifetime](stage-296-is-window/README.md) | `npm run demo -- stage-296-is-window` | Compare live, null, invalid and destroyed HWNDs against Windows |
 | [298 - Fixed string concatenation](stage-298-corelib-concat-construction/README.md) | `npm run demo -- stage-298-corelib-concat-construction` | Compare original CoreLib concatenation, UTF-16 copies, and reference identity |
 | [299 - Read-only explicit value projections](stage-299-readonly-explicit-overlay/README.md) | `npm run demo -- stage-299-readonly-explicit-overlay` | Verify bounded scalar views of readonly nested values and diagnostic boundaries |
+| [301 Â· Scoped pinning of static pointers](stage-301-static-pointer-pinning/README.md) | `npm run demo -- stage-301-static-pointer-pinning` | Compare borrowed writes and direct accesses to one static field |
 
 ## Adding a stage
 

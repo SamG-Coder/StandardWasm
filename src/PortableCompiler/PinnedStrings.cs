@@ -9,7 +9,7 @@ namespace PortableCompiler
         // pinned string: the netstandard form, ldloc; conv.u; ... + OffsetToStringData.
         internal const int Text = 1;
         // pinned char&: the form that calls string.GetPinnableReference().
-        internal const int Character = 2, Byte = 3;
+        internal const int Character = 2, Byte = 3, StaticPointer = 4;
 
         internal static int Kind(byte[] image, int cursor, int end)
         {
