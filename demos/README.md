@@ -308,6 +308,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [336 · Mono ICU locale membership](stage-336-mono-icu-locale/README.md) | `npm run demo -- stage-336-mono-icu-locale` | Verify the original UTF-16 P/Invoke against the published ICU profiles |
 | [354 · Stock readonly character span empty getter](stage-354-compact-empty-span/README.md) | `npm run demo -- stage-354-compact-empty-span` | Execute the stock managed getter with its compact ABI |
 | [360 · Native UTF-16 string construction](stage-360-native-utf16-string-construction/README.md) | `npm run demo -- stage-360-native-utf16-string-construction` | Bind the original constructor and verify its bounded snapshot emitter |
+| [362 · Constrained Int32 ToString](stage-362-constrained-int32-tostring/README.md) | `npm run demo -- stage-362-constrained-int32-tostring` | Link constrained Int32 ToString to the original override without boxing |
 
 ## Adding a stage
 

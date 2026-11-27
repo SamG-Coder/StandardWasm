@@ -37,7 +37,7 @@ namespace PortableCompiler
             if (int32Receiver)
             {
                 int primitive = declared == ObjectReference
-                    ? PrimitiveReceivers.ResolveConstrainedInt32Equals(bundle, objects, declarationOwner, declarationRow, target)
+                    ? PrimitiveReceivers.ResolveConstrainedInt32ObjectSlot(bundle, objects, declarationOwner, declarationRow, target)
                     : PrimitiveReceivers.ResolveConstrainedInt32Compare(bundle, objects, declared, declarationOwner, declarationRow, target);
                 if (primitive != -2) return primitive;
             }

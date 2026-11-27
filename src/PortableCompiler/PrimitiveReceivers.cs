@@ -22,7 +22,11 @@ namespace PortableCompiler
                 ? SignatureTypes.Int32Location : 0;
         }
 
-        internal static int ResolveConstrainedInt32Equals(BundleImages bundle, int[] objects,
+        // constrained. int32 callvirt Object::Equals(object) or Object::ToString().
+        // Int32 overrides both, so ECMA-335 III.2.1 calls the override on the
+        // receiver address without boxing. Any other Object slot returns -2 and
+        // keeps the caller's ordinary value-receiver handling or diagnostic.
+        internal static int ResolveConstrainedInt32ObjectSlot(BundleImages bundle, int[] objects,
             int owner, int declaration, int[] target)
         {
             byte[] image = bundle.Get(owner);
@@ -31,10 +35,11 @@ namespace PortableCompiler
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
             int name = MethodDefinitions.ReadColumn(image, layout, declaration, 3);
             int signature = MethodDefinitions.ReadColumn(image, layout, declaration, 4);
-            if (!MatchesAscii(image, heaps, (uint)name, "Equals") || signature <= 0 ||
-                !Fits((uint)signature, 5, (uint)heaps[1]) ||
-                U32(image, (uint)(heaps[0] + signature)) != 0x02012004 ||
-                image[heaps[0] + signature + 4] != 0x1c) return -2; // instance bool (object)
+            bool equals = MatchesAscii(image, heaps, (uint)name, "Equals") && signature > 0 &&
+                Fits((uint)signature, 5, (uint)heaps[1]) &&
+                U32(image, (uint)(heaps[0] + signature)) == 0x02012004 &&
+                image[heaps[0] + signature + 4] == 0x1c; // instance bool (object)
+            if (!equals && !RuntimeTypeMetadata.IsCoreObjectToString(image, heaps, layout, declaration)) return -2;
 
             int definition = ArrayTypeRefs.CoreDefinition(image, heaps, layout, SignatureReader.Int32);
             if (definition <= 0) return definition < 0 ? definition : -2;
