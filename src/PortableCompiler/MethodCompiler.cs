@@ -223,7 +223,7 @@ namespace PortableCompiler
             var remainderFixup = new int[1];
             var reflection = new RuntimeReflectionPlan();
             var hostUse = new int[1];
-            int functions = 0, length = 0, closedResultsThrough = 0;
+            int functions = 0, length = 0, closedSignaturesThrough = 0;
             bool externalObjects = false;
             // Any reachable ldind/stind needs the host-lent memory 0 (decision 0060).
             bool linearMemory = false;
@@ -466,8 +466,8 @@ namespace PortableCompiler
                 }
 
                 typeCalls.ApplyDescriptorSignatures(bases, indices, offsets, signatures);
-                typeCalls.ApplyClosedResults(bundle, owners, rows, contexts, instantiations, offsets, signatures, objects, closedResultsThrough, functions);
-                closedResultsThrough = functions;
+                typeCalls.ApplyClosedSignatures(bundle, owners, rows, contexts, instantiations, offsets, signatures, objects, closedSignaturesThrough, functions);
+                closedSignaturesThrough = functions;
                 int parameters = arities[current];
                 int signature = offsets[current];
                 int result = signatures[signature];
@@ -581,7 +581,7 @@ namespace PortableCompiler
                         functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
                             parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                             bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
-                            initializers, reflection, instantiations, methodArguments, inlineLocations, frameCells, parameters,
+                            initializers, reflection, typeCalls, instantiations, methodArguments, inlineLocations, frameCells, parameters,
                             nativePlans, addressedFields, booleanLocals, pointers, finalizers, tracksFinalizers);
                         if (functions == Reemit)
                         {
@@ -602,8 +602,8 @@ namespace PortableCompiler
                     for (int local = 0; local < frameCells.Length; local++)
                         if (frameCells[local] != 0 && inlineLocations[local] != 0) return -2;
                     typeCalls.ApplyDescriptorSignatures(bases, indices, offsets, signatures);
-                    typeCalls.ApplyClosedResults(bundle, owners, rows, contexts, instantiations, offsets, signatures, objects, closedResultsThrough, functions);
-                    closedResultsThrough = functions;
+                    typeCalls.ApplyClosedSignatures(bundle, owners, rows, contexts, instantiations, offsets, signatures, objects, closedSignaturesThrough, functions);
+                    closedSignaturesThrough = functions;
                     RuntimeTypeLocals.Specialize(bundle, records, frame, parameters, locals, objects, catchRegion, signatures, offsets, virtualTypes);
                     if (location.Length != 0) location[2] = -1;
                     int maximum = body[2];
@@ -628,12 +628,24 @@ namespace PortableCompiler
                             arities, offsets, signatures, objects, functions, fixedObjects);
                         if (functions < 0) return functions;
                     }
-                    var descriptorMismatch = new int[3];
+                    var descriptorMismatch = new int[4];
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
                         result, signatures, offsets, arities, location, catchRegion, outgoingNulls, objects, virtualTypes, allocatedStates,
                         descriptorMismatch, contexts);
                     if (status < 0)
                     {
+                        int virtualSlot = descriptorMismatch[3] - 1;
+                        if (virtualSlot >= 0)
+                        {
+                            int argument = descriptorMismatch[1];
+                            int expected = virtualTypes[records[virtualSlot + 1] + 1 + argument];
+                            if (typeCalls.RequireVirtualArgument(bundle, records[virtualSlot + BranchIl.Width + 1],
+                                records[virtualSlot + BranchIl.Width + 3], argument, expected, objects))
+                            {
+                                features[0] = hostFeatures | hostUse[0];
+                                return Reemit;
+                            }
+                        }
                         int resultSource = descriptorMismatch[2] - 1;
                         if (resultSource >= 0 && !IsExported(exports, resultSource) &&
                             typeCalls.RequireResult(bundle, owners[resultSource], rows[resultSource], signatures[offsets[resultSource]],
@@ -1160,7 +1172,8 @@ namespace PortableCompiler
         private static int LinkOperands(BundleImages bundle, byte[] image, int[] layout,
             int[] heaps, int owner, int callerRow, int context, int callerReceiver, bool valueReceiver, bool readOnlyReceiver, bool valueConstructor, int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets, int[] signatures, int[] objects, int[] thunks,
             int[] globals, byte[] literals, int[] literalSize, int functions, int[] location, int[] frame, int[] clauses, int[] hostUse, int[] virtualTypes, int[] virtualUsed,
-            TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, MethodInstantiations instantiations, int[] methodArguments,
+            TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, RuntimeTypeCalls typeCalls,
+            MethodInstantiations instantiations, int[] methodArguments,
             int[] inlineLocations, int[] frameCells, int parameterCount, NativeAggregatePlans nativePlans,
             AddressedFields addressedFields, byte[] booleanLocals,
             FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers)
@@ -2186,7 +2199,7 @@ namespace PortableCompiler
                             if (deferred)
                             {
                                 int staged = StageVirtualCall(bundle, targetImage, targetLayout, targetHeaps,
-                                    targetOwner, targetRow, objects, records, slot, virtualTypes, virtualUsed, targetContext);
+                                    targetOwner, targetRow, objects, records, slot, virtualTypes, virtualUsed, typeCalls, targetContext);
                                 if (staged < 0) return staged;
                                 continue;
                             }
@@ -2283,7 +2296,7 @@ namespace PortableCompiler
                 if (virtualMethodLocal && kind == BranchIl.Call && records[slot + 3] != 0)
                 {
                     int staged = StageVirtualCall(bundle, image, layout, heaps, owner, target,
-                        objects, records, slot, virtualTypes, virtualUsed);
+                        objects, records, slot, virtualTypes, virtualUsed, typeCalls);
                     if (staged < 0) return staged;
                     continue;
                 }
@@ -2550,7 +2563,7 @@ namespace PortableCompiler
 
         private static int StageVirtualCall(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int row, int[] objects, int[] records, int slot,
-            int[] types, int[] used, int closed = 0)
+            int[] types, int[] used, RuntimeTypeCalls typeCalls, int closed = 0)
         {
             int declaring = ObjectLayouts.Owner(image, heaps, layout, row, false);
             if (declaring < 1) return -1;
@@ -2565,6 +2578,7 @@ namespace PortableCompiler
             if (arity < 1) return arity < 0 ? arity : -1;
             if (RuntimeTypeLocals.IsLinkedSystemType(bundle, objects, types[shape]))
                 types[shape] = RuntimeTypeMetadata.Type;
+            typeCalls.ApplyVirtualArguments(bundle, owner, row, types, shape, objects);
             if (!IsSharedBundleSignature(types, shape, arity)) return -2;
             used[0] = shape + arity + 1;
             records[slot] = BranchIl.VirtualCall;
@@ -2599,9 +2613,9 @@ namespace PortableCompiler
                     function = BindVirtualBody(bundle, objects, actual, allocated, declared, owner, row,
                         owners, rows, contexts, bases, indices, arities, offsets, signatures, functions);
                     if (function < 0) return function;
-                    int resultStatus = dispatch.BindResult(bundle, objects, types[shape], signatures, offsets,
+                    int signatureStatus = dispatch.BindShape(bundle, objects, types, shape, arity, signatures, offsets,
                         owners, rows, contexts, function);
-                    if (resultStatus < 0) return resultStatus;
+                    if (signatureStatus < 0) return signatureStatus;
                     if (!VirtualSignaturesMatch(arities, offsets, signatures, function, types, shape, arity, actual, objects)) return -2;
                 }
                 else

@@ -126,6 +126,17 @@ namespace PortableCompiler
                     // compiler descriptor cannot be sent to an upstream body.
                     if (next < 0 && depth >= arity && PeLibrary.RuntimeTypeMetadata.IsReference(stack[depth - arity]))
                         return -2;
+                    if (next < 0 && depth >= arity)
+                    {
+                        for (int argument = 1; argument < arity; argument++)
+                        {
+                            if (stack[depth - arity + argument] != PeLibrary.RuntimeTypeMetadata.Type ||
+                                virtualTypes[operand + 1 + argument] < FirstClass) continue;
+                            descriptorMismatch[1] = argument;
+                            descriptorMismatch[3] = slot + 1;
+                            break;
+                        }
+                    }
                 }
                 else if (kind == ReadReflection)
                 {

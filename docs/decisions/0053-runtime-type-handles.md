@@ -14,10 +14,12 @@ integer supplied as a Wasm `eqref` is distinct, including when the Type
 reference is widened to `System.Object`.
 
 Linked nominal System.Type signatures use the upstream layout at the module
-boundary. An internal direct call can use the descriptor representation for
-a parameter if every reached call supplies a descriptor or null. Discovery
-triggers a new emission pass to check all callers against the same
-representation. Descriptors are also available for libraries without the
+boundary. An internal direct or virtual call can use the descriptor
+representation for a parameter if every reached call supplies a descriptor
+or null. Discovery triggers a new emission pass to check all callers against
+the same representation. For a virtual call, the dispatcher and selected
+overrides share the specialized argument ABI. Instance receivers keep their
+nominal layout. Descriptors are also available for libraries without the
 linked definition.
 
 The supported runtime binder accepts the exact platform TypeRef and

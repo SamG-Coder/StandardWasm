@@ -18,7 +18,8 @@ internal static class Program
         var cases = new Func<int>[]
         {
             BoxedIntMatch, BoxedDoubleMatch, BoxedBooleanMiss, StringMiss, NullMiss, ReferenceMatch, BoxIdentity,
-            OriginalIntWrites, OriginalIntTooShort, OriginalCharWrites, OriginalCharTooShort, ReferenceWrites
+            OriginalIntWrites, OriginalIntTooShort, OriginalCharWrites, OriginalCharTooShort, ReferenceWrites,
+            FormatProviderDescriptor, VirtualDescriptorArguments
         };
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
@@ -53,6 +54,22 @@ internal static class Program
     public static int OriginalCharTooShort() => Format('Q', 0);
     public static int ReferenceWrites() => Format(new Formatter(), 2);
 
+    public static int FormatProviderDescriptor() => ReadFormat(new Provider());
+
+    private static int ReadFormat(IFormatProvider provider) =>
+        ReferenceEquals(provider.GetFormat(typeof(Program)), "provider") ? 17 : -1;
+
+    public static int VirtualDescriptorArguments()
+    {
+        DescriptorReader first = new FirstReader();
+        DescriptorReader second = new SecondReader();
+        return CompareDescriptors(first, typeof(string)) + CompareDescriptors(second, typeof(string)) +
+            CompareDescriptors(second, null);
+    }
+
+    private static int CompareDescriptors(DescriptorReader reader, Type? second) =>
+        reader.Compare(typeof(Program), second);
+
     private static int Format(object value, int capacity)
     {
         var buffer = new[] { 'a', '_', '_', 'z' };
@@ -76,5 +93,27 @@ internal static class Program
             written = 2;
             return true;
         }
+    }
+
+    private sealed class Provider : IFormatProvider
+    {
+        public object? GetFormat(Type? formatType) => formatType == typeof(Program) ? "provider" : null;
+    }
+
+    private abstract class DescriptorReader
+    {
+        public abstract int Compare(Type first, Type? second);
+    }
+
+    private sealed class FirstReader : DescriptorReader
+    {
+        public override int Compare(Type first, Type? second) =>
+            first == typeof(Program) && second == typeof(string) ? 23 : -1;
+    }
+
+    private sealed class SecondReader : DescriptorReader
+    {
+        public override int Compare(Type first, Type? second) =>
+            first != typeof(Program) ? -1 : second == null ? 5 : second == typeof(string) ? 31 : -1;
     }
 }

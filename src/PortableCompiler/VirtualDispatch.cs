@@ -26,10 +26,20 @@ namespace PortableCompiler
             this.typeCalls = typeCalls;
         }
 
-        internal int BindResult(BundleImages bundle, int[] objects, int expected, int[] signatures, int[] offsets,
-            int[] owners, int[] rows, int[] contexts, int target)
-            => typeCalls.BindVirtualResult(bundle, objects, expected, signatures, offsets[target],
-                owners[target], rows[target], contexts[target] != 0);
+        internal int BindShape(BundleImages bundle, int[] objects, int[] declared, int shape, int arity,
+            int[] signatures, int[] offsets, int[] owners, int[] rows, int[] contexts, int target)
+        {
+            int status = typeCalls.BindVirtualSlot(bundle, objects, declared[shape], signatures, offsets[target],
+                owners[target], rows[target], -1, contexts[target] != 0);
+            if (status < 0) return status;
+            for (int argument = 1; argument < arity; argument++)
+            {
+                status = typeCalls.BindVirtualSlot(bundle, objects, declared[shape + 1 + argument],
+                    signatures, offsets[target] + 1 + argument, owners[target], rows[target], argument, contexts[target] != 0);
+                if (status < 0) return status;
+            }
+            return 0;
+        }
 
         internal void AddAllocation(int type)
         {
@@ -83,9 +93,9 @@ namespace PortableCompiler
                         sites[site + Owner], sites[site + Row], owners, rows, contexts, bases, indices,
                         arities, offsets, signatures, functions);
                     if (target < 0) return target;
-                    int resultStatus = BindResult(bundle, objects, signatures[shape], signatures, offsets,
+                    int signatureStatus = BindShape(bundle, objects, signatures, shape, arities[dispatcher], signatures, offsets,
                         owners, rows, contexts, target);
-                    if (resultStatus < 0) return resultStatus;
+                    if (signatureStatus < 0) return signatureStatus;
                     if (!MethodCompiler.VirtualSignaturesMatch(arities, offsets, signatures, target,
                         signatures, shape, arities[dispatcher], type, objects)) return -2;
                     if (target == functions) functions++;
@@ -147,7 +157,7 @@ namespace PortableCompiler
                     if (functions < 0) return functions;
                 }
                 int shape = offsets[dispatcher];
-                int result = BindResult(bundle, objects, signatures[shape], signatures, offsets,
+                int result = BindShape(bundle, objects, signatures, shape, arities[dispatcher], signatures, offsets,
                     owners, rows, contexts, target);
                 if (result < 0) return result;
                 if (!MethodCompiler.VirtualSignaturesMatch(arities, offsets, signatures, target,

@@ -10,6 +10,9 @@ The cases verify exact interface membership, identity of a successful cast,
 and both buffer sizes for the original explicit `Char.TryFormat` body.
 A managed reference implementation exercises the same call site and checks
 its `out` value and writes to the slice.
+The runner also passes runtime `Type` descriptors through the original
+`IFormatProvider.GetFormat` declaration and through two virtual overrides.
+The override cases pass two descriptors and a null argument.
 
 Both `Int32` cases have CLR answers. Until the generic numeric formatting
 body lowers, the verifier accepts only the located diagnostic at the call
