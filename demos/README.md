@@ -174,6 +174,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [169 · Computed byte span indices](stage-169-computed-byte-span-indices/README.md) | `npm run demo -- stage-169-computed-byte-span-indices` | Compare byte-span checks, sliced aliases, and straight-line indices across CLR, Node, and Edge |
 | [170 · Character span copying](stage-170-character-span-copy/README.md) | `npm run demo -- stage-170-character-span-copy` | Run original CoreLib span concatenation and compare overlapping and mixed-storage copies |
 | [171 · Immutable byte pins](stage-171-immutable-byte-pins/README.md) | `npm run demo -- stage-171-immutable-byte-pins` | Compare fixed literal byte pointers and their stored terminator in Node and Edge |
+| [172 · Nested private members](stage-172-nested-private-members/README.md) | `npm run demo -- stage-172-nested-private-members` | Compare closed generic private field and method binding from nested types |
 
 ## Adding a stage
 

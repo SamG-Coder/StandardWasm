@@ -66,10 +66,10 @@ namespace PortableCompiler
                 if (!AssemblyReferences.SameString(caller, heaps, reference[4], target, targetHeaps, name))
                     continue;
                 // A closed parent in the caller's own assembly may name assembly
-                // members, and private members of the caller's own definition.
-                // Nested-type access is not modeled and stays unbound.
+                // members and private members of the caller or an enclosing type.
                 bool local = closed != 0 && matched == owner &&
-                    (access == 3 || access == 5 || access == 1 && callerType == declaring);
+                    (access == 3 || access == 5 || access == 1 &&
+                        HasPrivateAccess(target, targetHeaps, targetLayout, callerType, declaring));
                 // Assembly (internal) and FamORAssem (protected internal) members of another
                 // bundle assembly are accessible when it names the caller in InternalsVisibleTo,
                 // with the identity rules of decision 0028 (decision 0055). Access through
@@ -187,12 +187,13 @@ namespace PortableCompiler
                 if (match < 0) return match;
                 if (match == 0) continue;
                 // Closed parents in the caller's assembly follow the same rule
-                // as methods: assembly members, and private members of the
-                // caller's own definition.
+                // as methods: assembly members and private members of the
+                // caller or an enclosing type.
                 flags = definition[0];
                 int access = flags & 7;
                 bool local = parent != 0 && matched == owner &&
-                    (access == 3 || access == 5 || access == 1 && callerType == declaringType);
+                    (access == 3 || access == 5 || access == 1 &&
+                        HasPrivateAccess(target, targetHeaps, targetLayout, callerType, declaringType));
                 if (!local && matched >= 0 && matched != owner && (access == 3 || access == 5))
                 {
                     int friend = FriendAccess(target, targetHeaps, targetLayout, caller, heaps, layout);
@@ -226,6 +227,27 @@ namespace PortableCompiler
             field[2] = row;
             field[3] = flags;
             return 0;
+        }
+
+        private static bool HasPrivateAccess(byte[] image, int[] heaps, int[] layout,
+            int callerType, int declaringType)
+        {
+            if (callerType < 1 || declaringType < 1) return false;
+            if (callerType == declaringType) return true;
+            var counts = new int[45];
+            if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0 ||
+                callerType > counts[2] || declaringType > counts[2]) return false;
+
+            // TypeDef rows here share one module. The enclosing chain must finish
+            // at a top-level type within the number of recorded nesting relations.
+            bool found = false;
+            for (int depth = 0; depth <= counts[41]; depth++)
+            {
+                callerType = NestedTypes.Enclosing(image, heaps, layout, counts, callerType);
+                if (callerType <= 0) return callerType == 0 && found;
+                if (callerType == declaringType) found = true;
+            }
+            return false;
         }
 
         private static int FriendAccess(byte[] target, int[] targetHeaps, int[] targetLayout,
