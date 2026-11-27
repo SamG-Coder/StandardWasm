@@ -479,6 +479,9 @@ namespace PortableCompiler
                 stack[depth - 1] = operand;
                 return depth;
             }
+            if (kind == BoxAggregateToInterface)
+                return depth > 0 && stack[depth - 1] == FieldAccess.Owner(operand)
+                    ? Push(stack, allocated, depth - 1, FieldAccess.Storage(operand)) : -2;
             if (kind == BoxAggregate || kind == UnboxAggregate || kind == UnboxAggregateAddress || kind == TestAggregateBox)
             {
                 if (depth == 0) return -2;

@@ -805,7 +805,7 @@ namespace PortableCompiler
                         return -2;
                     var depths = new int[body[1]];
                     var states = new int[body[1] * maximum];
-                    bool hasNull = false, hasBranch = false;
+                    bool hasNull = false, hasBranch = false, hasAggregateBox = false;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
@@ -813,6 +813,7 @@ namespace PortableCompiler
                             records[slot + 3] == BranchIl.ProvenNativeZero) hasNull = true;
                         if (kind == BranchIl.Branch || kind == BranchIl.Conditional || kind == BranchIl.Switch)
                             hasBranch = true;
+                        if (kind == BranchIl.BoxAggregate) hasAggregateBox = true;
                     }
                     var outgoingNulls = new byte[hasNull ? states.Length : 0];
                     // Without a control-flow edge into a shared successor, the
@@ -829,6 +830,11 @@ namespace PortableCompiler
                         functions = BindCaughtExceptions(bundle, catchRegion, location, owners, rows, contexts, bases, indices,
                             arities, offsets, signatures, objects, functions, fixedObjects);
                         if (functions < 0) return functions;
+                    }
+                    if (hasAggregateBox)
+                    {
+                        status = AggregateBoxAssignments.Bind(bundle, objects, records, frame, result, catchRegion, location);
+                        if (status < 0) return status;
                     }
                     var descriptorMismatch = new int[6];
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
@@ -1167,7 +1173,8 @@ namespace PortableCompiler
                                     dispatch.AddAllocation(operation);
                             }
                             if (kind == BranchIl.BoxValue) dispatch.AddBox(operation);
-                            if (kind == BranchIl.BoxAggregate) reflection.AggregateBoxes.Include(operation, records[slot + 3]);
+                            if (kind == BranchIl.BoxAggregate || kind == BranchIl.BoxAggregateToInterface)
+                                reflection.AggregateBoxes.Include(kind == BranchIl.BoxAggregate ? operation : FieldAccess.Owner(operation), records[slot + 3]);
                             if (hasNull || hasBranch)
                             {
                                 capacity = StackSpillWasm.Transfer(sizingBuffer, capacity, records, pc,
