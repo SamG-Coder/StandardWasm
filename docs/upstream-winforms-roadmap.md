@@ -174,8 +174,11 @@ replay binds the internal `HWINSTA.Value` field under its declaring
 assembly's existing friend grant. Field access uses the same verified
 assembly identity as method access. The browser window host now binds
 `GetWindowLongW` and `GetWindowLongPtrW` to registered window state and
-preserves the managed P/Invoke error slot. The replay next reports a
-diagnostic in the original `HWND.op_Explicit` at `IL_0000`.
+preserves the managed P/Invoke error slot. The original `HWND.op_Explicit`
+now reads its native argument through `IntPtr.ToPointer()`. The startup
+bundle includes the original `System.ComponentModel.EventBasedAsync`
+assembly for `AsyncOperationManager`. The replay next reports a diagnostic
+at the value receiver in CoreLib's `ValueStringBuilder.Dispose` at `IL_0007`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

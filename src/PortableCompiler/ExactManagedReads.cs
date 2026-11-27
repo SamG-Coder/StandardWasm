@@ -1,6 +1,7 @@
 using PeLibrary;
 using static PeLibrary.ImageBytes;
 using static PortableCompiler.BranchIl;
+using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
@@ -15,9 +16,15 @@ namespace PortableCompiler
             {
                 if (records[address] != FrameAddress) continue;
                 int type = frame[records[address + 1]];
-                if (!ObjectLayouts.IsValueType(objects, type)) continue;
                 int call = records[address + 2] * Width;
-                if (call >= records.Length || records[call] != MethodSpecCall || records[call + 3] != 0) continue;
+                if (call >= records.Length) continue;
+                if (type == Native)
+                {
+                    FoldPointerAccessor(image, heaps, layout, records, clauses, address, call);
+                    continue;
+                }
+                if (!ObjectLayouts.IsValueType(objects, type) ||
+                    records[call] != MethodSpecCall || records[call + 3] != 0) continue;
                 int load = records[call + 2] * Width;
                 if (load >= records.Length || records[load] != LoadObject ||
                     ValueOperands.Entry(records, call / Width, clauses) || ValueOperands.Entry(records, load / Width, clauses)) continue;
@@ -46,6 +53,21 @@ namespace PortableCompiler
                 records[call] = Nop;
                 records[load] = Nop;
             }
+        }
+
+        private static void FoldPointerAccessor(byte[] image, int[] heaps, int[] layout, int[] records,
+            int[] clauses, int address, int call)
+        {
+            int kind = records[call];
+            bool member = kind == MemberCall;
+            if ((!member && kind != Call) || records[call + 3] != (member ? 0x28 : 0) ||
+                ValueOperands.Entry(records, call / Width, clauses) ||
+                !NativePointerMetadata.IsPointerAccessor(image, heaps, layout, records[call + 1], member)) return;
+
+            // The accessor only reads the pointer bits already in the slot.
+            // Do this before planning native storage for any other address uses.
+            records[address] = Load;
+            records[call] = Nop;
         }
 
         private static bool IsPlatformAs(byte[] image, int[] heaps, int[] layout, int[] counts, int target)

@@ -23,6 +23,8 @@ The kernels cover:
 - `int` reads with `long` writes and reads
 - `float` reads stored as `double`
 - a pointer returned from a helper, pointer difference and null
+- pointer round-trips through `IntPtr.ToPointer()` on a local and
+  `UIntPtr.ToPointer()` on an argument, including a null pointer
 - a null dereference, which raises `NullReferenceException` and is caught
 - the reader's argument checks, and writes past capacity
 
