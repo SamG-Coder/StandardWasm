@@ -2285,6 +2285,11 @@ namespace PortableCompiler
                         records[slot] = BranchIl.TypeFromHandle;
                         continue;
                     }
+                    if (RuntimeTypeMetadata.IsCoreObjectGetType(image, heaps, layout, target))
+                    {
+                        records[slot] = BranchIl.GetObjectType;
+                        continue;
+                    }
                     int accessor = StringMetadata.AccessorDefinition(image, heaps, layout, target);
                     if (accessor != 0)
                     {

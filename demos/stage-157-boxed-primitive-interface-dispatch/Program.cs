@@ -23,7 +23,8 @@ internal static class Program
             FormatProviderDescriptor, VirtualDescriptorArguments,
             ImplicitByteView, ConstructedByteView, ReturnedByteView, NullByteView, EmptyByteView, ByteViewBounds,
             WritableSpanReference, ClosedGenericSpanReference, DefaultSpanReference,
-            StringObjectSlot, StringOwnSlot, NullStringObjectSlot
+            StringObjectSlot, StringOwnSlot, NullStringObjectSlot,
+            OriginalExceptionGetType, OriginalDerivedExceptionGetType, NullExceptionGetType
         };
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
@@ -37,6 +38,21 @@ internal static class Program
             }, cases = results
         }));
     }
+
+    public static int OriginalExceptionGetType() =>
+        CheckExceptionType(new Exception("a"), typeof(Exception));
+
+    public static int OriginalDerivedExceptionGetType() =>
+        CheckExceptionType(new InvalidOperationException("b"), typeof(InvalidOperationException));
+
+    public static int NullExceptionGetType()
+    {
+        try { return CheckExceptionType(null!, typeof(Exception)); }
+        catch (NullReferenceException) { return 7; }
+    }
+
+    private static int CheckExceptionType(Exception value, Type type) =>
+        value.GetType() == type ? 5 : 0;
 
     public static int StringObjectSlot() => CheckObjectSlot("abc");
     public static int StringOwnSlot() => CheckStringSlot("def");

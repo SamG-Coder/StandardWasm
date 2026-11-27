@@ -24,6 +24,10 @@ The sealed string receiver cases compile the original CoreLib bodies for calls
 through the Object slot and a String-declared virtual slot. They compare
 returned string identity and the typed null-receiver exception.
 
+The runtime type cases compile CoreLib's unchanged `Exception.GetType` body.
+They verify exact descriptors for base and derived exceptions, plus its
+typed null-receiver failure.
+
 Both `Int32` cases have CLR answers. The compiler now binds the original
 `Number.TryFormatInt32<char>` generic method. Until the formatting pipeline
 lowers, the verifier accepts only the located diagnostic at the pinned local

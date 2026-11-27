@@ -99,6 +99,30 @@ namespace PeLibrary
             return cursor != end ? 0 : getType ? 1 : equality ? 2 : 3;
         }
 
+        // CoreLib itself calls Object.GetType by MethodDef rather than MemberRef.
+        internal static bool IsCoreObjectGetType(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x50) != 0 ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "GetType")) return false;
+            int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+            if (owner < 1 || !ObjectLayouts.IsCoreObjectType(image, heaps, layout, owner << 2)) return false;
+
+            int blob = MethodDefinitions.ReadColumn(image, layout, row, 4), limit = heaps[0] + heaps[1];
+            if (blob <= 0 || blob >= heaps[1]) return false;
+            var next = new int[1];
+            int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
+            int start = next[0];
+            if (size < 4 || size > limit - start || image[start] != 0x20 ||
+                image[start + 1] != 0 || image[start + 2] != 0x12) return false;
+            int end = start + size;
+            int result = CompressedUnsigned(image, start + 3, end, next);
+            if (result <= 0 || (result & 3) != 0 || next[0] != end) return false;
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            return first >= 0 && result >> 2 <= counts[2] &&
+                ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, result >> 2, "System", "Type");
+        }
+
         internal static bool IsGetTypeFromHandle(byte[] image, int[] heaps, int[] layout, int row)
         {
             var member = new int[AssemblyReferences.SymbolWidth];
