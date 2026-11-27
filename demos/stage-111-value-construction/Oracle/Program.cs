@@ -11,5 +11,6 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
 {
     inputs,
     values = inputs.Select(Kernels.InvokeValueOverride).ToArray(),
+    typeBranches = inputs.Select(Kernels.CheckTypeBranches).ToArray(),
     boxingDiagnostic = new[] { 0, generic.MetadataToken & 0xffffff, 1 }
 }));

@@ -120,8 +120,11 @@ resource manager getter, whose reachable field types include CoreLib's
 `CultureData` and its `CalendarId[]` field. Constrained dispatch binds the
 original `ValueStringBuilder.ToString` override in CoreLib's `String.FormatHelper`.
 Ordinary struct calls retain the managed receiver when the IL leaves it on the
-stack, including the linked padding setters. The startup replay now stops on
-the `Unsafe.As` call in WinForms `PropertyStore.AddValue`.
+stack, including the linked padding setters. In `PropertyStore.AddValue`, a
+closed type selects the matching branch of the original `typeof` checks. The
+immediate same-type managed read preserves the value copy used by the original
+`ldobj`. The startup replay now reaches CoreLib's `Debugger.IsAttached` getter
+and stops at the internal debugger query.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

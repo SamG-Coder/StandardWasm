@@ -413,6 +413,10 @@ namespace PortableCompiler
                         location, catchRegion.Length != 0, filterEnds: filterEnds);
                     if (status < 0)
                         return status;
+                    RuntimeTypeBranches.FoldClosedTypeBranches(bundle, image, layout, heaps, owner, context,
+                        methodArguments, objects, records, catchRegion);
+                    ExactManagedReads.FoldExactManagedReads(bundle, image, layout, heaps, owner, context,
+                        methodArguments, objects, frame, records, catchRegion);
                     byte[] frameRoots = null;
                     if (rootProbe)
                     {

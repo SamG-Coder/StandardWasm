@@ -192,6 +192,16 @@ namespace ValueConstructionDemo
 
         private static int ConstrainedHash<T>(ref T value) where T : struct => value.GetHashCode();
 
+        public static int CheckTypeBranches(int value) =>
+            unchecked(CloseTypeBranch<CounterOverride>(value) + CloseTypeBranch<Pair>(value));
+
+        private static int CloseTypeBranch<T>(int value) where T : struct
+        {
+            if (typeof(T) == typeof(CounterOverride)) return unchecked(value * 7 + 5);
+            if (typeof(T) != typeof(InheritedHash)) return unchecked(value * 11 - 3);
+            return typeof(T).GetFields().Length;
+        }
+
         public static int BorrowExtent(int value)
         {
             var extent = new Extent(value, 1);

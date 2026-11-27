@@ -51,14 +51,18 @@ async function verify(compiler, fixture, packed, inputs) {
         if (status <= 0) return { status, diagnostic: [0, 1, 2].map(i => tool.ReadDiagnostic(location, i)) };
         return { bytes: Uint8Array.from({ length: status }, (_, i) => tool.ReadByte(output, i)) };
     }
-    const supported = compileEntry("InvokeValueOverride");
-    if (!supported.bytes) throw Error(JSON.stringify(supported));
-    const { instance } = await WebAssembly.instantiate(supported.bytes);
-    return { values: inputs.map(instance.exports.run), rejection: compileEntry("RejectInheritedValueHash") };
+    async function runEntry(name) {
+        const supported = compileEntry(name);
+        if (!supported.bytes) throw Error(JSON.stringify({ name, ...supported }));
+        const { instance } = await WebAssembly.instantiate(supported.bytes);
+        return inputs.map(instance.exports.run);
+    }
+    return { values: await runEntry("InvokeValueOverride"), typeBranches: await runEntry("CheckTypeBranches"),
+        rejection: compileEntry("RejectInheritedValueHash") };
 }
 
 const assets = { "/compiler": readFileSync(compiler), "/fixture": images[0], "/bundle": bundle };
-const expected = { values: oracle.values, rejection: { status: -2, diagnostic: oracle.boxingDiagnostic } };
+const expected = { values: oracle.values, typeBranches: oracle.typeBranches, rejection: { status: -2, diagnostic: oracle.boxingDiagnostic } };
 const node = await verify(...Object.values(assets), oracle.inputs);
 assert.deepEqual(node, expected);
 const browser = await chromium.launch({ channel: "msedge" });
