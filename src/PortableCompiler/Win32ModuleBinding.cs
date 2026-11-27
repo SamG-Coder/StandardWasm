@@ -10,7 +10,7 @@ namespace PortableCompiler
             IsValidDpiContext = 7, SetProcessDpiContext = 8, SetLegacyDpi = 9, SetProcessAwareness = 10,
             GetThreadDpiContext = 11, EqualDpiContexts = 12, GetDpiAwareness = 13, IsProcessDpiAware = 14,
             IsWindowEnabled = 15, EnableWindow = 16, GetWindowLong = 17, GetWindowLongPtr = 18,
-            Count = GetWindowLongPtr;
+            BCryptGenRandom = 19, Count = BCryptGenRandom;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -21,12 +21,14 @@ namespace PortableCompiler
             member == EqualDpiContexts ? "AreDpiAwarenessContextsEqual" : member == GetDpiAwareness ? "GetAwarenessFromDpiAwarenessContext" :
             member == IsProcessDpiAware ? "IsProcessDPIAware" :
             member == IsWindowEnabled ? "IsWindowEnabled" : member == EnableWindow ? "EnableWindow" :
-            member == GetWindowLong ? "GetWindowLongW" : "GetWindowLongPtrW";
+            member == GetWindowLong ? "GetWindowLongW" : member == GetWindowLongPtr ? "GetWindowLongPtrW" : "BCryptGenRandom";
 
         private static string Library(int member) => member <= ReleaseContext ? "KERNEL32.dll" :
-            member == SetProcessAwareness ? "api-ms-win-shcore-scaling-l1-1-1.dll" : "USER32.dll";
+            member == SetProcessAwareness ? "api-ms-win-shcore-scaling-l1-1-1.dll" :
+            member == BCryptGenRandom ? "BCrypt.dll" : "USER32.dll";
 
         internal static int Arity(int member) =>
+            member == BCryptGenRandom ? 4 :
             member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ? 0 :
             member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts || member == EnableWindow ||
             UsesLastError(member) ? 2 : 1;
@@ -60,6 +62,9 @@ namespace PortableCompiler
         {
             if (arity != Arity(member)) return false;
             int result = types[offset];
+            if (member == BCryptGenRandom)
+                return types[offset + 1] == Native && types[offset + 2] == Native &&
+                    types[offset + 3] == I32 && types[offset + 4] == I32 && result == I32;
             if (UsesLastError(member))
                 return IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
                     types[offset + 2] == I32 && (result == Native || member == GetWindowLong && result == I32);

@@ -228,6 +228,20 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
     queries.push(query(handle));
     const windowEnabled = { queries, transitions, invalid: window.WriteWindowEnabled(handle, 1) };
 
+    const randomModule = await compile(["CheckSystemRandomBuffer", "CheckSystemRandomStatus", "CheckSystemRandomRange"], runtimeAssets);
+    const randomImports = WebAssembly.Module.imports(randomModule);
+    if (randomImports.length !== 2 ||
+        !randomImports.some(entry => entry.module === "standardwasm:resources" && entry.name === "memory") ||
+        !randomImports.some(entry => entry.module === "standardwasm:win32" && entry.name === "bCryptGenRandom"))
+        throw Error("The random fixture must use only the random source and its linear memory.");
+    const { exports: random } = await instantiate(randomModule, compiler, []);
+    const systemRandom = [0, 16, 65536, 65552, 131104].map(random.CheckSystemRandomBuffer);
+    const randomStatuses = [0, 1, 2, 3].map(random.CheckSystemRandomStatus);
+    const invalidRandomArgument = 0xc000000d | 0;
+    if (random.CheckSystemRandomRange(-1, 16) !== invalidRandomArgument ||
+        random.CheckSystemRandomRange(1024, -1) !== invalidRandomArgument)
+        throw Error("The random host accepted a range outside Wasm memory.");
+
     const staticPin = [exports.Sum(), exports.Alias(2), exports.Sum(), exports.Alias(9), exports.Sum()];
     const monitor = [0, 1, 2, 3].map(exports.LockRoundTrip).concat([0, 1, 2].map(exports.ReleaseDepth));
     const filter = [0, 1, 2, 3].map(exports.MatchPair);
@@ -293,7 +307,7 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, enumVectors, windowEnabled, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringTrim, scopedWritableSpan, scopedReceiverReset, stackBackedSpan, scopedReference, characterCallbacks, staticEventCallbacks, debuggerStatus, exactValueReads, byteSpan, byteLocations, whitespace, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, enumVectors, windowEnabled, systemRandom, randomStatuses, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringTrim, scopedWritableSpan, scopedReceiverReset, stackBackedSpan, scopedReference, characterCallbacks, staticEventCallbacks, debuggerStatus, exactValueReads, byteSpan, byteLocations, whitespace, dpi };
 }
 
 function readOracle(...args) {
@@ -319,6 +333,7 @@ const expectedCompiler = {
     typeReturn: oracle.compiledTypeReturn, stringField: oracle.compiledStringField, byteSpan: oracle.compiledByteSpan,
     stringTrim: oracle.compiledStringTrim, scopedWritableSpan: oracle.scopedWritableSpan, stackBackedSpan: oracle.stackBackedSpan, scopedReference: oracle.scopedReference,
     scopedReceiverReset: oracle.scopedReceiverReset,
+    systemRandom: oracle.systemRandom, randomStatuses: oracle.randomStatuses,
     characterCallbacks: oracle.characterCallbacks, staticEventCallbacks: oracle.staticEventCallbacks,
     debuggerStatus: { default: oracle.debuggerStatus, transitions: [0, 1, 0] },
     exactValueReads: oracle.exactValueReads,
@@ -396,6 +411,7 @@ try {
         console.log("Six stack-backed span results matched the CLR in Node and Edge, including typed bounds and length failures.");
         console.log("Four scoped byref cases matched CLR field mutation, span replacement, and value-copy independence in Node and Edge.");
         console.log("Four scoped receiver resets matched CLR alias updates and preserved earlier copies in Node and Edge.");
+        console.log("Five system-random buffer sizes and four return statuses matched Windows in Node and Edge.");
         console.log("Five span callbacks and three static event cases matched the CLR in Node and Edge.");
         console.log("Five original CoreLib String.StartsWith(char) cases matched the CLR in Node and Edge.");
         console.log("Both returned runtime type cases matched the CLR in Node and Edge.");

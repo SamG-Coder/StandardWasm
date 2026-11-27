@@ -34,9 +34,27 @@ namespace PeLibrary
                 int constructor = AttributeConstructors.ReadRowIndex(image, constructorAt, constructorWidth);
                 int type = AttributeConstructors.ReadType(image, heaps, layout, counts, constructor);
                 if (type < 0) return type;
-                if (!IsSupportedAttribute(image, heaps, layout, counts, first, type)) return -2;
+                if (!IsSupportedAttribute(image, heaps, layout, counts, first, type) &&
+                    !IsNativeZeroIntrinsic(image, heaps, layout, counts, first, row, flags, type)) return -2;
             }
             return 0;
+        }
+
+        private static bool IsNativeZeroIntrinsic(byte[] image, int[] heaps, int[] layout, int[] counts, int first,
+            int row, int flags, int attribute)
+        {
+            if ((flags & 0x20) == 0 || attribute == 0 || (attribute & 7) != 0 ||
+                !ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, attribute >> 3,
+                    "System.Runtime.CompilerServices", "IntrinsicAttribute")) return false;
+            int owner = ObjectLayouts.Owner(image, heaps, layout, row, true);
+            if (!NativeStorage.IsIntegerElement(ArrayTypeRefs.PrimitiveElement(image, heaps, layout, owner << 2)))
+                return false;
+            int table = AssemblyReferences.FieldTable(image, heaps, layout);
+            if (table < 0) return false;
+            var field = new int[3];
+            AssemblyReferences.ReadField(image, layout, table, row, field);
+            // CoreLib's IntPtr.Zero and UIntPtr.Zero use the ordinary static slot.
+            return MatchesAscii(image, heaps, (uint)field[1], "Zero");
         }
 
         private static bool IsSupportedAttribute(byte[] image, int[] heaps, int[] layout, int[] counts, int first, int type)

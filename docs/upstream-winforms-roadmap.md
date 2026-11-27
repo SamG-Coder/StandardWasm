@@ -178,9 +178,11 @@ preserves the managed P/Invoke error slot. The original `HWND.op_Explicit`
 now reads its native argument through `IntPtr.ToPointer()`. The startup
 bundle includes the original `System.ComponentModel.EventBasedAsync`
 assembly for `AsyncOperationManager`. `ValueStringBuilder.Dispose` now
-clears its receiver through the caller's managed location. The replay next
-reports a diagnostic at the static field in CoreLib's
-`Interop.GetRandomBytes` at `IL_0000`.
+clears its receiver through the caller's managed location. CoreLib's
+`Interop.GetRandomBytes` continues to run its original managed body and
+uses Web Crypto through the system-preferred `BCryptGenRandom` import.
+The replay next reports a diagnostic at `String.GetRawStringData` in
+CoreLib's `String.Create` at `IL_0028`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

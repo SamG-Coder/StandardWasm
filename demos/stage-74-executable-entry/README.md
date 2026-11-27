@@ -81,6 +81,14 @@ the CLR's cached last-error value. It also checks zero-initialized extra window
 storage on the browser host.
 [GetWindowLongW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowlongw)
 
+The Win32 host verifier also exercises CoreLib's system-preferred
+`BCryptGenRandom` contract. The host fills valid Wasm memory with Web Crypto
+and returns a failure status when the buffer is invalid or Web Crypto fails.
+The probe checks guard bytes, fills larger than one Web Crypto request,
+and status codes, including ranges outside Wasm memory.
+[BCryptGenRandom](https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/nf-bcrypt-bcryptgenrandom)
+[Web Crypto buffer limit](https://www.w3.org/TR/webcrypto/#Crypto-method-getRandomValues)
+
 The scoped-span fixture stores an array-backed `Span<char>` in a `ref struct`
 and copies the struct. Writes through the copy still reach the original array.
 The CLR, Node, and Edge compare the alias, the length of a default span, and

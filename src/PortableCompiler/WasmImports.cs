@@ -9,7 +9,8 @@ namespace PortableCompiler
         // character-view consumer, including callees compiled before discovery.
         internal const int NativeCharacterViews = 1 << 29;
         private const int FirstNativeFeature = 16;
-        private const int NativeMemoryFeatures = ((1 << Win32ModuleBinding.ReleaseContext) - 1) * FirstNativeFeature;
+        private const int NativeMemoryFeatures = ((1 << Win32ModuleBinding.ReleaseContext) - 1) * FirstNativeFeature |
+            (FirstNativeFeature << (Win32ModuleBinding.BCryptGenRandom - 1));
 
         internal static int Win32NativeFeature(int member) => FirstNativeFeature << (member - 1);
 

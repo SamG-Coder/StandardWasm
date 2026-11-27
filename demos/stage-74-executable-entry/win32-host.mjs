@@ -5,7 +5,7 @@ import { createWindowState, windowImportNames } from "./window-state.mjs";
 
 export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
-    "getModuleHandleW", "createActCtxW", "getCurrentActCtx", "activateActCtx"
+    "getModuleHandleW", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom"
 ]);
 export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, "deactivateActCtx", "releaseActCtx",
@@ -14,6 +14,7 @@ export const win32ImportNames = new Set([
 
 const moduleNotFound = 126;
 const noAccess = 998;
+const invalidParameter = 0xc000000d | 0, invalidHandle = 0xc0000008 | 0, unsuccessful = 0xc0000001 | 0;
 const executableHandle = 1;
 const decoder = new TextDecoder("utf-16le", { ignoreBOM: true });
 const normalize = name => name.replaceAll("\\", "/").toLowerCase();
@@ -76,6 +77,22 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         return image && readPeResource(image, 24, id, 0);
     }
 
+    function bCryptGenRandom(algorithm, pointer, length, flags) {
+        // CoreLib requests the system-preferred generator with no provider handle.
+        if ((flags & 2) === 0) return invalidHandle;
+        if (algorithm !== 0 || (flags & ~3) !== 0) return invalidParameter;
+        const start = pointer >>> 0, count = length >>> 0;
+        const buffer = memory.buffer;
+        if (start === 0 || start > buffer.byteLength || count > buffer.byteLength - start) return invalidParameter;
+        try {
+            for (let offset = 0; offset < count; offset += 65536)
+                globalThis.crypto.getRandomValues(new Uint8Array(buffer, start + offset, Math.min(65536, count - offset)));
+        } catch {
+            return unsuccessful;
+        }
+        return 0;
+    }
+
     return {
         getModuleHandleW,
         ...createActivationContexts(memory, findManifest, value => { systemError = value; }),
@@ -84,6 +101,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         enableWindow: (handle, enable) => windows.enableWindow(handle, enable),
         getWindowLongW: getWindowLong,
         getWindowLongPtrW: getWindowLong,
+        bCryptGenRandom,
         getLastSystemError: () => systemError,
         setLastSystemError: value => { systemError = value | 0; },
         getLastPInvokeError: () => pinvokeError,
