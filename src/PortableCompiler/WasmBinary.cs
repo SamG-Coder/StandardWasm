@@ -22,7 +22,7 @@ namespace PortableCompiler
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
             byte[] literals, int literalSize, int[] globals, int remainderFixup, int exceptionTags, long hostFeatures, int reflectionHeapFixup,
             FunctionPointerPlan pointers, int rootCount, int rootWalker, bool rootProbe, NativeImportTable natives,
-            PrimitiveArrayWasm primitiveArrays)
+            PrimitiveArrayWasm primitiveArrays, int[] delegateTypeFixups)
         {
             // Imported functions precede defined functions in the Wasm index
             // space. Emitted bodies already include this offset in their calls.
@@ -111,7 +111,12 @@ namespace PortableCompiler
             typeEntries += hostImports;
             if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
             if (hasDescriptors) typeEntries++;
-            int prefix = UnsignedSize(typeEntries) + 70 + ManagedValueLocationWasm.TypeBytes(rootCount >= 0) +
+            // Stage 204 (decision 0091): one thunk function type per delegate entry, after every fixed
+            // type. Counted before the prefix so the entry count's LEB width includes them (Codex
+            // review of f6e0ba1: 110 delegate types crossed a width boundary).
+            int delegateTypes = DelegateShapes.EntryCount(objects);
+            typeEntries += delegateTypes;
+            int prefix = UnsignedSize(typeEntries) + 72 + ManagedValueLocationWasm.TypeBytes(rootCount >= 0) +
                 ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + 7 + PrimitiveArrayWasm.BaseTypeOverhead +
                 primitiveArrays.TypeBytes +
                 (recursive ? 1 + UnsignedSize(objects[0]) : 0);
@@ -121,6 +126,7 @@ namespace PortableCompiler
             prefix += WasmImports.TypeBytes(hostFeatures, natives);
             if (argumentArray != 0) prefix += EntryArgumentsWasm.TypeBytes(argumentArray);
             if (hasDescriptors) prefix += RuntimeTypeWasm.DescriptorBytes;
+            prefix += GeneralDelegates.ThunkTypeBytes(objects);
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;
             int functionSize = UnsignedSize(totalFunctions) + thunks[0];
@@ -137,6 +143,15 @@ namespace PortableCompiler
             int builderType = importType + hostImports;
             // Append the optional descriptor type to keep the existing ABI indices stable.
             int descriptorHeap = builderType + (argumentArray != 0 ? EntryArgumentsWasm.FunctionCount : 0);
+            int delegateTypeBase = descriptorHeap + (hasDescriptors ? 1 : 0) + primitiveArrays.IdentityTypeCount();
+            for (int ordinal = 0; ordinal < delegateTypes; ordinal++)
+                WasmIndexFixups.Resolve(bodies, delegateTypeFixups[ordinal], delegateTypeBase + ordinal);
+            for (int i = 0; i < thunks[0]; i++)
+            {
+                int key = GeneralDelegates.ThunkKey(thunks, i);
+                // The fixed thunk types are one-byte indices; appended ones may need more.
+                if (key != 0) functionSize += UnsignedSize(delegateTypeBase + (key < 0 ? -key : key) - DelegateShapes.KeyBase) - 1;
+            }
             if (argumentArray != 0)
             {
                 for (int i = 0; i < EntryArgumentsWasm.FunctionCount; i++)
@@ -202,8 +217,9 @@ namespace PortableCompiler
             for (int i = 0; i < thunks[0]; i++)
             {
                 int function = thunks[i + 1];
-                int receiver = IsStaticThunk(arities[function]) ? 0 : types[offsets[function] + 1];
-                int thunkSize = ThunkSize(receiver, hostImports + function, arities[function]);
+                bool open = ThunkOpen(thunks, i, arities[function]);
+                int receiver = open ? 0 : types[offsets[function] + 1];
+                int thunkSize = ThunkSize(receiver, hostImports + function, arities[function], open);
                 if (1 + thunkSize > output.Length - codeSize ||
                     UnsignedSize(hostImports + functions + i) > output.Length - elementSize)
                     return -3;
@@ -293,14 +309,20 @@ namespace PortableCompiler
             // is set once at construction and retains the original singleton.
             output[cursor++] = 0x4e;
             output[cursor++] = 2;
+            // Stage 221 (decision 0092): every multicast-capable delegate shares this entry, so the
+            // method is any function reference (cast to the delegate's thunk type at the call) and
+            // the entry records its nominal delegate type: 0 for EventHandler, a general delegate
+            // key's ordinal + 1 otherwise.
             output[cursor++] = 0x5f;
-            output[cursor++] = 4;
+            output[cursor++] = 5;
             output[cursor++] = 0x6d;
             output[cursor++] = 0;
-            output[cursor++] = 0x63;
-            output[cursor++] = EventThunkType;
+            output[cursor++] = 0x64; // (ref func)
+            output[cursor++] = 0x70;
             output[cursor++] = 0;
             output[cursor++] = 0x7f; // method identity, independent of the receiver
+            output[cursor++] = 0;
+            output[cursor++] = 0x7f; // nominal delegate type
             output[cursor++] = 0;
             output[cursor++] = 0x63;
             output[cursor++] = EventHandlerHeap;
@@ -416,6 +438,7 @@ namespace PortableCompiler
             if (hasDescriptors) cursor = RuntimeTypeWasm.WriteDescriptor(output, cursor);
             // Append exact array heaps after every type whose index is fixed earlier.
             cursor = primitiveArrays.WriteIdentities(output, cursor, bodies, descriptorHeap + (hasDescriptors ? 1 : 0));
+            cursor = GeneralDelegates.WriteThunkTypes(output, cursor, objects);
             if (WasmImports.Any(hostFeatures, natives))
             {
                 cursor = Section(output, cursor, 2, importSize);
@@ -430,6 +453,12 @@ namespace PortableCompiler
             {
                 int target = thunks[i + 1];
                 int arity = arities[target], signature = offsets[target];
+                int key = GeneralDelegates.ThunkKey(thunks, i);
+                if (key != 0)
+                {
+                    cursor = Unsigned(output, cursor, delegateTypeBase + (key < 0 ? -key : key) - DelegateShapes.KeyBase);
+                    continue;
+                }
                 bool span = CharacterSpanCallbackMetadata.MatchesTarget(types, signature, arity, arity == 3);
                 output[cursor++] = span ? (byte)CharacterSpanThunkType : arity < 2 ? (byte)ScalarThunkType : (byte)EventThunkType;
             }
@@ -552,9 +581,9 @@ namespace PortableCompiler
             for (int i = 0; i < thunks[0]; i++)
             {
                 int function = thunks[i + 1], arity = arities[function];
-                bool open = IsStaticThunk(arity);
+                bool open = ThunkOpen(thunks, i, arity);
                 int receiver = open ? 0 : types[offsets[function] + 1];
-                cursor = Unsigned(output, cursor, ThunkSize(receiver, hostImports + function, arity));
+                cursor = Unsigned(output, cursor, ThunkSize(receiver, hostImports + function, arity, open));
                 output[cursor++] = 0; // local declarations
                 if (!open)
                 {
@@ -621,7 +650,7 @@ namespace PortableCompiler
         internal static int HeapType(int type) =>
             IsValueLocation(type) ? ValueLocationHeap : (type == Delegate || type == CharacterSpanCallback) ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
                 type == EventArgsReference ? EventArgsHeap :
-                type == EventHandlerReference || type == DelegateReference ? EventHandlerHeap :
+                type == EventHandlerReference || type == DelegateReference || DelegateShapes.IsKey(type) ? EventHandlerHeap :
                 type == Singles ? SingleArrayHeap : type == Doubles ? DoubleArrayHeap :
                 type == NativeVector ? NativeArrayHeap : IsManagedLocation(type) ? ObjectLocationHeap : IsSpan(type) ? ReadOnlySpanHeap :
                 type < FirstClass ? type - Bytes : FirstClassHeap + type - FirstClass;
@@ -636,8 +665,16 @@ namespace PortableCompiler
         // two or three argument convention as EventHandler.
         internal static bool IsStaticThunk(int arity) => arity == 0 || arity == 2;
 
-        private static int ThunkSize(int receiver, int function, int arity) =>
-            IsStaticThunk(arity) ? 3 + 2 * arity + UnsignedSize(function) :
+        // A general delegate thunk records static-ness explicitly (Stage 204); the fixed shapes keep
+        // the arity rule above.
+        private static bool ThunkOpen(int[] thunks, int thunk, int arity)
+        {
+            int key = GeneralDelegates.ThunkKey(thunks, thunk);
+            return key != 0 ? key < 0 : IsStaticThunk(arity);
+        }
+
+        private static int ThunkSize(int receiver, int function, int arity, bool open) =>
+            open ? 3 + 2 * arity + UnsignedSize(function) :
             7 + HeapTypeSize(HeapType(receiver)) + 2 * (arity - 1) + UnsignedSize(function);
 
         private static int Reserve(int remaining, int size)

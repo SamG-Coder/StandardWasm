@@ -143,6 +143,12 @@ namespace PortableCompiler
                 arguments[1] == GenericScalar.Key(0x18) &&
                 SpanMetadata.IsPlatformType(image, layout, heaps, head[0], "System.Buffers", "SpanAction`2"))
                 return CharacterSpanCallback;
+            if (head[1] == 0x12)
+            {
+                // Stage 204 (decision 0091): System.Func`n / Action`n instantiations get a delegate key.
+                int general = GeneralDelegates.Storage(image, layout, heaps, head[0], arguments, count, objects);
+                if (general != 0) return general;
+            }
             return BundleLayouts.RegisterInstantiation(bundle, image, layout, heaps, owner, head[0], objects, arguments, head[1] == 0x11);
         }
 

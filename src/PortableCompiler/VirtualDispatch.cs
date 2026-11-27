@@ -62,6 +62,7 @@ namespace PortableCompiler
             if (type == RuntimeTypeMetadata.Type) typeDescriptors = true;
             if (type == EventArgsReference || type == EventHandlerReference ||
                 type == DelegateReference || type == SignatureTypes.Delegate || type == SignatureTypes.CharacterSpanCallback ||
+                DelegateShapes.IsKey(type) ||
                 type == RuntimeTypeMetadata.Module || type == RuntimeTypeMetadata.Assembly)
                 unsupportedRootReceiver = true;
         }
