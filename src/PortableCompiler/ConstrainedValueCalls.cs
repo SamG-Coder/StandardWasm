@@ -34,9 +34,11 @@ namespace PortableCompiler
                 context, methodArguments, objects, declaration, allowInterface: true);
             if (status < 0) return status;
             int declarationOwner = declaration[0], declarationRow = declaration[1], declared = declaration[2];
-            if (int32Receiver && declared == ObjectReference)
+            if (int32Receiver)
             {
-                int primitive = PrimitiveReceivers.ResolveConstrainedInt32Equals(bundle, objects, declarationOwner, declarationRow, target);
+                int primitive = declared == ObjectReference
+                    ? PrimitiveReceivers.ResolveConstrainedInt32Equals(bundle, objects, declarationOwner, declarationRow, target)
+                    : PrimitiveReceivers.ResolveConstrainedInt32Compare(bundle, objects, declared, declarationOwner, declarationRow, target);
                 if (primitive != -2) return primitive;
             }
             if (!valueReceiver) return -2;
