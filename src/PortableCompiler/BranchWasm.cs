@@ -165,7 +165,7 @@ namespace PortableCompiler
                 {
                     if (frameCells[i] == 0) continue;
                     code[used++] = 1;
-                    used = WasmBinary.ValueType(code, used, frameCells[i]);
+                    used = WasmBinary.ValueType(code, used, NativeFrameWasm.IsCell(frameCells[i]) ? Native : frameCells[i]);
                 }
             }
             if (tracksRoots)
@@ -181,8 +181,13 @@ namespace PortableCompiler
                 for (int i = 0; i < frameCells.Length; i++)
                 {
                     if (frameCells[i] == 0) continue;
-                    // Every load, store and managed address of this slot uses the same cell.
+                    // Every load, store and address of this slot uses the same backing storage.
                     int vector = frameCells[i];
+                    if (NativeFrameWasm.IsCell(vector))
+                    {
+                        cellLocals[i] = cell++;
+                        continue;
+                    }
                     if (i < arguments) used = Local(code, used, 0x20, i);
                     else if (vector == Bytes) used = Const(code, used, 0);
                     else
@@ -232,6 +237,8 @@ namespace PortableCompiler
                 code[used++] = 0x1f; code[used++] = 0x40; code[used++] = 1;                  // try_table
                 code[used++] = 0x03; code[used++] = 0;                                         // catch_all_ref 0
             }
+            if (stackPointer >= 0 && cellCount != 0)
+                used = NativeFrameWasm.InitializeSlots(code, used, stackPointer, stackBase, stackLimit, pcLocal, arguments, frameCells, cellLocals, nativePlans);
             if (prologue >= 0 && tracksRoots)
                 used = RootStackWasm.CallInitializerWithRoots(code, used, rootCount, rootFrame, frameRoots,
                     arguments, cellLocals, hostImports + prologue);
@@ -297,7 +304,11 @@ namespace PortableCompiler
                     if (kind == Load)
                     {
                         pushed = StackType(frame[operand]);
-                        if (IsValueLocation(frameCells[operand]))
+                        if (frameCells[operand] == Native)
+                            used = NativeFrameWasm.LoadWord(code, used, cellLocals[operand]);
+                        else if (frameCells[operand] < 0)
+                            used = NativeAggregates.Load(code, used, nativePlans, -frameCells[operand], cellLocals[operand], 0);
+                        else if (IsValueLocation(frameCells[operand]))
                             used = ManagedValueLocationWasm.ReadLocation(code, used, cellLocals[operand], pushed);
                         else if (frameCells[operand] != 0)
                             used = ManagedLocationWasm.LoadCell(code, used, cellLocals[operand], frameCells[operand], Representation(objects, pushed));
@@ -547,7 +558,12 @@ namespace PortableCompiler
                     int source = states[state + top];
                     int spilled = Spill(spills, maximum, spillFlags, source, top);
                     int type = frame[operand], backing = inlineLocations[operand];
-                    if (IsValueLocation(frameCells[operand]))
+                    if (frameCells[operand] == Native)
+                        used = NativeFrameWasm.StoreWord(code, used, cellLocals[operand], spilled, source);
+                    else if (frameCells[operand] < 0)
+                        used = NativeFrameWasm.StoreAggregate(code, used, nativePlans, objects, -frameCells[operand],
+                            cellLocals[operand], spilled, source, type, spills, maximum, spillFlags, top);
+                    else if (IsValueLocation(frameCells[operand]))
                     {
                         used = Local(code, used, 0x20, cellLocals[operand]);
                         used = LoadOperand(code, used, spilled, source, type);
@@ -960,7 +976,7 @@ namespace PortableCompiler
                 {
                     int type = records[slot + 3];
                     int target = Spill(spills, maximum, spillFlags, type, depth);
-                    if (IsValueLocation(type))
+                    if (type == Native || IsValueLocation(type))
                     {
                         used = Local(code, used, 0x20, cellLocals[operand]);
                         used = Local(code, used, 0x21, target);
@@ -1419,7 +1435,6 @@ namespace PortableCompiler
                 objectBase, filters, tracksRoots ? rootCount : -1, rootFrame);
             code[used++] = 0x0b;
             code[used++] = 0;
-            if (guard >= 0 && !tracksRoots) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers, -1);
             if (tracksRoots || stackPointer >= 0)
             {
                 code[used++] = 0x0b; // end try_table
@@ -1431,7 +1446,8 @@ namespace PortableCompiler
                 code[used++] = 0x0a; // throw_ref
             }
             // Unwind the initializer frame before the guard turns the exception into a trap.
-            if (guard >= 0 && tracksRoots) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers, rootCount);
+            if (guard >= 0) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers,
+                tracksRoots ? rootCount : -1);
             code[used++] = 0x0b;
             return used;
         }

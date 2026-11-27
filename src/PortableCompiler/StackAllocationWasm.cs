@@ -10,6 +10,18 @@ namespace PortableCompiler
     {
         internal const int Pages = 16, Capacity = 160;
 
+        internal static int Register(int[] globals, int[] shadowStack)
+        {
+            if (shadowStack[0] != 0) return 0;
+            for (int slot = 0; slot < shadowStack.Length; slot++)
+            {
+                int global = StaticFields.Register(globals, 0, int.MinValue + 1 + slot, SignatureTypes.I32);
+                if (global < 0) return global;
+                shadowStack[slot] = global + 1;
+            }
+            return 0;
+        }
+
         // Function prologue: save $sp. The region is reserved lazily by the first nonzero
         // allocation, so a frame that never needs stack storage never grows memory: a host
         // memory that cannot grow only fails when the CLR would really use the stack.

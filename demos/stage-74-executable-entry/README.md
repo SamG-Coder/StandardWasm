@@ -61,6 +61,11 @@ The oracle selects the embedded manifest by numeric resource ID. It records
 the native structure offsets, the active context before and after
 deactivation, and the errors for a missing manifest and invalid flags.
 
+The activation-context fixture supplies the addresses of a local native word
+and a local blittable handle. Windows, Node, and Edge agree on the activation
+lifecycle. Separate cases verify that writes through a pointer update the
+managed local, and writes to the local are visible through the same pointer.
+
 The managed probe also checks pinned addresses of blittable static structs.
 A direct managed store and a pointer store use the same stable linear-memory
 storage, including after a static initializer and across separate exports.

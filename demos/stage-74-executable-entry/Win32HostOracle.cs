@@ -67,7 +67,9 @@ Console.WriteLine(JsonSerializer.Serialize(new { executable, results, errors = n
         .Concat(Enumerable.Range(0, 3).Select(MonitorProbe.ReleaseDepth)).ToArray(), compiledStaticPin = new[] { PinnedStaticProbe.Sum(), PinnedStaticProbe.Alias(2),
         PinnedStaticProbe.Sum(), PinnedStaticProbe.Alias(9), PinnedStaticProbe.Sum() }, framework = forms.Assembly.Location, frameworkLookup = new[] { moduleHandle == 0 ? 0 : 1, moduleError },
     activationContext = ActivationContextOracle.Probe(moduleHandle), compiledActivation = ActivationContextOracle.ProbeFixture(), compiledLifecycle = ActivationContextProbe.Lifecycle(), compiledPointers = new[] { 0, -1, 123 }
-        .SelectMany(value => new[] { ActivationContextProbe.PointerRoundTrip(value, 0), ActivationContextProbe.PointerRoundTrip(value, 1) }) }));
+        .SelectMany(value => new[] { ActivationContextProbe.PointerRoundTrip(value, 0), ActivationContextProbe.PointerRoundTrip(value, 1) }),
+    nativeLocal = new[] { 0, -1, 123 }.Select(ActivationContextProbe.NativeLocalAlias),
+    nativeAggregate = new[] { 0, -1, 123 }.Select(ActivationContextProbe.NativeAggregateAlias) }));
 
 [DllImport("KERNEL32.dll", EntryPoint = "GetModuleHandleW", ExactSpelling = true,
     CharSet = CharSet.Unicode, SetLastError = true)]

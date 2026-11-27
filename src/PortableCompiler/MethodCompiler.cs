@@ -439,6 +439,10 @@ namespace PortableCompiler
                     virtualUsed[0] = 0;
                     var inlineLocations = new int[parameters + locals];
                     var frameCells = new int[parameters + locals];
+                    status = NativeFrameWasm.BindAddresses(bundle, objects, nativePlans, records, catchRegion,
+                        frame, parameters, frameCells, location);
+                    if (status < 0) return status;
+                    if (frameRoots != null) NativeFrameWasm.ExcludeNativeRoots(frameRoots, frameCells);
                     functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
                         parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                         bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
@@ -566,11 +570,18 @@ namespace PortableCompiler
                         if (capacity > int.MaxValue - 24) return -3;
                         capacity += 24;
                     }
+                    bool allocates = false, pins = false;
                     for (int slot = 0; slot < frameCells.Length; slot++)
                     {
                         if (frameCells[slot] == 0) continue;
-                        if (capacity > int.MaxValue - 32) return -3;
-                        capacity += 32;
+                        int cellBytes = NativeFrameWasm.IsCell(frameCells[slot]) ? NativeFrameWasm.Capacity : 32;
+                        if (capacity > int.MaxValue - cellBytes) return -3;
+                        capacity += cellBytes;
+                        if (!NativeFrameWasm.IsCell(frameCells[slot])) continue;
+                        status = StackAllocationWasm.Register(globals, shadowStack);
+                        if (status < 0) return status;
+                        allocates = true;
+                        linearMemory = true;
                     }
                     if (catchRegion.Length != 0)
                     {
@@ -595,7 +606,6 @@ namespace PortableCompiler
                         if (capacity > int.MaxValue - 320) return -3;
                         capacity += 320;
                     }
-                    bool allocates = false, pins = false;
                     frameShape[21] = 0;
                     frameShape[22] = nativeStatics.Pages();
                     int classBytes = objects[0] * 12;
@@ -623,6 +633,14 @@ namespace PortableCompiler
                         }
                         int pc = slot / BranchIl.Width;
                         int operation = records[slot + 1];
+                        if ((kind == BranchIl.Load || kind == BranchIl.Store) && frameCells[operation] < 0 && depths[pc] != 0)
+                        {
+                            // Native layout nesting is bounded to 16 levels. Each stored leaf
+                            // needs at most one load or store sequence per level.
+                            long bytes = 128L + 768L * NativeAggregates.Size(nativePlans.Plans, -frameCells[operation]);
+                            if (bytes > int.MaxValue - capacity) return -3;
+                            capacity += (int)bytes;
+                        }
                         if ((kind == BranchIl.LoadIndirect || kind == BranchIl.StoreIndirect) && depths[pc] != 0)
                         {
                             int address = pc * maximum + depths[pc] - (kind == BranchIl.LoadIndirect ? 2 : 3);
@@ -654,13 +672,8 @@ namespace PortableCompiler
                             }
                             linearMemory = true;
                             allocates = true;
-                            if (shadowStack[0] == 0)
-                                for (int g = 0; g < 3; g++)
-                                {
-                                    int global = StaticFields.Register(globals, 0, int.MinValue + 1 + g, I32);
-                                    if (global < 0) return global;
-                                    shadowStack[g] = global + 1;
-                                }
+                            status = StackAllocationWasm.Register(globals, shadowStack);
+                            if (status < 0) return status;
                             if (kind == BranchIl.PinString)
                             {
                                 pins = true;

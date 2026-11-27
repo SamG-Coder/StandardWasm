@@ -60,35 +60,60 @@ public static unsafe class ActivationContextProbe
         nint created = Create(0);
         if (created == -1) return 0;
         HANDLE handle = new HANDLE((void*)created);
-        HANDLE* current = stackalloc HANDLE[1];
-        ulong* cookieStorage = stackalloc ulong[1];
-        nuint* cookie = (nuint*)cookieStorage;
-        if (GetCurrentActCtx(current).Value == 0)
+        HANDLE current;
+        nuint cookie = 0;
+        if (GetCurrentActCtx(&current).Value == 0)
         {
             ReleaseActCtx(handle);
             return 1;
         }
-        void* before = current->Value;
+        void* before = ReadHandle(current);
         if (before != null) ReleaseActCtx(new HANDLE(before));
-        if (ActivateActCtx(handle, cookie).Value == 0)
+        if (ActivateActCtx(handle, &cookie).Value == 0)
         {
             ReleaseActCtx(handle);
             return 2;
         }
         int result = 4;
-        if (GetCurrentActCtx(current).Value != 0)
+        if (GetCurrentActCtx(&current).Value != 0)
         {
-            if (current->Value == handle.Value) result |= 8;
-            if (current->Value != null) ReleaseActCtx(new HANDLE(current->Value));
+            void* active = ReadHandle(current);
+            if (active == handle.Value) result |= 8;
+            if (active != null) ReleaseActCtx(new HANDLE(active));
         }
-        if (DeactivateActCtx(0, *cookie).Value != 0) result |= 16;
-        if (GetCurrentActCtx(current).Value != 0)
+        if (DeactivateActCtx(0, cookie).Value != 0) result |= 16;
+        if (GetCurrentActCtx(&current).Value != 0)
         {
-            if (current->Value == before) result |= 32;
-            if (current->Value != null) ReleaseActCtx(new HANDLE(current->Value));
+            void* restored = ReadHandle(current);
+            if (restored == before) result |= 32;
+            if (restored != null) ReleaseActCtx(new HANDLE(restored));
         }
         ReleaseActCtx(handle);
         return result;
+    }
+
+    private static void* ReadHandle(HANDLE handle) => handle.Value;
+
+    public static int NativeAggregateAlias(int seed)
+    {
+        HANDLE value;
+        HANDLE* alias = &value;
+        *alias = MakeHandle(17);
+        int byLocal = (int)(nint)ReadHandle(value);
+        value = MakeHandle(seed);
+        return byLocal + (int)(nint)ReadHandle(*alias);
+    }
+
+    private static HANDLE MakeHandle(int value) => new HANDLE((void*)(nint)value);
+
+    public static int NativeLocalAlias(int seed)
+    {
+        nuint word = unchecked((nuint)(uint)seed);
+        nuint* alias = &word;
+        *alias = 17;
+        int byLocal = unchecked((int)word);
+        word = unchecked((nuint)(uint)seed);
+        return byLocal + unchecked((int)*alias);
     }
 
     public static nint Create(int scenario)

@@ -179,7 +179,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
         return WebAssembly.compile(code);
     }
 
-    const module = await compile(["Exchange", "Read", "LookupModule", "Create", "Lifecycle", "PointerRoundTrip",
+    const module = await compile(["Exchange", "Read", "LookupModule", "Create", "Lifecycle", "PointerRoundTrip", "NativeLocalAlias", "NativeAggregateAlias",
         "Alias", "Sum", "LockRoundTrip", "ReleaseDepth", "MatchPair", "ObjectSpanAliases", "ObjectSpanBounds",
         "DpiValid", "DpiAwareness", "DpiApply", "DpiCurrent", "DpiIsAware", "BooleanAliases", "BooleanWithMonitor",
         "GenericBooleanLocations", "GenericStringLocations"]);
@@ -196,6 +196,8 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
         return [handle === -1 ? -1 : handle > 0 ? 1 : 0, exports.Read()];
     });
     const pointers = [0, -1, 123].flatMap(value => [exports.PointerRoundTrip(value, 0), exports.PointerRoundTrip(value, 1)]);
+    const nativeLocal = [0, -1, 123].map(value => exports.NativeLocalAlias(value));
+    const nativeAggregate = [0, -1, 123].map(value => exports.NativeAggregateAlias(value));
     const staticPin = [exports.Sum(), exports.Alias(2), exports.Sum(), exports.Alias(9), exports.Sum()];
     const monitor = [0, 1, 2, 3].map(exports.LockRoundTrip).concat([0, 1, 2].map(exports.ReleaseDepth));
     const filter = [0, 1, 2, 3].map(exports.MatchPair);
@@ -237,7 +239,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringTrim, byteSpan, byteLocations, whitespace, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringTrim, byteSpan, byteLocations, whitespace, dpi };
 }
 
 function readOracle(...args) {
@@ -255,7 +257,7 @@ const runtimeAssets = runtime ? ["System.Private.CoreLib.dll", "System.Runtime.d
 const runtimePaths = runtimeAssets.map((_, index) => "/test-runtime-" + index);
 const expectedCompiler = {
     legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle,
-    pointers: oracle.compiledPointers, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor,
+    pointers: oracle.compiledPointers, nativeLocal: oracle.nativeLocal, nativeAggregate: oracle.nativeAggregate, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor,
     filter: oracle.compiledFilter, objectSpans: oracle.compiledObjectSpans, booleanLocations: oracle.compiledBooleanLocations,
     genericLocations: oracle.compiledGenericLocations, finalWriter: oracle.compiledFinalWriter,
     genericValues: oracle.compiledGenericValues, constrainedReferences: oracle.compiledConstrainedReferences,
@@ -343,7 +345,8 @@ try {
         console.log("Two-type exception filters matched the CLR for both matches, a rejection, and normal completion.");
         console.log("Monitor reentrancy, lockTaken, and three typed failure paths matched the CLR.");
         console.log("Pinned static aliases matched the CLR across managed stores and separate export calls.");
-        console.log("The Wasm compiler matched CLR module lookups, the activation-context lifecycle, and Marshal error exchange in Node and Edge.");
+        console.log("Native word and blittable local aliases matched the CLR in Node and Edge.");
+    console.log("The Wasm compiler matched CLR module lookups, the activation-context lifecycle, and Marshal error exchange in Node and Edge.");
     }
     console.log("Node and Edge matched 6 CLR module lookups and both last-error slots. Memory growth and host isolation passed.");
     console.log("Node and Edge matched the WinForms manifest activation lifecycle and Windows error results.");

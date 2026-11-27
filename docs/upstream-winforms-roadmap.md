@@ -99,7 +99,9 @@ and name across the host lookup. The probe also retains the original managed
 exception across calls in `finally` and supported type-filtered catch handlers.
 Compilation of the unchanged sample in probe mode gets past
 `ThemingScope.CreateActivationContext` and `System.Windows.Forms.Application..cctor`.
-It stops at the native address of a local in `ThemingScope..ctor`.
+`ThemingScope..ctor` now compiles its activation-context out parameters through
+stable native frame slots. The same bundle reaches `ThreadContext.RunMessageLoopInner`
+and stops at the generic `PInvokeCore.GetWindowLong` call.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.
