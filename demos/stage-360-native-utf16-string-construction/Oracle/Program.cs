@@ -1,4 +1,5 @@
-using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
@@ -9,6 +10,10 @@ string core = Environment.GetEnvironmentVariable("STANDARDWASM_MONO_CORELIB") ??
     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages",
         "microsoft.netcore.app.runtime.mono.browser-wasm", Environment.Version.ToString(), "runtimes",
         "browser-wasm", "native", "System.Private.CoreLib.dll");
+using var pe = new PEReader(File.OpenRead(core));
+MetadataReader metadata = pe.GetMetadataReader();
+bool mono = metadata.TypeDefinitions.Select(metadata.GetTypeDefinition).Any(type =>
+    metadata.GetString(type.Namespace) == "Mono" && metadata.GetString(type.Name) == "MonoAssemblyName");
 Func<int>[] cases = [NativeStringProbe.Snapshot, NativeStringProbe.ZeroLength, NativeStringProbe.DirectConstructor,
     NativeStringProbe.OutsideWasmMemory];
 File.WriteAllText(args[0], JsonSerializer.Serialize(new
@@ -23,7 +28,7 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
         expected = index == 3 ? 0 : run(),
         memory = true,
         trap = index == 3,
-        rejection = index == 2 ? new { status = -2, location = core.StartsWith(runtime, StringComparison.OrdinalIgnoreCase)
-            ? new[] { 2, 15148, 444 } : new[] { 2, 30055, 47 } } : null
+        rejection = index == 2 ? new { status = -2, location = mono
+            ? new[] { 2, 30055, 47 } : new[] { 2, 15148, 444 } } : null
     })
 }));
