@@ -164,7 +164,7 @@ namespace PortableCompiler
             for (int i = 0; i < thunks[0]; i++)
             {
                 int function = thunks[i + 1];
-                int receiver = types[offsets[function] + 1];
+                int receiver = IsStaticThunk(arities[function]) ? 0 : types[offsets[function] + 1];
                 int thunkSize = ThunkSize(receiver, hostImports + function, arities[function]);
                 if (1 + thunkSize > output.Length - codeSize ||
                     UnsignedSize(hostImports + functions + i) > output.Length - elementSize)
@@ -372,7 +372,7 @@ namespace PortableCompiler
             for (int i = 0; i < functions; i++)
                 cursor = Unsigned(output, cursor, i + typeOffset);
             for (int i = 0; i < thunks[0]; i++)
-                output[cursor++] = arities[thunks[i + 1]] == 3 ? (byte)EventThunkType : (byte)ScalarThunkType;
+                output[cursor++] = arities[thunks[i + 1]] >= 2 ? (byte)EventThunkType : (byte)ScalarThunkType;
             if (hasRemainder) cursor = Unsigned(output, cursor, typeOffset + functions);
             if (argumentArray != 0)
                 for (int i = 0; i < EntryArgumentsWasm.FunctionCount; i++)
@@ -481,16 +481,21 @@ namespace PortableCompiler
             }
             for (int i = 0; i < thunks[0]; i++)
             {
-                int function = thunks[i + 1], receiver = types[offsets[function] + 1];
-                int arity = arities[function];
+                int function = thunks[i + 1], arity = arities[function];
+                bool open = IsStaticThunk(arity);
+                int receiver = open ? 0 : types[offsets[function] + 1];
                 cursor = Unsigned(output, cursor, ThunkSize(receiver, hostImports + function, arity));
                 output[cursor++] = 0; // local declarations
-                output[cursor++] = 0x20;
-                output[cursor++] = 0;
-                output[cursor++] = 0xfb;
-                output[cursor++] = 22; // ref.cast to the target's concrete receiver
-                cursor = Signed(output, cursor, HeapType(receiver));
-                for (int argument = 1; argument < arity; argument++)
+                if (!open)
+                {
+                    output[cursor++] = 0x20;
+                    output[cursor++] = 0;
+                    output[cursor++] = 0xfb;
+                    output[cursor++] = 22; // ref.cast to the target's concrete receiver
+                    cursor = Signed(output, cursor, HeapType(receiver));
+                }
+                // A static target ignores the thunk's leading target parameter.
+                for (int argument = 1; argument < (open ? arity + 1 : arity); argument++)
                 {
                     output[cursor++] = 0x20;
                     output[cursor++] = (byte)argument;
@@ -555,7 +560,13 @@ namespace PortableCompiler
         // bit reserves one additional bit compared with an unsigned index.
         internal static int HeapTypeSize(int index) => UnsignedSize(index * 2);
 
+        // Stage 164 (decision 0088): thunk targets are exactly the shapes MethodCompiler links:
+        // Func<int> takes (receiver) or, open static, (); EventHandler takes (receiver, sender, e)
+        // or, open static, (sender, e). So arity alone says whether the target is static.
+        internal static bool IsStaticThunk(int arity) => arity == 0 || arity == 2;
+
         private static int ThunkSize(int receiver, int function, int arity) =>
+            IsStaticThunk(arity) ? 3 + 2 * arity + UnsignedSize(function) :
             7 + HeapTypeSize(HeapType(receiver)) + 2 * (arity - 1) + UnsignedSize(function);
 
         private static int Reserve(int remaining, int size)

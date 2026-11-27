@@ -60,6 +60,19 @@ namespace PortableCompiler
 
         internal static byte FloatWidth(int left, int right) => left == F64 || right == F64 ? F64 : F32;
 
+        // Stage 164 (decision 0088): the storage of a GENERICINST delegate type, shared by method
+        // and local signatures (Read) and field storage (BundleLayouts.ReadFieldStorage), so one
+        // closed delegate type has one representation wherever it is declared. Func`1<int32> is
+        // the scalar Delegate closure; 0 means "not a recognized delegate", and the caller reads
+        // the type as an ordinary generic instance. next[0] receives the position after it.
+        internal static int GenericDelegateStorage(byte[] image, int[] heaps, int[] layout, int start, int end, int[] next)
+        {
+            int after = DelegateMetadata.ParseFunc(image, heaps, layout, start, end);
+            if (after < 0) return 0;
+            next[0] = after;
+            return Delegate;
+        }
+
         internal static bool IsArray(int type) =>
             type == Bytes || type == Ints || type == Chars || type == Longs || type == Singles || type == Doubles || type == NativeVector;
 
@@ -178,11 +191,12 @@ namespace PortableCompiler
                 }
                 else if (element == 0x15)
                 {
-                    int afterDelegate = DelegateMetadata.ParseFunc(image, heap, methods, cursor - 1, end);
-                    if (afterDelegate >= 0)
+                    var afterDelegate = new int[1];
+                    int delegateStorage = GenericDelegateStorage(image, heap, methods, cursor - 1, end, afterDelegate);
+                    if (delegateStorage != 0)
                     {
-                        cursor = afterDelegate;
-                        types[target] = Delegate;
+                        cursor = afterDelegate[0];
+                        types[target] = delegateStorage;
                     }
                     else
                     {

@@ -1374,20 +1374,25 @@ namespace PortableCompiler
                         records[slot + 1] = pointers.Slot(index);
                         continue;
                     }
-                    if (!hasReceiver ||
-                        (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) != 0)
-                        return -2;
+                    // Stage 164 (decision 0088): an open static target (ldnull; ldftn static)
+                    // has no receiver. A static method closed over its first argument (an
+                    // extension-method delegate) keeps the diagnostic.
+                    bool staticTarget = (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) != 0;
+                    if (!staticTarget && !hasReceiver) return -2;
                     int next = records[slot + 2] * BranchIl.Width;
                     if (next >= records.Length || records[next] != BranchIl.MemberCall || records[next + 3] != 0x73)
                         return -2;
                     bool eventHandler = EventMetadata.Member(image, heaps, layout, records[next + 1]) == EventMetadata.ConstructHandler;
+                    // Instance targets take the receiver as their first parameter. The thunk
+                    // writer relies on these exact arities (WasmBinary.IsStaticThunk).
                     if (eventHandler)
                     {
-                        if (arities[index] != 3 || signatures[signature] != Void ||
-                            signatures[signature + 2] != ObjectReference || signatures[signature + 3] != EventArgsReference)
+                        int sender = signature + (staticTarget ? 1 : 2);
+                        if (arities[index] != (staticTarget ? 2 : 3) || signatures[signature] != Void ||
+                            signatures[sender] != ObjectReference || signatures[sender + 1] != EventArgsReference)
                             return -2;
                     }
-                    else if (arities[index] != 1 || signatures[signature] != I32)
+                    else if (arities[index] != (staticTarget ? 0 : 1) || signatures[signature] != I32)
                         return -2;
                     int thunk = 0;
                     while (thunk < thunks[0] && thunks[thunk + 1] != index) thunk++;
@@ -1397,7 +1402,8 @@ namespace PortableCompiler
                         thunks[0] = thunk + 1;
                     }
                     records[slot + 1] = thunk;
-                    records[slot + 3] = signatures[signature + 1];
+                    // The receiver the delegate binds: null for an open static target.
+                    records[slot + 3] = staticTarget ? NullValue : signatures[signature + 1];
                     continue;
                 }
                 if (kind == BranchIl.NewObject)
