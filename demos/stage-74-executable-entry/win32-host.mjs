@@ -3,7 +3,7 @@ import { createActivationContexts } from "./activation-context.mjs";
 import { createDpiAwareness, dpiImportNames } from "./dpi-awareness.mjs";
 import { createDisplayContexts, displayContextImportNames } from "./display-context.mjs";
 import { createFullPathHost } from "./full-path-host.mjs";
-import { createLongPathHost } from "./long-path-host.mjs";
+import { createFilePathHost } from "./long-path-host.mjs";
 import { createAdjustWindowRectExForDpi } from "./window-rect.mjs";
 import { createThreadMessageQueue, createWindowMessageRegistration } from "./window-messages.mjs";
 import { createThreadHandleHost } from "./thread-handle-host.mjs";
@@ -16,7 +16,7 @@ export const win32MemoryImports = new Set([
     "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom",
     "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "getLongPathNameW", "redrawWindow", "invalidateRect", "registerWindowMessageW",
     "adjustWindowRectExForDpi", "getWindowThreadProcessId", "duplicateHandle", "getExitCodeThread", "getUserObjectInformationW",
-    "peekMessageW", "getWindowRect", "getClientRect"
+    "peekMessageW", "getWindowRect", "getClientRect", "deleteFileW"
 ]);
 export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, ...displayContextImportNames,
@@ -199,7 +199,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         loadLibraryExW,
         getProcAddress,
         getFullPathNameW: createFullPathHost(memory, win32FileSystem, errors),
-        getLongPathNameW: createLongPathHost(memory, win32FileSystem, errors),
+        ...createFilePathHost(memory, win32FileSystem, errors),
         // Only this registry's explicitly bound WNDPROC tokens are callable.
         callWindowProcW(token, hwnd, message, wparam, lparam) {
             return dynamicLibraries.invoke(token, windowProcedureSignature, hwnd, message, wparam, lparam);

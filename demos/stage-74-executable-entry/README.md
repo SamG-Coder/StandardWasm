@@ -235,6 +235,11 @@ entries through platform.win32FileSystem. The mount supports optional DOS aliase
 in-place UTF-16 expansion and short-buffer retries. See the
 [Stage 254 provider contract](../stage-254-virtual-long-paths/README.md).
 
+`DeleteFileW` uses the same launch-local file entries. Deleting a file removes
+its long name and any DOS alias from subsequent lookup. An embedder can mark a
+file entry `readOnly: true`. See the
+[Stage 325 verification](../stage-325-virtual-file-deletion/README.md).
+
 ### Dynamic export lookup
 
 The host registry starts empty and registers browser callbacks under explicit

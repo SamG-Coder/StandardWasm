@@ -11,7 +11,7 @@ function canonicalDirectory(path) {
     return path.slice(3).split("\\").every(part => !/[. ]$/u.test(part) && !deviceComponent.test(part));
 }
 
-function resolvePath(input, cwd, capacity) {
+export function resolveFullPath(input, cwd, capacity = 5) {
     if (/^ *$/u.test(input)) return { error: invalidName };
     const path = input.replaceAll("/", "\\");
     if (path === ".") {
@@ -99,7 +99,7 @@ export function createFullPathHost(memory, filesystem, errors) {
         if (overlaps(address, input.bytes, target, outputBytes) ||
             partSlot && (overlaps(address, input.bytes, partSlot, 4) || overlaps(target, outputBytes, partSlot, 4)))
             return fail(notSupported);
-        const path = resolvePath(input.path, cwd, capacity);
+        const path = resolveFullPath(input.path, cwd, capacity);
         if (partSlot) view.setUint32(partSlot, 0, true);
         if (path.error) return fail(path.error);
         if (capacity === 0) return path.required;

@@ -1,6 +1,7 @@
 import { deviceComponent, maximumUnits, readPath } from "./win32-path-input.mjs";
+import { resolveFullPath } from "./full-path-host.mjs";
 
-const fileNotFound = 2, pathNotFound = 3, notSupported = 50, filenameTooLong = 206;
+const fileNotFound = 2, pathNotFound = 3, accessDenied = 5, notSupported = 50, filenameTooLong = 206;
 const notDirectory = 267, noAccess = 998;
 const invalidComponent = /[\\/:*?"<>|\u0000-\u001f]/u;
 const dosName = /^[A-Z0-9!#$%&'()@^_`{}~\-]{1,8}(?:\.[A-Z0-9!#$%&'()@^_`{}~\-]{1,3})?$/i;
@@ -56,7 +57,8 @@ function indexMount(filesystem, mount) {
         const name = names.at(-1), key = fold(name), alias = entry.dosName && fold(entry.dosName);
         if (parent.children.has(key) || (alias && parent.children.has(alias)))
             throw new TypeError("StandardWasm: conflicting virtual long-path names");
-        const node = { name, children: entry.kind === "directory" ? new Map() : undefined };
+        const node = { name, alias, readOnly: entry.readOnly === true,
+            children: entry.kind === "directory" ? new Map() : undefined };
         parent.children.set(key, node);
         if (alias) parent.children.set(alias, node);
     }
@@ -80,6 +82,7 @@ function resolvePath(path, mount) {
     const segments = rest.split(/([\\/]+)/u);
     let index = absolute ? 2 : 0;
     let node = absolute ? mount.tree : mount.directory;
+    let parent;
     if (absolute) {
         for (const name of mount.root.names) {
             const inputName = segments[index];
@@ -94,21 +97,25 @@ function resolvePath(path, mount) {
         if ((name !== "." && !validName(name)) || (extended && name === ".")) return { error: notSupported };
         if (!node.children) return { error: pathNotFound };
         if (name === ".") continue;
+        parent = node;
         node = node.children.get(fold(name));
         if (!node) return { error: segments[index + 2] ? pathNotFound : fileNotFound };
         if (dosName.test(name)) segments[index] = node.name;
     }
     if (/[\\/]$/u.test(rest) && !node.children) return { error: notDirectory };
     const text = extended + drive + segments.join("");
-    return text.length > maximumUnits ? { error: filenameTooLong } : { text };
+    return text.length > maximumUnits ? { error: filenameTooLong } : { text, node, parent };
 }
 
-export function createLongPathHost(memory, filesystem, errors) {
+export function createFilePathHost(memory, filesystem, errors) {
     const fail = error => { errors.system = error; return 0; };
-    if (filesystem?.longPathMount === undefined) return () => fail(notSupported);
-    const mount = indexMount(filesystem, filesystem.longPathMount);
+    const configured = filesystem?.longPathMount;
+    // The readiness of this tree only depends on the guest's mount inventory.
+    // A deletion cannot access the browser origin or the machine's filesystem.
+    const mount = filesystem && indexMount(filesystem, configured ?? { root: filesystem.currentDirectory, entries: [] });
 
-    return function getLongPathNameW(source, destination, bufferCapacity) {
+    function getLongPathNameW(source, destination, bufferCapacity) {
+        if (!configured) return fail(notSupported);
         const view = new DataView(memory.buffer);
         const address = source >>> 0, target = destination >>> 0, capacity = bufferCapacity >>> 0;
         const outputBytes = capacity * 2;
@@ -126,5 +133,26 @@ export function createLongPathHost(memory, filesystem, errors) {
             view.setUint16(target + 2 * index, path.text.charCodeAt(index), true);
         view.setUint16(target + 2 * path.text.length, 0, true);
         return path.text.length;
-    };
+    }
+
+    function deleteFileW(source) {
+        if (!mount) return fail(notSupported);
+        const input = readPath(new DataView(memory.buffer), source >>> 0);
+        if (input.error) return fail(input.error);
+        if (/^ *$/u.test(input.path)) return fail(pathNotFound);
+        const absolute = input.path.startsWith("\\\\?\\") ? { result: input.path } :
+            resolveFullPath(input.path, filesystem.currentDirectory);
+        if (absolute.error) return fail(absolute.error);
+        const path = resolvePath(absolute.result, mount);
+        if (path.error) return fail(path.error);
+        const { node, parent } = path;
+        if (node.children || node.readOnly) return fail(accessDenied);
+        // Both keys refer to the same file. A single deletion removes its
+        // long and DOS aliases for every subsequent operation in this launch.
+        parent.children.delete(fold(node.name));
+        if (node.alias) parent.children.delete(node.alias);
+        return 1;
+    }
+
+    return { getLongPathNameW, deleteFileW };
 }

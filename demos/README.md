@@ -307,6 +307,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [321 · Overlapped window creation](stage-321-overlapped-window-creation/README.md) | `npm run demo -- stage-321-overlapped-window-creation` | Compare the real WinForms top-level creation geometry and callbacks |
 | [322 · Window rectangle queries](stage-322-window-rect-queries/README.md) | `npm run demo -- stage-322-window-rect-queries` | Compare rectangle imports during and after Win32 window creation |
 | [324 · CoreCLR native exception messages](stage-324-core-exception-text/README.md) | `npm run demo -- stage-324-core-exception-text` | Compare native exception message text and reference identity |
+| [325 · Virtual file deletion](stage-325-virtual-file-deletion/README.md) | `npm run demo -- stage-325-virtual-file-deletion` | Compare DeleteFileW and launch-local path mutation |
 
 ## Adding a stage
 
