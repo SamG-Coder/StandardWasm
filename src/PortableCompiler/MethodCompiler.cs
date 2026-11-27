@@ -740,7 +740,7 @@ namespace PortableCompiler
                     CoreStringCreation.Lower(bundle, image, layout, heaps, owner, source, methodArguments,
                         frame, records, objects, catchRegion);
                     RuntimeTypeBranches.FoldClosedTypeBranches(bundle, image, layout, heaps, owner, context,
-                        methodArguments, objects, records, catchRegion, count);
+                        methodArguments, objects, frame, records, catchRegion, count);
                     RuntimeTypeBranches.FoldClosedSizeBranches(bundle, image, layout, heaps, owner,
                         context, methodArguments, objects, records, catchRegion);
                     EnumFlagTests.Lower(bundle, image, layout, heaps, owner, objects, records, catchRegion);
