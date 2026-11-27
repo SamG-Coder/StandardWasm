@@ -2286,7 +2286,7 @@ namespace PortableCompiler
                             hostUse[0] = hostUse[0] | WasmImports.NativeCharacterViews;
                             continue;
                         }
-                        if (span == BranchIl.CharacterArrayAsSpan && opcode == 0x73 ||
+                        if (span == BranchIl.CharacterArrayAsSpan ||
                             span == BranchIl.SpanAsReadOnly && opcode == 0x28 ||
                             span == BranchIl.ByteArrayAsSpan)
                         {

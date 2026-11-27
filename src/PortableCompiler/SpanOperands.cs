@@ -24,7 +24,7 @@ namespace PortableCompiler
                 records[call + 3] = spanType;
                 return 1;
             }
-            if (spanType == SignatureTypes.CharacterSpan)
+            if (spanType == SignatureTypes.CharacterSpan || spanType == SignatureTypes.WritableCharacterSpan)
             {
                 int copy = records[call] == Load ? Next(records, call, clauses) : -1;
                 if (copy >= 0 && records[copy] == FieldAddress)
@@ -35,6 +35,12 @@ namespace PortableCompiler
                     copy = AfterDestinationSlice(bundle, image, layout, heaps, owner, context, methodArguments,
                         records, index, objects, clauses, fieldCaller);
                 }
+                else if (copy >= 0 && IsDirectMemberCall(records, copy) &&
+                    SpanMetadata.ClassifySpanCall(bundle, image, layout, heaps, owner, records[copy + 1],
+                        context, methodArguments, objects, constructor: false) == CharacterArrayAsSpan)
+                {
+                    copy = Next(records, copy, clauses);
+                }
                 if (records[call] == FrameAddress && frame[records[call + 1]] == SignatureTypes.WritableCharacterSpan)
                 {
                     int index = Next(records, call, clauses);
@@ -44,10 +50,11 @@ namespace PortableCompiler
                 }
                 if (copy >= 0 && IsDirectMemberCall(records, copy) &&
                     SpanMetadata.IsCharacterCopyTo(bundle, image, layout, heaps, owner, records[copy + 1],
-                        context, methodArguments, objects))
+                        context, methodArguments, spanType, objects))
                 {
                     records[address] = field ? GetField : Load;
                     records[copy] = CopyCharacterSpan;
+                    records[copy + 3] = spanType;
                     return 1;
                 }
             }

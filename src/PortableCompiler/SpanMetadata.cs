@@ -138,11 +138,14 @@ namespace PortableCompiler
 
             if (image[start] != 0 || image[start + 1] != 1) return 0;
             int end = start + size;
+            int arrayParameter = OpenSpan(image, layout, heaps, start + 2, end, next, type == WritableCharacterSpan);
+            if (arrayParameter >= 0 && end - arrayParameter == 3 && image[arrayParameter] == 0x1d &&
+                image[arrayParameter + 1] == 0x13 && image[arrayParameter + 2] == 0)
+                return type == ReadOnlyByteSpan ? BranchIl.ByteArrayAsSpan : BranchIl.CharacterArrayAsSpan;
+            if (type == ReadOnlyByteSpan) return 0;
+
             int parameter = OpenSpan(image, layout, heaps, start + 2, end, next, false);
             if (parameter < 0) return 0;
-            if (type == ReadOnlyByteSpan)
-                return end - parameter == 3 && image[parameter] == 0x1d &&
-                    image[parameter + 1] == 0x13 && image[parameter + 2] == 0 ? BranchIl.ByteArrayAsSpan : 0;
             return OpenSpan(image, layout, heaps, parameter, end, next, true) == end
                 ? BranchIl.SpanAsReadOnly : 0;
         }
@@ -162,14 +165,14 @@ namespace PortableCompiler
         }
 
         internal static bool IsCharacterCopyTo(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
-            int owner, int member, int context, int[] methodArguments, int[] objects)
+            int owner, int member, int context, int[] methodArguments, int sourceType, int[] objects)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             if (AssemblyReferences.ReadMember(image, heaps, layout, member, reference, allowClosedParent: true) < 0 ||
                 !MatchesAscii(image, heaps, (uint)reference[4], "CopyTo")) return false;
             int parent = reference[AssemblyReferences.GenericParent];
             if (parent == 0 || ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps, owner,
-                parent, objects, context, methodArguments) != CharacterSpan) return false;
+                parent, objects, context, methodArguments) != sourceType) return false;
             var cursor = new int[1];
             int end = SignatureReader.ReadInstance(image, heaps, reference[5], 1, cursor);
             return end >= 0 && SignatureReader.TakeElement(image, cursor, end, SignatureReader.Void) &&

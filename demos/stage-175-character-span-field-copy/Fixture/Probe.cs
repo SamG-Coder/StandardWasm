@@ -42,6 +42,34 @@ namespace CharacterSpanFieldCopy
             catch (ArgumentException) { return data[0] == 'a' ? 409 : 0; }
             return 0;
         }
+
+        public static int ArrayDestination()
+        {
+            char[] letters = { 'p', 'q' };
+            var start = new Span<char>(letters);
+            ReadOnlySpan<char> source = start;
+            char[] target = { 'a', 'b', 'c' };
+            source.CopyTo(target);
+            return target[0] == 'p' && target[1] == 'q' && target[2] == 'c' ? 419 : 0;
+        }
+
+        public static int NullArray()
+        {
+            char[] target = null;
+            ReadOnlySpan<char> source = default;
+            source.CopyTo(target);
+            Span<char> empty = target;
+            return empty.Length == 0 ? 421 : 0;
+        }
+
+        public static int WritableSource()
+        {
+            char[] letters = { 'a', 'b', 'c' };
+            var span = new Span<char>(letters);
+            Span<char> source = span.Slice(1, 2);
+            source.CopyTo(letters);
+            return letters[0] == 'b' && letters[1] == 'c' && letters[2] == 'c' ? 431 : 0;
+        }
     }
 
     internal ref struct Writer

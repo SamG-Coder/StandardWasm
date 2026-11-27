@@ -518,7 +518,7 @@ namespace PortableCompiler
                 else if (kind == CopyCharacterSpan)
                 {
                     used = CharacterSpanCopyWasm.Copy(code, used,
-                        Spill(spills, maximum, spillFlags, CharacterSpan, top - 1),
+                        Spill(spills, maximum, spillFlags, records[slot + 3], top - 1),
                         Spill(spills, maximum, spillFlags, WritableCharacterSpan, top),
                         scratch + 3, scratch + 4, frameShape[25] != 0);
                 }

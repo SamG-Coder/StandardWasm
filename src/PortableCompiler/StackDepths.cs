@@ -462,7 +462,7 @@ namespace PortableCompiler
                     ? Push(stack, allocated, depth - 2, String) : -1;
             if (kind == PinStaticBytes) return Push(stack, allocated, depth, Native);
             if (kind == CopyCharacterSpan)
-                return Match(stack, depth, WritableCharacterSpan) && Match(stack, depth - 1, CharacterSpan) ? depth - 2 : -2;
+                return Match(stack, depth, WritableCharacterSpan) && Match(stack, depth - 1, extra) ? depth - 2 : -2;
             if (kind == StringFromChars)
                 return Match(stack, depth, Chars) ? Push(stack, allocated, depth - 1, String) : -1;
             if (kind == StringFromSpan)
