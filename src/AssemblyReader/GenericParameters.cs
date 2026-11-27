@@ -71,7 +71,6 @@ namespace PeLibrary
                 // A plain nominal ValueType row supplements the value-type bit.
                 if (tag != 2 && (flags & NonNullableValue) != 0 &&
                     ObjectLayouts.IsPlatformValueType(image, heaps, methods, counts, start, type)) continue;
-                if (tag != 2 && !method) return -2;
                 hasDeferred = true;
             }
             if (!hasDeferred) return 0;
@@ -86,13 +85,12 @@ namespace PeLibrary
             return 1;
         }
 
-        internal static int ReadDeferred(byte[] image, int[] table, int index, int[] parameter, bool nominal = false)
+        internal static int ReadDeferred(byte[] image, int[] table, int index, int[] parameter)
         {
             uint at = (uint)(table[0] + index * (table[1] + table[2]));
             int owner = Index(image, at, table[1]);
             if (owner <= table[4] || owner > table[5]) return 0;
             int type = Index(image, at + (uint)table[1], table[2]);
-            if ((type & 3) != 2 && !nominal) return 0;
             parameter[0] = owner - table[4] - 1;
             parameter[1] = (U16(image, (uint)(table[6] + (owner - 1) * table[7] + 2)) & NonNullableValue) != 0 ? 1 : 0;
             return type;

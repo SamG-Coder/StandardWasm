@@ -13,7 +13,7 @@ namespace PortableCompiler
             var cursor = new int[1];
             for (int i = 0; i < table[3]; i++)
             {
-                int coded = GenericParameters.ReadDeferred(image, table, i, parameter, nominal: method);
+                int coded = GenericParameters.ReadDeferred(image, table, i, parameter);
                 if (coded == 0) continue;
                 if (parameter[1] != 0 && ConstraintMarkers.IsValueType(image, layout, heaps, coded)) continue;
                 int end = 0;
@@ -152,7 +152,7 @@ namespace PortableCompiler
             for (int i = 0; i < deferred[3]; i++)
             {
                 int coded = GenericParameters.ReadDeferred(image, deferred, i, parameter);
-                if (coded == 0) continue;
+                if (coded == 0 || parameter[1] != 0 && ConstraintMarkers.IsValueType(image, layout, heaps, coded)) continue;
                 int[] required = ReadInterface(bundle, image, layout, heaps, identity[0], objects, coded, args, 0);
                 if (required[0] < 0) return required[0];
                 if (!Same(required, identity)) return 0;
