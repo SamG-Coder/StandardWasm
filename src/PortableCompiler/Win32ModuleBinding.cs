@@ -13,7 +13,7 @@ namespace PortableCompiler
             BCryptGenRandom = 19, GetProcessAwareness = 20, LoadLibrary = 21, GetProcedure = 22,
             CallWindowProcedure = 23, RegisterClass = 24, GetClassInfo = 25,
             SetWindowLong = 26, SetWindowLongPtr = 27, CreateWindow = 28,
-            GetFullPathName = 29, RedrawWindow = 30, Count = RedrawWindow;
+            GetFullPathName = 29, RedrawWindow = 30, RegisterWindowMessage = 31, Count = RegisterWindowMessage;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -31,7 +31,8 @@ namespace PortableCompiler
             member == GetClassInfo ? "GetClassInfoW" : member == SetWindowLong ? "SetWindowLongW" :
             member == SetWindowLongPtr ? "SetWindowLongPtrW" :
             member == CreateWindow ? "CreateWindowExW" :
-            member == GetFullPathName ? "GetFullPathNameW" : member == RedrawWindow ? "RedrawWindow" : "BCryptGenRandom";
+            member == GetFullPathName ? "GetFullPathNameW" : member == RedrawWindow ? "RedrawWindow" :
+            member == RegisterWindowMessage ? "RegisterWindowMessageW" : "BCryptGenRandom";
 
         private static string Library(int member) => member == LoadLibrary || member == GetFullPathName ? "kernel32.dll" :
             member <= ReleaseContext || member == GetProcedure ? "KERNEL32.dll" :
@@ -112,6 +113,8 @@ namespace PortableCompiler
             if (member == GetFullPathName)
                 return result == I32 && types[offset + 1] == Native && types[offset + 2] == I32 &&
                     types[offset + 3] == Native && types[offset + 4] == Native;
+            if (member == RegisterWindowMessage)
+                return result == I32 && IsAbiShape(bundle, objects, types[offset + 1], Native, "PCWSTR");
             if (member == RedrawWindow)
                 return IsAbiShape(bundle, objects, result, I32, "BOOL") &&
                     IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&

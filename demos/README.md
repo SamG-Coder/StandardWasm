@@ -202,6 +202,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [200 · Runtime type namespaces](stage-200-type-namespace/README.md) | `npm run demo -- stage-200-type-namespace` | Read canonical metadata namespaces from ordinary, nested, generic, and array types |
 | [201 · Default window procedure](stage-201-default-window-procedure/README.md) | `npm run demo -- stage-201-default-window-procedure` | Resolve a resident User32 procedure and verify native hidden-popup defaults and captions |
 | [203 · Redraw requests for hidden windows](stage-203-hidden-window-redraw/README.md) | `npm run demo -- stage-203-hidden-window-redraw` | Compare compiled RedrawWindow calls, borrowed rectangles and last-error behavior against Windows |
+| [205 · Registered window messages](stage-205-register-window-message/README.md) | `npm run demo -- stage-205-register-window-message` | Compare Win32 registered message identity, UTF-16 input and last-error behavior across runtimes |
 
 ## Adding a stage
 

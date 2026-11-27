@@ -420,7 +420,7 @@ try {
         if (path === "/stage-73-executable-intake/loader/pe.mjs")
             return route.fulfill({ contentType: "text/javascript",
                 body: readFileSync(new URL("../stage-73-executable-intake/loader/pe.mjs", import.meta.url)) });
-        if (["/resource-host.mjs", "/com-host.mjs", "/dynamic-library-host.mjs", "/win32-host.mjs", "/full-path-host.mjs", "/activation-context.mjs", "/dpi-awareness.mjs", "/window-state.mjs"].includes(path))
+        if (["/resource-host.mjs", "/com-host.mjs", "/dynamic-library-host.mjs", "/win32-host.mjs", "/full-path-host.mjs", "/activation-context.mjs", "/dpi-awareness.mjs", "/window-state.mjs", "/window-messages.mjs"].includes(path))
             return route.fulfill({ contentType: "text/javascript", body: readFileSync(new URL("." + path, import.meta.url)) });
         return route.abort();
     });
