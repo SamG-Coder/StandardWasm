@@ -81,9 +81,24 @@ namespace PortableCompiler
             return Cell(code, used, owner, reference, field);
         }
 
+        internal static int CreateFrameCell(byte[] code, int used) => CellInstruction(code, used, 0);
+
+        internal static int ClearFrameCell(byte[] code, int used, int cell)
+        {
+            used = Local(code, used, 0x20, cell);
+            code[used++] = 0xd0; // ref.null eq is the default snapshot
+            code[used++] = 0x6d;
+            return WriteSnapshot(code, used);
+        }
+
         internal static int ReadLocation(byte[] code, int used, int local, int type)
         {
             used = Local(code, used, 0x20, local);
+            return ReadSnapshot(code, used, type);
+        }
+
+        internal static int ReadSnapshot(byte[] code, int used, int type)
+        {
             used = CellInstruction(code, used, 2);
             code[used++] = 0;
             code[used++] = 0xfb;

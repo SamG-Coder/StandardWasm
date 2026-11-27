@@ -80,7 +80,9 @@ The constrained-reference probe covers a base implementation, an override,
 a null receiver, and reference identity after `box T` for a reference-type
 specialization. The type-descriptor probe checks that `typeof` and `GetType`
 share one descriptor per closed generic type and that different type
-arguments produce distinct descriptors.
+arguments produce distinct descriptors. The bundled struct-alias probe also
+copies and replaces a struct through generic `ref T` and `out T`, including
+resetting the original slot to its default value.
 
 The monitor probe checks the CLR's reentrant lock behavior on the launch
 worker's single managed execution agent. It verifies lockTaken and typed

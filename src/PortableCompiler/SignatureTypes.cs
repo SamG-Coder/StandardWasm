@@ -16,10 +16,12 @@ namespace PortableCompiler
         internal static bool IsManagedLocation(int type) =>
             type == ObjectLocation || type == CharacterLocation || type == BooleanLocation || type == StringLocation;
 
-        internal static int LocationFromIdentity(int type) =>
+        internal static int LocationFromIdentity(int[] objects, int type) =>
             type == ObjectLayouts.ObjectReference ? ObjectLocation : type == String ? StringLocation :
-            type == GenericScalar.Key(3) ? CharacterLocation : type == GenericScalar.Key(2) ? BooleanLocation : 0;
+            type == GenericScalar.Key(3) ? CharacterLocation : type == GenericScalar.Key(2) ? BooleanLocation :
+            ObjectLayouts.IsValueType(objects, type) && !ObjectLayouts.IsByRefLikeValue(objects, type) ? ValueLocation(type) : 0;
         internal static int CellValue(int location) =>
+            IsValueLocation(location) ? LocatedValue(location) :
             location == BooleanLocation ? I32 : location == StringLocation ? String : ObjectLayouts.ObjectReference;
 
         internal static bool IsSpan(int type) => type == ObjectSpan || type == CharacterSpan || type == WritableCharacterSpan;

@@ -124,6 +124,11 @@ namespace PortableCompiler
                         continue;
                     }
 
+                    // A static call can consume this address as an ordinary byref
+                    // argument. Leave it intact for the frame-cell representation.
+                    if (StaticCallDepth(image, layout, heaps, methodCount, kind, records[next + 1], int.MaxValue - 1) >= 0)
+                        return -2;
+
                     // [&value, arguments] -> call -> []. The link step accepts only
                     // a value-type instance constructor (ConstructValue) or a
                     // read-only instance method (decision 0049) with exactly

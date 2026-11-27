@@ -20,11 +20,11 @@ namespace PortableCompiler
             if (at >= end) return -1;
             int element = image[at];
             if (element != 2 && element != 3 && element != 0x0e && element != 0x1c &&
-                element != 0x13 && element != 0x1e) return -2;
+                element != 0x11 && element != 0x13 && element != 0x1e) return -2;
             int type = Read(bundle, image, layout, heaps, owner, next, end, context, objects, 0,
                 methodArguments: methodArguments);
             if (type < 0) return type;
-            int location = LocationFromIdentity(type);
+            int location = LocationFromIdentity(objects, type);
             return location != 0 ? location : -2;
         }
 
@@ -33,7 +33,7 @@ namespace PortableCompiler
         {
             int type = TypeSpecIdentity(bundle, image, layout, heaps, owner, row, context, objects, methodArguments);
             if (type < 0) return type;
-            int location = LocationFromIdentity(type);
+            int location = LocationFromIdentity(objects, type);
             return location != 0 ? location : -2;
         }
 

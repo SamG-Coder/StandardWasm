@@ -337,7 +337,8 @@ namespace PortableCompiler
                 // value. Its IL returns void, so stack analysis checks void.
                 bool valueConstructor = IsValueConstructor(image, layout, heaps, source, signatures, signature, parameters, objects);
                 if (valueConstructor) result = Void;
-                bool locationReceiver = parameters > 0 && IsValueLocation(signatures[signature + 1]);
+                bool locationReceiver = parameters > 0 && IsValueLocation(signatures[signature + 1]) &&
+                    (MethodDefinitions.ReadColumn(image, layout, source, 2) & 0x10) == 0;
                 // Snapshot receivers retain the existing read-only ABI.
                 bool valueMethod = !valueConstructor && !locationReceiver &&
                     IsValueMethod(image, layout, heaps, source, signatures, signature, parameters, objects);
@@ -408,6 +409,8 @@ namespace PortableCompiler
                     if (functions < 0)
                         return functions;
 
+                    for (int local = 0; local < frameCells.Length; local++)
+                        if (frameCells[local] != 0 && inlineLocations[local] != 0) return -2;
                     typeCalls.Apply(bases, indices, offsets, signatures);
                     RuntimeTypeLocals.Specialize(bundle, records, frame, parameters, locals, objects, catchRegion);
                     if (location.Length != 0) location[2] = -1;
@@ -963,7 +966,15 @@ namespace PortableCompiler
                     }
                     int lowered = ValueOperands.LowerFrame(bundle, image, layout, heaps,
                         owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses);
-                    if (lowered < 0) return ManagedObjectCopy(records, slot, location, lowered);
+                    if (lowered == -2 && ObjectLayouts.IsValueType(objects, type) &&
+                        !ObjectLayouts.IsByRefLikeValue(objects, type) && !ObjectLayouts.IsExplicitValue(objects, type))
+                    {
+                        int locationType = ValueLocation(type);
+                        frameCells[local] = locationType;
+                        records[slot] = BranchIl.LoadFrameLocation;
+                        records[slot + 3] = locationType;
+                    }
+                    else if (lowered < 0) return ManagedObjectCopy(records, slot, location, lowered);
                     continue;
                 }
                 if (kind == BranchIl.ConstrainedInstance) return -2;
@@ -1078,9 +1089,10 @@ namespace PortableCompiler
                         int locationType = ManagedReferenceSignatures.TypeSpecLocation(bundle, image, layout, heaps,
                             owner, row, context, objects, methodArguments);
                         if (locationType < 0) return locationType;
-                        if (locationType != BooleanLocation && locationType != StringLocation && locationType != ObjectLocation)
-                            return -2;
-                        int vector = locationType == BooleanLocation ? Bytes : ObjectLayouts.RegisterArray(objects, ObjectReference);
+                        if (!IsValueLocation(locationType) && locationType != BooleanLocation &&
+                            locationType != StringLocation && locationType != ObjectLocation) return -2;
+                        int vector = IsValueLocation(locationType) ? 0 :
+                            locationType == BooleanLocation ? Bytes : ObjectLayouts.RegisterArray(objects, ObjectReference);
                         if (vector < 0) return vector;
                         records[slot] = kind == BranchIl.LoadObject ? BranchIl.LoadManagedCell :
                             kind == BranchIl.StoreObject ? BranchIl.StoreManagedCell : BranchIl.ClearManagedCell;

@@ -176,8 +176,12 @@ namespace PortableCompiler
                         code[used++] = 0xd0; // ref.null eq
                         code[used++] = 0x6d;
                     }
-                    used = Gc(code, used, 8, vector); // array.new_fixed
-                    code[used++] = 1;
+                    if (IsValueLocation(vector)) used = ManagedValueLocationWasm.CreateFrameCell(code, used);
+                    else
+                    {
+                        used = Gc(code, used, 8, vector); // array.new_fixed
+                        code[used++] = 1;
+                    }
                     used = Local(code, used, 0x21, cell);
                     cellLocals[i] = cell++;
                 }
@@ -233,7 +237,9 @@ namespace PortableCompiler
                     if (kind == Load)
                     {
                         pushed = StackType(frame[operand]);
-                        if (frameCells[operand] != 0)
+                        if (IsValueLocation(frameCells[operand]))
+                            used = ManagedValueLocationWasm.ReadLocation(code, used, cellLocals[operand], pushed);
+                        else if (frameCells[operand] != 0)
                             used = ManagedLocationWasm.LoadCell(code, used, cellLocals[operand], frameCells[operand], pushed);
                         else used = inlineLocations[operand] == 0 ? Local(code, used, 0x20, operand) :
                             InlineObjectStorageWasm.Snapshot(code, used, pushed, inlineLocations[operand], operand, FieldCount(objects, pushed));
@@ -443,7 +449,13 @@ namespace PortableCompiler
                     int source = states[state + top];
                     int spilled = Spill(spills, maximum, spillFlags, source, top);
                     int type = frame[operand], backing = inlineLocations[operand];
-                    if (frameCells[operand] != 0)
+                    if (IsValueLocation(frameCells[operand]))
+                    {
+                        used = Local(code, used, 0x20, cellLocals[operand]);
+                        used = LoadOperand(code, used, spilled, source, type);
+                        used = ManagedValueLocationWasm.WriteSnapshot(code, used);
+                    }
+                    else if (frameCells[operand] != 0)
                         used = InlineObjectStorageWasm.Set(code, used, frameCells[operand], cellLocals[operand], 0, spilled);
                     else if (backing != 0)
                         used = InlineObjectStorageWasm.Store(code, used, type, backing, operand, spilled, FieldCount(objects, type));
@@ -637,7 +649,9 @@ namespace PortableCompiler
                     int first = depth - arity;
                     int target = records[slot + 3];
                     int type = frame[target], backing = inlineLocations[target];
-                    used = backing == 0 ? Local(code, used, 0x20, target) :
+                    bool cellBacked = IsValueLocation(frameCells[target]);
+                    if (cellBacked) used = ManagedValueLocationWasm.ReadLocation(code, used, cellLocals[target], type);
+                    else used = backing == 0 ? Local(code, used, 0x20, target) :
                         InlineObjectStorageWasm.Snapshot(code, used, type, backing, target, FieldCount(objects, type));
                     for (int i = 1; i < arity; i++)
                     {
@@ -647,9 +661,15 @@ namespace PortableCompiler
                     }
                     code[used++] = 0x10;
                     used = WasmBinary.Unsigned(code, used, hostImports + operand);
-                    int temporary = backing == 0 ? target : temporaries + type - FirstClass;
+                    int temporary = backing == 0 && !cellBacked ? target : temporaries + type - FirstClass;
                     used = Local(code, used, 0x21, temporary);
-                    if (backing != 0)
+                    if (cellBacked)
+                    {
+                        used = Local(code, used, 0x20, cellLocals[target]);
+                        used = Local(code, used, 0x20, temporary);
+                        used = ManagedValueLocationWasm.WriteSnapshot(code, used);
+                    }
+                    else if (backing != 0)
                         used = InlineObjectStorageWasm.Store(code, used, type, backing, target, temporary, FieldCount(objects, type));
                 }
                 else if (kind == MathCall)
@@ -702,6 +722,33 @@ namespace PortableCompiler
                     code[used++] = 0x10;
                     used = WasmBinary.Unsigned(code, used, frameShape[20] + operand - 1);
                     if (!setter) used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, depth));
+                }
+                else if ((kind == LoadManagedCell || kind == StoreManagedCell || kind == ClearManagedCell) && operand == 0)
+                {
+                    int type = records[slot + 3];
+                    int position = kind == StoreManagedCell ? top - 1 : top;
+                    int address = Spill(spills, maximum, spillFlags, type, position);
+                    used = GuardNull(code, used, address);
+                    if (kind == LoadManagedCell)
+                    {
+                        int value = LocatedValue(type);
+                        // Location spills use eqref. Restore the exact cell heap at the load.
+                        used = LoadOperand(code, used, address, type, type);
+                        used = ManagedValueLocationWasm.ReadSnapshot(code, used, value);
+                        used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, value, top));
+                    }
+                    else
+                    {
+                        used = LoadOperand(code, used, address, type, type);
+                        if (kind == StoreManagedCell)
+                            used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
+                        else
+                        {
+                            code[used++] = 0xd0; // ref.null eq
+                            code[used++] = 0x6d;
+                        }
+                        used = ManagedValueLocationWasm.WriteSnapshot(code, used);
+                    }
                 }
                 else if (kind == LoadManagedCell || kind == StoreManagedCell || kind == ClearManagedCell)
                 {
@@ -777,7 +824,12 @@ namespace PortableCompiler
                 {
                     int type = records[slot + 3];
                     int target = Spill(spills, maximum, spillFlags, type, depth);
-                    used = ManagedLocationWasm.TakeCell(code, used, cellLocals[operand], target, type);
+                    if (IsValueLocation(type))
+                    {
+                        used = Local(code, used, 0x20, cellLocals[operand]);
+                        used = Local(code, used, 0x21, target);
+                    }
+                    else used = ManagedLocationWasm.TakeCell(code, used, cellLocals[operand], target, type);
                 }
                 else if (kind == LoadSingleObjectSpan)
                 {
@@ -1044,7 +1096,9 @@ namespace PortableCompiler
                 }
                 else if (kind == ClearValue)
                 {
-                    if (inlineLocations[operand] != 0)
+                    if (IsValueLocation(frameCells[operand]))
+                        used = ManagedValueLocationWasm.ClearFrameCell(code, used, cellLocals[operand]);
+                    else if (inlineLocations[operand] != 0)
                         used = InlineObjectStorageWasm.Clear(code, used, inlineLocations[operand], operand, FieldCount(objects, frame[operand]));
                     else if (frame[operand] == PeLibrary.RuntimeTypeMetadata.Handle)
                     {
@@ -1066,8 +1120,12 @@ namespace PortableCompiler
                     else if (IsExplicitValue(objects, type))
                         used = ExplicitValueWasm.Update(code, used, objects, type, local, operand, FieldAccess.Storage(descriptor), replacement, source);
                     else
-                        used = ValueFieldsWasm.Update(code, used, objects, type, local, temporaries + type - FirstClass,
-                            operand, replacement, source, IsValueLocation(frame[local]));
+                    {
+                        bool frameCell = IsValueLocation(frameCells[local]);
+                        used = ValueFieldsWasm.Update(code, used, objects, type, frameCell ? cellLocals[local] : local,
+                            temporaries + type - FirstClass, operand, replacement, source,
+                            frameCell || IsValueLocation(frame[local]));
+                    }
                 }
                 else if (kind == NewArray || kind == InitializedArray)
                 {
