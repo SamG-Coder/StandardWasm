@@ -283,6 +283,14 @@ namespace PortableCompiler
                     ? Push(stack, allocated, depth - 2, CharacterLocation) : -2;
             if (kind == SpanLength || kind == SpanIsEmpty)
                 return Match(stack, depth, extra) ? Push(stack, allocated, depth - 1, I32) : -2;
+            if (kind == ArrayCopy)
+            {
+                int start = depth - operand;
+                if (start < 0 || !Match(stack, depth, I32)) return -1;
+                if (operand == 5 && (stack[start + 1] != I32 || stack[start + 3] != I32)) return -1;
+                int vector = ArrayCopyWasm.Vector(objects, stack[start], stack[start + (operand == 3 ? 1 : 2)]);
+                return vector == 0 ? -2 : start;
+            }
             if (kind == SpanSlice)
                 return Match(stack, depth - operand, extra) && Match(stack, depth, I32) &&
                     (operand == 1 || Match(stack, depth - 1, I32))

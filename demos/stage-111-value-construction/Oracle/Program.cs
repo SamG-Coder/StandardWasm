@@ -38,6 +38,7 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     closedGenericStatics = inputs.Select(StaticInt32Probe.CheckClosedGenericStatics).ToArray(),
     genericArrayElements = inputs.Select(GenericArrayProbe.CheckGenericArrayElements).ToArray(),
     genericArrayFailures = inputs.Select(GenericArrayProbe.CheckGenericArrayFailures).ToArray(),
+    arrayCopies = inputs.Select(GenericArrayProbe.CheckArrayCopy).ToArray(),
     referenceContainment = inputs.Select(ReferenceContainmentProbe.CheckReferenceContainment).ToArray(),
     entryAliases = inputs.Select(EntryArrayProbe.UpdateEntryArray).ToArray(),
     interiorFields = inputs.Select(EntryArrayProbe.ClearInteriorFields).ToArray(),

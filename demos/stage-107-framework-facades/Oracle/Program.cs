@@ -47,6 +47,7 @@ for (int source = 0; source < 2; source++)
         MethodInfo nan = entry.GetMethod("IsNaN")!;
         MethodInfo surrogate = entry.GetMethod("IsHighSurrogate")!;
         MethodInfo list = entry.GetMethod("List")!;
+        MethodInfo growth = entry.GetMethod("ListGrowth")!;
         string[] floating = ["NaN", "-Infinity", "Infinity", "-0", "12.5"];
         string[] codes = ["55295", "55296", "56319", "56320", "97"];
         Accept("IsNaN", nan, packIds, floating, floating.Select(value =>
@@ -54,14 +55,11 @@ for (int source = 0; source < 2; source++)
         Accept("IsHighSurrogate", surrogate, packIds, codes, codes.Select(value =>
             (int)surrogate.Invoke(null, [int.Parse(value, System.Globalization.CultureInfo.InvariantCulture)])!).ToArray());
 
+        Accept("List.Add after deferred initialization", list, packIds, ["0"], [(int)list.Invoke(null, null)!]);
+        int[] seeds = [int.MinValue, -5, 0, 5, int.MaxValue];
+        Accept("List capacity growth", growth, packIds, seeds.Select(value => value.ToString()).ToArray(),
+            seeds.Select(value => (int)growth.Invoke(null, [value])!).ToArray());
         if (source != 0) continue;
-        if ((int)list.Invoke(null, null)! != 5)
-            throw new InvalidOperationException("Unexpected CLR List result.");
-        byte[] listIl = list.GetMethodBody()!.GetILAsByteArray()!;
-        int add = Array.IndexOf(listIl, (byte)0x6f);
-        if (add < 0 || list.Module.ResolveMethod(BinaryPrimitives.ReadInt32LittleEndian(listIl.AsSpan(add + 1)))?.Name != nameof(List<int>.Add))
-            throw new InvalidOperationException("Expected a virtual List.Add call.");
-        Reject("List.Add after deferred initialization", list, packIds, -2, add);
         int call = Array.IndexOf(nan.GetMethodBody()!.GetILAsByteArray()!, (byte)0x28);
         if (call < 0) throw new InvalidOperationException("Expected a Double.IsNaN call.");
         Reject("missing facade", nan, [source], -4, call);

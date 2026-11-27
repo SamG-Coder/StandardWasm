@@ -1081,6 +1081,18 @@ namespace PortableCompiler
                     used = SpanWasm.Slice(code, used, type, view, start, length, frameShape[25] != 0);
                     used = Local(code, used, 0x21, view);
                 }
+                else if (kind == ArrayCopy)
+                {
+                    int first = depth - operand, target = first + (operand == 3 ? 1 : 2);
+                    int sourceType = states[state + first], targetType = states[state + target];
+                    int source = Spill(spills, maximum, spillFlags, sourceType, first);
+                    int destination = Spill(spills, maximum, spillFlags, targetType, target);
+                    int sourceIndex = operand == 3 ? -1 : Spill(spills, maximum, spillFlags, I32, first + 1);
+                    int destinationIndex = operand == 3 ? -1 : Spill(spills, maximum, spillFlags, I32, target + 1);
+                    int vector = ArrayCopyWasm.Vector(objects, sourceType, targetType);
+                    used = ArrayCopyWasm.Emit(code, used, vector, source, sourceIndex, destination, destinationIndex,
+                        Spill(spills, maximum, spillFlags, I32, top));
+                }
                 else if (kind == SpanRead)
                 {
                     int type = records[slot + 3];

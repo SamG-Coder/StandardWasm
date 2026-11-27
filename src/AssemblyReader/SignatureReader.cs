@@ -4,23 +4,32 @@ namespace PeLibrary
 {
     internal static class SignatureReader
     {
-        internal const int Boolean = 0x02, Int32 = 0x08;
+        internal const int Void = 0x01, Boolean = 0x02, Int32 = 0x08;
         private const int ValueType = 0x11, Class = 0x12, TypeParameter = 0x13, GenericInstance = 0x15;
         private const int Instance = 0x20;
 
         // Reads an ordinary instance call header. The cursor points to the
         // return type on success and the result marks the end of the blob.
-        internal static int ReadInstance(byte[] image, int[] heaps, int blob, int arity, int[] cursor)
+        internal static int ReadInstance(byte[] image, int[] heaps, int blob, int arity, int[] cursor) =>
+            ReadHeader(image, heaps, blob, arity, cursor, Instance);
+
+        internal static int ReadStatic(byte[] image, int[] heaps, int blob, int arity, int[] cursor) =>
+            ReadHeader(image, heaps, blob, arity, cursor, 0);
+
+        private static int ReadHeader(byte[] image, int[] heaps, int blob, int arity, int[] cursor, int convention)
         {
             if (blob < 1 || blob >= heaps[1]) return -1;
             int limit = heaps[0] + heaps[1];
             int size = CompressedUnsigned(image, heaps[0] + blob, limit, cursor);
             int at = cursor[0];
-            if (size < 3 || size > limit - at || image[at] != Instance) return -1;
+            if (size < 3 || size > limit - at || image[at] != convention) return -1;
             int end = at + size;
             int count = CompressedUnsigned(image, at + 1, end, cursor);
             return count == arity && count < end - cursor[0] ? end : -1;
         }
+
+        internal static int ReadClass(byte[] image, int[] cursor, int end) =>
+            TakeElement(image, cursor, end, Class) ? CompressedUnsigned(image, cursor[0], end, cursor) : -1;
 
         internal static int ReadGenericHeader(byte[] image, int[] cursor, int end, int[] head)
         {

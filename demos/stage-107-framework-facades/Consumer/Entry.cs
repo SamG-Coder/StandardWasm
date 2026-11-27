@@ -13,5 +13,13 @@ namespace FacadeConsumer
             list.Add(5);
             return list[0];
         }
+
+        public static int ListGrowth(int seed)
+        {
+            var list = new List<int>();
+            for (int index = 0; index < 11; index++)
+                list.Add(unchecked(seed + index));
+            return unchecked(list[0] + list[10] + list.Count * 1000);
+        }
     }
 }

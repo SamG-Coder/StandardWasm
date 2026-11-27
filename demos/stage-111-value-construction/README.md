@@ -75,6 +75,8 @@ types for the same generic field declaration.
 The generic array fixture allocates arrays, reads, and replaces elements
 through C# methods specialized for `int`, `sbyte`, `double`, and `string`. It also compares
 typed bounds and null exceptions.
+The array-copy cases check reference identity, overlapping ranges in both
+directions, typed validation failures, and the destination after a failed copy.
 The runtime type fixture compares `Object.GetType` for a derived instance,
 a plain object, a string, and boxed `Int32` and `UInt32` against the CLR.
 It includes an interface receiver, a null receiver, and the identity shared

@@ -913,6 +913,8 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.InvalidCast;
                             else if (kind == BranchIl.NativeCharacterSpan || kind == BranchIl.SpanSlice)
                                 tags = ExceptionTypes.ArgumentOutOfRange;
+                            else if (kind == BranchIl.ArrayCopy)
+                                tags = ExceptionTypes.ArgumentNull | ExceptionTypes.ArgumentOutOfRange | ExceptionTypes.Argument;
                             else if (kind == BranchIl.ThrowFrameworkArgument)
                                 tags = operation == ExceptionTagsWasm.ArgumentNullTag
                                     ? ExceptionTypes.ArgumentNull : ExceptionTypes.ArgumentOutOfRange;
@@ -1855,6 +1857,18 @@ namespace PortableCompiler
                     int status = StringLiterals.Lower(image, heaps, records, slot, literals, literalSize, globals);
                     if (status < 0) return status;
                     continue;
+                }
+                if ((kind == BranchIl.Call || kind == BranchIl.MemberCall) && records[slot + 3] ==
+                    (kind == BranchIl.Call ? 0 : 0x28) && records[slot + BranchIl.Width + 1] == 0)
+                {
+                    int arity = ArrayCopyMetadata.Arity(image, layout, heaps, records[slot + 1], kind == BranchIl.MemberCall);
+                    if (arity != 0)
+                    {
+                        records[slot] = BranchIl.ArrayCopy;
+                        records[slot + 1] = arity;
+                        records[slot + 3] = 0;
+                        continue;
+                    }
                 }
                 if ((kind == BranchIl.Call || kind == BranchIl.MemberCall) && records[slot + 3] ==
                     (kind == BranchIl.Call ? 0 : 0x28) && records[slot + BranchIl.Width + 1] == 0 &&
