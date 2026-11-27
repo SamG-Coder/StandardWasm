@@ -80,10 +80,10 @@ namespace PortableCompiler
 
             if (!unsafeType) return 0;
             // static T& AddByteOffset<T>(T&, nint/nuint)
-            if (key == 5 && size == 10 && MatchesAscii(image, heaps, (uint)name, "AddByteOffset") &&
+            if ((key == 3 || key == 5) && size == 10 && MatchesAscii(image, heaps, (uint)name, "AddByteOffset") &&
                 U32(image, (uint)start) == 0x10020110 && U32(image, (uint)(start + 4)) == 0x1e10001e &&
                 image[start + 8] == 0 && (image[start + 9] == 0x18 || image[start + 9] == 0x19))
-                return OffsetStaticByteLocation;
+                return key == 3 ? OffsetCharacterLocation : OffsetStaticByteLocation;
             // static T ReadUnaligned<T>(byte&)
             if (key == 7 && size == 7 && MatchesAscii(image, heaps, (uint)name, "ReadUnaligned") &&
                 U32(image, (uint)start) == 0x1e010110 && image[start + 4] == 0 &&

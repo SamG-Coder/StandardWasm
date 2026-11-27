@@ -411,11 +411,14 @@ namespace PortableCompiler
                     used = SpanWasm.TakeLocation(code, used, view, locationType);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, locationType, top));
                 }
-                else if (kind == OffsetStaticByteLocation)
+                else if (kind == OffsetStaticByteLocation || kind == OffsetCharacterLocation)
                 {
-                    int target = Spill(spills, maximum, spillFlags, StaticByteLocation, top - 1);
+                    bool characters = kind == OffsetCharacterLocation;
+                    int locationType = characters ? CharacterLocation : StaticByteLocation;
+                    int target = Spill(spills, maximum, spillFlags, locationType, top - 1);
                     int offset = Spill(spills, maximum, spillFlags, states[state + top], top);
-                    used = ManagedLocationWasm.OffsetStaticByte(code, used, target, offset);
+                    used = characters ? ManagedLocationWasm.OffsetCharacter(code, used, target, offset)
+                        : ManagedLocationWasm.OffsetStaticByte(code, used, target, offset);
                     used = Local(code, used, 0x21, target);
                 }
                 else if (kind == ReadStaticUInt16)

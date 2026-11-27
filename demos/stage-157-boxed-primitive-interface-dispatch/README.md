@@ -18,7 +18,13 @@ managed array, including aliasing, slicing, a returned view, null, empty views
 and bounds. Writable character span cases get references through CoreLib's
 `MemoryMarshal.GetReference` and verify writes to sliced array storage,
 including a generic caller. Dereferencing the default span's reference
-must raise the same typed exception as on the CLR.
+must raise the same typed exception as on the CLR. The character-offset cases
+exercise both `Unsafe.AddByteOffset<char>` native integer signatures. A managed
+location keeps its array owner and moves by the signed byte offset divided
+by two. A stack-backed location moves by the full byte offset. The compiler
+requires an even offset proved from the local IL since the managed location
+has no slot for an odd byte displacement. An odd constant and an unproved
+parameter remain located diagnostics.
 
 The sealed string receiver cases compile the original CoreLib bodies for calls
 through the Object slot and a String-declared virtual slot. They compare

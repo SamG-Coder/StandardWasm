@@ -79,6 +79,45 @@ namespace PortableCompiler
             return used;
         }
 
+        internal static int OffsetCharacter(byte[] code, int used, int location, int offset)
+        {
+            used = Local(code, used, 0x20, location);
+            code[used++] = 0xd1; // ref.is_null
+            code[used++] = 0x04;
+            used = WasmBinary.ValueType(code, used, CharacterLocation);
+            // Null plus zero stays null. A nonzero result is an ownerless byte address.
+            used = Local(code, used, 0x20, offset);
+            code[used++] = 0x45; // i32.eqz
+            code[used++] = 0x04;
+            used = WasmBinary.ValueType(code, used, CharacterLocation);
+            code[used++] = 0xd0;
+            used = WasmBinary.Signed(code, used, WasmBinary.HeapType(CharacterLocation));
+            code[used++] = 0x05;
+            code[used++] = 0xd0;
+            code[used++] = 0x6d; // ref.null eq
+            used = Local(code, used, 0x20, offset);
+            used = Gc(code, used, 0, CharacterLocation);
+            code[used++] = 0x0b;
+
+            code[used++] = 0x05;
+            used = LoadField(code, used, location, 0);
+            used = LoadField(code, used, location, 1);
+            used = LoadField(code, used, location, 0);
+            code[used++] = 0xd1; // An absent owner uses byte units.
+            code[used++] = 0x04;
+            code[used++] = 0x7f;
+            used = Local(code, used, 0x20, offset);
+            code[used++] = 0x05;
+            used = Local(code, used, 0x20, offset);
+            used = Const(code, used, 1);
+            code[used++] = 0x75; // i32.shr_s: aligned negative offsets remain negative.
+            code[used++] = 0x0b;
+            code[used++] = 0x6a;
+            used = Gc(code, used, 0, CharacterLocation);
+            code[used++] = 0x0b;
+            return used;
+        }
+
         internal static int ReadStaticUInt16(byte[] code, int used, int location)
         {
             // Wasm is little-endian. Read two adjacent bytes at any alignment

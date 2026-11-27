@@ -1657,6 +1657,8 @@ namespace PortableCompiler
                         int intrinsic = StaticByteIntrinsics.Identify(image, layout, heaps, counts, spec, methodArguments);
                         if (intrinsic != 0)
                         {
+                            if (intrinsic == BranchIl.OffsetCharacterLocation &&
+                                !CharacterOffsetProof.IsAligned(records, slot, clauses)) return -2;
                             records[slot] = intrinsic;
                             continue;
                         }

@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
@@ -15,6 +16,8 @@ internal static class Program
             local.IsPinned && local.LocalType == typeof(char).MakeByRefType()))
             throw new InvalidOperationException("The CoreLib formatting baseline changed.");
         int[] intDiagnostic = [2, digits.MetadataToken & 0xffffff, -1];
+        int[] oddOffset = OffsetDiagnostic(nameof(OddOffset));
+        int[] unknownOffset = OffsetDiagnostic(nameof(UnknownOffset));
 
         var cases = new Func<int>[]
         {
@@ -23,6 +26,7 @@ internal static class Program
             FormatProviderDescriptor, VirtualDescriptorArguments,
             ImplicitByteView, ConstructedByteView, ReturnedByteView, NullByteView, EmptyByteView, ByteViewBounds,
             WritableSpanReference, ClosedGenericSpanReference, DefaultSpanReference,
+            PositiveCharacterOffset, NegativeCharacterOffset, NativeCharacterOffset, OddCharacterOffset, UnknownCharacterOffset,
             StringObjectSlot, StringOwnSlot, NullStringObjectSlot,
             OriginalExceptionGetType, OriginalDerivedExceptionGetType, NullExceptionGetType, OriginalObjectDisplayName,
             ClosedTypeDisplayName, OpenTypeDisplayName, ArrayTypeDisplayName, RepeatedTypeDisplayName, NamespacedTypeDisplayName, NullTypeDisplayName,
@@ -34,7 +38,9 @@ internal static class Program
         };
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
-            acceptedDiagnostic = run.Method.Name.StartsWith("OriginalInt", StringComparison.Ordinal) ? intDiagnostic : null
+            acceptedDiagnostic = run.Method.Name.StartsWith("OriginalInt", StringComparison.Ordinal) ? intDiagnostic :
+                run.Method.Name == nameof(OddCharacterOffset) ? oddOffset :
+                run.Method.Name == nameof(UnknownCharacterOffset) ? unknownOffset : null
         });
         File.WriteAllText(args[0], JsonSerializer.Serialize(new {
             runtime = Environment.Version.ToString(), files = new[] {
@@ -259,6 +265,64 @@ internal static class Program
         try { return CheckObjectSlot(null!); }
         catch (NullReferenceException) { return 3; }
     }
+
+    private static int[] OffsetDiagnostic(string name)
+    {
+        var method = typeof(Program).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic)!;
+        int call = Array.IndexOf(method.GetMethodBody()!.GetILAsByteArray()!, (byte)0x28);
+        return [0, method.MetadataToken & 0xffffff, call];
+    }
+
+    public static int PositiveCharacterOffset()
+    {
+        char[] data = ['a', 'b', 'c', 'd'];
+        Span<char> view = new Span<char>(data).Slice(1);
+        ref char origin = ref MemoryMarshal.GetReference(view);
+        ref char destination = ref OffsetElements(ref origin, 2);
+        destination = 'X';
+        data[3] = 'Y';
+        return data[0] * 100 + view[0] + destination;
+    }
+
+    public static int NegativeCharacterOffset()
+    {
+        char[] data = ['a', 'b', 'c', 'd'];
+        Span<char> view = new Span<char>(data).Slice(2);
+        ref char origin = ref MemoryMarshal.GetReference(view);
+        ref char destination = ref Unsafe.AddByteOffset(ref origin, (nint)(-2));
+        destination = 'X';
+        return data[1] * 100 + view[0];
+    }
+
+    public static int NativeCharacterOffset()
+    {
+        Span<char> data = stackalloc char[3];
+        data[0] = 'a';
+        data[1] = 'b';
+        data[2] = 'c';
+        ref char origin = ref MemoryMarshal.GetReference(data.Slice(1));
+        Unsafe.AddByteOffset(ref origin, (nint)(-2)) = 'X';
+        Unsafe.AddByteOffset(ref origin, (nuint)2) = 'Y';
+        return data[0] * 10000 + data[1] * 100 + data[2];
+    }
+
+    public static int OddCharacterOffset()
+    {
+        char[] data = ['\u1234', '\u5678'];
+        return OddOffset(ref MemoryMarshal.GetReference(new Span<char>(data)));
+    }
+
+    public static int UnknownCharacterOffset()
+    {
+        char[] data = ['a', 'b'];
+        return UnknownOffset(ref MemoryMarshal.GetReference(new Span<char>(data)), 2);
+    }
+
+    private static ref T OffsetElements<T>(ref T value, int elements) =>
+        ref Unsafe.AddByteOffset(ref value, (nint)(elements * sizeof(char)));
+
+    private static ref char OddOffset(ref char value) => ref Unsafe.AddByteOffset(ref value, (nint)1);
+    private static ref char UnknownOffset(ref char value, nint offset) => ref Unsafe.AddByteOffset(ref value, offset);
 
     public static int WritableSpanReference()
     {
