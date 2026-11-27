@@ -43,6 +43,8 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     suppression = SuppressionCases.Verify(),
     suppressionRow = typeof(FinalizableAllocations).GetMethod(nameof(FinalizableAllocations.CheckSuppression))!.MetadataToken & 0x00ffffff,
     publicSuppression = Enumerable.Range(0, 5).Select(FinalizableAllocations.CheckSuppression).ToArray(),
+    exchangeRow = typeof(ReferenceExchangeProbe).GetMethod(nameof(ReferenceExchangeProbe.Check))!.MetadataToken & 0x00ffffff,
+    referenceExchange = Enumerable.Range(0, 7).Select(ReferenceExchangeProbe.Check).ToArray(),
     pin = EmitRootProbe.ObservePinned(),
     protectedExceptions = EmitRootProbe.ObserveProtectedExceptions(),
     initializerResults = EmitRootProbe.ObserveInitializers(),

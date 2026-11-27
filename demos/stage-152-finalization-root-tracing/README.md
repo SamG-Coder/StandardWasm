@@ -126,3 +126,9 @@ lookup. The managed tail continues to use the assembly when it constructs
 the stream. The name has no further uses. This is a compiler check against
 the installed CoreLib IL. The standalone resource-opening fixture still
 reaches an unsupported dependency in CoreLib's resource-string path.
+
+The managed reference compare-exchange fixture exercises the original
+CoreLib overloads with a static class field and with local `object` and
+`string` references. Seven cases check the previous-value result, null
+comparands and replacements, and distinct objects with equal payloads.
+The Wasm operation runs without yielding on a location owned by one agent.

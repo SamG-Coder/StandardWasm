@@ -354,6 +354,21 @@ namespace PortableCompiler
                         initializerPrologue = initializerSlot[0];
                     }
                 }
+                int status = 0;
+                if (stub < 0 && initializerPrologue < 0)
+                {
+                    status = ReferenceExchangeWasm.WriteBody(moduleCode, length, image, layout, heaps, source,
+                        objects, signatures, offsets[current], arities[current]);
+                    if (status < 0) return status;
+                    if (status != length)
+                    {
+                        bodyOffsets[current] = length;
+                        sizes[current] = status - length;
+                        length = status;
+                        exceptionTags |= ExceptionTypes.NullReference;
+                        continue;
+                    }
+                }
                 if (stub < 0 && (MethodDefinitions.ReadColumn(image, layout, source, 2) & 0x2000) != 0)
                 {
                     // MethodShape proved the named native leaf and both sides
@@ -382,7 +397,7 @@ namespace PortableCompiler
                     continue;
                 }
                 uint rva = 0;
-                int status = 0;
+                status = 0;
                 if (stub >= 0)
                 {
                     // The CLR fails the JIT before the method runs, so a stub triggers no type

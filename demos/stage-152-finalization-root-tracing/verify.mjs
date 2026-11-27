@@ -17,12 +17,12 @@ run("dotnet", ["run", "-c", "Release", "--project", join(stage, "Oracle"), "--",
     join(runtime.directory, "System.Private.CoreLib.dll")]);
 const oracle = JSON.parse(readFileSync(oraclePath, "utf8"));
 const fixture = readFileSync(join(stage, "Fixture", "bin", "Release", "netstandard2.0", "Fixture.dll"));
-const framework = ["System.Private.CoreLib.dll", "netstandard.dll", "System.Runtime.dll"]
+const framework = ["System.Private.CoreLib.dll", "netstandard.dll", "System.Runtime.dll", "System.Threading.dll"]
     .map(path => ({ path, bytes: readFileSync(join(runtime.directory, path)) }));
 const assets = {
     compiler: readFileSync(process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts", "StandardWasm.Compiler.wasm")),
     basicBundle: Buffer.from(packEntry({ bytes: fixture }, [], oracle.row)[0]),
-    suppressionBundle: Buffer.from(packEntry({ bytes: fixture }, framework, oracle.suppressionRow)[0]),
+    frameworkBundle: Buffer.from(packEntry({ bytes: fixture }, framework, oracle.suppressionRow)[0]),
     rootProbe: readFileSync(join(evidence, "root-probe.wasm"))
 };
 
@@ -327,9 +327,12 @@ const expectedRoots = { values: oracle.rootProbeResult,
     allocationFinalizers: oracle.allocationFinalizers, suppression: oracle.suppression, pin: oracle.pin, protectedExceptions: oracle.protectedExceptions, initializerResults: oracle.initializerResults };
 const node = await probe({ compiler: assets.compiler, bundle: assets.basicBundle, row: oracle.row, count: oracle.result.length });
 assert.deepEqual(node, oracle.result);
-const nodeSuppression = await probe({ compiler: assets.compiler, bundle: assets.suppressionBundle,
+const nodeSuppression = await probe({ compiler: assets.compiler, bundle: assets.frameworkBundle,
     row: oracle.suppressionRow, count: oracle.publicSuppression.length });
 assert.deepEqual(nodeSuppression, oracle.publicSuppression);
+const nodeExchange = await probe({ compiler: assets.compiler, bundle: assets.frameworkBundle,
+    row: oracle.exchangeRow, count: oracle.referenceExchange.length });
+assert.deepEqual(nodeExchange, oracle.referenceExchange);
 const nodeRoots = await observeRoots(assets.rootProbe);
 assert.deepEqual(nodeRoots, expectedRoots);
 const browser = await chromium.launch({ channel: "msedge" });
@@ -341,7 +344,7 @@ try {
             route.fulfill({ body: "<!doctype html>", contentType: "text/html" });
     });
     await page.goto("http://127.0.0.1/");
-    const [edge, edgeSuppression] = await page.evaluate(async ({ source, cases }) => {
+    const [edge, edgeSuppression, edgeExchange] = await page.evaluate(async ({ source, cases }) => {
         const compiler = new Uint8Array(await (await fetch("/compiler")).arrayBuffer());
         const probe = (0, eval)("(" + source + ")");
         const results = [];
@@ -352,16 +355,18 @@ try {
         return results;
     }, { source: probe.toString(), cases: [
         { name: "basicBundle", row: oracle.row, count: oracle.result.length },
-        { name: "suppressionBundle", row: oracle.suppressionRow, count: oracle.publicSuppression.length } ] });
+        { name: "frameworkBundle", row: oracle.suppressionRow, count: oracle.publicSuppression.length },
+        { name: "frameworkBundle", row: oracle.exchangeRow, count: oracle.referenceExchange.length } ] });
     assert.deepEqual(edge, oracle.result);
     assert.deepEqual(edgeSuppression, oracle.publicSuppression);
+    assert.deepEqual(edgeExchange, oracle.referenceExchange);
     const edgeRoots = await page.evaluate(async source => {
         const bytes = await (await fetch("/rootProbe")).arrayBuffer();
         return (0, eval)("(" + source + ")")(bytes);
     }, observeRoots.toString());
     assert.deepEqual(edgeRoots, expectedRoots);
     const result = { nodeVersion: process.version, edgeVersion: browser.version(), oracle, node, edge,
-        nodeSuppression, edgeSuppression, nodeRoots, edgeRoots,
+        nodeSuppression, edgeSuppression, nodeExchange, edgeExchange, nodeRoots, edgeRoots,
         compilerSha256: createHash("sha256").update(assets.compiler).digest("hex"),
         fixtureSha256: createHash("sha256").update(fixture).digest("hex"),
         rootProbeSha256: createHash("sha256").update(assets.rootProbe).digest("hex") };
