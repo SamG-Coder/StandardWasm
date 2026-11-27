@@ -28,6 +28,10 @@ internal static class EmitRootProbe
             nameof(RootProbe.ObserveProtectedException), nameof(RootProbe.ObserveInitializerEntry), nameof(RootProbe.ObserveInitializerField),
             nameof(RootProbe.ObserveInitializerFailure) })
             Export(typeof(RootProbe), name);
+        Export(typeof(InteriorOwnerProbe), nameof(InteriorOwnerProbe.ObserveArrayInterior));
+        Export(typeof(InteriorOwnerProbe), nameof(InteriorOwnerProbe.ObserveClassInterior));
+        Export(typeof(InteriorOwnerProbe), nameof(InteriorOwnerProbe.ObserveProjectedArrayInterior));
+        Export(typeof(InteriorOwnerProbe), nameof(InteriorOwnerProbe.ReadInteriorFinalizations));
         Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.Allocate));
         Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.ValueOf));
         Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.Suppress));

@@ -5,19 +5,24 @@ namespace PortableCompiler
 {
     internal static class ManagedValueLocationWasm
     {
-        internal const int TypeBytes = 4;
+        internal static int TypeBytes(bool tracksRoots) => tracksRoots ? 6 : 4;
 
         // A class field owns the cell. Ordinary field loads return its immutable
         // value snapshot, so only addresses can share the mutable location.
         internal static bool UsesCell(int[] objects, int owner, int storage) =>
             !IsValueType(objects, owner) && IsValueType(objects, storage);
 
-        internal static int WriteType(byte[] output, int cursor)
+        internal static int WriteType(byte[] output, int cursor, bool tracksRoots)
         {
             output[cursor++] = 0x5f; // struct
-            output[cursor++] = 1;
+            output[cursor++] = tracksRoots ? (byte)2 : (byte)1;
             output[cursor++] = 0x6d; // nullable eqref, null denotes the default snapshot
             output[cursor++] = 1; // mutable
+            if (tracksRoots)
+            {
+                output[cursor++] = 0x6d; // containing class or array, absent for frame and projection cells
+                output[cursor++] = 0; // immutable: snapshot replacement must preserve the owner
+            }
             return cursor;
         }
 
@@ -47,7 +52,7 @@ namespace PortableCompiler
         }
 
         internal static int Write(byte[] code, int used, int owner, int reference, int field,
-            int source, int sourceType, int type)
+            int source, int sourceType, int type, bool tracksRoots)
         {
             used = Cell(code, used, owner, reference, field);
             code[used++] = 0xd1; // ref.is_null
@@ -55,7 +60,7 @@ namespace PortableCompiler
             // Allocate the cell on the first write. Later writes replace only the snapshot.
             used = Local(code, used, 0x20, reference);
             used = LoadOperand(code, used, source, sourceType, type);
-            used = CellInstruction(code, used, 0); // struct.new
+            used = CreateCell(code, used, tracksRoots, reference);
             used = Gc(code, used, 5, owner);
             used = WasmBinary.Unsigned(code, used, field);
             code[used++] = 0x05;
@@ -67,21 +72,35 @@ namespace PortableCompiler
             return used;
         }
 
-        internal static int Take(byte[] code, int used, int owner, int reference, int field)
+        internal static int Take(byte[] code, int used, int owner, int reference, int field, bool tracksRoots)
         {
             used = Cell(code, used, owner, reference, field);
             code[used++] = 0xd1; // ref.is_null
             code[used++] = 0x04; code[used++] = 0x40;
             used = Local(code, used, 0x20, reference);
             code[used++] = 0xd0; code[used++] = 0x6d; // ref.null eq
-            used = CellInstruction(code, used, 0);
+            used = CreateCell(code, used, tracksRoots, reference);
             used = Gc(code, used, 5, owner);
             used = WasmBinary.Unsigned(code, used, field);
             code[used++] = 0x0b;
             return Cell(code, used, owner, reference, field);
         }
 
-        internal static int CreateFrameCell(byte[] code, int used) => CellInstruction(code, used, 0);
+        // The value is already on the stack. Leave the cell, with its original
+        // owner attached so an interior alias keeps the entire object alive.
+        internal static int CreateCell(byte[] code, int used, bool tracksRoots, int owner = -1)
+        {
+            if (tracksRoots)
+            {
+                if (owner >= 0) used = Local(code, used, 0x20, owner);
+                else
+                {
+                    code[used++] = 0xd0; // ref.null eq
+                    code[used++] = 0x6d;
+                }
+            }
+            return CellInstruction(code, used, 0); // struct.new
+        }
 
         internal static int ClearFrameCell(byte[] code, int used, int cell)
         {

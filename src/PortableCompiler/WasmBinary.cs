@@ -105,7 +105,7 @@ namespace PortableCompiler
             typeEntries += hostImports;
             if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
             if (hasDescriptors) typeEntries++;
-            int prefix = UnsignedSize(typeEntries) + 70 + ManagedValueLocationWasm.TypeBytes +
+            int prefix = UnsignedSize(typeEntries) + 70 + ManagedValueLocationWasm.TypeBytes(rootCount >= 0) +
                 ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + 7 + PrimitiveArrayWasm.BaseTypeOverhead +
                 primitiveArrays.TypeBytes +
                 (recursive ? 1 + UnsignedSize(objects[0]) : 0);
@@ -310,7 +310,7 @@ namespace PortableCompiler
             cursor = PrimitiveArrayWasm.WriteBase(output, cursor, NativeVector);
             output[cursor++] = 0x5f;
             output[cursor++] = 0;
-            cursor = ManagedValueLocationWasm.WriteType(output, cursor);
+            cursor = ManagedValueLocationWasm.WriteType(output, cursor, rootCount >= 0);
             cursor = ManagedLocationWasm.WriteType(output, cursor);
             cursor = SpanWasm.WriteType(output, cursor);
             output[cursor++] = 0x60; // (target eqref, Span<char>, native int) -> void

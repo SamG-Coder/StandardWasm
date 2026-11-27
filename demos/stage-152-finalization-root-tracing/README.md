@@ -96,8 +96,13 @@ event-delegate traversal, indirect calls, and a cleanup policy for raw Wasm
 traps. General executable filters are outside the compiler's supported
 pure type-disjunction pattern. Addressed slots are kept live
 conservatively. For a mutable frame cell, the root is its backing storage.
-Managed location and value-cell wrappers expose their owner or snapshot to
-the mark pass. Node and Edge verify that an addressed struct's reference and
+Managed location and value-cell wrappers expose their owner and snapshot edges to
+the mark pass. The interior-owner cases borrow an array element and a class field
+across a managed call, with both default and initialized values. The CLR, Node
+and Edge keep the finalizable class owner or the array's finalizable sibling
+alive during the borrow and finalize it after the call returns. A nested
+aggregate alias also reaches its parent cell and array by following the
+projection descriptor. Node and Edge verify that an addressed struct's reference and
 an updated `ref object` cell both survive the protected call and its `finally`,
 then become unreachable after the frame returns. JavaScript invokes the pass
 at probe observation points. The Wasm module performs the traversal.

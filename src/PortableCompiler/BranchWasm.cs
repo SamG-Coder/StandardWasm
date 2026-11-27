@@ -202,7 +202,7 @@ namespace PortableCompiler
                         code[used++] = 0xd0; // ref.null eq
                         code[used++] = 0x6d;
                     }
-                    if (IsValueLocation(vector)) used = ManagedValueLocationWasm.CreateFrameCell(code, used);
+                    if (IsValueLocation(vector)) used = ManagedValueLocationWasm.CreateCell(code, used, tracksRoots);
                     else
                     {
                         used = Gc(code, used, 8, vector); // array.new_fixed
@@ -1184,7 +1184,7 @@ namespace PortableCompiler
                     {
                         used = GuardNull(code, used, array);
                         used = GuardArrayIndex(code, used, array, index, false);
-                        used = ValueArrayWasm.Take(code, used, operand, array, index);
+                        used = ValueArrayWasm.Take(code, used, operand, array, index, tracksRoots);
                         used = Local(code, used, 0x21, resultSpill);
                     }
                     else used = ManagedLocationWasm.TakeElement(code, used, array, index, resultSpill);
@@ -1314,7 +1314,7 @@ namespace PortableCompiler
                     int descriptor = records[slot + 3], storage = FieldAccess.Storage(descriptor);
                     int reference = Spill(spills, maximum, spillFlags, states[state + top], top);
                     used = GuardNull(code, used, reference);
-                    used = ManagedValueLocationWasm.Take(code, used, FieldAccess.Owner(descriptor), reference, operand);
+                    used = ManagedValueLocationWasm.Take(code, used, FieldAccess.Owner(descriptor), reference, operand, tracksRoots);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, ValueLocation(storage), top));
                 }
                 else if (kind == GetReferenceField || kind == SetReferenceField || kind == TakeReferenceFieldAddress)
@@ -1373,7 +1373,7 @@ namespace PortableCompiler
                     int descriptor = records[slot + 3], owner = FieldAccess.Owner(descriptor);
                     int location = ValueFieldProjections.DecodeLocation(objects, FieldAccess.Storage(descriptor));
                     int source = Spill(spills, maximum, spillFlags, states[state + top], top);
-                    used = ValueFieldProjectionWasm.Take(code, used, source, owner, operand, location);
+                    used = ValueFieldProjectionWasm.Take(code, used, source, owner, operand, location, tracksRoots);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, location, top));
                 }
                 else if (kind == ClearInteriorField)
@@ -1408,7 +1408,7 @@ namespace PortableCompiler
                         {
                             int source = states[state + top];
                             used = ManagedValueLocationWasm.Write(code, used, type, reference, operand,
-                                Spill(spills, maximum, spillFlags, source, top), source, storage);
+                                Spill(spills, maximum, spillFlags, source, top), source, storage, tracksRoots);
                         }
                     }
                     else
@@ -1523,7 +1523,7 @@ namespace PortableCompiler
                 else if ((kind == ArrayGet || kind == ArraySet) && records[slot + 3] != 0)
                 {
                     used = ValueArrayWasm.EmitAccess(code, used, kind == ArrayGet, operand, records[slot + 3], state, top, states,
-                        spills, maximum, spillFlags, objects);
+                        spills, maximum, spillFlags, objects, tracksRoots);
                 }
                 else if (kind == ArrayGet)
                 {

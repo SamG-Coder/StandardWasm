@@ -48,6 +48,7 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     pin = EmitRootProbe.ObservePinned(),
     protectedExceptions = EmitRootProbe.ObserveProtectedExceptions(),
     initializerResults = EmitRootProbe.ObserveInitializers(),
+    interiorOwners = InteriorOwnerCases.Verify(),
 }));
 
 [MethodImpl(MethodImplOptions.NoInlining)]

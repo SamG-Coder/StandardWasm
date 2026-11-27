@@ -55,6 +55,7 @@ async function observeRoots(bytes) {
     const addressedSnapshots = [];
     let exceptionSnapshots = null;
     let initializerSnapshots = null;
+    let observeInterior = null;
     let inspectAddress = false;
     let inspectCell = false;
     let pinnedOwner = null;
@@ -70,6 +71,10 @@ async function observeRoots(bytes) {
                 const { __root_probe_count: count, __root_probe_table: table } = instance.exports;
                 // Fixed-tag exceptions and normal finally entries have no managed payload.
                 const roots = Array.from({ length: count.value }, (_, index) => table.get(index)).filter(value => value !== null);
+                if (observeInterior !== null) {
+                    observeInterior(roots);
+                    return;
+                }
                 if (initializerSnapshots !== null) {
                     const { __root_probe_mark: mark, __root_probe_contains: contains } = instance.exports;
                     mark();
@@ -113,7 +118,8 @@ async function observeRoots(bytes) {
         ThrowWithRoot, BuildGraph, SetStaticRoot, ObserveProtectedException,
         ObserveInitializerEntry, ObserveInitializerField, ObserveInitializerFailure,
         __root_probe_run_next: runNext, Allocate, ValueOf, Suppress, get_Finalized, get_Total, get_OverridesRan,
-        TakeResurrected, MakePinOwner, ObservePinned } = instance.exports;
+        TakeResurrected, MakePinOwner, ObservePinned,
+        ObserveArrayInterior, ObserveClassInterior, ObserveProjectedArrayInterior, ReadInteriorFinalizations } = instance.exports;
     function assertEmpty() {
         if (count.value !== 0) throw new Error("Root scope was not restored");
         for (let i = 0; i < table.length; i++)
@@ -327,8 +333,39 @@ async function observeRoots(bytes) {
         throw new Error("Type initialization changed its live arguments, field operand, or failure caching");
     initializerSnapshots = null;
     const initializerResults = { entry, field, failures };
+
+    const interiorOwners = [];
+    for (const [run, seed] of [[ObserveArrayInterior, 0], [ObserveArrayInterior, 23],
+        [ObserveClassInterior, 0], [ObserveClassInterior, 47], [ObserveProjectedArrayInterior, 71]]) {
+        const before = ReadInteriorFinalizations();
+        let during;
+        observeInterior = roots => {
+            if (during !== undefined || roots.length !== 1 || edges(roots[0]) !== 2)
+                throw new Error("Expected one live value location with a snapshot and owner edge");
+            let cell = roots[0];
+            if (run === ObserveProjectedArrayInterior) {
+                const projection = read(cell, 0);
+                if (read(cell, 1) !== null || edges(projection) !== 1)
+                    throw new Error("Expected a projected alias with its parent in the descriptor");
+                cell = read(projection, 0);
+            }
+            const owner = read(cell, 1);
+            mark();
+            if (owner === null || contains(cell) !== 1 || contains(owner) !== 1)
+                throw new Error("The active interior alias did not retain its owner");
+            if (discover() !== 0 || runNext() !== 0)
+                throw new Error("The owner or its child was eligible during the borrow");
+            during = ReadInteriorFinalizations() - before;
+        };
+        const value = run(seed);
+        observeInterior = null;
+        assertEmpty();
+        if (discover() !== 1 || runNext() !== 1 || runNext() !== 0)
+            throw new Error("The owner or its child did not become eligible after the borrow");
+        interiorOwners.push({ value, during, after: ReadInteriorFinalizations() - before });
+    }
     return { values: [value, constructed, constructedValue, addressedValue, cellValue], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph, staticRoot: true,
-        discovered, allocationReceivers, allocationFinalizers, suppression, pin, protectedExceptions, initializerResults };
+        discovered, allocationReceivers, allocationFinalizers, suppression, pin, protectedExceptions, initializerResults, interiorOwners };
 }
 
 const expectedRoots = { values: oracle.rootProbeResult,
@@ -337,7 +374,8 @@ const expectedRoots = { values: oracle.rootProbeResult,
         { count: 1, unique: 1 }, { count: 2, unique: 2 }, { count: 1, unique: 1 }, { count: 3, unique: 2 }, { count: 1, unique: 1 }],
     clearedOnReturn: true, clearedOnUnwind: true, graph: oracle.graph, staticRoot: true, discovered: [0, 1, 0, 1, 2],
     allocationReceivers: { count: oracle.allocationFinalizers.count, total: oracle.allocationFinalizers.total },
-    allocationFinalizers: oracle.allocationFinalizers, suppression: oracle.suppression, pin: oracle.pin, protectedExceptions: oracle.protectedExceptions, initializerResults: oracle.initializerResults };
+    allocationFinalizers: oracle.allocationFinalizers, suppression: oracle.suppression, pin: oracle.pin, protectedExceptions: oracle.protectedExceptions, initializerResults: oracle.initializerResults,
+    interiorOwners: oracle.interiorOwners };
 const node = await probe({ compiler: assets.compiler, bundle: assets.basicBundle, row: oracle.row, count: oracle.result.length });
 assert.deepEqual(node, oracle.result);
 const nodeSuppression = await probe({ compiler: assets.compiler, bundle: assets.frameworkBundle,

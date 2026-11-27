@@ -9,7 +9,7 @@ namespace PortableCompiler
     {
         internal const int FirstSnapshotHelper = 4, HelperCount = 6;
 
-        internal static int Take(byte[] code, int used, int source, int owner, int selector, int location)
+        internal static int Take(byte[] code, int used, int source, int owner, int selector, int location, bool tracksRoots)
         {
             // The pair points at the mutable cell, not its current value snapshot.
             used = GuardNull(code, used, source);
@@ -20,7 +20,7 @@ namespace PortableCompiler
             // ObjectLocation payload instead describes a projected field.
             // The view group starts with a non-final native array. The nominal
             // group emits only final arrays, so its snapshots have distinct heaps.
-            return IsValueLocation(location) ? ManagedValueLocationWasm.CreateFrameCell(code, used) : used;
+            return IsValueLocation(location) ? ManagedValueLocationWasm.CreateCell(code, used, tracksRoots) : used;
         }
 
         internal static int Read(byte[] code, int used, int start, int address, int vector, int location,

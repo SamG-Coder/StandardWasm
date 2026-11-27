@@ -10,11 +10,11 @@ namespace PortableCompiler
     {
         internal static int Write(byte[] code, int used, int[] objects, bool read)
         {
-            if (code.Length - used < 196) return -3;
+            if (code.Length - used < 228) return -3;
             code[used++] = 0;
-            // These compiler-owned wrappers all carry their traced owner or
-            // value snapshot in field zero, independent of the nominal heap.
-            used = Wrapper(code, used, ValueLocation(FirstClass), read);
+            // A value location retains its current snapshot (or projection)
+            // and its original owner. Other wrappers have only a single edge.
+            used = Wrapper(code, used, ValueLocation(FirstClass), read, 2);
             used = Wrapper(code, used, ObjectLocation, read);
             used = Wrapper(code, used, ObjectSpan, read);
             used = Wrapper(code, used, CharacterSpanCallback, read);
@@ -50,24 +50,28 @@ namespace PortableCompiler
             return count;
         }
 
-        private static int Wrapper(byte[] code, int used, int type, bool read)
+        private static int Wrapper(byte[] code, int used, int type, bool read, int edges = 1)
         {
             used = Local(code, used, 0x20, 0);
             used = RefType(code, used, 0x14, type);
             code[used++] = 0x04; code[used++] = 0x40;
             if (read)
             {
-                used = Local(code, used, 0x20, 1);
-                code[used++] = 0x45;
-                code[used++] = 0x04; code[used++] = 0x40;
-                used = Receiver(code, used, type);
-                used = Gc(code, used, 2, type);
-                code[used++] = 0;
-                code[used++] = 0x0f;
-                code[used++] = 0x0b;
+                for (int field = 0; field < edges; field++)
+                {
+                    used = Local(code, used, 0x20, 1);
+                    used = Const(code, used, field);
+                    code[used++] = 0x46; // i32.eq
+                    code[used++] = 0x04; code[used++] = 0x40;
+                    used = Receiver(code, used, type);
+                    used = Gc(code, used, 2, type);
+                    code[used++] = (byte)field;
+                    code[used++] = 0x0f;
+                    code[used++] = 0x0b;
+                }
                 used = Null(code, used);
             }
-            else used = Const(code, used, 1);
+            else used = Const(code, used, edges);
             code[used++] = 0x0f;
             code[used++] = 0x0b;
             return used;
