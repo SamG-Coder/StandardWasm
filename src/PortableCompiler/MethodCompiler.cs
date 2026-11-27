@@ -64,6 +64,7 @@ namespace PortableCompiler
             if (location.Length < CompileLocation.Size || warnings.Length < 1) return -3;
             BundleImages images = BundleImages.Unpack(bundle);
             if (images == null) return -1;
+            images.DeferMissing = true;
             int capacity = (warnings.Length - 1) / 3;
             var stubs = new int[1 + 2 * capacity];
             warnings[0] = 0;

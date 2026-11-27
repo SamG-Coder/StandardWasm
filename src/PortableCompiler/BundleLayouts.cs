@@ -178,8 +178,13 @@ namespace PortableCompiler
                 if (storage >= 0 && reference[0] != end) return -1;
             }
             else if (reference[0] != 0)
+            {
+                bool valueType = reference[1] == 1;
                 storage = RegisterType(bundle, image, layout, heaps, owner,
-                    reference[0], objects, reference[1] == 1);
+                    reference[0], objects, valueType);
+                // A value-type field needs its layout, so it keeps the -4 (CLR probe 3).
+                if (storage == -4 && !valueType && bundle.DeferMissing) storage = ObjectLayouts.ObjectReference;
+            }
             return storage;
         }
 
