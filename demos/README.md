@@ -185,6 +185,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [180 · CoreLib monitors](stage-180-corelib-monitors/README.md) | `npm run demo -- stage-180-corelib-monitors` | Run original AppContext code and verify monitor depth and typed failures |
 | [182 · Boolean field projections](stage-182-boolean-field-projections/README.md) | `npm run demo -- stage-182-boolean-field-projections` | Compare Boolean aliases to replaced struct-array fields, nested values and ordinary locals in CLR, Node, and Edge |
 | [183 · Computed span slice arguments](stage-183-computed-span-slices/README.md) | `npm run demo -- stage-183-computed-span-slices` | Verify computed slice offsets, lengths, aliases and typed failures |
+| [184 · Window class registration and procedure replacement](stage-184-window-class-registration/README.md) | `npm run demo -- stage-184-window-class-registration` | Compare Win32 class atoms, module-local attributes, and procedure replacement in the browser host |
 | [185 · Character span equality](stage-185-character-span-equality/README.md) | `npm run demo -- stage-185-character-span-equality` | Match the CLR on backing identity, range and empty anchors |
 
 ## Adding a stage

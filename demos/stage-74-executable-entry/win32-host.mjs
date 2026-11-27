@@ -1,11 +1,12 @@
 import { readPeResource } from "../stage-73-executable-intake/loader/pe.mjs";
 import { createActivationContexts } from "./activation-context.mjs";
 import { createDpiAwareness, dpiImportNames } from "./dpi-awareness.mjs";
-import { createWindowState, windowImportNames } from "./window-state.mjs";
+import { createWindowClassState, createWindowState, windowImportNames } from "./window-state.mjs";
 
 export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
-    "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom"
+    "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom",
+    "registerClassW", "getClassInfoW"
 ]);
 export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, "callWindowProcW", "deactivateActCtx", "releaseActCtx",
@@ -67,7 +68,16 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
             register(asset.path, nextHandle)) moduleImages.set(nextHandle++, asset.bytes);
     }
 
-    const getWindowLong = (handle, index) => windows.getWindowLong(handle, index, value => { errors.system = value; });
+    const setError = value => { errors.system = value; };
+    const isProcedure = token => dynamicLibraries?.hasTarget(token, windowProcedureSignature);
+    const getWindowLong = (handle, index) => windows.getWindowLong(handle, index, setError);
+    function setWindowLong(handle, index, token) {
+        return windows.setWindowProcedure(handle, index, token, procedure => {
+            if (!isProcedure(procedure)) return undefined;
+            return (message, wparam, lparam) =>
+                dynamicLibraries.invoke(procedure, windowProcedureSignature, handle, message, wparam, lparam);
+        }, setError);
+    }
 
     function loadLibraryExW(pointer, reserved, flags) {
         const address = pointer >>> 0;
@@ -158,6 +168,9 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         enableWindow: (handle, enable) => windows.enableWindow(handle, enable),
         getWindowLongW: getWindowLong,
         getWindowLongPtrW: getWindowLong,
+        setWindowLongW: setWindowLong,
+        setWindowLongPtrW: setWindowLong,
+        ...createWindowClassState(memory, isProcedure, setError),
         bCryptGenRandom,
         getLastSystemError: () => errors.system,
         setLastSystemError: value => { errors.system = value | 0; },

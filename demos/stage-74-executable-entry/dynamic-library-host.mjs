@@ -174,5 +174,6 @@ export function createDynamicLibraryHost(errors) {
         return dispatch(token, nativeIndirectSignature, [input, pointer], availableUnits);
     }
 
-    return { registerLibrary, loadLibrary, getModuleHandle, getProcAddress, freeLibrary, invoke, invokeScoped };
+    const hasTarget = (token, signature) => targets.get(token)?.signature === signature;
+    return { registerLibrary, loadLibrary, getModuleHandle, getProcAddress, freeLibrary, invoke, invokeScoped, hasTarget };
 }
