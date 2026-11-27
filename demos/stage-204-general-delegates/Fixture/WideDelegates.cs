@@ -1,7 +1,10 @@
 namespace GeneralDelegateFixture
 {
-    // Stage 204 review regression (Codex, f6e0ba1): more delegate types than one LEB byte counts in the
-    // type section. Each type needs its own thunk type, so the section's entry count crosses 128.
+    // Stage 204 review regression (Codex, f6e0ba1): 80 delegate TypeDefs, each with its own thunk
+    // type and invoke helper. Before the thunk types the module's type count is below 128; after,
+    // it is above, so the count's LEB widens. f6e0ba1 measured the width before adding them and
+    // emitted a type section one byte short (Node rejects it). Measured on f6e0ba1 with this fixture:
+    // 60 to 100 delegates fail; 110 and 140 start above 128 and pass.
     public delegate int Shift0(int value);
     public delegate int Shift1(int value);
     public delegate int Shift2(int value);
@@ -82,66 +85,6 @@ namespace GeneralDelegateFixture
     public delegate int Shift77(int value);
     public delegate int Shift78(int value);
     public delegate int Shift79(int value);
-    public delegate int Shift80(int value);
-    public delegate int Shift81(int value);
-    public delegate int Shift82(int value);
-    public delegate int Shift83(int value);
-    public delegate int Shift84(int value);
-    public delegate int Shift85(int value);
-    public delegate int Shift86(int value);
-    public delegate int Shift87(int value);
-    public delegate int Shift88(int value);
-    public delegate int Shift89(int value);
-    public delegate int Shift90(int value);
-    public delegate int Shift91(int value);
-    public delegate int Shift92(int value);
-    public delegate int Shift93(int value);
-    public delegate int Shift94(int value);
-    public delegate int Shift95(int value);
-    public delegate int Shift96(int value);
-    public delegate int Shift97(int value);
-    public delegate int Shift98(int value);
-    public delegate int Shift99(int value);
-    public delegate int Shift100(int value);
-    public delegate int Shift101(int value);
-    public delegate int Shift102(int value);
-    public delegate int Shift103(int value);
-    public delegate int Shift104(int value);
-    public delegate int Shift105(int value);
-    public delegate int Shift106(int value);
-    public delegate int Shift107(int value);
-    public delegate int Shift108(int value);
-    public delegate int Shift109(int value);
-    public delegate int Shift110(int value);
-    public delegate int Shift111(int value);
-    public delegate int Shift112(int value);
-    public delegate int Shift113(int value);
-    public delegate int Shift114(int value);
-    public delegate int Shift115(int value);
-    public delegate int Shift116(int value);
-    public delegate int Shift117(int value);
-    public delegate int Shift118(int value);
-    public delegate int Shift119(int value);
-    public delegate int Shift120(int value);
-    public delegate int Shift121(int value);
-    public delegate int Shift122(int value);
-    public delegate int Shift123(int value);
-    public delegate int Shift124(int value);
-    public delegate int Shift125(int value);
-    public delegate int Shift126(int value);
-    public delegate int Shift127(int value);
-    public delegate int Shift128(int value);
-    public delegate int Shift129(int value);
-    public delegate int Shift130(int value);
-    public delegate int Shift131(int value);
-    public delegate int Shift132(int value);
-    public delegate int Shift133(int value);
-    public delegate int Shift134(int value);
-    public delegate int Shift135(int value);
-    public delegate int Shift136(int value);
-    public delegate int Shift137(int value);
-    public delegate int Shift138(int value);
-    public delegate int Shift139(int value);
     public static class WideDelegates
     {
         static int Step(int value) => value + 1;
@@ -228,66 +171,6 @@ namespace GeneralDelegateFixture
             Shift77 d77 = Step; total += d77(77);
             Shift78 d78 = Step; total += d78(78);
             Shift79 d79 = Step; total += d79(79);
-            Shift80 d80 = Step; total += d80(80);
-            Shift81 d81 = Step; total += d81(81);
-            Shift82 d82 = Step; total += d82(82);
-            Shift83 d83 = Step; total += d83(83);
-            Shift84 d84 = Step; total += d84(84);
-            Shift85 d85 = Step; total += d85(85);
-            Shift86 d86 = Step; total += d86(86);
-            Shift87 d87 = Step; total += d87(87);
-            Shift88 d88 = Step; total += d88(88);
-            Shift89 d89 = Step; total += d89(89);
-            Shift90 d90 = Step; total += d90(90);
-            Shift91 d91 = Step; total += d91(91);
-            Shift92 d92 = Step; total += d92(92);
-            Shift93 d93 = Step; total += d93(93);
-            Shift94 d94 = Step; total += d94(94);
-            Shift95 d95 = Step; total += d95(95);
-            Shift96 d96 = Step; total += d96(96);
-            Shift97 d97 = Step; total += d97(97);
-            Shift98 d98 = Step; total += d98(98);
-            Shift99 d99 = Step; total += d99(99);
-            Shift100 d100 = Step; total += d100(100);
-            Shift101 d101 = Step; total += d101(101);
-            Shift102 d102 = Step; total += d102(102);
-            Shift103 d103 = Step; total += d103(103);
-            Shift104 d104 = Step; total += d104(104);
-            Shift105 d105 = Step; total += d105(105);
-            Shift106 d106 = Step; total += d106(106);
-            Shift107 d107 = Step; total += d107(107);
-            Shift108 d108 = Step; total += d108(108);
-            Shift109 d109 = Step; total += d109(109);
-            Shift110 d110 = Step; total += d110(110);
-            Shift111 d111 = Step; total += d111(111);
-            Shift112 d112 = Step; total += d112(112);
-            Shift113 d113 = Step; total += d113(113);
-            Shift114 d114 = Step; total += d114(114);
-            Shift115 d115 = Step; total += d115(115);
-            Shift116 d116 = Step; total += d116(116);
-            Shift117 d117 = Step; total += d117(117);
-            Shift118 d118 = Step; total += d118(118);
-            Shift119 d119 = Step; total += d119(119);
-            Shift120 d120 = Step; total += d120(120);
-            Shift121 d121 = Step; total += d121(121);
-            Shift122 d122 = Step; total += d122(122);
-            Shift123 d123 = Step; total += d123(123);
-            Shift124 d124 = Step; total += d124(124);
-            Shift125 d125 = Step; total += d125(125);
-            Shift126 d126 = Step; total += d126(126);
-            Shift127 d127 = Step; total += d127(127);
-            Shift128 d128 = Step; total += d128(128);
-            Shift129 d129 = Step; total += d129(129);
-            Shift130 d130 = Step; total += d130(130);
-            Shift131 d131 = Step; total += d131(131);
-            Shift132 d132 = Step; total += d132(132);
-            Shift133 d133 = Step; total += d133(133);
-            Shift134 d134 = Step; total += d134(134);
-            Shift135 d135 = Step; total += d135(135);
-            Shift136 d136 = Step; total += d136(136);
-            Shift137 d137 = Step; total += d137(137);
-            Shift138 d138 = Step; total += d138(138);
-            Shift139 d139 = Step; total += d139(139);
             return total;
         }
     }
