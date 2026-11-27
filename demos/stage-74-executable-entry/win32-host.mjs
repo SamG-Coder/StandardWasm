@@ -8,7 +8,7 @@ export const win32MemoryImports = new Set([
     "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom"
 ]);
 export const win32ImportNames = new Set([
-    ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, "deactivateActCtx", "releaseActCtx",
+    ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, "callWindowProcW", "deactivateActCtx", "releaseActCtx",
     "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError"
 ]);
 
@@ -17,6 +17,7 @@ const noAccess = 998;
 const invalidWin32Parameter = 87;
 const invalidParameter = 0xc000000d | 0, invalidHandle = 0xc0000008 | 0, unsuccessful = 0xc0000001 | 0;
 const executableHandle = 1;
+const windowProcedureSignature = "stdcall:i32(p32,u32,u32,i32)";
 const decoder = new TextDecoder("utf-16le", { ignoreBOM: true });
 const normalize = name => name.replaceAll("\\", "/").toLowerCase();
 
@@ -147,6 +148,10 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         getModuleHandleW,
         loadLibraryExW,
         getProcAddress,
+        // Only this registry's explicitly bound WNDPROC tokens are callable.
+        callWindowProcW(token, hwnd, message, wparam, lparam) {
+            return dynamicLibraries.invoke(token, windowProcedureSignature, hwnd, message, wparam, lparam);
+        },
         ...createActivationContexts(memory, findManifest, value => { errors.system = value; }),
         ...createDpiAwareness(value => { errors.system = value; }),
         isWindowEnabled: handle => windows.isWindowEnabled(handle),

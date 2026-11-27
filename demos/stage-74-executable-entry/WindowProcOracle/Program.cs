@@ -29,6 +29,7 @@ try
         fixtureAssembly = typeof(WindowProcBindingFixture).Assembly.Location,
         fixtureRow = typeof(WindowProcBindingFixture).GetMethod(nameof(WindowProcBindingFixture.Lookup))!.MetadataToken & 0x00ffffff,
         nominal,
+        dispatch = WindowProcedureOracle.Observe(),
         lookup = new
         {
             sameModule = module == user32,

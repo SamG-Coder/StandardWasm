@@ -273,3 +273,18 @@ the compiler check as well. The ordinary C# fixture uses one-field
 `HMODULE`, `PCSTR`, and `FARPROC` structures matching the generated
 WinForms P/Invoke. Its known and missing exports match Windows x86 in both
 JavaScript engines.
+
+### Calling a previous window procedure
+
+The fixed browser `CallWindowProcW` entry dispatches an explicitly
+registered WNDPROC token. It forwards the HWND, message, WPARAM, and LPARAM
+and returns the callback's signed 32-bit LRESULT. The same registry supplies
+the tokens returned by `GetProcAddress`. A missing registration, foreign or
+released token, or signature mismatch is reported explicitly.
+
+The Windows x86 verifier calls two native procedures through
+`CallWindowProcW` with a real WinForms-created HWND. Node and Edge match
+the selected callbacks, their argument bits, and LRESULTs using the same
+production browser host. A call-only module uses the registry without a
+linear memory import. This test covers dispatch to registered procedures.
+[Win32 CallWindowProcW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-callwindowprocw)

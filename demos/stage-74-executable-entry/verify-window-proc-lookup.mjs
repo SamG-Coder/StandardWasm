@@ -19,21 +19,21 @@ const oracle = JSON.parse(readFileSync(oraclePath, "utf8"));
 assert.equal(oracle.architecture, "X86");
 assert.deepEqual(oracle.original, { matches: true, cached: true });
 
-function fixture(includeSymbol) {
+function fixture(includeSymbol, dispatchOnly = false) {
     const i32 = 0x7f;
     const types = [[0x60, 1, i32, 1, i32], [0x60, 2, i32, i32, 1, i32],
-        [0x60, 0, 1, i32], [0x60, 1, i32, 0]];
-    const calls = [["getModuleHandleW", 0], ["getLastSystemError", 2], ["getLastPInvokeError", 2],
+        [0x60, 0, 1, i32], [0x60, 1, i32, 0], [0x60, 5, i32, i32, i32, i32, i32, 1, i32]];
+    const calls = dispatchOnly ? [["callWindowProcW", 4]] : [["getModuleHandleW", 0], ["getLastSystemError", 2], ["getLastPInvokeError", 2],
         ["setLastPInvokeError", 3]];
-    if (includeSymbol) calls.push(["getProcAddress", 1], ["getWindowLongPtrW", 1]);
+    if (includeSymbol && !dispatchOnly) calls.push(["getProcAddress", 1], ["getWindowLongPtrW", 1], ["callWindowProcW", 4]);
     const name = value => [value.length, ...Buffer.from(value)];
     const section = (id, bytes) => bytes.length < 128
         ? [id, bytes.length, ...bytes]
         : [id, (bytes.length & 127) | 128, bytes.length >>> 7, ...bytes];
     const imports = calls.map(([entry, type]) => [...name("standardwasm:win32"), ...name(entry), 0, type]);
-    imports.unshift([...name("standardwasm:resources"), ...name("memory"), 2, 0, 1]);
+    if (!dispatchOnly) imports.unshift([...name("standardwasm:resources"), ...name("memory"), 2, 0, 1]);
     const exports = calls.map(([entry], index) => [...name(entry), 0, index]);
-    exports.push([...name("memory"), 2, 0]);
+    if (!dispatchOnly) exports.push([...name("memory"), 2, 0]);
     return [0, 97, 115, 109, 1, 0, 0, 0,
         ...section(1, [types.length, ...types.flat()]),
         ...section(2, [imports.length, ...imports.flat()]),
@@ -46,14 +46,31 @@ async function exercise(instantiate, createWindows, variants) {
     const module = new WebAssembly.Module(Uint8Array.from(variants.full));
     const lookupOnly = new WebAssembly.Module(Uint8Array.from(variants.module));
     const start = (wasm, platform) => instantiate(wasm, {}, [], {}, "reference.exe", windows, undefined, platform);
-    let expectedModule, expectedProcedure;
+    let expectedModule, expectedProcedure, hwnd, free;
+    const signature = "stdcall:i32(p32,u32,u32,i32)";
+    const received = [];
+    const signs = [];
+    const callback = (label, result) => (window, message, wparam, lparam) => {
+        received.push([label, window === hwnd ? 1 : 0, message | 0, wparam | 0, lparam]);
+        signs.push(window >= 0 && message >= 0 && wparam >= 0 && lparam < 0);
+        return result;
+    };
+    const declines = (operation, pattern) => {
+        try { operation(); }
+        catch (error) { return pattern.test(error.message); }
+        return false;
+    };
     const platform = {
-        configureNativeLibraries({ registerLibrary, loadLibrary, getProcAddress }) {
+        configureNativeLibraries({ registerLibrary, loadLibrary, getProcAddress, freeLibrary }) {
             registerLibrary("user32", new Map([
-                ["DefWindowProcW", { signature: "stdcall:i32(p32,u32,u32,i32)", invoke() {
-                    throw new Error("This registry fixture exercises symbol lookup only");
-                } }]
+                ["DefWindowProcW", { signature, invoke() {
+                    throw new Error("This fixture has no default window processing");
+                } }],
+                ["FixtureProcA", { signature, invoke: callback(1, -315851420) }],
+                ["FixtureProcB", { signature, invoke: callback(2, 1234567) }],
+                ["OtherSignature", { signature: "stdcall:i32(p32)", invoke() { throw Error("unexpected callback"); } }]
             ]));
+            free = freeLibrary;
             expectedModule = loadLibrary("user32.dll", 0, 0x800);
             expectedProcedure = getProcAddress(expectedModule, "DefWindowProcW");
         }
@@ -76,13 +93,17 @@ async function exercise(instantiate, createWindows, variants) {
             procedure: string(256, "DefWindowProcW", false),
             wrongCase: string(288, "defwindowprocw", false),
             path: string(320, "C:\\Windows\\System32\\user32.dll", true),
-            executable: string(448, "reference.exe", true)
+            executable: string(448, "reference.exe", true),
+            first: string(512, "FixtureProcA", false),
+            second: string(544, "FixtureProcB", false),
+            wrong: string(576, "OtherSignature", false)
         };
     }
 
     const { exports: guest } = await start(module, platform);
     const addresses = populate(guest.memory);
     const h = guest.getModuleHandleW(addresses.user32);
+    const release = free;
     const p = guest.getProcAddress(h, addresses.procedure);
     const missingModule = guest.getModuleHandleW(addresses.missing);
     const moduleError = guest.getLastSystemError();
@@ -90,8 +111,20 @@ async function exercise(instantiate, createWindows, variants) {
     const procedureError = guest.getLastSystemError();
     const lookup = { sameModule: h === expectedModule, sameProcedure: p === expectedProcedure,
         missingModule, moduleError, missingProcedure, procedureError };
-    const hwnd = windows.register(0, undefined, { procedure: p });
+    hwnd = windows.register(0, undefined, { procedure: p });
     const storedProcedure = guest.getWindowLongPtrW(hwnd, -4) === p;
+    const prior = guest.getProcAddress(h, addresses.first);
+    const alternate = guest.getProcAddress(h, addresses.second);
+    const incompatible = guest.getProcAddress(h, addresses.wrong);
+    guest.setLastPInvokeError(321);
+    // Cache the current system error from the case-mismatch failure.
+    const systemBefore = guest.getLastSystemError();
+    const before = guest.callWindowProcW(prior, hwnd, 0x80000111, 0xfedcba98, 0x87654321);
+    const after = guest.callWindowProcW(alternate, hwnd, 0x7fff, 0x80000000, -1);
+    const dispatch = { received, results: [before, after] };
+    const preservedDispatch = [guest.getLastSystemError() === systemBefore, guest.getLastPInvokeError()];
+    const wrongSignature = declines(() => guest.callWindowProcW(incompatible, hwnd, 0, 0, 0), /signature mismatch/);
+    const nullToken = declines(() => guest.callWindowProcW(0, hwnd, 0, 0, 0), /unregistered dynamic export token/);
     const executable = [guest.getModuleHandleW(0), guest.getModuleHandleW(addresses.executable)];
     const diskPath = guest.getModuleHandleW(addresses.path);
     const diskError = guest.getLastSystemError();
@@ -110,13 +143,29 @@ async function exercise(instantiate, createWindows, variants) {
     const fresh = second.getModuleHandleW(secondAddresses.user32) !== h;
     const foreign = second.getProcAddress(h, secondAddresses.procedure);
     const foreignError = second.getLastSystemError();
+    const foreignCall = declines(() => second.callWindowProcW(prior, hwnd, 0, 0, 0), /unregistered dynamic export token/);
 
     const { exports: empty } = await start(module);
     const noProvider = empty.getModuleHandleW(populate(empty.memory).user32);
     const noProviderError = empty.getLastSystemError();
+    const noProviderCall = declines(() => empty.callWindowProcW(prior, hwnd, 0, 0, 0), /unregistered dynamic export token/);
     const { exports: names } = await start(lookupOnly, platform);
     const namesOnly = names.getModuleHandleW(populate(names.memory).user32) === expectedModule;
-    return { lookup, storedProcedure, executable, diskPath, diskError, ordinal, ordinalError, malformed,
+    release(h);
+    const stale = declines(() => guest.callWindowProcW(prior, hwnd, 0, 0, 0), /unregistered dynamic export token/);
+
+    let dispatchToken, extraMemory;
+    const { exports: unlinked } = await start(new WebAssembly.Module(Uint8Array.from(variants.dispatch)), {
+        configureNativeLibraries({ memory, registerLibrary, loadLibrary, getProcAddress }) {
+            extraMemory = memory !== undefined;
+            registerLibrary("fixture-user32", new Map([
+                ["WndProc", { signature, invoke: (window, message) => window === hwnd && message === 0 ? 19 : -1 }]
+            ]));
+            dispatchToken = getProcAddress(loadLibrary("fixture-user32"), "WndProc");
+        }
+    });
+    const callOnly = [unlinked.callWindowProcW(dispatchToken, hwnd, 0, 0, 0), extraMemory];
+    return { lookup, dispatch, stale, callOnly, signs, preservedDispatch, wrongSignature, nullToken, foreignCall, noProviderCall, storedProcedure, executable, diskPath, diskError, ordinal, ordinalError, malformed,
         malformedError, preservedError, fresh, foreign, foreignError, noProvider, noProviderError, namesOnly };
 }
 
@@ -150,10 +199,11 @@ async function exerciseCompiled(instantiate, compilerBytes, assemblyBytes, row) 
     return { found, missing, imports };
 }
 
-const variants = { full: fixture(true), module: fixture(false) };
+const variants = { full: fixture(true), module: fixture(false), dispatch: fixture(false, true) };
 const node = await exercise(instantiateManagedModule, createWindowState, variants);
 assert.deepEqual(node, {
-    lookup: oracle.lookup, storedProcedure: true, executable: [1, 1], diskPath: 0, diskError: 126, ordinal: 0,
+    lookup: oracle.lookup, dispatch: oracle.dispatch, stale: true, callOnly: [19, false], signs: [true, true], preservedDispatch: [true, 321],
+    wrongSignature: true, nullToken: true, foreignCall: true, noProviderCall: true, storedProcedure: true, executable: [1, 1], diskPath: 0, diskError: 126, ordinal: 0,
     ordinalError: 127, malformed: 0, malformedError: 998, preservedError: 321, fresh: true, foreign: 0,
     foreignError: 6, noProvider: 0, noProviderError: 126, namesOnly: true
 });
@@ -190,7 +240,7 @@ try {
     writeFileSync(join(evidence, "results.json"), JSON.stringify({
         oracle, node, browser, compiled, nodeVersion: process.version, edgeVersion: edge.version()
     }, null, 2) + "\n");
-    console.log("Node and Edge matched Windows x86 module/export lookup and checked browser registry isolation.");
+    console.log("Node and Edge matched Windows x86 lookup and window-procedure dispatch through the browser registry.");
     if (compiled) console.log("Compiled HMODULE/PCSTR/FARPROC lookup matched the Windows x86 result in both engines.");
 } finally {
     await edge.close();

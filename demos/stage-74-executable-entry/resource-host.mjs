@@ -199,6 +199,7 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     }
     let dynamicLibraries;
     const requestedLibrary = requestedWin32.has("loadLibraryExW") || requestedWin32.has("getProcAddress") ||
+        requestedWin32.has("callWindowProcW") ||
         requestedWin32.has("getModuleHandleW") && typeof platform?.configureNativeLibraries === "function";
     if (wantsNativeIndirect || wantsNativeSymbol || requestedLibrary) {
         dynamicLibraries = createDynamicLibraryHost(errors);
