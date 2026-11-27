@@ -263,6 +263,7 @@ namespace PortableCompiler
                 if (status != 0)
                     return status == MethodBodies.Malformed ? -1 : -2;
                 int[] catchRegion = noCatch;
+                int[] filterEnds = null, filters = noCatch;
                 bool hasFinally = false;
                 if (body[5] != 0)
                 {
@@ -279,6 +280,25 @@ namespace PortableCompiler
                         {
                             hasFinally = true;
                             continue; // The reader publishes zero in the union field.
+                        }
+                        if (catchRegion[clause] == 1)
+                        {
+                            if (filterEnds == null)
+                            {
+                                filterEnds = new int[body[1]];
+                                filters = new int[regions * ExceptionFilters.Width];
+                            }
+                            int start = catchRegion[clause + 5], end = catchRegion[clause + 3];
+                            int filtered = ExceptionFilters.Bind(bundle, image, layout, heaps, owner,
+                                body[0] + start, body[0] + end, objects, filters, clause / ExceptionRegions.Width * ExceptionFilters.Width);
+                            if (filtered < 0) return filtered;
+                            if (start == 0) return -1;
+                            for (int offset = 0; offset < end; offset++)
+                                if (filterEnds[offset] > start) return -1;
+                            filterEnds[start] = end;
+                            catchRegion[clause] = 0;
+                            catchRegion[clause + 5] = filtered;
+                            continue;
                         }
                         if (catchRegion[clause] != 0) return -2;
                         // Fixed-tag bits, plus the object tag and caught class when the
@@ -327,7 +347,7 @@ namespace PortableCompiler
                     int localBlob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, body[3]);
                     if (localBlob < 0)
                         return -1;
-                    locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context, methodArguments, pinned);
+                    locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context, methodArguments, pinned, filters);
                     if (locals < 0)
                         return locals;
                     // CorILMethod_InitLocals (body[4]) is deliberately not required. Without it
@@ -348,9 +368,14 @@ namespace PortableCompiler
                     var records = new int[body[1] * BranchIl.Width];
                     status = resourceOpen
                         ? ResourceOpenIl.Decode(image, body, records, location, parameters)
-                        : BranchIl.Decode(image, body[0], body[1], parameters, locals, records, location, catchRegion.Length != 0);
+                        : BranchIl.Decode(image, body[0], body[1], parameters, locals, records, location, catchRegion.Length != 0, filterEnds: filterEnds);
                     if (status < 0)
                         return status;
+                    if (filterEnds != null)
+                    {
+                        status = ExceptionFilters.ValidateLocals(records, filters, parameters, locals, location);
+                        if (status < 0) return status;
+                    }
                     status = ArrayInitializers.Lower(image, heaps, layout, records, literals, literalSize, location);
                     if (status < 0)
                         return status;
@@ -641,7 +666,7 @@ namespace PortableCompiler
                     }
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
-                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers, reflection, inlineLocations, nativePlans.Plans);
+                        arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers, reflection, inlineLocations, nativePlans.Plans, filters);
                 }
 
                 if (used < 0) return used;

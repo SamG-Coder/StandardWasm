@@ -10,7 +10,7 @@ namespace PortableCompiler
         private const int LocationSpill = 1, SpanSpill = 2;
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection, int[] inlineLocations, int[] nativePlans)
+            byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection, int[] inlineLocations, int[] nativePlans, int[] filters)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -1116,7 +1116,7 @@ namespace PortableCompiler
                 code[used++] = 0x0b;
             }
             code[used++] = 0;
-            if (catchRegion.Length != 0) used = ExceptionDispatchWasm.End(code, used, pcLocal, catchRegion, exceptionLocals > 1, objectBase);
+            if (catchRegion.Length != 0) used = ExceptionDispatchWasm.End(code, used, pcLocal, catchRegion, exceptionLocals > 1, objectBase, filters);
             code[used++] = 0x0b;
             code[used++] = 0;
             if (guard >= 0) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers);

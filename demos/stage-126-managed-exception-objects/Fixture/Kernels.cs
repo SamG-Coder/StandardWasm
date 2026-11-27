@@ -22,6 +22,10 @@ namespace ExceptionFixture
     {
     }
 
+    public sealed class UnrelatedException : Exception
+    {
+    }
+
     // Each kernel returns an int that encodes which handlers ran, in order.
     // Handlers never bind the exception variable (C# emits `pop`), matching the
     // compiler's handler-entry rule. The CLR oracle runs the same DLL.
@@ -129,6 +133,23 @@ namespace ExceptionFixture
                 catch (Shared.NamedException) { return 81; } // the fixture's own class
             }
             catch (Exception) { return 82; }
+        }
+
+        public static int TypeFilterMatchesInherited() => TypeFilter(0);
+        public static int TypeFilterMatchesSecond() => TypeFilter(1);
+        public static int TypeFilterRejectsOther() => TypeFilter(2);
+
+        private static int TypeFilter(int scenario)
+        {
+            try
+            {
+                if (scenario == 0) Throw(new DerivedException());
+                if (scenario == 1) Throw(new OtherException());
+                Throw(new UnrelatedException());
+                return 0;
+            }
+            catch (Exception error) when (error is FixtureException or OtherException) { return 101; }
+            catch (UnrelatedException) { return 102; }
         }
 
         public static int Filtered()

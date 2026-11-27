@@ -21,5 +21,7 @@ The kernels cover:
 - one `catch (Exception)` handler first receiving a divide-by-zero and then an object, rethrowing both
 - same-named exception classes in two assemblies staying distinct
 
-`Filtered` uses an exception filter and must return the explicit -2 diagnostic at its handler offset.
+The pure two-type filters check nominal matching, inherited matching, and
+fall-through to a later catch. `Filtered` evaluates a field predicate and
+still produces the explicit -2 diagnostic at its handler offset.
 `Uncaught` must reach the host on the exported object tag. The design is decision 0054.

@@ -28,7 +28,7 @@ var forms = typeof(System.Windows.Forms.Application).Module;
 nint moduleHandle = Lookup(forms.Name.ToUpperInvariant());
 int moduleError = Marshal.GetLastPInvokeError();
 Console.WriteLine(JsonSerializer.Serialize(new { executable, results, errors = new[] { system, pinvoke },
-    compiledFixture, compiledMonitor = Enumerable.Range(0, 4).Select(MonitorProbe.LockRoundTrip)
+    compiledFixture, compiledFilter = Enumerable.Range(0, 4).Select(ExceptionFilterProbe.MatchPair).ToArray(), compiledMonitor = Enumerable.Range(0, 4).Select(MonitorProbe.LockRoundTrip)
         .Concat(Enumerable.Range(0, 3).Select(MonitorProbe.ReleaseDepth)).ToArray(), compiledStaticPin = new[] { PinnedStaticProbe.Sum(), PinnedStaticProbe.Alias(2),
         PinnedStaticProbe.Sum(), PinnedStaticProbe.Alias(9), PinnedStaticProbe.Sum() }, framework = forms.Assembly.Location, frameworkLookup = new[] { moduleHandle == 0 ? 0 : 1, moduleError },
     activationContext = ActivationContextOracle.Probe(moduleHandle), compiledActivation = ActivationContextOracle.ProbeFixture(), compiledLifecycle = ActivationContextProbe.Lifecycle(), compiledPointers = new[] { 0, -1, 123 }

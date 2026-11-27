@@ -19,7 +19,7 @@ namespace PortableCompiler
                 int start = clauses[clause + HandlerStart], tryStart = clauses[clause + TryStart];
                 int end = start + clauses[clause + HandlerLength];
                 if (location.Length != 0) location[2] = start;
-                if (start == 0 || !Boundary(records, start) || !Boundary(records, end) ||
+                if (start == 0 || records[start * BranchIl.Width] == FilterSkip || !Boundary(records, start) || !Boundary(records, end) ||
                     !Boundary(records, tryStart) || !Boundary(records, tryStart + clauses[clause + TryLength]))
                     return -1;
                 for (int earlier = 0; earlier < clause; earlier += Width)
@@ -46,6 +46,11 @@ namespace PortableCompiler
                 int slot = pc * BranchIl.Width;
                 int kind = records[slot], operand = records[slot + 1], next = records[slot + 2];
                 if (location.Length != 0) location[2] = pc;
+                if (kind == FilterSkip)
+                {
+                    pc = next;
+                    continue;
+                }
                 if (kind == Leave)
                 {
                     if (!Edge(clauses, pc, operand, true)) return -1;
@@ -78,7 +83,8 @@ namespace PortableCompiler
                     if (kind == Switch)
                         for (int i = 0; i < records[slot + 3]; i++)
                             if (!Edge(clauses, pc, SwitchTarget(records, operand, i), false)) return -1;
-                    if (kind != Branch && (next >= length || !Edge(clauses, pc, next, false))) return -1;
+                    if (kind != Branch && (next >= length || records[next * BranchIl.Width] == FilterSkip ||
+                        !Edge(clauses, pc, next, false))) return -1;
                 }
                 pc = next;
             }

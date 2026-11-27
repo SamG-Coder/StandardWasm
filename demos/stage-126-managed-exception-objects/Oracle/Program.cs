@@ -18,7 +18,8 @@ var cases = new List<object>();
 foreach (string name in new[]
 {
     "TypedCatch", "DerivedBeforeBase", "BaseCatchesDerived", "MismatchReachesOuter", "CatchException",
-    "RethrowKeepsType", "FinallyOrder", "NullVariableThrow", "RepeatedHandlerVisit", "SameNameStaysDistinct"
+    "RethrowKeepsType", "FinallyOrder", "NullVariableThrow", "RepeatedHandlerVisit", "SameNameStaysDistinct",
+    "TypeFilterMatchesInherited", "TypeFilterMatchesSecond", "TypeFilterRejectsOther"
 })
 {
     MethodInfo method = kernels.GetMethod(name)!;
@@ -26,7 +27,7 @@ foreach (string name in new[]
     cases.Add(new { name, row = Row(method), images, clr = value.ToString(), wasm = value.ToString() });
 }
 
-// Exception filters keep the explicit diagnostic at their handler (decision 0054).
+// A filter with a general predicate still has a located diagnostic.
 MethodInfo filtered = kernels.GetMethod("Filtered")!;
 int filteredValue = (int)filtered.Invoke(null, null)!;
 ExceptionHandlingClause filter = filtered.GetMethodBody()!.ExceptionHandlingClauses

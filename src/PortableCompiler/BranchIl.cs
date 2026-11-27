@@ -50,7 +50,7 @@ namespace PortableCompiler
         // copy with a NUL terminator, or 0 for null. Auxiliary 1: null raises NullReferenceException.
         // 118 matches the integration line, where 116 and 117 are runtime-type kinds.
         internal const int PinString = 118;
-        internal const int StaticFieldAddress = 121, LoadNativeStatic = 122, StoreNativeStatic = 123, Monitor = 124;
+        internal const int StaticFieldAddress = 121, LoadNativeStatic = 122, StoreNativeStatic = 123, Monitor = 124, FilterSkip = 125;
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
@@ -59,13 +59,20 @@ namespace PortableCompiler
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
         internal static int Decode(byte[] image, int start, int length, int arguments, int locals,
-            int[] records, int[] location, bool hasCatches, int first = 0)
+            int[] records, int[] location, bool hasCatches, int first = 0, int[] filterEnds = null)
         {
             int pc = first;
             while (pc < length)
             {
                 if (location.Length != 0) location[2] = pc;
                 int slot = pc * Width;
+                if (filterEnds != null && filterEnds[pc] != 0)
+                {
+                    pc = filterEnds[pc];
+                    records[slot] = FilterSkip;
+                    records[slot + 2] = pc;
+                    continue;
+                }
                 int op = image[start + pc++];
                 if (op == 0xfe && pc < length && image[start + pc] == 0x13)
                 {
@@ -466,7 +473,7 @@ namespace PortableCompiler
                 records[slot + 3] = records[slot + 3] | 1;
             else if (kind == ConvertFloat || kind == ConvertInteger || kind == Load)
                 records[slot + 3] = 1;
-            return records[slot] != 0;
+            return kind != 0 && kind != FilterSkip;
         }
 
         private static void MarkNativeZero(int[] records, int length)

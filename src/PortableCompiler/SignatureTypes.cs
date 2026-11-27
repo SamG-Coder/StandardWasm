@@ -106,7 +106,7 @@ namespace PortableCompiler
         // write only their slots. Stack values normalize CLI small integers to i32.
         // context is the closed declaring layout that supplies VAR arguments,
         // or zero when the declaring type is not generic.
-        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context, int[] methodArguments = null, int[] pinned = null)
+        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context, int[] methodArguments = null, int[] pinned = null, int[] filters = null)
         {
             if (index <= 0 || index >= heap[1])
                 return -2;
@@ -140,6 +140,9 @@ namespace PortableCompiler
                 if (cursor >= end)
                     return -2;
                 int element = image[cursor++];
+                int filterLocal = locals && filters != null ? ExceptionFilters.LocalKind(filters, i) : 0;
+                if (filterLocal == 2 && element != 2) return -2;
+                if (filterLocal == 1 && element != 0x12) return -2;
                 if (locals && pinned != null) pinned[i] = 0;
                 int target = offset + i + (i == 0 ? 0 : implicitSlots);
                 if (element == PinnedLocals.Pinned)
@@ -242,6 +245,13 @@ namespace PortableCompiler
                     if (coded <= 0) return -2;
                     cursor = next[0];
                     bool valueType = element == 0x11;
+                    if (filterLocal == 1)
+                    {
+                        if ((coded & 3) != 1 || !ExceptionFilters.IsExceptionGuard(image, methods, heap, 0x01000000 | (coded >> 2)))
+                            return -2;
+                        types[target] = ObjectLayouts.ObjectReference; // Elided filter scratch.
+                        continue;
+                    }
                     int type = RuntimeTypeMetadata.Storage(image, heap, methods, coded, valueType);
                     // Keep the upstream System.Type layout when this bundle supplies it.
                     // The opaque descriptor is the fallback for libraries without that definition.

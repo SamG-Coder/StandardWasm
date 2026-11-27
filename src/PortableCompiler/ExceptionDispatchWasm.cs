@@ -43,7 +43,7 @@ namespace PortableCompiler
 
         // pc is the pc local. Saved exception locals: exnref at pc + 1 (scratch) and
         // pc + 2 + clause; eqref at objects (scratch) and objects + 1 + clause.
-        internal static int End(byte[] code, int used, int pc, int[] region, bool saveHandlers, int objects)
+        internal static int End(byte[] code, int used, int pc, int[] region, bool saveHandlers, int objects, int[] filters)
         {
             code[used++] = 0x0b; // try_table
             code[used++] = 0;    // only the catch edges may reach the destinations
@@ -55,7 +55,7 @@ namespace PortableCompiler
                 used = Dispatch(code, used, pc, region, ExceptionTagsWasm.FixedTag(tag), loop, saveHandlers, objects);
             }
             code[used++] = 0x0b; // object destination: [eqref]
-            return DispatchObject(code, used, pc, region, saveHandlers, objects);
+            return DispatchObject(code, used, pc, region, saveHandlers, objects, filters);
         }
 
         private static int Dispatch(byte[] code, int used, int pc, int[] clauses, int tag, int loop, bool saveHandlers, int objects)
@@ -86,27 +86,33 @@ namespace PortableCompiler
             return ThrowReference(code, used, captured);
         }
 
-        private static int DispatchObject(byte[] code, int used, int pc, int[] clauses, bool saveHandlers, int objects)
+        private static int DispatchObject(byte[] code, int used, int pc, int[] clauses, bool saveHandlers, int objects, int[] filters)
         {
             used = Local(code, used, 0x21, objects);
             for (int clause = 0; clause < clauses.Length; clause += ExceptionClauses.Width)
             {
                 bool cleanup = ExceptionClauses.IsFinally(clauses, clause);
                 int mask = clauses[clause + ExceptionClauses.Mask];
-                if (!cleanup && !ManagedExceptionClauses.CatchesObjects(mask)) continue;
+                int filter = filters.Length == 0 ? 0 : filters[clause / ExceptionClauses.Width * ExceptionFilters.Width];
+                bool firstObject = ManagedExceptionClauses.CatchesObjects(mask);
+                bool secondObject = ManagedExceptionClauses.CatchesObjects(filter);
+                if (!cleanup && !firstObject && !secondObject) continue;
                 used = InRange(code, used, pc, clauses, clause);
                 code[used++] = 0x04; // if
                 code[used++] = 0x40;
-                int caught = cleanup ? PeLibrary.ObjectLayouts.ObjectReference : ManagedExceptionClauses.CaughtClass(mask);
-                bool tested = caught != PeLibrary.ObjectLayouts.ObjectReference;
+                int caught = cleanup ? PeLibrary.ObjectLayouts.ObjectReference : ManagedExceptionClauses.CaughtClass(firstObject ? mask : filter);
+                int other = firstObject && secondObject ? ManagedExceptionClauses.CaughtClass(filter) : 0;
+                bool tested = caught != PeLibrary.ObjectLayouts.ObjectReference && other != PeLibrary.ObjectLayouts.ObjectReference;
                 if (tested)
                 {
                     // Nominal match: Wasm GC subtyping mirrors the bundle's class hierarchy, so
                     // a derived exception matches its base and same-named classes stay distinct.
-                    used = Local(code, used, 0x20, objects);
-                    code[used++] = 0xfb;
-                    code[used++] = 20; // ref.test (ref T): a thrown object is never null
-                    used = WasmBinary.Signed(code, used, WasmBinary.HeapType(caught));
+                    used = IsInstance(code, used, objects, caught);
+                    if (other != 0 && other != caught)
+                    {
+                        used = IsInstance(code, used, objects, other);
+                        code[used++] = 0x72; // i32.or
+                    }
                     code[used++] = 0x04; // if
                     code[used++] = 0x40;
                 }
@@ -126,6 +132,14 @@ namespace PortableCompiler
                 code[used++] = 0x0b;
             }
             return ThrowObject(code, used, objects);
+        }
+
+        private static int IsInstance(byte[] code, int used, int objects, int type)
+        {
+            used = Local(code, used, 0x20, objects);
+            code[used++] = 0xfb;
+            code[used++] = 20; // ref.test (ref T)
+            return WasmBinary.Signed(code, used, WasmBinary.HeapType(type));
         }
 
         private static int InRange(byte[] code, int used, int pc, int[] clauses, int clause)
