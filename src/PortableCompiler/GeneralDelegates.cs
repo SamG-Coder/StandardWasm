@@ -163,7 +163,7 @@ namespace PortableCompiler
             int at = start + 2;
             if (hasResult)
             {
-                if (image[at] != 0x13 || image[at + 1] != count) return 0;
+                if (at + 1 >= start + size || image[at] != 0x13 || image[at + 1] != count) return 0;
                 at += 2;
             }
             else if (image[at++] != 1) return 0;

@@ -24,6 +24,8 @@ and Edge must return the CLR's value for every kernel:
 - delegates stored in static and instance fields, then passed on
 - library-declared delegates with static, void, instance (captured) and class-result signatures
 - invoking a null delegate (`NullReferenceException`)
+- 140 distinct delegate types in one method, so the module's type count and thunk type indices
+  need multi-byte LEB encodings
 
 The `Reject*` kernels must be diagnosed, not approximated: the shared closure has no type identity,
 so casts from `object`, `is` tests and `Delegate.Combine` (`+=`) on these delegates stay

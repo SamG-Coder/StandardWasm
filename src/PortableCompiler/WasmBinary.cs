@@ -111,6 +111,11 @@ namespace PortableCompiler
             typeEntries += hostImports;
             if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
             if (hasDescriptors) typeEntries++;
+            // Stage 204 (decision 0091): one thunk function type per delegate entry, after every fixed
+            // type. Counted before the prefix so the entry count's LEB width includes them (Codex
+            // review of f6e0ba1: 110 delegate types crossed a width boundary).
+            int delegateTypes = DelegateShapes.EntryCount(objects);
+            typeEntries += delegateTypes;
             int prefix = UnsignedSize(typeEntries) + 70 + ManagedValueLocationWasm.TypeBytes(rootCount >= 0) +
                 ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + 7 + PrimitiveArrayWasm.BaseTypeOverhead +
                 primitiveArrays.TypeBytes +
@@ -121,9 +126,6 @@ namespace PortableCompiler
             prefix += WasmImports.TypeBytes(hostFeatures, natives);
             if (argumentArray != 0) prefix += EntryArgumentsWasm.TypeBytes(argumentArray);
             if (hasDescriptors) prefix += RuntimeTypeWasm.DescriptorBytes;
-            // Stage 204 (decision 0091): one thunk function type per delegate entry, after every fixed type.
-            int delegateTypes = DelegateShapes.EntryCount(objects);
-            typeEntries += delegateTypes;
             prefix += GeneralDelegates.ThunkTypeBytes(objects);
             if (classBytes > output.Length - prefix) return -3;
             int typeSize = classBytes + prefix;

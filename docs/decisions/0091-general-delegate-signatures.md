@@ -67,5 +67,5 @@ or ordinary classes. Their runtime-provided `.ctor` and `Invoke` have no IL, so 
 ## Verification
 
 `npm run demo -- stage-204-general-delegates` runs the fixture on the x86 CLR 10.0.10 and compares
-Node and Edge with it. The fixture has 16 value kernels and 5 `Reject*` kernels that must be
+Node and Edge with it. The fixture has 17 value kernels and 5 `Reject*` kernels that must be
 diagnosed.

@@ -45,6 +45,7 @@ namespace GeneralDelegateFixture
         public static int RejectMulticast() { Combine c = Mix; c += Mix; return (int)c(4, 2); }
         public static int RejectIsType() { object o = (Combine)Mix; return o is Sink ? 1 : 2; }
         public static int RejectFuncCast() { object o = (Func<int, int>)Twice; return ((Func<int, int>)o)(21); }
+        public static int WideTypeIndices() => WideDelegates.Run();
         public static int DoubleResult() { Func<double, double> f = d => d * 1.5; return (int)(f(10.0) * 10); }
     }
 }
