@@ -94,7 +94,11 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
             continue;
         }
         const group = Object.hasOwn(runtimeImports, owner) ? runtimeImports[owner] : undefined;
-        if (!group || kind !== "function" || !Object.hasOwn(group, name) || typeof group[name] !== "function")
+        // A WebAssembly.Suspending import (Stage 151, decision 0079) is a function import too.
+        const value = group && Object.hasOwn(group, name) ? group[name] : undefined;
+        const callable = typeof value === "function" ||
+            (typeof WebAssembly.Suspending === "function" && value instanceof WebAssembly.Suspending);
+        if (!group || kind !== "function" || !callable)
             throw Error("The generated module requests an unsupported runtime import.");
     }
     if (!requestedResources.size) return WebAssembly.instantiate(module, runtimeImports);
