@@ -315,6 +315,14 @@ namespace PortableCompiler
             return used;
         }
 
+        internal static int BorrowCharacters(byte[] code, int used, int reference)
+        {
+            used = BranchWasm.GuardNull(code, used, reference);
+            used = Unwrap(code, Local(code, used, 0x20, reference));
+            used = Zero(code, used);
+            return BranchWasm.Gc(code, used, 0, SignatureTypes.ReadOnlyCharacterLocation);
+        }
+
         internal static int FirstCodeUnit(byte[] code, int used, int reference)
         {
             used = Unwrap(code, Local(code, used, 0x20, reference));

@@ -1400,6 +1400,7 @@ namespace PortableCompiler
                                 kind == BranchIl.RuntimeTypeGenericDefinition || kind == BranchIl.RuntimeTypeGenericArguments || kind == BranchIl.RuntimeTypeIsValue || kind == BranchIl.ArrayLength || kind == BranchIl.GetField ||
                                 kind == BranchIl.SetField || kind == BranchIl.ClearInteriorField || kind == BranchIl.TakeProjectedFieldAddress ||
                                 nativeField || kind == BranchIl.StringLength || kind == BranchIl.StringFirstCodeUnit ||
+                                kind == BranchIl.TakeReadOnlyCharacterLocation && records[slot + 3] == String ||
                                 kind == BranchIl.GetReferenceField || kind == BranchIl.SetReferenceField || kind == BranchIl.TakeReferenceFieldAddress ||
                                 kind == BranchIl.StringRange || kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.InvokeDelegate ||
                                 kind == BranchIl.ThrowNull || kind == BranchIl.ReadReflection || kind == BranchIl.GetObjectType ||
@@ -1903,6 +1904,12 @@ namespace PortableCompiler
                 // Validate it before reflection recognizers read its metadata.
                 if (kind == BranchIl.Call && (records[slot + 1] < 1 || records[slot + 1] > methodCount))
                     return -1;
+                if (kind == BranchIl.Call && ReadOnlyStringBorrow.IsOrdinalInput(image, layout, heaps, callerRow, records[slot + 1]))
+                {
+                    records[slot] = BranchIl.TakeReadOnlyCharacterLocation;
+                    records[slot + 3] = String;
+                    continue;
+                }
                 if ((kind == BranchIl.Call || kind == BranchIl.MemberCall) &&
                     RuntimeTypeTokens.LowerExactHandleGetter(image, layout, heaps, records, slot, clauses)) continue;
                 if ((kind == BranchIl.Call || kind == BranchIl.MemberCall && records[slot + 3] != 0x73) &&

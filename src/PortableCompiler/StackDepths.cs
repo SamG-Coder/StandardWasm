@@ -293,7 +293,8 @@ namespace PortableCompiler
             if (kind == TakeCharacterSpanLocation)
                 return Match(stack, depth, WritableCharacterSpan) ? Push(stack, allocated, depth - 1, CharacterLocation) : -2;
             if (kind == TakeReadOnlyCharacterLocation)
-                return Match(stack, depth, CharacterSpan) ? Push(stack, allocated, depth - 1, ReadOnlyCharacterLocation) : -2;
+                return Match(stack, depth, extra == String ? String : CharacterSpan)
+                    ? Push(stack, allocated, depth - 1, ReadOnlyCharacterLocation) : -2;
             if (kind == OffsetStaticByteLocation || kind == OffsetCharacterLocation)
             {
                 if (depth < 2) return -2;

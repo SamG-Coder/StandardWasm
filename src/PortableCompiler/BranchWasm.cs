@@ -472,11 +472,12 @@ namespace PortableCompiler
                 else if (kind == TakeStaticByteLocation || kind == TakeCharacterSpanLocation || kind == TakeReadOnlyCharacterLocation)
                 {
                     int viewType = kind == TakeCharacterSpanLocation ? WritableCharacterSpan :
-                        kind == TakeReadOnlyCharacterLocation ? CharacterSpan : ReadOnlyByteSpan;
+                        kind == TakeReadOnlyCharacterLocation ? records[slot + 3] == String ? String : CharacterSpan : ReadOnlyByteSpan;
                     int locationType = kind == TakeCharacterSpanLocation ? CharacterLocation :
                         kind == TakeReadOnlyCharacterLocation ? ReadOnlyCharacterLocation : StaticByteLocation;
                     int view = Spill(spills, maximum, spillFlags, viewType, top);
-                    used = SpanWasm.TakeLocation(code, used, view, locationType);
+                    used = viewType == String ? StringWasm.BorrowCharacters(code, used, view) :
+                        SpanWasm.TakeLocation(code, used, view, locationType);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, locationType, top));
                 }
                 else if (kind == OffsetStaticByteLocation || kind == OffsetCharacterLocation)
