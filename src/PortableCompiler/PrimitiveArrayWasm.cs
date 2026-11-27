@@ -47,6 +47,14 @@ namespace PortableCompiler
             return WriteLayout(output, cursor, storage);
         }
 
+        // Stage 204: the type indices WriteIdentities assigns, so later appended types know their base.
+        internal int IdentityTypeCount()
+        {
+            int count = 0;
+            for (int heap = 0; heap < families.Length; heap++) count += families[heap];
+            return count;
+        }
+
         internal int WriteIdentities(byte[] output, int cursor, byte[] bodies, int type)
         {
             for (int heap = 0; heap < families.Length; heap++)

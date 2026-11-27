@@ -280,7 +280,10 @@ namespace PortableCompiler
             var offsets = new int[functionCapacity];
             var sizes = new int[functionCapacity];
             var bodyOffsets = new int[functionCapacity];
-            var thunks = new int[functionCapacity + 1];
+            // [count, thunk functions..., then GeneralDelegates thunk keys in the second half]
+            var thunks = new int[2 * (functionCapacity + 1)];
+            // Stage 204: per delegate key, the fixup chain of its thunk type index in invoke helpers.
+            var delegateTypeFixups = new int[DelegateShapes.MaxDelegates];
             var signatures = new int[output.Length];
             var frame = new int[output.Length];
             var virtualTypes = new int[output.Length];
@@ -1345,6 +1348,15 @@ namespace PortableCompiler
             // Resolve after all bodies have published their fixup chains.
             for (int helper = 0; helper < projectionHelpers.Length; helper++)
                 WasmIndexFixups.Resolve(moduleCode, projections.Fixups[helper], projectionHelpers[helper]);
+            for (int ordinal = 0; ordinal < DelegateShapes.EntryCount(objects); ordinal++)
+            {
+                int key = DelegateShapes.KeyAt(ordinal), helper = DelegateShapes.InvokeHelper(objects, key);
+                if (helper < 0) continue;
+                bodyOffsets[helper] = length;
+                length = GeneralDelegates.WriteInvokeHelper(moduleCode, length, objects, key, delegateTypeFixups);
+                if (length < 0) return length;
+                sizes[helper] = length - bodyOffsets[helper];
+            }
             for (int c = 0; c < pointers.CarrierCount; c++)
             {
                 int carrier = pointers.Carriers[c];
@@ -1418,7 +1430,7 @@ namespace PortableCompiler
             if (linearMemory) hostFeatures |= WasmImports.Memory;
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
                 moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0], pointers, rootCount, rootWalker, rootProbe, natives,
-                primitiveArrays);
+                primitiveArrays, delegateTypeFixups);
         }
 
         private static bool IsExported(int[] exports, int target)
@@ -2492,6 +2504,22 @@ namespace PortableCompiler
                     }
                     if (spanCallback == CharacterSpanCallbackMetadata.Construct && opcode == 0x73)
                         constructorType = CharacterSpanCallback;
+                    // Stage 204 (decision 0091): System.Func`n / Action`n with a delegate key.
+                    var generalKey = new int[1];
+                    int generalMember = addressed ? 0 : GeneralDelegates.Member(bundle, image, layout, heaps,
+                        owner, member, context, methodArguments, objects, generalKey);
+                    if (generalMember == GeneralDelegates.Invoke && opcode == 0x6f)
+                    {
+                        functions = GeneralDelegates.RegisterInvokeHelper(objects, generalKey[0], owner, owners, rows, contexts,
+                            arities, offsets, signatures, functions);
+                        if (functions < 0) return functions;
+                        records[slot] = BranchIl.Call;
+                        records[slot + 1] = DelegateShapes.InvokeHelper(objects, generalKey[0]);
+                        records[slot + 3] = 1; // callvirt null check: a null delegate raises NullReferenceException
+                        continue;
+                    }
+                    if (generalMember == GeneralDelegates.Construct && opcode == 0x73)
+                        constructorType = generalKey[0];
                     // Platform event members are bound by identity in every bundled assembly.
                     if (!addressed)
                     {
@@ -2817,7 +2845,16 @@ namespace PortableCompiler
                         return -2;
                     bool spanCallback = CharacterSpanCallbackMetadata.Member(bundle, image, layout, heaps, owner,
                         records[next + 1], context, methodArguments, objects) == CharacterSpanCallbackMetadata.Construct;
-                    if (spanCallback)
+                    var generalKey = new int[1];
+                    bool general = !spanCallback && GeneralDelegates.Member(bundle, image, layout, heaps, owner,
+                        records[next + 1], context, methodArguments, objects, generalKey) == GeneralDelegates.Construct;
+                    if (general)
+                    {
+                        if (instance && !hasReceiver ||
+                            !GeneralDelegates.MatchesTarget(objects, generalKey[0], signatures, signature, arities[index], instance))
+                            return -2;
+                    }
+                    else if (spanCallback)
                     {
                         if (instance && !hasReceiver ||
                             !CharacterSpanCallbackMetadata.MatchesTarget(signatures, signature, arities[index], instance))
@@ -2839,6 +2876,7 @@ namespace PortableCompiler
                     {
                         thunks[thunk + 1] = index;
                         thunks[0] = thunk + 1;
+                        GeneralDelegates.SetThunkKey(thunks, thunk, general ? generalKey[0] : 0, !instance);
                     }
                     records[slot + 1] = thunk;
                     records[slot + 3] = instance ? signatures[signature + 1] : NullValue;

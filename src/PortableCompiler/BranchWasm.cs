@@ -1936,7 +1936,7 @@ namespace PortableCompiler
             // A base Delegate slot currently accepts EventHandler lists only.
             // Both types have the same physical storage but distinct CLI stack identities.
             type == DelegateReference ? EventHandlerReference - 1 :
-            type == CharacterSpanCallback ? Delegate - 1 :
+            type == CharacterSpanCallback || PeLibrary.DelegateShapes.IsKey(type) ? Delegate - 1 :
             // ReinterpretPacked16Location is verifier-only. Both nominal
             // views keep the same reference in the shared location bank.
             IsManagedLocation(type) ? LastScalarBank :
