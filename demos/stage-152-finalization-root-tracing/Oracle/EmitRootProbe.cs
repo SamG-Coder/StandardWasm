@@ -8,7 +8,7 @@ internal static class EmitRootProbe
 {
     private delegate int CompileRoots(byte[] bundle, byte[] entries, byte[] output, int[] location);
 
-    internal static int Write(string outputPath)
+    internal static int[] Write(string outputPath)
     {
         byte[] image = File.ReadAllBytes(typeof(RootProbe).Assembly.Location);
         byte[] bundle = new byte[image.Length + sizeof(int)];
@@ -16,7 +16,7 @@ internal static class EmitRootProbe
         image.CopyTo(bundle, sizeof(int));
         using var manifest = new MemoryStream();
         using var entries = new BinaryWriter(manifest);
-        foreach (string name in new[] { nameof(RootProbe.ObserveFrames), nameof(RootProbe.ThrowWithRoot) })
+        foreach (string name in new[] { nameof(RootProbe.ObserveFrames), nameof(RootProbe.ObserveConstructor), nameof(RootProbe.ThrowWithRoot) })
         {
             byte[] label = Encoding.UTF8.GetBytes(name);
             entries.Write(typeof(RootProbe).GetMethod(name)!.MetadataToken & 0x00ffffff);
@@ -38,7 +38,7 @@ internal static class EmitRootProbe
         {
             Console.SetOut(TextWriter.Null);
             try { RootProbe.ThrowWithRoot(11); }
-            catch (NullReferenceException) { return RootProbe.ObserveFrames(11); }
+            catch (NullReferenceException) { return [RootProbe.ObserveFrames(11), RootProbe.ObserveConstructor(11)]; }
             throw new Exception("The CLR root probe did not throw NullReferenceException");
         }
         finally { Console.SetOut(original); }

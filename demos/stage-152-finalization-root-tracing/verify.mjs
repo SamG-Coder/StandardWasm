@@ -60,13 +60,15 @@ async function observeRoots(bytes) {
             }
         }
     });
-    const { __root_probe_table: table, __root_probe_count: count, ObserveFrames, ThrowWithRoot } = instance.exports;
+    const { __root_probe_table: table, __root_probe_count: count, ObserveFrames, ObserveConstructor, ThrowWithRoot } = instance.exports;
     function assertEmpty() {
         if (count.value !== 0) throw new Error("Root scope was not restored");
         for (let i = 0; i < table.length; i++)
             if (table.get(i) !== null) throw new Error("Root slot was not cleared");
     }
     const value = ObserveFrames(11);
+    assertEmpty();
+    const constructed = ObserveConstructor(11);
     assertEmpty();
     let exception;
     try { ThrowWithRoot(11); }
@@ -76,11 +78,11 @@ async function observeRoots(bytes) {
     assertEmpty();
     if (ObserveFrames(11) !== value) throw new Error("Failed to reuse the module after unwinding");
     assertEmpty();
-    return { value, snapshots, clearedOnReturn: true, clearedOnUnwind: true };
+    return { values: [value, constructed], snapshots, clearedOnReturn: true, clearedOnUnwind: true };
 }
 
-const expectedRoots = { value: oracle.rootProbeResult,
-    snapshots: [{ count: 3, unique: 2 }, { count: 1, unique: 1 }, { count: 3, unique: 2 }],
+const expectedRoots = { values: oracle.rootProbeResult,
+    snapshots: [{ count: 3, unique: 2 }, { count: 2, unique: 1 }, { count: 1, unique: 1 }, { count: 3, unique: 2 }],
     clearedOnReturn: true, clearedOnUnwind: true };
 const node = await probe(assets);
 assert.deepEqual(node, oracle.result);

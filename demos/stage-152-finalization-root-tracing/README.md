@@ -38,7 +38,8 @@ An internal compiler mode emits a root stack around direct managed calls
 and constructors in the probe fixture. It records live frame slots, references
 in the evaluation stack that survive the call, and a newly allocated receiver
 while its constructor is running. Node and Edge observe three occupied slots
-with two distinct objects during a nested call. They observe one slot during
+with two distinct objects during a nested call, and two slots referring to
+the same receiver during an active constructor. They observe one slot during
 the throwing call and an empty stack after each normal return or managed
 exception unwind. The normal compilation entry point keeps the diagnostic
 table private by omitting it entirely.
