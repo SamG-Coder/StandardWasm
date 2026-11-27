@@ -97,7 +97,7 @@ async function runCases(compiler, images, cases, monitorHost) {
         const code = Uint8Array.from({ length: status }, (_, i) => build.ReadByte(output, i));
         const module = await WebAssembly.compile(code);
         const imports = WebAssembly.Module.imports(module);
-        const expectedImport = test.name === "Locked" ? 1 : 0;
+        const expectedImport = test.name === "Locked" || test.name === "RuntimeTypeLock" ? 1 : 0;
         if (imports.length !== expectedImport || imports.some(item =>
             item.module !== "standardwasm:threading" || item.name !== "changeMonitorDepth" || item.kind !== "function"))
             throw Error(test.name + " has unexpected runtime imports");

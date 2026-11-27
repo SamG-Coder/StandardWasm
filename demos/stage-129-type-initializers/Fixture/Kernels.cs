@@ -280,5 +280,20 @@ namespace TypeInitializerFixture
         {
             lock (gate) { return 1; }
         }
+
+        public static int RuntimeTypeLock()
+        {
+            Type target = typeof(Kernels);
+            bool taken = false;
+            try
+            {
+                System.Threading.Monitor.Enter(target, ref taken);
+                return taken && target == typeof(Kernels) ? 1 : 0;
+            }
+            finally
+            {
+                if (taken) System.Threading.Monitor.Exit(target);
+            }
+        }
     }
 }

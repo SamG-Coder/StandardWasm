@@ -368,6 +368,7 @@ namespace PortableCompiler
                     if (functions < 0)
                         return functions;
 
+                    RuntimeTypeLocals.Specialize(bundle, records, frame, parameters, locals, objects, catchRegion);
                     if (location.Length != 0) location[2] = -1;
                     int maximum = body[2];
                     if (maximum > 0 && body[1] > int.MaxValue / maximum)
