@@ -2013,13 +2013,11 @@ namespace PortableCompiler
                     int declaring = ObjectLayouts.Owner(image, heaps, layout, target, false);
                     if (declaring < 1) return -1;
                     int receiver = ObjectLayouts.Find(objects, owner, declaring, new int[0]);
-                    if (receiver == 0)
-                    {
-                        receiver = BundleLayouts.Register(bundle, image, layout, heaps, owner, declaring, objects);
-                        if (receiver == -2 && !virtualMethodLocal)
-                            receiver = BundleLayouts.RegisterValue(bundle, image, layout, heaps, owner, declaring, objects);
-                        if (receiver < 0) return receiver;
-                    }
+                    // A pointer can reach a value method before any managed
+                    // use registers the struct. Leave reference receiver
+                    // selection to MethodShape, including CoreLib's root.
+                    if (receiver == 0 && !virtualMethodLocal)
+                        receiver = BundleLayouts.RegisterValue(bundle, image, layout, heaps, owner, declaring, objects);
                     // An unrewritten IL receiver of a value method is a byref.
                     // Address scans that substituted a snapshot mark the call separately.
                     if (UsesLocationReceiver(objects, receiver)) key = -1;
