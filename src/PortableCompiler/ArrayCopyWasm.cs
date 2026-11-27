@@ -6,12 +6,14 @@ namespace PortableCompiler
 {
     internal static class ArrayCopyWasm
     {
+        internal const int Capacity = 384;
+
         internal static int Vector(int[] objects, int source, int destination)
         {
             if (source != NullValue && destination != NullValue && source != destination) return 0;
             int vector = source != NullValue ? source : destination;
             int element = ArrayElement(objects, vector);
-            if (element != 0 && !IsValueType(objects, element)) return vector;
+            if (element != 0) return vector;
             // Some packed heaps erase CLI distinctions (e.g. bool and byte).
             // Require a known simple-copy pair or an exact nominal vector.
             return vector == Ints || vector == Longs || vector == NativeVector ||
@@ -19,13 +21,18 @@ namespace PortableCompiler
         }
 
         internal static int Emit(byte[] code, int used, int vector, int source, int sourceIndex,
-            int destination, int destinationIndex, int length)
+            int destination, int destinationIndex, int length, bool aggregate, bool tracksRoots,
+            int cursor, int direction, int snapshot)
         {
             used = CheckNull(code, used, source);
             used = CheckNull(code, used, destination);
             used = CheckNonNegative(code, used, length);
             used = CheckRange(code, used, source, sourceIndex, length);
             used = CheckRange(code, used, destination, destinationIndex, length);
+            if (aggregate)
+                return AggregateArrayCopyWasm.Emit(code, used, vector, source, sourceIndex, destination,
+                    destinationIndex, length, cursor, direction, snapshot, tracksRoots);
+
             used = Local(code, used, 0x20, destination);
             used = LoadIndex(code, used, destinationIndex);
             used = Local(code, used, 0x20, source);
@@ -63,7 +70,7 @@ namespace PortableCompiler
             return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.ArgumentTag);
         }
 
-        private static int LoadIndex(byte[] code, int used, int index) =>
+        internal static int LoadIndex(byte[] code, int used, int index) =>
             index < 0 ? Const(code, used, 0) : Local(code, used, 0x20, index);
     }
 }

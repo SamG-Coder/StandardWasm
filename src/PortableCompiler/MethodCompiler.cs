@@ -1308,7 +1308,11 @@ namespace PortableCompiler
                                 capacity += ArrayClearWasm.Capacity;
                             }
                             else if (kind == BranchIl.ArrayCopy)
+                            {
                                 tags = ExceptionTypes.ArgumentNull | ExceptionTypes.ArgumentOutOfRange | ExceptionTypes.Argument;
+                                if (capacity > int.MaxValue - ArrayCopyWasm.Capacity) return -3;
+                                capacity += ArrayCopyWasm.Capacity;
+                            }
                             else if (kind == BranchIl.ThrowFrameworkArgument)
                                 tags = operation == ExceptionTagsWasm.ArgumentNullTag
                                     ? ExceptionTypes.ArgumentNull : ExceptionTypes.ArgumentOutOfRange;

@@ -1401,8 +1401,12 @@ namespace PortableCompiler
                     int sourceIndex = operand == 3 ? -1 : Spill(spills, maximum, spillFlags, I32, first + 1);
                     int destinationIndex = operand == 3 ? -1 : Spill(spills, maximum, spillFlags, I32, target + 1);
                     int vector = ArrayCopyWasm.Vector(objects, sourceType, targetType);
+                    // The array operands do not use their i32 positions, and the length
+                    // does not use its eqref position. These slots are dead after Copy.
                     used = ArrayCopyWasm.Emit(code, used, vector, source, sourceIndex, destination, destinationIndex,
-                        Spill(spills, maximum, spillFlags, I32, top));
+                        Spill(spills, maximum, spillFlags, I32, top), IsValueType(objects, ArrayElement(objects, vector)),
+                        tracksRoots, Spill(spills, maximum, spillFlags, I32, first),
+                        Spill(spills, maximum, spillFlags, I32, target), Spill(spills, maximum, spillFlags, ObjectReference, top));
                 }
                 else if (kind == SpanRead)
                 {
