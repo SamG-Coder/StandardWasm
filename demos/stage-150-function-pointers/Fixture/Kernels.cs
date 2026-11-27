@@ -118,7 +118,8 @@ namespace FunctionPointerFixture
         }
 
         // A static method bound to another assembly's delegate type keeps its delegate diagnostic.
-        public static int RejectRemoteDelegate(int value) => new FunctionPointerDependency.Transform(Double)(value);
+        // Diagnosed until Stage 220 (decision 0091) bound delegate TypeDefs reached through a TypeRef.
+        public static int RemoteDelegate(int value) => new FunctionPointerDependency.Transform(Double)(value);
 
         // Recursion through a pointer.
         private static int Factorial(int n) => n <= 1 ? 1 : n * ((delegate*<int, int>)&Factorial)(n - 1);

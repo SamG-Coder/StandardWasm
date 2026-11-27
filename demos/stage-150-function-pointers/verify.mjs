@@ -124,5 +124,5 @@ try {
     const values = node.filter(result => result.value !== undefined).length;
     console.log("Node " + process.version + " and Edge " + browser.version() + " matched " + values +
         " function-pointer results from the CLR " + oracle.runtime + "; a null call is an engine trap and " +
-        tests.rejects.length + " located diagnostics remain (unmanaged calli, a static-target delegate).");
+        tests.rejects.length + " located diagnostic remains (unmanaged calli).");
 } finally { await browser.close(); }
