@@ -40,6 +40,36 @@ namespace PeLibrary
             return found;
         }
 
+        // Stage 156 (decision 0083): the ImplMap row of a P/Invoke MethodDef. result receives the
+        // mapping flags, the entry-point name and the module name (string heap indices).
+        // Returns 1 when found, 0 when the method has no mapping, or -1 for malformed metadata.
+        internal static int ForMethod(byte[] image, int[] heaps, int[] methods, int[] counts, int row, int[] result)
+        {
+            if (counts[28] == 0) return 0;
+            int map = MetadataTableRows.TableStart(heaps, methods, counts, 28);
+            int modules = MetadataTableRows.TableStart(heaps, methods, counts, 26);
+            if (map < 0 || modules < 0) return -1;
+            int strings = methods[2];
+            int memberWidth = counts[4] < 32768 && counts[6] < 32768 ? 2 : 4;
+            int moduleWidth = counts[26] < 65536 ? 2 : 4;
+            int width = 2 + memberWidth + strings + moduleWidth;
+            for (int i = 0; i < counts[28]; i++)
+            {
+                uint at = (uint)(map + i * width);
+                uint member = Index(image, at + 2, memberWidth);
+                // MemberForwarded: tag 1 is MethodDef.
+                if ((member & 1) != 1 || (int)(member >> 1) != row) continue;
+                uint scope = Index(image, at + (uint)(2 + memberWidth + strings), moduleWidth);
+                if (scope == 0 || scope > (uint)counts[26]) return -1;
+                result[0] = (int)U16(image, at);
+                result[1] = (int)Index(image, at + (uint)(2 + memberWidth), strings);
+                result[2] = (int)Index(image, (uint)(modules + ((int)scope - 1) * strings), strings);
+                if ((uint)result[1] >= (uint)heaps[3] || (uint)result[2] >= (uint)heaps[3]) return -1;
+                return 1;
+            }
+            return 0;
+        }
+
         private static uint Index(byte[] image, uint at, int width) => width == 2 ? U16(image, at) : U32(image, at);
     }
 }

@@ -26,16 +26,16 @@ namespace PortableCompiler
             entries[8] = 0x72;
             entries[9] = 0x75;
             entries[10] = 0x6e;
-            return CompileProgram(BundleImages.Single(image), entries, output, location, 0, new MissingAssemblyStubs());
+            return CompileProgram(BundleImages.Single(image), entries, output, location, 0, new MissingAssemblyStubs(), new NativeImportTable());
         }
 
         internal static int CompileExports(byte[] image, byte[] entries, byte[] output) =>
-            CompileProgram(BundleImages.Single(image), entries, output, new int[0], 0, new MissingAssemblyStubs());
+            CompileProgram(BundleImages.Single(image), entries, output, new int[0], 0, new MissingAssemblyStubs(), new NativeImportTable());
 
         internal static int CompileModuleDetailed(byte[] image, byte[] entries, byte[] output, int[] location)
         {
             if (location.Length < CompileLocation.Size) return -3;
-            return CompileProgram(BundleImages.Single(image), entries, output, location, 0, new MissingAssemblyStubs());
+            return CompileProgram(BundleImages.Single(image), entries, output, location, 0, new MissingAssemblyStubs(), new NativeImportTable());
         }
 
         internal static int CompileBundle(byte[] bundle, byte[] entries, byte[] output) =>
@@ -51,7 +51,7 @@ namespace PortableCompiler
         {
             CompileLocation.Clear(location);
             BundleImages images = BundleImages.Unpack(bundle);
-            return images == null ? -1 : CompileProgram(images, entries, output, location, 0, new MissingAssemblyStubs());
+            return images == null ? -1 : CompileProgram(images, entries, output, location, 0, new MissingAssemblyStubs(), new NativeImportTable());
         }
 
         // Issue #299 (opt in): a method whose body needs an assembly missing from the bundle (-4)
@@ -67,11 +67,12 @@ namespace PortableCompiler
             images.DeferMissing = true;
             int capacity = (warnings.Length - 1) / 3;
             var stubs = new MissingAssemblyStubs();
+            var natives = new NativeImportTable();
             warnings[0] = 0;
             while (true)
             {
                 images.MissingReference = null;
-                int status = CompileProgram(images, entries, output, location, 0, stubs);
+                int status = CompileProgram(images, entries, output, location, 0, stubs, natives);
                 if (status != -4 || location[1] <= 0) return status;
                 // No progress (a stub could not be lowered), no exact display name, or no room:
                 // report the strict located diagnostic.
@@ -118,12 +119,67 @@ namespace PortableCompiler
         }
 
 
+        // Stage 156 (decision 0083): records the import for a native method, binds CoreLib's
+        // EntryPointNotFoundException(string) for a host that lacks the entry, writes its message
+        // literal and the thunk records (NativeThunks).
+        private static int LinkNativeThunk(BundleImages bundle, NativeImportTable natives, int nativeBase, int current,
+            int owner, int source, int kind, byte[] module, byte[] name, byte[] types, int[] shape, int description,
+            int[] records, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities,
+            int[] offsets, int[] signatures, int[] objects, int functions, byte[] literals, int[] literalSize)
+        {
+            int moduleLength = description & 0xffff, nameLength = description >> 16;
+            if (shape[0] != arities[current]) return -1;
+            int entry = natives.Add(owner, source, module, moduleLength, name, nameLength, types, shape[0], shape[1]);
+            int present = natives.Helper(NativeImportTable.PresentHelper);
+            int clear = -1, save = -1;
+            if (shape[2] != 0)
+            {
+                clear = nativeBase + natives.Helper(NativeImportTable.ClearErrorHelper);
+                save = nativeBase + natives.Helper(NativeImportTable.SaveErrorHelper);
+            }
+            var found = new int[2];
+            if (InitializerFailures.FindCoreLib(bundle, found) < 0) return -1;
+            if (found[0] < 0) return -2; // no CoreLib: a missing entry could not raise its exception
+            byte[] coreLib = bundle.Get(found[0]);
+            var coreLayout = new int[4];
+            var coreHeaps = new int[8];
+            if (CompressedTables.FindWithHeaps(coreLib, coreLayout, coreHeaps) < 0) return -1;
+            int type = ObjectLayouts.FindTypeDefinition(coreLib, coreHeaps, coreLayout, "System", "EntryPointNotFoundException");
+            int row = type == 0 ? 0 : NativeThunks.FindMessageConstructor(coreLib, coreHeaps, coreLayout, type);
+            if (row == 0) return -2;
+            int constructor = indices[bases[found[0]] + row] - 1;
+            if (constructor < 0)
+            {
+                functions = Register(bundle, coreLib, coreLayout, coreHeaps, found[0], row, 0, owners, rows, contexts,
+                    bases, indices, arities, offsets, signatures, objects, functions);
+                if (functions < 0) return functions;
+                constructor = functions - 1;
+            }
+            var message = new byte[64 + moduleLength + nameLength];
+            int messageBytes = NativeThunks.Message(module, moduleLength, kind, name, nameLength, message);
+            int messageStart = literalSize[0];
+            int units = Utf8Scalars.CopyUtf16(message, 0, messageBytes, literals, messageStart);
+            if (units < 0) return units;
+            literalSize[0] = messageStart + units;
+            NativeThunks.Records(records, current, shape[0], entry, nativeBase + present, nativeBase + entry, clear, save,
+                messageStart, units / 2, constructor);
+            return functions;
+        }
+
         // Imported functions precede defined functions. Discovery can add
         // a host feature, so re-emit with its function indices reserved.
         private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location,
-            int hostFeatures, MissingAssemblyStubs stubs)
+            int hostFeatures, MissingAssemblyStubs stubs, NativeImportTable natives)
         {
-            int hostImports = WasmImports.FunctionCount(hostFeatures);
+            // Native entries reached in an earlier pass are reserved; a new one forces another pass.
+            int reservedNatives = natives.Count;
+            int hostImports = WasmImports.FunctionCount(hostFeatures, natives);
+            int nativeBase = WasmImports.FixedFunctionCount(hostFeatures);
+            // Stage 156: scratch for describing a native thunk's import (decision 0083).
+            var nativeModule = new byte[512];
+            var nativeName = new byte[512];
+            var nativeTypes = new byte[64];
+            var nativeShape = new int[3];
             CompileLocation.Clear(location);
             byte[] image = bundle.Get(0);
             var entryOffsets = new int[entries.Length / 9];
@@ -305,12 +361,26 @@ namespace PortableCompiler
                 }
                 uint rva = 0;
                 int status = 0;
+                int nativeKind = stub >= 0 ? NativeThunks.None : NativeThunks.Kind(image, layout, source);
+                int nativeDescription = 0;
                 if (stub >= 0)
                 {
                     // The CLR fails the JIT before the method runs, so a stub triggers no type
                     // initializer. Its body is four synthetic instructions with a stack of two.
                     initializerPrologue = -1;
                     body[0] = 0; body[1] = 4; body[2] = 2; body[3] = 0; body[4] = 0; body[5] = 0;
+                }
+                else if (nativeKind != NativeThunks.None)
+                {
+                    // Stage 156 (decision 0083): a host import behind a synthetic thunk. The type
+                    // initializer prologue stays: the CLR runs it before a precise type's P/Invoke.
+                    nativeDescription = NativeThunks.Describe(image, heaps, layout, source, nativeKind,
+                        nativeModule, nativeName, nativeTypes, nativeShape);
+                    if (nativeDescription < 0) return nativeDescription;
+                    body[0] = 0;
+                    body[1] = NativeThunks.RecordCount(nativeShape[0], nativeShape[2] != 0);
+                    body[2] = nativeShape[0] > 1 ? nativeShape[0] : 1;
+                    body[3] = 0; body[4] = 0; body[5] = 0;
                 }
                 else
                 {
@@ -399,7 +469,7 @@ namespace PortableCompiler
                     return -2;
 
                 var code = new byte[body[1] * 4 + 2];
-                int used = stub < 0 && scalar && locals == 0 && catchRegion.Length == 0 && initializerPrologue < 0
+                int used = stub < 0 && nativeKind == NativeThunks.None && scalar && locals == 0 && catchRegion.Length == 0 && initializerPrologue < 0
                     ? StraightLineIl.Translate(image, body, parameters, code) : -2;
                 if (used < 0)
                 {
@@ -414,6 +484,13 @@ namespace PortableCompiler
                             location[0] = owner; location[1] = source; location[2] = 0;
                             return functions;
                         }
+                    }
+                    else if (nativeKind != NativeThunks.None)
+                    {
+                        functions = LinkNativeThunk(bundle, natives, nativeBase, current, owner, source, nativeKind,
+                            nativeModule, nativeName, nativeTypes, nativeShape, nativeDescription, records, owners, rows,
+                            contexts, bases, indices, arities, offsets, signatures, objects, functions, literals, literalSize);
+                        if (functions < 0) return functions;
                     }
                     else
                     {
@@ -733,8 +810,8 @@ namespace PortableCompiler
                 bodyOffsets[current] = length;
                 length += used;
             }
-            if ((hostUse[0] & ~hostFeatures) != 0)
-                return CompileProgram(bundle, entries, output, location, hostFeatures | hostUse[0], stubs);
+            if ((hostUse[0] & ~hostFeatures) != 0 || natives.Count != reservedNatives)
+                return CompileProgram(bundle, entries, output, location, hostFeatures | hostUse[0], stubs, natives);
             length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, length, hostImports, location);
             if (length < 0) return length;
             for (int c = 0; c < pointers.CarrierCount; c++)
@@ -773,7 +850,7 @@ namespace PortableCompiler
             CompileLocation.Clear(location);
             if (linearMemory) hostFeatures |= WasmImports.Memory;
             return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
-                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0], pointers);
+                moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0], pointers, natives);
         }
 
         private static int LinkOperands(BundleImages bundle, byte[] image, int[] layout,
@@ -1892,7 +1969,10 @@ namespace PortableCompiler
         {
             int attributes = MethodDefinitions.ReadColumn(image, layout, row, 2);
             int implementation = MethodDefinitions.ReadColumn(image, layout, row, 1);
-            if ((attributes & 0x2400) != 0 || (!allowVirtual && (attributes & 0x40) != 0) || (implementation & 7) != 0)
+            // Abstract methods have no body. A P/Invoke (PinvokeImpl 0x2000) compiles to a native
+            // thunk only when static (decision 0083); NativeThunks.Describe checks the signature.
+            if ((attributes & 0x0400) != 0 || (attributes & 0x2010) == 0x2000 ||
+                (!allowVirtual && (attributes & 0x40) != 0) || (implementation & 7) != 0)
                 return -2;
             int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
             if (owner < 0) return -1;
