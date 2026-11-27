@@ -53,7 +53,8 @@ managed `EntryPointNotFoundException` on that miss. The verifier checks
 case-sensitive resolution, a matching export token, and the managed catch.
 The exception currently carries a generic missing-export message.
 
-Public `TryGetExport` passes an `out nint` location. The x86 CLR verifies
-its expected success and false results, and the compiler still reports
-the unsupported location at the original managed call site. The raw QCall
-and its non-throwing result already work independently of that location.
+Public `TryGetExport` writes through the caller's original `out nint`
+location. The fixture verifies the true result and nonzero token, and
+checks that a miss returns false and overwrites a nonzero sentinel with
+zero. A second fixture returns a native-word byref through an ordinary
+managed helper and verifies that writes through both aliases stay visible.

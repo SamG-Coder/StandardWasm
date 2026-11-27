@@ -27,9 +27,22 @@ public static unsafe class LibraryCalls
     public static int TryFind(int scenario)
     {
         nint library = LoadNative("kernel32.dll", 0, 0x800);
-        return NativeLibrary.TryGetExport(library, ExportName(scenario), out nint address) ? address != 0 ? 1 : -1 :
+        nint address = -1;
+        return NativeLibrary.TryGetExport(library, ExportName(scenario), out address) ? address != 0 ? 1 : -1 :
             address == 0 ? 0 : -1;
     }
+
+    public static int NativeWordAliases(nint initial)
+    {
+        ref nint alias = ref Forward(ref initial);
+        Set(ref alias, -313);
+        nint observed = initial;
+        initial = 27;
+        return observed == -313 && alias == 27 ? 191 : 0;
+    }
+
+    private static ref nint Forward(ref nint value) => ref value;
+    private static void Set(ref nint target, nint value) => target = value;
 
     public static int Find(int scenario)
     {

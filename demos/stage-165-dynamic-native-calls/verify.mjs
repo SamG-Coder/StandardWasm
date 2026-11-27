@@ -122,9 +122,12 @@ async function exerciseLibrary(compilerBytes, assemblyBytes, framework, oracle, 
     const symbolModule = await compile(oracle.symbolRow);
     const symbolNameModule = await compile(oracle.symbolNameRow);
     const originalSymbolModule = await compile(oracle.originalSymbolRow, framework[0], framework.slice(1));
-    const [tryBundle, tryEntries] = pack(asset, framework, oracle.trySymbolRow, origins);
-    const tryResult = tool.CompileBundleDetailed(upload(tryBundle), upload(tryEntries), output, diagnostic);
-    const tryDiagnostic = [0, 1, 2].map(index => tool.ReadDiagnostic(diagnostic, index));
+    const tryLookupModule = await compile(oracle.trySymbolRow);
+    const nativeWordModule = await compile(oracle.nativeWordRow, asset, []);
+    if (WebAssembly.Module.imports(nativeWordModule).length)
+        throw Error("Managed native-word locations must not require a linear-memory host");
+    const { exports: nativeWord } = await instantiate(nativeWordModule, tool, []);
+    const nativeWordAliases = nativeWord.run(7);
     const sourceName = await compile(oracle.nameRow);
     const combined = await compile(oracle.combinedRow);
     const coreLib = await compile(oracle.coreLibRow, framework[0], framework.slice(1));
@@ -148,6 +151,8 @@ async function exerciseLibrary(compilerBytes, assemblyBytes, framework, oracle, 
     const firstLibrary = library;
     const { exports: symbolFixture } = await instantiate(symbolModule, tool, [], {}, undefined, undefined, undefined, platform);
     const symbols = [0, 1].map(scenario => symbolFixture.run(scenario));
+    const { exports: tryLookup } = await instantiate(tryLookupModule, tool, [], {}, undefined, undefined, undefined, platform);
+    const trySymbols = [0, 1].map(scenario => tryLookup.run(scenario));
     const { exports: names } = await instantiate(symbolNameModule, tool, []);
     const { exports: originalLookup } = await instantiate(originalSymbolModule, tool, [], {}, undefined, undefined, undefined, platform);
     const originalSymbol = [originalLookup.run(library, names.run(0), 0) === token ? 1 : 0,
@@ -175,7 +180,7 @@ async function exerciseLibrary(compilerBytes, assemblyBytes, framework, oracle, 
     });
     const originalSuccess = [original.run(nameFixture.run(), 0, 0x800) === expectedLibrary ? 1 : 0, coreLibErrors.pinvoke];
     const originalNull = [original.run(null, 0, 0x800), coreLibErrors.system, coreLibErrors.pinvoke];
-    return { cases, symbols, originalSymbol, tryResult, tryDiagnostic, unconfigured: unconfiguredResult, isolatedRegistry, required, length, text, imports, originalSuccess, originalNull };
+    return { cases, symbols, originalSymbol, trySymbols, nativeWordAliases, unconfigured: unconfiguredResult, isolatedRegistry, required, length, text, imports, originalSuccess, originalNull };
 }
 
 const nativeIndirect = "standardwasm:native-indirect";
@@ -292,9 +297,8 @@ const library = await exerciseLibrary(compiler, assembly, framework, oracle.load
 assert.deepEqual(library.cases, oracle.loadLibrary.cases);
 assert.deepEqual(library.symbols, oracle.loadLibrary.symbols);
 assert.deepEqual(library.originalSymbol, oracle.loadLibrary.originalSymbol);
-assert.equal(library.tryResult, -2);
-assert.deepEqual(library.tryDiagnostic.slice(0, 2), [0, oracle.loadLibrary.trySymbolRow]);
-assert.ok(library.tryDiagnostic[2] >= 0);
+assert.deepEqual(library.trySymbols, oracle.loadLibrary.trySymbols);
+assert.equal(library.nativeWordAliases, oracle.loadLibrary.nativeWordAliases);
 assert.deepEqual(library.unconfigured, [0, 126]);
 assert.equal(library.isolatedRegistry, true);
 assert.equal(library.required, oracle.loadLibrary.required);

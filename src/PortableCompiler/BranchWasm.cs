@@ -205,7 +205,7 @@ namespace PortableCompiler
                         continue;
                     }
                     if (i < arguments) used = Local(code, used, 0x20, i);
-                    else if (vector == Bytes || vector == Ints) used = Const(code, used, 0);
+                    else if (vector == Bytes || vector == Ints || vector == NativeVector) used = Const(code, used, 0);
                     else
                     {
                         code[used++] = 0xd0; // ref.null eq
@@ -1289,9 +1289,11 @@ namespace PortableCompiler
                     int address = Spill(spills, maximum, spillFlags, type, top);
                     if (frameShape[25] != 0 && IsPacked16Location(type))
                         used = NativeCharacterViewWasm.ReadLocation(code, used, address);
-                    else if (IsPacked16Location(type) || type == BooleanLocation || type == StaticByteLocation || type == Int32Location)
+                    else if (IsPacked16Location(type) || type == BooleanLocation || type == StaticByteLocation ||
+                        type == Int32Location || type == NativeIntLocation)
                     {
-                        int vector = type == Int32Location ? Ints : IsPacked16Location(type) ? Chars : Bytes;
+                        int vector = type == NativeIntLocation ? NativeVector :
+                            type == Int32Location ? Ints : IsPacked16Location(type) ? Chars : Bytes;
                         if (IsPacked16Location(type)) used = GuardNull(code, used, address);
                         used = ValueFieldProjectionWasm.Read(code, used, frameShape[7], address, vector, type, projections);
                     }
@@ -1313,9 +1315,10 @@ namespace PortableCompiler
                     int source = Spill(spills, maximum, spillFlags, value, top);
                     if (frameShape[25] != 0 && IsPacked16Location(type))
                         used = NativeCharacterViewWasm.WriteLocation(code, used, address, source);
-                    else if (IsPacked16Location(type) || type == BooleanLocation || type == Int32Location)
+                    else if (IsPacked16Location(type) || type == BooleanLocation || type == Int32Location || type == NativeIntLocation)
                     {
-                        int vector = type == Int32Location ? Ints : IsPacked16Location(type) ? Chars : Bytes;
+                        int vector = type == NativeIntLocation ? NativeVector :
+                            type == Int32Location ? Ints : IsPacked16Location(type) ? Chars : Bytes;
                         if (IsPacked16Location(type)) used = GuardNull(code, used, address);
                         used = ValueFieldProjectionWasm.Write(code, used, frameShape[7], address, source, vector, type, projections);
                     }

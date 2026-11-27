@@ -21,7 +21,7 @@ namespace PortableCompiler
             if (at >= end) return -1;
             int element = image[at];
             if (element != 2 && element != 3 && element != 5 && element != 6 && element != 8 && element != 0x0e && element != 0x1c &&
-                element != 0x11 && element != 0x12 && element != 0x13 && element != 0x15 && element != 0x1e) return -2;
+                element != 0x11 && element != 0x12 && element != 0x13 && element != 0x15 && element != 0x18 && element != 0x1e) return -2;
             int type = Read(bundle, image, layout, heaps, owner, next, end, context, objects, 0,
                 methodArguments: methodArguments);
             if (type < 0) return type;

@@ -59,6 +59,8 @@ internal static unsafe class Program
                 originalSymbol = new[] { originalSymbol, originalMissing },
                 trySymbolRow = tryFind.MetadataToken & 0x00ffffff,
                 trySymbols = new[] { LibraryCalls.TryFind(0), LibraryCalls.TryFind(1) },
+                nativeWordRow = typeof(LibraryCalls).GetMethod(nameof(LibraryCalls.NativeWordAliases))!.MetadataToken & 0x00ffffff,
+                nativeWordAliases = LibraryCalls.NativeWordAliases(7),
                 loadRow = typeof(LibraryCalls).GetMethod(nameof(LibraryCalls.Load))!.MetadataToken & 0x00ffffff,
                 combinedRow = typeof(LibraryCalls).GetMethod(nameof(LibraryCalls.LoadAndInvoke))!.MetadataToken & 0x00ffffff,
                 cases = new[] { LibraryCalls.Load(0) == library ? 1 : 0, (int)LibraryCalls.Load(1),

@@ -360,7 +360,8 @@ namespace PortableCompiler
                 if (!IsNativeInteger(address) && (address != CharacterLocation || operand != 0x49) &&
                     (address != Int16Location || operand != 0x48) &&
                     (address != BooleanLocation && address != StaticByteLocation || operand != 0x47) &&
-                    (address != Int32Location || operand != 0x4a && operand != 0x4b)) return -2;
+                    (address != Int32Location || operand != 0x4a && operand != 0x4b) &&
+                    (address != NativeIntLocation || operand != 0x4d)) return -2;
                 return Push(stack, allocated, depth - 1, IndirectType(operand));
             }
             if (kind == StoreIndirect)
@@ -368,7 +369,8 @@ namespace PortableCompiler
                 if (depth < 2 || !IndirectValue(operand, stack[depth - 1])) return -2;
                 int address = stack[depth - 2];
                 if (!IsNativeInteger(address) && (!IsPacked16Location(address) || operand != 0x53) &&
-                    (address != BooleanLocation || operand != 0x52) && (address != Int32Location || operand != 0x54)) return -2;
+                    (address != BooleanLocation || operand != 0x52) && (address != Int32Location || operand != 0x54) &&
+                    (address != NativeIntLocation || operand != 0xdf)) return -2;
                 return depth - 2;
             }
             if (kind == GetObjectType)
