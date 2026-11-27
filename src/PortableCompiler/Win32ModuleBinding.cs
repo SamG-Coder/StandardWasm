@@ -12,7 +12,8 @@ namespace PortableCompiler
             IsWindowEnabled = 15, EnableWindow = 16, GetWindowLong = 17, GetWindowLongPtr = 18,
             BCryptGenRandom = 19, GetProcessAwareness = 20, LoadLibrary = 21, GetProcedure = 22,
             CallWindowProcedure = 23, RegisterClass = 24, GetClassInfo = 25,
-            SetWindowLong = 26, SetWindowLongPtr = 27, CreateWindow = 28, Count = CreateWindow;
+            SetWindowLong = 26, SetWindowLongPtr = 27, CreateWindow = 28,
+            GetFullPathName = 29, Count = GetFullPathName;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -29,15 +30,17 @@ namespace PortableCompiler
             member == CallWindowProcedure ? "CallWindowProcW" : member == RegisterClass ? "RegisterClassW" :
             member == GetClassInfo ? "GetClassInfoW" : member == SetWindowLong ? "SetWindowLongW" :
             member == SetWindowLongPtr ? "SetWindowLongPtrW" :
-            member == CreateWindow ? "CreateWindowExW" : "BCryptGenRandom";
+            member == CreateWindow ? "CreateWindowExW" :
+            member == GetFullPathName ? "GetFullPathNameW" : "BCryptGenRandom";
 
-        private static string Library(int member) => member == LoadLibrary ? "kernel32.dll" :
+        private static string Library(int member) => member == LoadLibrary || member == GetFullPathName ? "kernel32.dll" :
             member <= ReleaseContext || member == GetProcedure ? "KERNEL32.dll" :
             member == SetProcessAwareness ? "api-ms-win-shcore-scaling-l1-1-1.dll" :
             member == BCryptGenRandom ? "BCrypt.dll" : "USER32.dll";
 
         internal static int Arity(int member) =>
-            member == CreateWindow ? 12 : member == CallWindowProcedure ? 5 : member == BCryptGenRandom ? 4 :
+            member == CreateWindow ? 12 : member == CallWindowProcedure ? 5 :
+            member == BCryptGenRandom || member == GetFullPathName ? 4 :
             member == LoadLibrary || member == GetClassInfo || IsWindowLongSetter(member) ? 3 :
             member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ? 0 :
             member == GetProcedure || member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts || member == EnableWindow ||
@@ -104,6 +107,11 @@ namespace PortableCompiler
                     types[offset + 3] == Native;
             if (member == CreateWindow)
                 return MatchesCreateWindowSignature(bundle, objects, types, offset);
+            // The CoreLib wrapper pins both UTF-16 addresses and owns the
+            // system-error snapshot. This leaf accepts linear addresses only.
+            if (member == GetFullPathName)
+                return result == I32 && types[offset + 1] == Native && types[offset + 2] == I32 &&
+                    types[offset + 3] == Native && types[offset + 4] == Native;
             if (IsWindowLongSetter(member))
                 return IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
                     types[offset + 2] == I32 && types[offset + 3] == Native && result == Native;
