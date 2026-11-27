@@ -38,7 +38,8 @@ internal static class Program
             PrimitiveVectorTypeIdentity, PrimitiveVectorAliases, InitializedPrimitiveVectorIdentity,
             ClosedValueIsNotNull, ClosedValueIsNull, ClosedReferenceNullCheck, ClosedBoxNullBranches,
             NarrowEnumFlags, WideEnumFlags, UnsetEnumFlags, WideEnumSmallConstants,
-            ClosedEnumTypeBranches, ClosedNonEnumPrunesUnsafeBranch, NativePointerView
+            ClosedEnumTypeBranches, ClosedNonEnumPrunesUnsafeBranch, NativePointerView,
+            NullAggregateLocation, NullReferencePayloadLocation, NullBooleanLocation, NullCharacterAddress
         };
         foreach (var run in cases)
         {
@@ -113,6 +114,47 @@ internal static class Program
         int* restored = (int*)Unsafe.AsPointer(ref *address);
         int* empty = null;
         return restored == address && Unsafe.AsPointer(ref *empty) == null ? *restored : 0;
+    }
+
+    public static int NullAggregateLocation()
+    {
+        var values = new NullProbeValue[1];
+        ref NullProbeValue present = ref values[0];
+        ref NullProbeValue missing = ref Unsafe.NullRef<NullProbeValue>();
+        if (Unsafe.IsNullRef(ref present) || !Unsafe.IsNullRef(ref missing)) return 0;
+        try { return missing.Number; }
+        catch (NullReferenceException) { return 181; }
+    }
+
+    public static int NullReferencePayloadLocation()
+    {
+        var holder = new NullReferenceHolder();
+        ref string? value = ref holder.Text;
+        ref string? missing = ref Unsafe.NullRef<string?>();
+        if (!Unsafe.IsNullRef(ref missing) || Unsafe.IsNullRef(ref value) || value != null) return 0;
+        value = "live";
+        return !Unsafe.IsNullRef(ref value) && holder.Text == "live" ? 191 : 0;
+    }
+
+    private sealed class NullReferenceHolder
+    {
+        internal string? Text;
+    }
+
+    public static int NullBooleanLocation()
+    {
+        bool value = false;
+        return IsNullBoolean(ref Unsafe.NullRef<bool>()) && !IsNullBoolean(ref value) ? 193 : 0;
+    }
+
+    private static bool IsNullBoolean(ref bool value) => Unsafe.IsNullRef(ref value);
+
+    public static int NullCharacterAddress()
+    {
+        ref char missing = ref Unsafe.NullRef<char>();
+        ref char offset = ref Unsafe.AddByteOffset(ref missing, (nint)2);
+        ref char restored = ref Unsafe.AddByteOffset(ref offset, (nint)(-2));
+        return Unsafe.IsNullRef(ref missing) && !Unsafe.IsNullRef(ref offset) && Unsafe.IsNullRef(ref restored) ? 197 : 0;
     }
 
     private static bool TestNarrow(NarrowFlag value, NarrowFlag mask) =>

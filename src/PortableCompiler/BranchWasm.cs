@@ -889,6 +889,23 @@ namespace PortableCompiler
                     used = Const(code, used, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, Native, depth));
                 }
+                else if (kind == NullManagedLocation)
+                {
+                    int location = records[slot + 3];
+                    code[used++] = 0xd0; // ref.null of the byref carrier, not the referenced value.
+                    used = WasmBinary.Signed(code, used, WasmBinary.HeapType(location));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, location, depth));
+                }
+                else if (kind == TestNullLocation)
+                {
+                    int type = states[state + top];
+                    int address = Spill(spills, maximum, spillFlags, type, top);
+                    used = Local(code, used, 0x20, address);
+                    code[used++] = IsNativeInteger(type) ? (byte)0x45 : (byte)0xd1; // i32.eqz or ref.is_null
+                    if (type == CharacterLocation)
+                        used = ManagedLocationWasm.TestCharacterAddress(code, used, address);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top));
+                }
                 else if (kind == CallNativeIndirect)
                 {
                     // IL already evaluated [receiver, token]. The host validates

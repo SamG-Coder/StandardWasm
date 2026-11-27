@@ -25,11 +25,17 @@ namespace PortableCompiler
             int type = Read(bundle, image, layout, heaps, owner, next, end, context, objects, 0,
                 methodArguments: methodArguments);
             if (type < 0) return type;
+            int location = ElementLocation(objects, type);
+            return location != 0 ? location : -2;
+        }
+
+        internal static int ElementLocation(int[] objects, int type)
+        {
             int location = LocationFromIdentity(objects, type);
             // A managed out enum with 32-bit storage uses the existing scalar cell.
             if (location == 0 && ObjectLayouts.IsEnumKey(type) && ObjectLayouts.SignatureStorage(objects, type) == I32)
                 location = Int32Location;
-            return location != 0 ? location : -2;
+            return location;
         }
 
         internal static int TypeSpecLocation(BundleImages bundle, byte[] image, int[] layout, int[] heaps,

@@ -1689,12 +1689,17 @@ namespace PortableCompiler
                     if (status < 0) return status;
                     if (!checkReceiver)
                     {
-                        if (NativeAddressIntrinsics.IsAsPointer(image, layout, heaps, counts, spec))
+                        int addressIntrinsic = NativeAddressIntrinsics.Identify(image, layout, heaps, counts, spec);
+                        if (addressIntrinsic != 0)
                         {
+                            var element = new int[1];
                             status = MethodInstantiations.ReadArguments(bundle, image, layout, heaps, owner,
-                                context, objects, methodArguments, spec, new int[1]);
+                                context, objects, methodArguments, spec, element);
                             if (status < 0) return status;
-                            records[slot] = BranchIl.NativeAddressView;
+                            int reference = ManagedReferenceSignatures.ElementLocation(objects, element[0]);
+                            if (addressIntrinsic == BranchIl.NullManagedLocation && reference == 0) return -2;
+                            records[slot] = addressIntrinsic;
+                            records[slot + 3] = reference;
                             continue;
                         }
                         int intrinsic = StaticByteIntrinsics.Identify(image, layout, heaps, counts, spec, methodArguments);

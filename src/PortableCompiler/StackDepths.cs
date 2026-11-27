@@ -464,6 +464,14 @@ namespace PortableCompiler
             // A managed heap location requires separate pinning support.
             if (kind == NativeAddressView)
                 return depth > 0 && IsNativeInteger(stack[depth - 1]) ? depth : -2;
+            if (kind == NullManagedLocation) return Push(stack, allocated, depth, extra);
+            if (kind == TestNullLocation)
+            {
+                if (depth == 0) return -2;
+                int address = stack[depth - 1];
+                return IsNativeInteger(address) || extra != 0 && address == extra
+                    ? Push(stack, allocated, depth - 1, I32) : -2;
+            }
             if (kind == CallNativeIndirect)
             {
                 if (depth < 2 || !IsNativeInteger(stack[depth - 1]) || !IsNativeInteger(stack[depth - 2])) return -2;

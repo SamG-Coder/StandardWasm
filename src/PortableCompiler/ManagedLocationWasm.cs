@@ -118,6 +118,22 @@ namespace PortableCompiler
             return used;
         }
 
+        internal static int TestCharacterAddress(byte[] code, int used, int location)
+        {
+            // A character location can also encode a native address as [null, address].
+            // The first null test is already on the stack, so never read a null carrier.
+            code[used++] = 0x04; code[used++] = 0x7f;
+            used = Const(code, used, 1);
+            code[used++] = 0x05;
+            used = LoadField(code, used, location, 0);
+            code[used++] = 0xd1;
+            used = LoadField(code, used, location, 1);
+            code[used++] = 0x45;
+            code[used++] = 0x71;
+            code[used++] = 0x0b;
+            return used;
+        }
+
         internal static int ReadStaticUInt16(byte[] code, int used, int location)
         {
             // Wasm is little-endian. Read two adjacent bytes at any alignment
