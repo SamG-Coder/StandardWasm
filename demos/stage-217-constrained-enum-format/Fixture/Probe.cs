@@ -69,6 +69,8 @@ namespace ConstrainedEnumFormat
             !ReferenceEquals(Read8((I8)(-8)), Read8((I8)(-8))) ? 1 : 0;
 
         public static int GenericName() => TextCode(ReadGeneric(Letters.Жёлтый));
+        public static int GenericNarrow() => TextCode(ReadGeneric((I8)sbyte.MinValue));
+        public static int GenericWide() => TextCode(ReadGeneric((U64)ulong.MaxValue));
 
         // These calls deliberately require formatting outside this stage's scope.
         public static int RejectUnsortedAliases() => TextCode(ReadUnsortedAlias((UnsortedAlias)1));

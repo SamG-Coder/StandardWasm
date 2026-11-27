@@ -27,7 +27,9 @@ namespace PortableCompiler
                 table == 1 || table == 2 ? BundleLayouts.RegisterType(bundle, image, layout, heaps,
                     owner, row << 2 | (table == 1 ? 1 : 0), objects, valueType: true, enumIdentity: true) : 0;
             if (!ObjectLayouts.IsEnumKey(type)) return 0;
-            if (StackType(frameType) != StackType(ObjectLayouts.SignatureStorage(objects, type))) return -2;
+            // Check the actual frame slot before Load normalizes packed values
+            // to the evaluation-stack category.
+            if (frameType != ObjectLayouts.SignatureStorage(objects, type)) return -2;
 
             var identity = new int[2];
             ObjectLayouts.EnumIdentity(objects, type, identity);
