@@ -3,6 +3,7 @@ import { frameworkInventory, frameworkMissingExitCode, frameworkMissingMessage, 
 import { instantiateManagedModule } from "./resource-host.mjs";
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
+const defaultFileSystem = Object.freeze({ currentDirectory: "C:\\StandardWasm\\App" });
 
 function readManifest(asset) {
     if (!asset) throw Error("Provide the original .NET deployment manifests.");
@@ -73,8 +74,11 @@ export async function runManagedEntry(compilerBytes, selection, platform) {
 
     const code = Uint8Array.from({ length }, (_, i) => compiler.ReadByte(output, i));
     const module = await WebAssembly.compile(code);
+    // File input exposes no Windows host path. Each launched program gets a
+    // virtual working directory unless its platform supplies another one.
+    const services = { win32FileSystem: defaultFileSystem, ...platform };
     const { exports } = await instantiateManagedModule(module, compiler, [selection.entry, ...companions],
-        {}, selection.executablePath, undefined, undefined, platform);
+        {}, selection.executablePath, undefined, undefined, services);
     if (typeof exports.run !== "function" || exports.run.length !== 0)
         throw Error("This entry host supports a parameterless managed entry point.");
     const exitCode = exports.run();

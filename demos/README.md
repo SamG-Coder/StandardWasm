@@ -196,6 +196,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [194 · Win32 full-path resolution](stage-194-win32-full-path/README.md) | `npm run demo -- stage-194-win32-full-path` | Compare virtual Windows path resolution, UTF-16 buffer retries and file-part pointers |
 | [195 · Compiled Windows full-path binding](stage-195-full-path-native-binding/README.md) | `npm run demo -- stage-195-full-path-native-binding` | Compile the raw UTF-16 full-path import and check argument order, shared memory, and return values |
 | [196 · Managed full-path wrapper](stage-196-full-path-managed-wrapper/README.md) | `npm run demo -- stage-196-full-path-managed-wrapper` | Compare scoped UTF-16 buffers and saved Win32 errors against the x86 CLR |
+| [198 · Virtual executable working directory](stage-198-virtual-executable-directory/README.md) | `npm run demo -- stage-198-virtual-executable-directory` | Launch an unchanged console publish through the real file intake and resolve paths within its virtual directory |
 
 ## Adding a stage
 
