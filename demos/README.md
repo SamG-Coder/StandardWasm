@@ -193,6 +193,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [189 · Synchronous Win32 window creation](stage-189-window-creation/README.md) | `npm run demo -- stage-189-window-creation` | Compare hidden window creation, current procedure dispatch, and nested callback memory against Windows |
 | [190 · Compiled window creation binding](stage-190-window-creation-binding/README.md) | `npm run demo -- stage-190-window-creation-binding` | Compile the SDK-shaped window creation import and dispatch through the production host |
 | [193 · Single-character local span](stage-193-single-character-local-span/README.md) | `npm run demo -- stage-193-single-character-local-span` | Preserve local aliasing, distinct frame owners, and empty span anchors |
+| [194 · Win32 full-path resolution](stage-194-win32-full-path/README.md) | `npm run demo -- stage-194-win32-full-path` | Compare virtual Windows path resolution, UTF-16 buffer retries and file-part pointers |
 | [195 · Compiled Windows full-path binding](stage-195-full-path-native-binding/README.md) | `npm run demo -- stage-195-full-path-native-binding` | Compile the raw UTF-16 full-path import and check argument order, shared memory, and return values |
 
 ## Adding a stage
