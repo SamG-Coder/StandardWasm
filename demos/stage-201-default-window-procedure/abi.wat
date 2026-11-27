@@ -1,0 +1,17 @@
+(module
+  (import "standardwasm:resources" "memory" (memory 1))
+  (import "standardwasm:win32" "getModuleHandleW" (func $module (param i32) (result i32)))
+  (import "standardwasm:win32" "getProcAddress" (func $proc (param i32 i32) (result i32)))
+  (import "standardwasm:win32" "callWindowProcW" (func $call (param i32 i32 i32 i32 i32) (result i32)))
+  (import "standardwasm:win32" "registerClassW" (func $register (param i32) (result i32)))
+  (import "standardwasm:win32" "createWindowExW"
+    (func $create (param i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32) (result i32)))
+  (import "standardwasm:win32" "getLastSystemError" (func $error (result i32)))
+  (export "memory" (memory 0))
+  (export "getModuleHandleW" (func $module))
+  (export "getProcAddress" (func $proc))
+  (export "callWindowProcW" (func $call))
+  (export "registerClassW" (func $register))
+  (export "createWindowExW" (func $create))
+  (export "getLastSystemError" (func $error))
+)

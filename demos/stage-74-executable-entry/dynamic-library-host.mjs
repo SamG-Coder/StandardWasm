@@ -81,7 +81,7 @@ export function createDynamicLibraryHost(errors) {
         return 0;
     }
 
-    function registerLibrary(name, entries) {
+    function registerLibrary(name, entries, resident = false) {
         const key = libraryKey(name);
         if (key === undefined || libraries.has(key) || !(entries instanceof Map) || entries.size === 0)
             throw new TypeError("StandardWasm: invalid dynamic library registration");
@@ -97,7 +97,10 @@ export function createDynamicLibraryHost(errors) {
                 throw new TypeError("StandardWasm: invalid dynamic export registration");
             exports.set(entry, { signature, invoke, scopedUtf16, shape, library: key, entry });
         }
-        libraries.set(key, { exports, handle: 0, references: 0, tokens: new Map() });
+        const handle = resident ? id() : 0;
+        const library = { exports, handle, resident, references: 0, tokens: new Map() };
+        libraries.set(key, library);
+        if (resident) handles.set(handle, library);
     }
 
     function loadLibrary(name, reserved = 0, flags = 0) {
@@ -134,8 +137,8 @@ export function createDynamicLibraryHost(errors) {
 
     function freeLibrary(handle) {
         const library = handles.get(handle);
-        if (!library) return failure(invalidHandle);
-        if (--library.references === 0) {
+        if (!library || library.references === 0) return failure(invalidHandle);
+        if (--library.references === 0 && !library.resident) {
             for (const token of library.tokens.values()) targets.delete(token);
             library.tokens.clear();
             handles.delete(handle);
@@ -175,5 +178,6 @@ export function createDynamicLibraryHost(errors) {
     }
 
     const hasTarget = (token, signature) => targets.get(token)?.signature === signature;
-    return { registerLibrary, loadLibrary, getModuleHandle, getProcAddress, freeLibrary, invoke, invokeScoped, hasTarget };
+    const hasLibrary = name => libraries.has(libraryKey(name));
+    return { registerLibrary, loadLibrary, getModuleHandle, getProcAddress, freeLibrary, invoke, invokeScoped, hasTarget, hasLibrary };
 }

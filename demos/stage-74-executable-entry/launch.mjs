@@ -76,7 +76,11 @@ export async function runManagedEntry(compilerBytes, selection, platform) {
     const module = await WebAssembly.compile(code);
     // File input exposes no Windows host path. Each launched program gets a
     // virtual working directory unless its platform supplies another one.
-    const services = { win32FileSystem: defaultFileSystem, ...platform };
+    const includedFrameworks = config.runtimeOptions?.includedFrameworks;
+    const isDesktop = framework => framework?.name === "Microsoft.WindowsDesktop.App";
+    const win32Desktop = frameworks.frameworks.some(isDesktop) ||
+        (Array.isArray(includedFrameworks) && includedFrameworks.some(isDesktop));
+    const services = { win32FileSystem: defaultFileSystem, win32Desktop, ...platform };
     const { exports } = await instantiateManagedModule(module, compiler, [selection.entry, ...companions],
         {}, selection.executablePath, undefined, undefined, services);
     if (typeof exports.run !== "function" || exports.run.length !== 0)

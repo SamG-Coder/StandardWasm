@@ -15,7 +15,7 @@ export function createWindowState() {
         register(style, dispatch, attributes = {}) {
             if (nextHandle > 0xffffffff) throw new Error("Win32 window handle space is exhausted.");
             const handle = nextHandle++;
-            windows.set(handle, { style: style | 0, dispatch, attributes: { ...attributes },
+            windows.set(handle, { style: style | 0, dispatch, title: "", attributes: { ...attributes },
                 extra: new DataView(new ArrayBuffer(attributes.extraBytes ?? 0)) });
             return handle;
         },
@@ -24,6 +24,13 @@ export function createWindowState() {
         },
         hasWindow(handle) {
             return windows.has(handle >>> 0);
+        },
+        getWindowTitle(handle) {
+            return windows.get(handle >>> 0)?.title;
+        },
+        setWindowTitle(handle, title) {
+            const window = windows.get(handle >>> 0);
+            if (window) window.title = title;
         },
         dispatchWindowMessage(handle, message, wparam, lparam) {
             return windows.get(handle >>> 0)?.dispatch?.(message, wparam, lparam);
@@ -187,6 +194,43 @@ const uahDestroyMessage = 0x0090; // Observed in the Windows x86 themed-window a
 const pageBytes = 65536;
 const createStructBytes = 48, minMaxInfoBytes = 40, rectBytes = 16;
 const maximumCaptionUnits = 32767;
+
+export function createDefaultWindowProcedure(memory, windows) {
+    return function defWindowProcW(hwnd, message, wparam, lparam) {
+        if (message === 0) return 0; // WM_NULL
+        if (!windows.hasWindow(hwnd)) {
+            if (message === sizeMessage || message === moveMessage) return 0;
+            throw new Error("StandardWasm: default window procedure requires a live HWND.");
+        }
+        const style = windows.getWindowLong(hwnd, -16, () => {});
+        const extendedStyle = windows.getWindowLong(hwnd, -20, () => {});
+        if (((style & ~clipSiblingsStyle) >>> 0) !== popupStyle || extendedStyle !== 0)
+            throw new Error("StandardWasm: default window procedure currently supports hidden borderless popups.");
+
+        // The hidden-popup defaults leave their incoming structures unchanged.
+        // WM_NCCREATE copies the text before the creation lease is released.
+        if (message === sizeMessage || message === moveMessage) return 0;
+        let size;
+        if (message === ncCreateMessage || message === createMessage) size = createStructBytes;
+        else if (message === ncCalcSizeMessage && wparam === 0) size = rectBytes;
+        else throw new Error("StandardWasm: unsupported default window message 0x" + message.toString(16) + ".");
+        const address = lparam >>> 0;
+        if (address === 0 || address > memory.buffer.byteLength - size)
+            throw new Error("StandardWasm: invalid guest buffer for the default window procedure.");
+        if (message !== ncCreateMessage) return 0;
+        const view = new DataView(memory.buffer);
+        const caption = view.getUint32(address + 36, true);
+        if (captionError(view, caption) !== 0)
+            throw new Error("StandardWasm: invalid creation caption for the default window procedure.");
+        let title = "";
+        if (caption) {
+            for (let offset = caption, unit; (unit = view.getUint16(offset, true)) !== 0; offset += 2)
+                title += String.fromCharCode(unit);
+        }
+        windows.setWindowTitle(hwnd, title);
+        return 1;
+    };
+}
 
 function captionError(view, address) {
     if (address === 0) return 0;

@@ -2,7 +2,7 @@ import { readPeResource } from "../stage-73-executable-intake/loader/pe.mjs";
 import { createActivationContexts } from "./activation-context.mjs";
 import { createDpiAwareness, dpiImportNames } from "./dpi-awareness.mjs";
 import { createFullPathHost } from "./full-path-host.mjs";
-import { createWindowClassState, createWindowCreation, createWindowState, windowImportNames } from "./window-state.mjs";
+import { createDefaultWindowProcedure, createWindowClassState, createWindowCreation, createWindowState, windowImportNames } from "./window-state.mjs";
 
 export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
@@ -47,7 +47,13 @@ export function createNativeSymbolLookup(memory, libraries, errors) {
 }
 
 export function createWin32Host(memory, executablePath, assets = [], windows = createWindowState(),
-    errors = { system: 0, pinvoke: 0 }, dynamicLibraries, windowCreationMetrics, win32FileSystem) {
+    errors = { system: 0, pinvoke: 0 }, dynamicLibraries, windowCreationMetrics, win32FileSystem, desktop = false) {
+    if (desktop && dynamicLibraries && !dynamicLibraries.hasLibrary("user32.dll")) {
+        dynamicLibraries.registerLibrary("user32.dll", new Map([["DefWindowProcW", {
+            signature: windowProcedureSignature,
+            invoke: createDefaultWindowProcedure(memory, windows)
+        }]]), true);
+    }
     const byPath = new Map();
     const byBaseName = new Map();
     const moduleImages = new Map();
