@@ -16,9 +16,18 @@ namespace PeLibrary
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
             if (first < 0) return 0;
             if (kind == 0)
-                return PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, methods, counts) &&
-                    ObjectLayouts.NamedDefinition(image, heaps, methods, counts, first, coded >> 2, "System", "Delegate")
+            {
+                // A caller's platform TypeRef and the defining CoreLib TypeDef
+                // share the same compiler-owned representation.
+                if (!PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, methods, counts)) return 0;
+                int row = coded >> 2;
+                if (ObjectLayouts.NamedDefinition(image, heaps, methods, counts, first, row, "System", "EventHandler"))
+                    return ObjectLayouts.EventHandlerReference;
+                if (ObjectLayouts.NamedDefinition(image, heaps, methods, counts, first, row, "System", "EventArgs"))
+                    return ObjectLayouts.EventArgsReference;
+                return ObjectLayouts.NamedDefinition(image, heaps, methods, counts, first, row, "System", "Delegate")
                     ? DelegateType : 0;
+            }
             int type = ReadType(image, heaps, methods, counts, first, coded >> 2);
             return type == InterlockedType ? 0 : type;
         }

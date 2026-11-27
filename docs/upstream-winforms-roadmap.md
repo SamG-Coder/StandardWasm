@@ -112,7 +112,10 @@ The compiler passes the scoped `ValueStringBuilder` by reference to the
 original `Path.GetTempPath` helper. The callback in CoreLib's
 `Path.GetRandomFileName` now binds as `SpanAction<char, nint>`, and the
 `NativeWindow` type initializer constructs its static shutdown handler.
-The latest replay stops at the `AppDomain.ProcessExit` subscription.
+The linker now gives the original CoreLib `EventHandler` and `EventArgs`
+definitions the same representation as their references in WinForms. The
+unchanged startup compilation gets past the `AppDomain.ProcessExit`
+subscription and reaches the resource manager call in `SR.GetResourceString`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.
