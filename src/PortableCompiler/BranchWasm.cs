@@ -1426,9 +1426,10 @@ namespace PortableCompiler
                     int type = records[slot + 3];
                     int view = Spill(spills, maximum, spillFlags, type, top - 1);
                     int index = Spill(spills, maximum, spillFlags, I32, top);
-                    used = frameShape[25] != 0 && type == CharacterSpan
+                    used = frameShape[25] != 0 && (type == CharacterSpan || type == ReadOnlyInt16Span)
                         ? NativeCharacterViewWasm.Read(code, used, view, index)
                         : SpanWasm.Read(code, used, operand, view, index);
+                    if (type == ReadOnlyInt16Span) code[used++] = 0xc1; // i32.extend16_s
                     int resultType = type == ObjectSpan ? ObjectReference : I32;
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, resultType, top - 1));
                 }

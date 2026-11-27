@@ -2444,6 +2444,12 @@ namespace PortableCompiler
                                 continue;
                             }
                         }
+                        if (ReadOnlySpanCasts.IsCharToInt16(image, layout, heaps, counts, spec))
+                        {
+                            records[slot] = BranchIl.SpanAsReadOnly;
+                            records[slot + 3] = ReadOnlyInt16Span;
+                            continue;
+                        }
                         int intrinsic = StaticByteIntrinsics.Identify(image, layout, heaps, counts, spec, methodArguments);
                         if (intrinsic == StaticByteIntrinsics.AddCharacterElements)
                         {

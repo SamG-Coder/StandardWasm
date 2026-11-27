@@ -373,7 +373,11 @@ namespace PortableCompiler
                 return depth >= 2 && IsNativeInteger(stack[depth - 2]) && stack[depth - 1] == I32
                     ? extra == 0 ? Push(stack, allocated, depth - 2, WritableCharacterSpan) : depth - 2 : -2;
             if (kind == SpanAsReadOnly)
-                return Match(stack, depth, WritableCharacterSpan) ? Push(stack, allocated, depth - 1, CharacterSpan) : -2;
+            {
+                bool signed = extra == ReadOnlyInt16Span;
+                return Match(stack, depth, signed ? CharacterSpan : WritableCharacterSpan)
+                    ? Push(stack, allocated, depth - 1, signed ? ReadOnlyInt16Span : CharacterSpan) : -2;
+            }
             if (kind == ByteSpanAsReadOnly)
                 return Match(stack, depth, WritableByteSpan) ? Push(stack, allocated, depth - 1, ReadOnlyByteSpan) : -2;
             if (kind == SpanAddress)

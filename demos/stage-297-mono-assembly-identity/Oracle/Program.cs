@@ -33,6 +33,6 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
         name = run.Method.Name,
         row = run.Method.MetadataToken & 0xffffff,
         expected = run(),
-        rejection = index < 3 ? new { status = -2, location = new[] { 2, searchFrontier, -1 } } : null
+        rejection = index < 3 ? new { status = -2, location = new[] { 2, searchFrontier, 0x35 } } : null
     })
 }));

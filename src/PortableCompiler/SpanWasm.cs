@@ -177,7 +177,7 @@ namespace PortableCompiler
             code[used++] = 0x05;
             used = LoadField(code, used, view, 0);
             used = LoadField(code, used, view, 1);
-            if (nativeCharacters && (type == CharacterSpan || type == WritableCharacterSpan))
+            if (nativeCharacters && (type == CharacterSpan || type == WritableCharacterSpan || type == ReadOnlyInt16Span))
             {
                 // Null owner on a non-default character descriptor denotes a
                 // byte address. Managed owners use element offsets.
