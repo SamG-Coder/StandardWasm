@@ -105,19 +105,18 @@ namespace PortableCompiler
                 image[at + 2] == 0x0e && IsDefinition(image, layout, heaps, span);
         }
 
-        internal static int ClassifyCharacterSpanCall(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
-            int owner, int member, int context, int[] methodArguments, int[] objects)
+        internal static int ClassifySpanCall(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int member, int context, int[] methodArguments, int[] objects, bool constructor)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             if (AssemblyReferences.ReadMember(image, heaps, layout, member, reference, allowClosedParent: true) < 0)
                 return 0;
             int parent = reference[AssemblyReferences.GenericParent];
             if (parent == 0) return 0;
-            uint name = (uint)reference[4];
-            bool constructor = MatchesAscii(image, heaps, name, ".ctor");
-            if (!constructor && !MatchesAscii(image, heaps, name, "op_Implicit")) return 0;
-            if (ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps,
-                owner, parent, objects, context, methodArguments) != WritableCharacterSpan) return 0;
+            if (!MatchesAscii(image, heaps, (uint)reference[4], constructor ? ".ctor" : "op_Implicit")) return 0;
+            int type = ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps,
+                owner, parent, objects, context, methodArguments);
+            if (type != WritableCharacterSpan && type != ReadOnlyByteSpan) return 0;
 
             int blob = reference[5];
             if (blob < 1 || blob >= heaps[1]) return 0;
@@ -129,24 +128,28 @@ namespace PortableCompiler
             if (constructor)
             {
                 // instance void .ctor(void*, int).
-                if (size == 6 && U32(image, (uint)start) == 0x0f010220 &&
+                if (type == WritableCharacterSpan && size == 6 && U32(image, (uint)start) == 0x0f010220 &&
                     U16(image, (uint)(start + 4)) == 0x0801) return BranchIl.NativeCharacterSpan;
                 // instance void .ctor(!0[]).
                 return size == 6 && U32(image, (uint)start) == 0x1d010120 &&
-                    U16(image, (uint)(start + 4)) == 0x0013 ? BranchIl.CharacterArrayAsSpan : 0;
+                    U16(image, (uint)(start + 4)) == 0x0013
+                    ? type == ReadOnlyByteSpan ? BranchIl.ByteArrayAsSpan : BranchIl.CharacterArrayAsSpan : 0;
             }
 
             if (image[start] != 0 || image[start + 1] != 1) return 0;
             int end = start + size;
-            int parameter = OpenCharacterSpan(image, layout, heaps, start + 2, end, next, false);
+            int parameter = OpenSpan(image, layout, heaps, start + 2, end, next, false);
             if (parameter < 0) return 0;
-            return OpenCharacterSpan(image, layout, heaps, parameter, end, next, true) == end
+            if (type == ReadOnlyByteSpan)
+                return end - parameter == 3 && image[parameter] == 0x1d &&
+                    image[parameter + 1] == 0x13 && image[parameter + 2] == 0 ? BranchIl.ByteArrayAsSpan : 0;
+            return OpenSpan(image, layout, heaps, parameter, end, next, true) == end
                 ? BranchIl.SpanAsReadOnly : 0;
         }
 
         // The MemberRef signature uses the declaring Span<T> argument. Its
-        // TypeSpec parent has already proved that this argument is char.
-        internal static int OpenCharacterSpan(byte[] image, int[] layout, int[] heaps,
+        // TypeSpec parent has already proved the closed element argument.
+        internal static int OpenSpan(byte[] image, int[] layout, int[] heaps,
             int at, int end, int[] next, bool writable)
         {
             if (end - at < 6 || image[at] != 0x15 || image[at + 1] != 0x11) return -2;

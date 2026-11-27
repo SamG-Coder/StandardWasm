@@ -53,14 +53,19 @@ namespace PortableCompiler
                 }
             }
             if (!IsDirectMemberCall(records, call)) return 0;
-            if (!field && indexed && lengthCall < 0 && spanType == SignatureTypes.WritableCharacterSpan &&
-                SpanMetadata.ClassifyCharacterSpanCall(bundle, image, layout, heaps, owner,
-                    records[call + 1], context, methodArguments, objects) == CharacterArrayAsSpan)
+            if (!field && indexed && lengthCall < 0 &&
+                (spanType == SignatureTypes.WritableCharacterSpan || spanType == SignatureTypes.ReadOnlyByteSpan))
             {
-                records[address] = Nop;
-                records[call] = CharacterArrayAsSpan;
-                records[call + 3] = records[address + 1] + 1;
-                return 1;
+                int span = SpanMetadata.ClassifySpanCall(bundle, image, layout, heaps, owner,
+                    records[call + 1], context, methodArguments, objects, constructor: true);
+                int expected = spanType == SignatureTypes.ReadOnlyByteSpan ? ByteArrayAsSpan : CharacterArrayAsSpan;
+                if (span == expected)
+                {
+                    records[address] = Nop;
+                    records[call] = span;
+                    records[call + 3] = records[address + 1] + 1;
+                    return 1;
+                }
             }
 
             int accessor = SpanMetadata.Accessor(bundle, image, layout, heaps, owner,

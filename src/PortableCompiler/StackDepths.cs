@@ -288,10 +288,11 @@ namespace PortableCompiler
                     ? Push(stack, allocated, depth - 2, ObjectSpan) : -2;
             if (kind == StringAsSpan)
                 return Match(stack, depth, String) ? Push(stack, allocated, depth - 1, CharacterSpan) : -2;
-            if (kind == CharacterArrayAsSpan)
+            if (kind == CharacterArrayAsSpan || kind == ByteArrayAsSpan)
             {
-                if (!Match(stack, depth, Chars)) return -2;
-                return extra == 0 ? Push(stack, allocated, depth - 1, WritableCharacterSpan) : depth - 1;
+                bool bytes = kind == ByteArrayAsSpan;
+                if (!Match(stack, depth, bytes ? Bytes : Chars)) return -2;
+                return extra == 0 ? Push(stack, allocated, depth - 1, bytes ? ReadOnlyByteSpan : WritableCharacterSpan) : depth - 1;
             }
             if (kind == NativeCharacterSpan)
                 return depth >= 2 && IsNativeInteger(stack[depth - 2]) && stack[depth - 1] == I32

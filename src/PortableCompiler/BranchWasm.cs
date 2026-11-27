@@ -1047,15 +1047,16 @@ namespace PortableCompiler
                 else if (kind == StringAsSpan)
                 {
                     int source = Spill(spills, maximum, spillFlags, states[state + top], top);
-                    used = SpanWasm.FromOwner(code, used, source, true);
+                    used = SpanWasm.FromOwner(code, used, source, CharacterSpan, true);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, CharacterSpan, top));
                 }
-                else if (kind == CharacterArrayAsSpan)
+                else if (kind == CharacterArrayAsSpan || kind == ByteArrayAsSpan)
                 {
                     int source = Spill(spills, maximum, spillFlags, states[state + top], top);
                     int target = records[slot + 3] - 1;
-                    used = SpanWasm.FromOwner(code, used, source, false);
-                    used = Local(code, used, 0x21, target >= 0 ? target : Spill(spills, maximum, spillFlags, WritableCharacterSpan, top));
+                    int type = kind == ByteArrayAsSpan ? ReadOnlyByteSpan : WritableCharacterSpan;
+                    used = SpanWasm.FromOwner(code, used, source, type, false);
+                    used = Local(code, used, 0x21, target >= 0 ? target : Spill(spills, maximum, spillFlags, type, top));
                 }
                 else if (kind == NativeCharacterSpan)
                 {

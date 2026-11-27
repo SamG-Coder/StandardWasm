@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 
@@ -8,21 +7,20 @@ internal static class Program
     {
         if (IntPtr.Size != 4) throw new InvalidOperationException("Expected the x86 CLR.");
         string runtime = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-        var negativeSign = typeof(NumberFormatInfo).GetMethod("NegativeSignTChar",
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
-        const int conversionOffset = 0x3e;
-        byte[] formatterIl = negativeSign.GetMethodBody()!.GetILAsByteArray()!;
-        if (formatterIl.Length < conversionOffset + 5 || formatterIl[conversionOffset] != 0x28 ||
-            negativeSign.Module.ResolveMethod(BitConverter.ToInt32(formatterIl, conversionOffset + 1)) is not MethodInfo conversion ||
-            conversion.Name != "op_Implicit" || conversion.DeclaringType != typeof(ReadOnlySpan<byte>))
+        var digits = typeof(int).Assembly.GetType("System.Number", throwOnError: true)!
+            .GetMethod("TryNegativeInt32ToDecStr", BindingFlags.Static | BindingFlags.NonPublic)!
+            .MakeGenericMethod(typeof(char));
+        if (!digits.GetMethodBody()!.LocalVariables.Any(local =>
+            local.IsPinned && local.LocalType == typeof(char).MakeByRefType()))
             throw new InvalidOperationException("The CoreLib formatting baseline changed.");
-        int[] intDiagnostic = [2, negativeSign.MetadataToken & 0xffffff, conversionOffset];
+        int[] intDiagnostic = [2, digits.MetadataToken & 0xffffff, -1];
 
         var cases = new Func<int>[]
         {
             BoxedIntMatch, BoxedDoubleMatch, BoxedBooleanMiss, StringMiss, NullMiss, ReferenceMatch, BoxIdentity,
             OriginalIntWrites, OriginalIntTooShort, OriginalCharWrites, OriginalCharTooShort, ReferenceWrites,
-            FormatProviderDescriptor, VirtualDescriptorArguments
+            FormatProviderDescriptor, VirtualDescriptorArguments,
+            ImplicitByteView, ConstructedByteView, ReturnedByteView, NullByteView, EmptyByteView, ByteViewBounds
         };
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
@@ -72,6 +70,47 @@ internal static class Program
 
     private static int CompareDescriptors(DescriptorReader reader, Type? second) =>
         reader.Compare(typeof(Program), second);
+
+    public static int ImplicitByteView()
+    {
+        var array = new byte[] { 11, 96, 202 };
+        ReadOnlySpan<byte> view = array;
+        ReadOnlySpan<byte> tail = view.Slice(1);
+        array[1] = 241;
+        return view[0] + tail[0] * 10 + tail.Length * 1000;
+    }
+
+    public static int ConstructedByteView()
+    {
+        var array = new byte[] { 4, 193 };
+        ReadOnlySpan<byte> view = new ReadOnlySpan<byte>(array);
+        array[0] = 212;
+        return view[0] + view[1];
+    }
+
+    public static int NullByteView() => ByteViewLength(null);
+    public static int EmptyByteView() => ByteViewLength(new byte[0]);
+
+    public static int ReturnedByteView()
+    {
+        ReadOnlySpan<byte> view = CreateByteView();
+        return view[1] + view.Length;
+    }
+
+    private static ReadOnlySpan<byte> CreateByteView() => new ReadOnlySpan<byte>(new byte[] { 7, 201 });
+
+    private static int ByteViewLength(byte[]? array)
+    {
+        ReadOnlySpan<byte> view = array;
+        return view.IsEmpty ? view.Length : -1;
+    }
+
+    public static int ByteViewBounds()
+    {
+        ReadOnlySpan<byte> view = new byte[] { 8 };
+        try { return view[1]; }
+        catch (IndexOutOfRangeException) { return 7; }
+    }
 
     private static int Format(object value, int capacity)
     {

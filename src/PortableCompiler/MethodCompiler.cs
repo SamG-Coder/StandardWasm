@@ -1960,8 +1960,8 @@ namespace PortableCompiler
                     }
                     if (!addressed && (opcode == 0x73 || opcode == 0x28))
                     {
-                        int span = SpanMetadata.ClassifyCharacterSpanCall(bundle, image, layout, heaps,
-                            owner, member, context, methodArguments, objects);
+                        int span = SpanMetadata.ClassifySpanCall(bundle, image, layout, heaps,
+                            owner, member, context, methodArguments, objects, opcode == 0x73);
                         if (span == BranchIl.NativeCharacterSpan && opcode == 0x73)
                         {
                             records[slot] = span;
@@ -1969,7 +1969,8 @@ namespace PortableCompiler
                             continue;
                         }
                         if (span == BranchIl.CharacterArrayAsSpan && opcode == 0x73 ||
-                            span == BranchIl.SpanAsReadOnly && opcode == 0x28)
+                            span == BranchIl.SpanAsReadOnly && opcode == 0x28 ||
+                            span == BranchIl.ByteArrayAsSpan)
                         {
                             records[slot] = span;
                             records[slot + 3] = 0;

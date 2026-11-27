@@ -38,16 +38,16 @@ namespace PortableCompiler
             return Local(code, used, 0x21, target);
         }
 
-        // Both views retain their original packed UTF-16 owner. A string
-        // contributes its backing array. A null source produces an empty view.
-        internal static int FromOwner(byte[] code, int used, int source, bool wrapped)
+        // Managed spans retain their original array. A string contributes its
+        // UTF-16 backing array. A null source produces an empty view.
+        internal static int FromOwner(byte[] code, int used, int source, int type, bool wrapped)
         {
             used = Local(code, used, 0x20, source);
             code[used++] = 0xd1; // ref.is_null
             code[used++] = 0x04;
-            used = WasmBinary.ValueType(code, used, CharacterSpan);
+            used = WasmBinary.ValueType(code, used, type);
             code[used++] = 0xd0; // ref.null
-            used = WasmBinary.Signed(code, used, WasmBinary.HeapType(CharacterSpan));
+            used = WasmBinary.Signed(code, used, WasmBinary.HeapType(type));
             code[used++] = 0x05;
             used = Local(code, used, 0x20, source);
             if (wrapped) used = StringWasm.Unwrap(code, used);
@@ -56,7 +56,7 @@ namespace PortableCompiler
             if (wrapped) used = StringWasm.Unwrap(code, used);
             code[used++] = 0xfb;
             code[used++] = 0x0f; // array.len
-            used = Gc(code, used, 0, CharacterSpan);
+            used = Gc(code, used, 0, type);
             code[used++] = 0x0b;
             return used;
         }

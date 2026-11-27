@@ -32,7 +32,7 @@ namespace PortableCompiler
                 image[start + 1] != 2 || image[start + 2] != 1) return 0;
             if (construct) return size == 5 && image[start + 3] == 0x1c && image[start + 4] == 0x18 ? Construct : 0;
             int end = start + size;
-            int argument = SpanMetadata.OpenCharacterSpan(image, layout, heaps, start + 3, end, next, true);
+            int argument = SpanMetadata.OpenSpan(image, layout, heaps, start + 3, end, next, true);
             return argument >= 0 && end - argument == 2 &&
                 image[argument] == 0x13 && image[argument + 1] == 1 ? Invoke : 0;
         }
