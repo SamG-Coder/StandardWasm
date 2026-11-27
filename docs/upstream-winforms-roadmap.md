@@ -48,6 +48,15 @@ collector. The reference framework includes finalizer declarations in
 finalizers matter when the concrete type comes from an ordinary application DLL.
 See the [.NET 10 CoreLib implementation](https://github.com/dotnet/runtime/blob/v10.0.10/src/coreclr/System.Private.CoreLib/src/System/GC.CoreCLR.cs).
 
+The startup census for the .NET 10.0.10 reference finds a call chain from
+`Program.Main` through `Application.Run` and the `ApplicationContext`
+constructor to `GC.SuppressFinalize`. The constructor suppresses finalization
+for the exact stock application context and stock modal context types. Its
+finalizer calls virtual `Dispose(false)` on derived instances. A Windows
+CLR probe with two derived instances observed one explicit disposal and
+one finalizer disposal on both x86 and x64. Preserve that distinction
+when adding the browser runtime path.
+
 Before claiming finalization support, compare an ordinary library on the CLR,
 Node and Edge. Cover the null argument exception, repeated suppression, two
 instances of the same type, inherited finalizers, re-registration and
@@ -58,6 +67,13 @@ JavaScript cleanup notifications can release independent host resources, but
 notification timing and delivery alone cannot satisfy the managed queue and
 resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)
 and the [.NET Wasm GC design discussion](https://github.com/dotnet/runtime/issues/94420).
+
+A Node and Edge probe observed that a cleanup registration holding a strong
+Wasm reference kept its target alive. Once that reference was cleared, cleanup
+ran after the target was gone. A compatible collector must instead queue the
+managed object while its state is available. In the upstream single-threaded
+Wasm runtime, a browser background job schedules the drain of managed GC work.
+See the [.NET 10 Mono GC implementation](https://github.com/dotnet/runtime/blob/v10.0.10/src/mono/mono/metadata/gc.c).
 
 ## Additional application hosts
 
