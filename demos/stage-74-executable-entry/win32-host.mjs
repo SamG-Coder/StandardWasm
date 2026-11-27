@@ -8,9 +8,10 @@ import { createAdjustWindowRectExForDpi } from "./window-rect.mjs";
 import { createThreadMessageQueue, createWindowMessageRegistration } from "./window-messages.mjs";
 import { createWindowEventPublisher } from "./window-events.mjs";
 import { createWindowSender } from "./window-send.mjs";
+import { createWindowPaint, paintImportNames } from "./window-paint.mjs";
 import { createThreadHandleHost } from "./thread-handle-host.mjs";
 import { createWindowStationHost } from "./window-station-host.mjs";
-import { createDefaultWindowProcedure, createWindowClassState, createWindowCreation, createInvalidateRect, createRedrawWindow,
+import { createDefaultWindowProcedure, createWindowClassState, createWindowCreation, createRedrawWindow,
     createWindowRectQueries, createWindowState, windowImportNames } from "./window-state.mjs";
 
 export const win32ImportModule = "standardwasm:win32";
@@ -18,7 +19,7 @@ export const win32MemoryImports = new Set([
     "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom",
     "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "getLongPathNameW", "redrawWindow", "invalidateRect", "registerWindowMessageW",
     "adjustWindowRectExForDpi", "getWindowThreadProcessId", "duplicateHandle", "getExitCodeThread", "getUserObjectInformationW",
-    "peekMessageW", "getWindowRect", "getClientRect", "deleteFileW", "sendMessageTimeoutW"
+    "peekMessageW", "getWindowRect", "getClientRect", "deleteFileW", "sendMessageTimeoutW", ...paintImportNames
 ]);
 export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, ...displayContextImportNames,
@@ -114,6 +115,8 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
     const bindProcedure = token => isProcedure(token)
         ? (handle, message, wparam, lparam) => dynamicLibraries.invoke(token, windowProcedureSignature, handle, message, wparam, lparam)
         : undefined;
+    const displayContexts = createDisplayContexts(windows, hwnd => classes.style(windows.getWindowClass(hwnd)), displayCapabilities);
+    const paint = createWindowPaint(memory, windows, displayContexts, setError);
     const getWindowLong = (handle, index) => windows.getWindowLong(handle, index, setError);
     function setWindowLong(handle, index, token) {
         return windows.setWindowProcedure(handle, index, token, procedure => {
@@ -209,7 +212,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         },
         ...createActivationContexts(memory, findManifest, value => { errors.system = value; }),
         ...createDpiAwareness(value => { errors.system = value; }),
-        ...createDisplayContexts(windows, hwnd => classes.style(windows.getWindowClass(hwnd)), displayCapabilities),
+        ...displayContexts,
         isWindow: handle => windows.hasWindow(handle) ? 1 : 0,
         getActiveWindow: () => windows.getActiveWindow(),
         setActiveWindow: handle => windows.setActiveWindow(handle, setError),
@@ -228,10 +231,10 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         createWindowExW: createWindowCreation(memory, windows, classes, bindProcedure, setError, windowCreationMetrics),
         ...createWindowRectQueries(memory, windows, setError),
         redrawWindow: createRedrawWindow(memory, windows, setError),
-        invalidateRect: createInvalidateRect(memory, windows, setError),
+        ...paint.imports,
         adjustWindowRectExForDpi: createAdjustWindowRectExForDpi(memory, setError),
         ...createThreadHandleHost(memory, () => windows.getCurrentThreadId(), setError),
-        ...createThreadMessageQueue(memory, windows, setError),
+        ...createThreadMessageQueue(memory, windows, setError, paint.nextPaint),
         notifyWinEvent: createWindowEventPublisher(windows, onWinEvent),
         sendMessageTimeoutW: createWindowSender(memory, windows, setError),
         ...createWindowStationHost(memory, desktop, setError),
