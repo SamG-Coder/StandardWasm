@@ -16,6 +16,7 @@ namespace PortableCompiler
         internal readonly int[] TypeNamespaceFixups = new int[1];
         internal readonly int[] HeapFixups = new int[1];
         internal readonly RuntimeTypeRelations TypeRelations = new RuntimeTypeRelations();
+        internal readonly RuntimeAssemblyMetadata AssemblyMetadata = new RuntimeAssemblyMetadata();
         internal readonly RuntimeObjectTypes ObjectTypes = new RuntimeObjectTypes();
         internal readonly RuntimeInterfaceTests InterfaceTests = new RuntimeInterfaceTests();
         internal readonly AggregateBoxPlan AggregateBoxes = new AggregateBoxPlan();

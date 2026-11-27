@@ -884,6 +884,11 @@ namespace PortableCompiler
                         }
                         return resourceOpen && status == -1 ? -2 : status;
                     }
+                    if (reflection.AssemblyMetadata.Vector != 0)
+                    {
+                        dispatch.AddAllocation(reflection.AssemblyMetadata.Vector);
+                        exceptionTags |= ExceptionTypes.ArgumentNull;
+                    }
                     ValueObjectOperands.LowerManaged(records, depths, states, maximum);
                     status = projections.BindReachable(records, depths, states, maximum, objects, location);
                     if (status < 0) return status;
@@ -1403,6 +1408,8 @@ namespace PortableCompiler
                 functions++;
             }
             length = reflection.TypeRelations.Write(bundle, moduleCode, length, objects, globals, bodyOffsets, sizes);
+            if (length < 0) return length;
+            length = reflection.AssemblyMetadata.Write(moduleCode, length, bodyOffsets, sizes, hostImports, reflection);
             if (length < 0) return length;
             var projectionHelpers = new int[ValueFieldProjectionWasm.HelperCount];
             for (int helper = 0; helper < projectionHelpers.Length; helper++)
@@ -2114,15 +2121,33 @@ namespace PortableCompiler
                     status = MethodInstantiations.ReadArguments(bundle, image, layout, heaps, owner,
                         context, objects, methodArguments, spec, types);
                     if (status < 0) return status;
+                    bool assemblyMetadata = !instance && !checkReceiver && types.Length == 1 &&
+                        RuntimeAssemblyMetadata.IsQuery(targetImage, targetLayout, targetHeaps, targetOwner, row, objects, types[0]);
                     var deferred = new int[8];
                     int constraints = GenericParameters.Check(targetImage, targetHeaps, targetLayout, row,
                         types, objects, deferred, method: true);
                     if (constraints < 0) return constraints;
                     if (constraints != 0)
                     {
-                        constraints = BundleConstraints.Check(bundle, targetImage, targetLayout, targetHeaps,
-                            targetOwner, objects, types, deferred, method: true, context: targetContext);
+                        constraints = assemblyMetadata ? RuntimeAssemblyMetadata.CheckConstraint(targetImage, targetLayout,
+                            targetHeaps, targetOwner, objects, types[0], deferred) :
+                            BundleConstraints.Check(bundle, targetImage, targetLayout, targetHeaps,
+                                targetOwner, objects, types, deferred, method: true, context: targetContext);
                         if (constraints < 0) return constraints;
+                    }
+                    else if (assemblyMetadata) return -2;
+
+                    if (assemblyMetadata)
+                    {
+                        var query = new int[1];
+                        functions = reflection.AssemblyMetadata.Bind(bundle, targetImage, targetLayout, targetHeaps,
+                            targetOwner, row, types[0], objects, globals, literals, literalSize, reflection,
+                            owners, rows, contexts, bases, indices, arities, offsets, signatures, functions, query);
+                        if (functions < 0) return functions;
+                        records[slot] = BranchIl.Call;
+                        records[slot + 1] = query[0];
+                        records[slot + 3] = 0;
+                        continue;
                     }
 
                     int implementationContext = targetContext;
