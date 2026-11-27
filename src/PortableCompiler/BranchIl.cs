@@ -97,6 +97,7 @@ namespace PortableCompiler
         internal const int WritableByteArraySpan = 233, ByteSpanAsReadOnly = 234;
         internal const int StaticValue = 235;
         internal const int RuntimeTypeIsValue = 237; // [canonical Type] -> [Boolean]
+        internal const int UpdateNestedConstructorField = 240; // [constructor this, scalar] -> []
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

@@ -1252,6 +1252,14 @@ namespace PortableCompiler
                                 if (fields > (int.MaxValue - capacity) / 16) return -3;
                                 capacity += fields * 16;
                             }
+                            if (kind == BranchIl.UpdateNestedConstructorField)
+                            {
+                                int fields = ObjectLayouts.FieldCount(objects, frame[0]) +
+                                    ObjectLayouts.FieldCount(objects, FieldAccess.Owner(records[slot + 3]));
+                                if (capacity > int.MaxValue - 96 || fields > (int.MaxValue - capacity - 96) / 20)
+                                    return -3;
+                                capacity += 96 + fields * 20;
+                            }
                             if (kind == BranchIl.ReadReflection && !ReflectionMembers.IsTypeText(operation))
                             {
                                 int bytes = reflection.BodyCapacity(int.MaxValue - capacity);
@@ -2572,6 +2580,10 @@ namespace PortableCompiler
                             records[nextSlot] = 0;
                             continue;
                         }
+                        if (valueConstructor && !linked && frame[0] == fieldOwner &&
+                            NestedConstructorFields.Bind(image, layout, heaps, owner, objects, records, slot, clauses,
+                                fieldOwner, fieldStorage, records[slot + 1]))
+                            continue;
                         if (ObjectLayouts.IsByRefLikeValue(objects, FieldAccess.Owner(descriptor)) &&
                             FieldAccess.Storage(descriptor) == I32 && ValueOperands.LowerScopedIntField(records, slot, clauses))
                             continue;

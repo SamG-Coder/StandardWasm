@@ -832,6 +832,9 @@ namespace PortableCompiler
             if (kind == UpdateConstructorField)
                 return depth >= 2 && stack[depth - 2] == ConstructorAddress &&
                     frame[0] == FieldAccess.Owner(extra) && Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 2 : -2;
+            if (kind == UpdateNestedConstructorField)
+                return depth >= 2 && stack[depth - 2] == ConstructorAddress &&
+                    Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 2 : -2;
             if (kind == UpdateValue)
                 return depth > 0 && Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 1 : -1;
             if (kind == NewArray || kind == InitializedArray)

@@ -1738,6 +1738,13 @@ namespace PortableCompiler
                     }
                     else used = ValueFieldsWasm.Clear(code, used, frame[operand], operand);
                 }
+                else if (kind == UpdateNestedConstructorField)
+                {
+                    int source = states[state + top], descriptor = records[slot + 3];
+                    used = NestedConstructorFields.Emit(code, used, objects, frame[0], records[slot + Width + 1],
+                        FieldAccess.Owner(descriptor), operand, FieldAccess.Storage(descriptor),
+                        Spill(spills, maximum, spillFlags, source, top), source, temporaries);
+                }
                 else if (kind == UpdateValue || kind == UpdateConstructorField)
                 {
                     int descriptor = records[slot + 3];
