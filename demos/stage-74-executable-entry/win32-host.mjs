@@ -5,7 +5,7 @@ import { createWindowState, windowImportNames } from "./window-state.mjs";
 
 export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
-    "getModuleHandleW", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom"
+    "getModuleHandleW", "loadLibraryExW", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom"
 ]);
 export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, "deactivateActCtx", "releaseActCtx",
@@ -14,13 +14,14 @@ export const win32ImportNames = new Set([
 
 const moduleNotFound = 126;
 const noAccess = 998;
+const invalidWin32Parameter = 87;
 const invalidParameter = 0xc000000d | 0, invalidHandle = 0xc0000008 | 0, unsuccessful = 0xc0000001 | 0;
 const executableHandle = 1;
 const decoder = new TextDecoder("utf-16le", { ignoreBOM: true });
 const normalize = name => name.replaceAll("\\", "/").toLowerCase();
 
 export function createWin32Host(memory, executablePath, assets = [], windows = createWindowState(),
-    errors = { system: 0, pinvoke: 0 }) {
+    errors = { system: 0, pinvoke: 0 }, dynamicLibraries) {
     const byPath = new Map();
     const byBaseName = new Map();
     const moduleImages = new Map();
@@ -44,10 +45,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
 
     const getWindowLong = (handle, index) => windows.getWindowLong(handle, index, value => { errors.system = value; });
 
-    function getModuleHandleW(pointer) {
-        const address = pointer >>> 0;
-        if (!address) return executableHandle;
-
+    function readWideString(address) {
         // A buffer view is refreshed after every memory.grow. Never read
         // beyond the explicit linear-memory instance supplied by the loader.
         const bytes = memory.buffer;
@@ -56,10 +54,28 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         while (end + 1 < view.byteLength && view.getUint16(end, true) !== 0) end += 2;
         if (end + 1 >= view.byteLength) {
             errors.system = noAccess;
+            return null;
+        }
+        return decoder.decode(new Uint8Array(bytes, address, end - address));
+    }
+
+    function loadLibraryExW(pointer, reserved, flags) {
+        const address = pointer >>> 0;
+        if (!address) {
+            errors.system = invalidWin32Parameter;
             return 0;
         }
+        const name = readWideString(address);
+        if (name === null) return 0;
+        return dynamicLibraries.loadLibrary(name, reserved, flags);
+    }
 
-        let name = normalize(decoder.decode(new Uint8Array(bytes, address, end - address)));
+    function getModuleHandleW(pointer) {
+        const address = pointer >>> 0;
+        if (!address) return executableHandle;
+        const text = readWideString(address);
+        if (text === null) return 0;
+        let name = normalize(text);
         if (name) {
             const leaf = baseName(name);
             if (!leaf.includes(".")) name += ".dll";
@@ -94,6 +110,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
 
     return {
         getModuleHandleW,
+        loadLibraryExW,
         ...createActivationContexts(memory, findManifest, value => { errors.system = value; }),
         ...createDpiAwareness(value => { errors.system = value; }),
         isWindowEnabled: handle => windows.isWindowEnabled(handle),

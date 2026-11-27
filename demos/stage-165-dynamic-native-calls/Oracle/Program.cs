@@ -18,6 +18,45 @@ internal static unsafe class Program
     private static uint Other(int input, char* address) =>
         unchecked((uint)(address[0] - input));
 
+    private delegate nint CoreLibLoader(string name, nint reserved, int flags);
+
+    private static object ObserveLoadLibrary()
+    {
+        const string tempPath = @"C:\StandardWasm\têmp-🛠\";
+        Environment.SetEnvironmentVariable("TMP", tempPath);
+        nint library = NativeLibrary.Load("kernel32.dll");
+        try
+        {
+            nint target = NativeLibrary.GetExport(library, "GetTempPathW");
+            int expected = tempPath.Length + 1;
+            char* buffer = stackalloc char[expected];
+            uint required = LibraryCalls.LoadAndInvoke(library, target, 0, null);
+            uint length = LibraryCalls.LoadAndInvoke(library, target, expected, buffer);
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Static |
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+            var coreLibLoad = typeof(object).Assembly.GetType("Interop+Kernel32", throwOnError: true)!
+                .GetMethod("LoadLibraryEx", flags, null, new[] { typeof(string), typeof(nint), typeof(int) }, null)!;
+            var loadOriginal = coreLibLoad.CreateDelegate<CoreLibLoader>();
+            nint original = loadOriginal(LibraryCalls.LibraryName(), 0, 0x800);
+            int originalError = Marshal.GetLastPInvokeError();
+            return new
+            {
+                original = new[] { original == library ? 1 : 0, originalError },
+                nameRow = typeof(LibraryCalls).GetMethod(nameof(LibraryCalls.LibraryName))!.MetadataToken & 0x00ffffff,
+                coreLibRow = coreLibLoad.MetadataToken & 0x00ffffff,
+                loadRow = typeof(LibraryCalls).GetMethod(nameof(LibraryCalls.Load))!.MetadataToken & 0x00ffffff,
+                combinedRow = typeof(LibraryCalls).GetMethod(nameof(LibraryCalls.LoadAndInvoke))!.MetadataToken & 0x00ffffff,
+                cases = new[] { LibraryCalls.Load(0) == library ? 1 : 0, (int)LibraryCalls.Load(1),
+                    (int)LibraryCalls.Load(2), (int)LibraryCalls.Load(3), (int)LibraryCalls.Load(6), (int)LibraryCalls.Load(10) },
+                required,
+                length,
+                text = new string(buffer, 0, expected),
+                tempPath
+            };
+        }
+        finally { NativeLibrary.Free(library); }
+    }
+
     private static void Main(string[] args)
     {
         delegate* unmanaged<int, char*, uint> write = &Write, other = &Other;
@@ -45,6 +84,7 @@ internal static unsafe class Program
             pinnedArray = Calls.PinnedArray((nint)write, 1),
             pinnedStack = Calls.PinnedStack((nint)write, 1),
             callOffset = Array.IndexOf(unsupported.GetMethodBody()!.GetILAsByteArray()!, (byte)0x29),
+            loadLibrary = ObserveLoadLibrary(),
             first, second, nullPointer, units = new[] { (int)data[0], (int)data[1] }
         }));
     }

@@ -7,19 +7,23 @@ import { runOn32BitClr, wasm32Runtime } from "../../scripts/runtime-packs.mjs";
 import { root } from "../../scripts/toolchain.mjs";
 import { instantiateManagedModule } from "../stage-74-executable-entry/resource-host.mjs";
 import { createTempPathHost } from "../stage-74-executable-entry/temp-path-host.mjs";
+import { packEntry } from "../stage-74-executable-entry/companions.mjs";
 import { serveLaunch } from "../stage-74-executable-entry/launch-server.mjs";
 
 const stage = join(root, "demos/stage-165-dynamic-native-calls");
 const evidence = join(root, "artifacts/stage-165-dynamic-native-calls");
 mkdirSync(evidence, { recursive: true });
 const oraclePath = join(evidence, "oracle.json");
-runOn32BitClr(wasm32Runtime(), join(stage, "Oracle/Oracle.csproj"),
+const runtime = wasm32Runtime();
+runOn32BitClr(runtime, join(stage, "Oracle/Oracle.csproj"),
     join(stage, "Oracle/bin/Release/net10.0/Oracle.dll"), [oraclePath]);
 const oracle = JSON.parse(readFileSync(oraclePath, "utf8"));
 assert.equal(oracle.architecture, "X86");
 assert.ok(oracle.callOffset >= 0);
 const compiler = readFileSync(process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts/StandardWasm.Compiler.wasm"));
 const assembly = readFileSync(oracle.assembly);
+const framework = ["System.Private.CoreLib.dll", "System.Runtime.dll", "System.Runtime.InteropServices.dll", "netstandard.dll"]
+    .map(path => ({ path, bytes: readFileSync(join(runtime.directory, path)) }));
 
 async function exercise(compilerBytes, assemblyBytes, { row, unsupportedRow, pinnedEntryRow, arrayRow, stackRow }, instantiate) {
     const { instance: { exports: tool } } = await WebAssembly.instantiate(compilerBytes);
@@ -92,6 +96,74 @@ async function exercise(compilerBytes, assemblyBytes, { row, unsupportedRow, pin
     catch (error) { staleRejected = /unregistered dynamic export token/.test(error.message); }
     return { first, second, nullPointer, units: [buffer.getUint16(address, true), buffer.getUint16(address + 2, true)],
         pinnedArray, pinnedStack, extents, retry, unconfiguredScopeRejected, staleRejected, reject, location, pinnedReject, pinnedLocation, imports };
+}
+
+async function exerciseLibrary(compilerBytes, assemblyBytes, framework, oracle, pack, instantiate, createTempPath) {
+    const { instance: { exports: tool } } = await WebAssembly.instantiate(compilerBytes);
+    const output = tool.CreateBytes(1 << 20);
+    const diagnostic = tool.CreateDiagnostic();
+    function upload(bytes) {
+        const managed = tool.CreateBytes(bytes.length);
+        for (let index = 0; index < bytes.length; index++) tool.SetByte(managed, index, bytes[index]);
+        return managed;
+    }
+    const asset = { path: "DynamicCallFixture.dll", bytes: new Uint8Array(assemblyBytes) };
+    const origins = tool.BundleModuleOrigins?.() === 1;
+    async function compile(row, entry = asset, companions = framework) {
+        const [bundle, entries] = pack(entry, companions, row, origins);
+        const size = tool.CompileBundleDetailed(upload(bundle), upload(entries), output, diagnostic);
+        if (size <= 0) throw Error("LoadLibraryExW fixture compile result " + size + " at " +
+            [0, 1, 2].map(index => tool.ReadDiagnostic(diagnostic, index)));
+        const compiled = Uint8Array.from({ length: size }, (_, index) => tool.ReadByte(output, index));
+        return WebAssembly.compile(compiled);
+    }
+
+    const module = await compile(oracle.loadRow);
+    const sourceName = await compile(oracle.nameRow);
+    const combined = await compile(oracle.combinedRow);
+    const coreLib = await compile(oracle.coreLibRow, framework[0], framework.slice(1));
+    const signature = "platform:u32(i32,p32)";
+    let memory, library, token;
+    const platform = {
+        configureNativeLibraries({ memory: guestMemory, errors, registerLibrary, loadLibrary, getProcAddress }) {
+            memory = guestMemory;
+            const temp = createTempPath(memory, oracle.tempPath, errors);
+            registerLibrary("kernel32", new Map([
+                ["GetTempPathW", { signature, invoke: temp.getTempPathW }]
+            ]));
+            library = loadLibrary("Kernel32");
+            token = getProcAddress(library, "GetTempPathW");
+        }
+    };
+
+    const unconfigured = await instantiate(module, tool, []);
+    const unconfiguredResult = [unconfigured.exports.run(0), unconfigured.exports.run(2)];
+    const { exports: load } = await instantiate(module, tool, [], {}, undefined, undefined, undefined, platform);
+    const firstLibrary = library;
+    const cases = [load.run(0) === firstLibrary ? 1 : 0, load.run(1), load.run(2), load.run(3), load.run(6), load.run(10)];
+
+    const { exports: mixed } = await instantiate(combined, tool, [], {}, undefined, undefined, undefined, platform);
+    const isolatedRegistry = library !== firstLibrary;
+    const required = mixed.run(library, token, 0, 0);
+    const address = 128;
+    const length = mixed.run(library, token, required, address);
+    const text = String.fromCharCode(...new Uint16Array(memory.buffer, address, required));
+    const imports = WebAssembly.Module.imports(combined).map(({ module, name }) => module + "/" + name);
+    const { exports: nameFixture } = await instantiate(sourceName, tool, []);
+    let coreLibErrors, expectedLibrary;
+    const { exports: original } = await instantiate(coreLib, tool, [], {}, undefined, undefined, undefined, {
+        configureNativeLibraries({ memory, errors, registerLibrary, loadLibrary }) {
+            coreLibErrors = errors;
+            registerLibrary("kernel32", new Map([
+                ["GetTempPathW", { signature, invoke: createTempPath(
+                    memory, oracle.tempPath, errors).getTempPathW }]
+            ]));
+            expectedLibrary = loadLibrary("kernel32");
+        }
+    });
+    const originalSuccess = [original.run(nameFixture.run(), 0, 0x800) === expectedLibrary ? 1 : 0, coreLibErrors.pinvoke];
+    const originalNull = [original.run(null, 0, 0x800), coreLibErrors.system, coreLibErrors.pinvoke];
+    return { cases, unconfigured: unconfiguredResult, isolatedRegistry, required, length, text, imports, originalSuccess, originalNull };
 }
 
 const nativeIndirect = "standardwasm:native-indirect";
@@ -204,6 +276,18 @@ const variants = {
     noMemory: resolverProbe({ memory: false }), wrongType: resolverProbe({ wrongType: true }),
     duplicate: resolverProbe({ duplicate: true })
 };
+const library = await exerciseLibrary(compiler, assembly, framework, oracle.loadLibrary, packEntry, instantiateManagedModule, createTempPathHost);
+assert.deepEqual(library.cases, oracle.loadLibrary.cases);
+assert.deepEqual(library.unconfigured, [0, 126]);
+assert.equal(library.isolatedRegistry, true);
+assert.equal(library.required, oracle.loadLibrary.required);
+assert.equal(library.length, oracle.loadLibrary.length);
+assert.equal(library.text, oracle.loadLibrary.text);
+assert.deepEqual(library.originalSuccess, oracle.loadLibrary.original);
+assert.deepEqual(library.originalNull, [0, oracle.loadLibrary.cases.at(-1), oracle.loadLibrary.cases.at(-1)]);
+assert.ok(library.imports.includes("standardwasm:win32/loadLibraryExW"));
+assert.ok(library.imports.includes("standardwasm:native-indirect/" + signature));
+
 const resolver = await exerciseResolver(instantiateManagedModule, createTempPathHost, variants, signature);
 assert.deepEqual(resolver, {
     invalid: 0, system: 998, saved: 321, required: 12, length: 11, text: "V:\\Scratch\\\0", direct: 15,
@@ -217,28 +301,38 @@ try {
     const page = await browser.newPage();
     const assets = {
         "/compiler": ["application/wasm", compiler],
-        "/assembly": ["application/octet-stream", assembly]
+        "/assembly": ["application/octet-stream", assembly],
+        ...Object.fromEntries(framework.map(({ path, bytes }) => ["/" + path, ["application/octet-stream", bytes]]))
     };
     await page.route(server.url + "/**", route => {
         const asset = assets[new URL(route.request().url()).pathname];
         return asset ? route.fulfill({ contentType: asset[0], body: asset[1] }) : route.continue();
     });
     await page.goto(server.url);
-    const { edge, edgeResolver } = await page.evaluate(async ({ source, resolverSource, rows, variants, signature }) => {
+    const { edge, edgeResolver, edgeLibrary } = await page.evaluate(async ({
+        source, resolverSource, librarySource, rows, variants, signature, loadOracle, frameworkPaths
+    }) => {
         const { instantiateManagedModule } = await import("/launch/resource-host.mjs");
+        const { packEntry } = await import("/launch/companions.mjs");
         const { createTempPathHost } = await import("/launch/temp-path-host.mjs");
         const [wasm, image] = await Promise.all(["/compiler", "/assembly"]
             .map(async path => (await fetch(path)).arrayBuffer()));
+        const framework = await Promise.all(frameworkPaths.map(async path => ({
+            path, bytes: new Uint8Array(await (await fetch("/" + path)).arrayBuffer())
+        })));
         return {
             edge: await (0, eval)("(" + source + ")")(wasm, image, rows, instantiateManagedModule),
+            edgeLibrary: await (0, eval)("(" + librarySource + ")")(wasm, image, framework, loadOracle, packEntry, instantiateManagedModule, createTempPathHost),
             edgeResolver: await (0, eval)("(" + resolverSource + ")")(instantiateManagedModule, createTempPathHost, variants, signature)
         };
-    }, { source: exercise.toString(), resolverSource: exerciseResolver.toString(), rows, variants, signature });
+    }, { source: exercise.toString(), resolverSource: exerciseResolver.toString(), librarySource: exerciseLibrary.toString(),
+        rows, variants, signature, loadOracle: oracle.loadLibrary, frameworkPaths: framework.map(({ path }) => path) });
     assert.deepEqual(edge, result);
     assert.deepEqual(edgeResolver, resolver);
+    assert.deepEqual(edgeLibrary, library);
     const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
     const report = { compiler: sha256(compiler), assembly: sha256(assembly), clr: oracle.runtime,
-        clrArchitecture: oracle.architecture, node: process.version, edge: browser.version(), result, resolver };
+        clrArchitecture: oracle.architecture, node: process.version, edge: browser.version(), result, resolver, library };
     writeFileSync(join(evidence, "results.json"), JSON.stringify(report, null, 2) + "\n");
     console.log(JSON.stringify(report));
 } finally {

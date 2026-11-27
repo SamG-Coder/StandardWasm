@@ -120,6 +120,7 @@ function mulDiv(number, numerator, denominator) {
 // ucrtbase, plus the CoreLib InternalCalls behind Marshal.GetLastWin32Error.
 export const windowsScalars = Object.freeze({
     "kernel32!MulDiv": (state, number, numerator, denominator) => mulDiv(number, numerator, denominator),
+    "kernel32!GetLastError": state => state.system,
     "kernel32!SetLastError": (state, code) => { state.system = code | 0; },
     "ucrtbase!abs": (state, value) => (value < 0 ? -value : value) | 0,
     "ucrtbase!llabs": (state, value) => value < 0n ? BigInt.asIntN(64, -value) : value,

@@ -30,3 +30,17 @@ The loader probe checks mixed direct and indirect imports, identical access
 to the shared error slots, a configured temp-path export, wrong Wasm import
 types, and absent configuration. Resolving native exports from original
 CoreLib calls still requires the managed native-library lookup bindings.
+
+The loader also supplies the exact raw `LoadLibraryExW` binding reached by
+the installed .NET 10 CoreLib. Its original managed wrapper marshals the
+UTF-16 name and captures the system error in the saved P/Invoke slot.
+The fixture checks case-insensitive library names, the System32 lookup flag,
+error 126 for a missing library, error 87 for invalid arguments, and
+successful lookup and invocation against a configured temporary directory.
+A load-only module without a provider gets an empty registry and the normal
+missing-library result.
+
+The Windows .NET 10 wrapper itself is compared with its emitted Wasm. The
+supported static CoreLib string marshaller reuses read-only UTF-16 pin
+storage and produces address zero for a null string. The fixture verifies
+the native load and indirect call share the same registry for one instance.

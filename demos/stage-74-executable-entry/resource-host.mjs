@@ -193,9 +193,23 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         memory = resource.memory;
         imports = { ...imports, ...resource.imports };
     }
+    let dynamicLibraries;
+    if (wantsNativeIndirect || requestedWin32.has("loadLibraryExW")) {
+        dynamicLibraries = createDynamicLibraryHost(errors);
+        const { invoke, invokeScoped, ...registry } = dynamicLibraries;
+        platform?.configureNativeLibraries?.({ memory, errors, ...registry });
+        if (wantsNativeIndirect) {
+            const dispatch = {};
+            if (nativeIndirectRequests.has(nativeIndirectSignature))
+                dispatch[nativeIndirectSignature] = createNativeIndirectDispatch(invoke);
+            if (nativeIndirectRequests.has(scopedUtf16Signature))
+                dispatch[scopedUtf16Signature] = createNativeIndirectDispatch(invokeScoped, true);
+            imports[nativeIndirectImportModule] = dispatch;
+        }
+    }
     if (requestedWin32.size) {
         const usesModules = requestedWin32.has("getModuleHandleW") || requestedWin32.has("createActCtxW");
-        imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : [], windows, errors);
+        imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : [], windows, errors, dynamicLibraries);
     }
     if (wantsCom) {
         const { imports: dispatch, registerInterface } = createComHost(memory);
@@ -203,16 +217,6 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         // receive the dispatch entry point.
         configureCom?.({ registerInterface });
         imports[comImportModule] = dispatch;
-    }
-    if (wantsNativeIndirect) {
-        const { invoke, invokeScoped, ...registry } = createDynamicLibraryHost(errors);
-        platform.configureNativeLibraries({ memory, errors, ...registry });
-        const dispatch = {};
-        if (nativeIndirectRequests.has(nativeIndirectSignature))
-            dispatch[nativeIndirectSignature] = createNativeIndirectDispatch(invoke);
-        if (nativeIndirectRequests.has(scopedUtf16Signature))
-            dispatch[scopedUtf16Signature] = createNativeIndirectDispatch(invokeScoped, true);
-        imports[nativeIndirectImportModule] = dispatch;
     }
     if (wantsMonitor) imports[threadingModule] = createMonitorHost();
     if (wantsDebugger) {

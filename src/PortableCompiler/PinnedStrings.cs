@@ -75,6 +75,15 @@ namespace PortableCompiler
                         records[slot + 3] = 1; // the CLR dereferences a null receiver
                     }
                 }
+                else if (character && kind == BranchIl.Call && records[slot + 3] == 0 && next < length &&
+                    IsLocal(records, next * BranchIl.Width, BranchIl.Store, pinned, arguments, locals, PinnedLocals.Character) &&
+                    ResourceNativeMetadata.IsTrustedUtf16PinnableReference(image, heaps, layout, records[slot + 1]))
+                {
+                    // The static CoreLib marshaller passes null as a null char pointer.
+                    records[slot] = BranchIl.PinString;
+                    records[slot + 1] = 0;
+                    records[slot + 3] = 0;
+                }
                 previous = slot;
                 pc = next;
             }
