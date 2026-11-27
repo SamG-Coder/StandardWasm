@@ -168,6 +168,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [162 · Closed reference casts](stage-162-closed-reference-casts/README.md) | `npm run demo -- stage-162-closed-reference-casts --no-rebuild` | Verify casts and type tests on constructed classes and interfaces |
 | [163 · Class Int32 field aliases and exchange](stage-163-class-int32-exchange/README.md) | `npm run demo -- stage-163-class-int32-exchange` | Compare interior aliases and signed Int32 exchange across class, array, local, static and struct fields |
 | [165 · Dynamic native calls](stage-165-dynamic-native-calls/README.md) | `npm run demo -- stage-165-dynamic-native-calls` | Compare typed calls through resolved export tokens, UTF-16 writes and diagnostics in Node and Edge |
+| [166 · Span field reader arguments](stage-166-span-field-reader-arguments/README.md) | `npm run demo -- stage-166-span-field-reader-arguments` | Verify indexed and sliced span fields with ordinary argument helpers and a located diagnostic for a mutating helper |
 
 ## Adding a stage
 

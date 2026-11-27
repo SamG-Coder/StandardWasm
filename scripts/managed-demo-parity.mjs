@@ -73,7 +73,15 @@ export async function verifyManagedDemo(stageName) {
             node: process.version, edge: browser.version(), outcomes: node };
         writeFileSync(join(evidence, "results.json"), JSON.stringify(result, null, 2) + "\n");
         assert.deepEqual(edge, node);
-        for (const test of node) assert.equal(test.result, test.expected, JSON.stringify(test));
+        for (const [index, test] of node.entries()) {
+            const rejection = oracle.cases[index].rejection;
+            if (rejection) {
+                assert.equal(test.status, rejection.status, JSON.stringify(test));
+                assert.deepEqual(test.location, rejection.location, JSON.stringify(test));
+            } else {
+                assert.equal(test.result, test.expected, JSON.stringify(test));
+            }
+        }
         console.log(JSON.stringify(result));
     } finally {
         await browser.close();
