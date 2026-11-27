@@ -2482,10 +2482,10 @@ namespace PortableCompiler
                     {
                         // A primitive native integer has scalar storage. The
                         // wide constructors still perform their original overflow check.
-                        records[slot] = conversion == NativePointerMetadata.IdentityConstructor
-                            ? BranchIl.NativePointerConstructor : BranchIl.CheckedConversion;
+                        bool identity = conversion == NativePointerMetadata.IdentityConstructor;
+                        records[slot] = identity ? BranchIl.NativePointerConstructor : BranchIl.CheckedConversion;
                         records[slot + 1] = conversion;
-                        records[slot + 3] = 0;
+                        records[slot + 3] = identity ? 0 : I64;
                         continue;
                     }
                 }

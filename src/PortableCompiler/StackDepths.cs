@@ -608,7 +608,10 @@ namespace PortableCompiler
             }
             if (kind == CheckedConversion)
             {
-                if (depth < 1 || !IsScalar(stack[depth - 1])) return -1;
+                // A conversion folded from a constructor retains the source
+                // type declared by its original call signature.
+                if (depth < 1 || !IsScalar(stack[depth - 1]) ||
+                    extra != 0 && stack[depth - 1] != extra) return -1;
                 stack[depth - 1] = CheckedConversionWasm.Result(operand);
                 return depth;
             }
