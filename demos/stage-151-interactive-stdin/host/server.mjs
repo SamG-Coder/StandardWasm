@@ -15,6 +15,7 @@ export function serveInteractiveConsole(port, compiler) {
         ...["console-launch", "console-host"].map(name => script("stage-110-console-arguments/host/" + name + ".mjs")),
         script("stage-74-executable-entry/companions.mjs"),
         script("stage-74-executable-entry/resource-host.mjs"),
+        script("stage-74-executable-entry/frameworks.mjs"),
         script("stage-73-executable-intake/loader/pe.mjs")
     ]));
 }

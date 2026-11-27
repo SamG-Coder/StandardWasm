@@ -1,4 +1,5 @@
 import { packEntry, readManagedCompanions } from "./companions.mjs";
+import { frameworkMissingExitCode, frameworkMissingMessage, resolveFrameworks } from "./frameworks.mjs";
 import { instantiateManagedModule } from "./resource-host.mjs";
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -15,6 +16,13 @@ export async function runManagedEntry(compilerBytes, selection) {
     const runtimeTarget = deps.runtimeTarget?.name;
     if (typeof target !== "string" || typeof runtimeTarget !== "string")
         throw Error("The original runtime configuration and dependency target are required.");
+    // Issue #299: as hostfxr, resolve the shared frameworks before anything is compiled.
+    const frameworks = resolveFrameworks(config, selection.frameworks);
+    if (!frameworks.ok) return {
+        entry: selection.entry.path, entryToken: selection.entryToken, target, runtimeTarget,
+        state: "framework-missing", exitCode: frameworkMissingExitCode, missingFramework: frameworks.missing,
+        stderr: frameworkMissingMessage(frameworks, selection.entry.path)
+    };
 
     const companions = readManagedCompanions(selection, deps, runtimeTarget);
     const compilerModule = await WebAssembly.compile(compilerBytes);

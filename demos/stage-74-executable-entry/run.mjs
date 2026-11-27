@@ -77,12 +77,14 @@ async function verify() {
         assert.equal(result.exitCode, clr.status);
         assert.equal(result.target, "net10.0");
     }
-    assert.equal(nodeDesktop.state, "unsupported");
-    // The framework-dependent desktop publish does not ship System.Windows.Forms. Since the
-    // pointer stages (#297, #298) the compiler links Main up to newobj MainForm::.ctor
-    // (IL_0005) and reports the missing referenced assembly there (-4, AssemblyBundle.FindOwner).
-    assert.equal(nodeDesktop.compilerStatus, -4);
-    assert.deepEqual(nodeDesktop.diagnostic, [0, 2, 5]);
+    // Issue #299: the framework-dependent desktop publish needs Microsoft.WindowsDesktop.App,
+    // which this host cannot supply yet. As hostfxr, the launcher reports the missing framework
+    // with exit status 0x80008096 before compiling, and Main never runs.
+    assert.equal(nodeDesktop.state, "framework-missing");
+    assert.equal(nodeDesktop.exitCode, 0x80008096 | 0);
+    assert.equal(nodeDesktop.missingFramework.name, "Microsoft.WindowsDesktop.App");
+    assert.ok(nodeDesktop.stderr.startsWith("You must install or update .NET to run this application.\r\n"));
+    assert.equal(nodeDesktop.compilerStatus, undefined);
 
     const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
     const browser = await chromium.launch({
@@ -97,7 +99,7 @@ async function verify() {
             await page.locator("#files").setInputFiles(paths.map(path => join(dir, path)));
             await page.waitForFunction(() => document.querySelector("#status").dataset.state === "ready");
             await page.getByRole("button", { name: "Run managed entry" }).click();
-            await page.waitForFunction(() => ["finished", "unsupported", "error"].includes(
+            await page.waitForFunction(() => ["finished", "unsupported", "framework-missing", "error"].includes(
                 document.querySelector("#status").dataset.state));
             return JSON.parse(await page.locator("#status").textContent());
         }
@@ -110,7 +112,7 @@ async function verify() {
             ordinary: nodeOrdinary, single: nodeSingle,
             winforms: { compiler: nodeDesktop, firstObjectLayoutBlocker: inspected }
         }, null, 2) + "\n");
-        console.log("Node and Edge ran both original console publishes with Windows exit parity and reported the WinForms blocker.");
+        console.log("Node and Edge ran both original console publishes with Windows exit parity and reported the missing Microsoft.WindowsDesktop.App framework as hostfxr does.");
     } finally {
         await browser.close();
     }
