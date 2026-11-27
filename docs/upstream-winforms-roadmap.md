@@ -115,7 +115,11 @@ original `Path.GetTempPath` helper. The callback in CoreLib's
 The linker now gives the original CoreLib `EventHandler` and `EventArgs`
 definitions the same representation as their references in WinForms. The
 unchanged startup compilation gets past the `AppDomain.ProcessExit`
-subscription and reaches the resource manager call in `SR.GetResourceString`.
+subscription. Nominal enum vectors let the linker register the original
+resource manager getter, whose reachable field types include CoreLib's
+`CultureData` and its `CalendarId[]` field. The startup replay now reaches the
+constrained `ToString` call on `ValueStringBuilder` in CoreLib's
+`String.FormatHelper`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

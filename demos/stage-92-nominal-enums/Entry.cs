@@ -8,7 +8,7 @@ namespace EnumFieldDemo
         public Local LocalState;
     }
 
-    public static class Kernels
+    public static partial class Kernels
     {
         // Keep these two enum references together for the equal-width metadata substitution in Verify.
         public static int Read(Frame frame) => (int)frame.State;

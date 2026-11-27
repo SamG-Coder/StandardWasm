@@ -69,7 +69,7 @@ namespace PortableCompiler
                 int element = ArrayElement(objects, classType);
                 if (element != 0)
                 {
-                    classBytes += 2 + ValueWidth(Representation(objects, element));
+                    classBytes += 2 + (IsNarrow(element) ? 1 : ValueWidth(Representation(objects, element)));
                     if (classBytes > output.Length) return -3;
                     continue;
                 }
@@ -342,8 +342,11 @@ namespace PortableCompiler
                 int element = ArrayElement(objects, classType);
                 if (element != 0)
                 {
-                    output[cursor++] = 0x5e; // mutable reference vector
-                    cursor = ValueType(output, cursor, Representation(objects, element));
+                    output[cursor++] = 0x5e; // mutable vector
+                    if (IsNarrow(element))
+                        output[cursor++] = element == Signed8 || element == Unsigned8 ? (byte)0x78 : (byte)0x77;
+                    else
+                        cursor = ValueType(output, cursor, Representation(objects, element));
                     output[cursor++] = 1;
                     continue;
                 }

@@ -993,6 +993,11 @@ namespace PortableCompiler
                         // A String vector holds references to the immutable String struct.
                         int element = PlatformTypeReferences.IsString(image, heaps, layout, coded) ? String :
                             BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
+                        if (element == -2)
+                        {
+                            element = BundleLayouts.RegisterType(bundle, image, layout, heaps, owner, coded, objects, true, true);
+                            if (element > 0 && !ObjectLayouts.IsEnumKey(element)) return -2;
+                        }
                         if (element < 0) return element;
                         type = ObjectLayouts.RegisterArray(objects, element);
                     }

@@ -593,12 +593,13 @@ namespace PortableCompiler
                 if (operand == 0x9a)
                 {
                     if (depth < 2 || !ArrayIndex(stack, depth)) return -1;
-                    int element = ArrayElement(objects, stack[depth - 2]);
-                    if (element == 0 || IsValueType(objects, element)) return -2;
+                    int arrayType = stack[depth - 2], element = ArrayElement(objects, arrayType);
+                    if (element == 0 || IsValueType(objects, element) || IsEnumArray(objects, arrayType)) return -2;
                     return Push(stack, allocated, depth - 2, element);
                 }
                 byte array = ArrayLoadType(operand);
-                if (!ArrayIndex(stack, depth) || !Match(stack, depth - 1, array)) return -1;
+                if (depth < 2 || !ArrayIndex(stack, depth) ||
+                    (!Match(stack, depth - 1, array) && EnumArrayStorage(objects, stack[depth - 2]) != array)) return -1;
                 stack[depth - 2] = ArrayValueType(array);
                 return depth - 1;
             }
@@ -607,14 +608,14 @@ namespace PortableCompiler
                 if (operand == 0xa2)
                 {
                     if (depth < 3 || !ArrayIndex(stack, depth - 1)) return -1;
-                    int element = ArrayElement(objects, stack[depth - 3]);
-                    if (element == 0 || IsValueType(objects, element)) return -2;
+                    int arrayType = stack[depth - 3], element = ArrayElement(objects, arrayType);
+                    if (element == 0 || IsValueType(objects, element) || IsEnumArray(objects, arrayType)) return -2;
                     return Assignable(stack[depth - 1], element, objects) ? depth - 3 : -1;
                 }
                 byte array = ArrayStoreType(operand);
-                if (depth == 0 || !Assignable(stack[depth - 1], ArrayValueType(array), objects) ||
+                if (depth < 3 || !Assignable(stack[depth - 1], ArrayValueType(array), objects) ||
                     !ArrayIndex(stack, depth - 1) ||
-                    !Match(stack, depth - 2, array))
+                    (!Match(stack, depth - 2, array) && EnumArrayStorage(objects, stack[depth - 3]) != array))
                     return -1;
                 return depth - 3;
             }

@@ -197,6 +197,9 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
         return [handle === -1 ? -1 : handle > 0 ? 1 : 0, exports.Read()];
     });
     const pointers = [0, -1, 123].flatMap(value => [exports.PointerRoundTrip(value, 0), exports.PointerRoundTrip(value, 1)]);
+    const enumModule = await compile(["EnumVectors"], []);
+    const { exports: enumExports } = await instantiate(enumModule, compiler, []);
+    const enumVectors = [0, 1, 2, 3, 4].map(enumExports.EnumVectors);
     const nativeLocal = [0, -1, 123].map(value => exports.NativeLocalAlias(value));
     const nativeAggregate = [0, -1, 123].map(value => exports.NativeAggregateAlias(value));
 
@@ -271,7 +274,7 @@ async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixture
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, windowEnabled, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringTrim, scopedWritableSpan, stackBackedSpan, scopedReference, characterCallbacks, staticEventCallbacks, byteSpan, byteLocations, whitespace, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, enumVectors, windowEnabled, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringTrim, scopedWritableSpan, stackBackedSpan, scopedReference, characterCallbacks, staticEventCallbacks, byteSpan, byteLocations, whitespace, dpi };
 }
 
 function readOracle(...args) {
@@ -289,7 +292,7 @@ const runtimeAssets = runtime ? ["System.Private.CoreLib.dll", "System.Runtime.d
 const runtimePaths = runtimeAssets.map((_, index) => "/test-runtime-" + index);
 const expectedCompiler = {
     legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle,
-    pointers: oracle.compiledPointers, nativeLocal: oracle.nativeLocal, nativeAggregate: oracle.nativeAggregate, windowEnabled: oracle.windowEnabled, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor,
+    pointers: oracle.compiledPointers, nativeLocal: oracle.nativeLocal, nativeAggregate: oracle.nativeAggregate, enumVectors: oracle.enumVectors, windowEnabled: oracle.windowEnabled, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor,
     filter: oracle.compiledFilter, objectSpans: oracle.compiledObjectSpans, booleanLocations: oracle.compiledBooleanLocations,
     genericLocations: oracle.compiledGenericLocations, finalWriter: oracle.compiledFinalWriter,
     genericValues: oracle.compiledGenericValues, constrainedReferences: oracle.compiledConstrainedReferences,
@@ -360,6 +363,7 @@ try {
         }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes],
             name: framework.name, dpiScenarios, runtimePaths });
         assert.deepEqual(compiled, expectedCompiler);
+        console.log("Five enum vector cases matched the CLR in Node and Edge, including typed failures.");
         console.log("Six generic value method and reference default cases matched the CLR in Node and Edge.");
         console.log("Six readonly static byte span reads and bounds cases matched the CLR in Node and Edge.");
         console.log("Static byte references, unaligned reads, and CoreLib whitespace classification matched the CLR in Node and Edge.");

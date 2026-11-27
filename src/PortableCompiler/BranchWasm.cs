@@ -1366,8 +1366,9 @@ namespace PortableCompiler
                     // width integer and floating arrays use plain array.get.
                     int instruction = array != Bytes && array != Chars ? 0x0b :
                         operand == 0x90 || operand == 0x92 ? 0x0c : 0x0d;
-                    used = Gc(code, used, instruction, array);
                     int value = operand == 0x9a ? ArrayElement(objects, array) : ArrayValueType(array);
+                    if (IsEnumArray(objects, states[state + top - 1])) array = states[state + top - 1];
+                    used = Gc(code, used, instruction, array);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, value, top - 1));
                 }
                 else if (kind == ArraySet)
@@ -1380,6 +1381,7 @@ namespace PortableCompiler
                     used = Local(code, used, 0x20, reference);
                     used = Local(code, used, 0x20, index);
                     used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
+                    if (IsEnumArray(objects, states[state + top - 2])) array = states[state + top - 2];
                     used = Gc(code, used, 0x0e, array);
                 }
 

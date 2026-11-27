@@ -125,6 +125,15 @@ namespace PortableCompiler
             return opcode == 0xa0 ? Singles : Doubles;
         }
 
+        internal static byte EnumArrayStorage(int[] objects, int array)
+        {
+            if (!ObjectLayouts.IsEnumArray(objects, array)) return 0;
+            int element = ObjectLayouts.ArrayElement(objects, array);
+            if (element == Signed8 || element == Unsigned8) return Bytes;
+            if (element == Signed16 || element == Unsigned16) return Chars;
+            return element == I64 ? Longs : Ints;
+        }
+
         // Destination for a method is [result, parameters...]. Local signatures
         // write only their slots. Stack values normalize CLI small integers to i32.
         // context is the closed declaring layout that supplies VAR arguments,

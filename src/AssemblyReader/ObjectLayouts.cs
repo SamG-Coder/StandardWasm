@@ -198,8 +198,14 @@ namespace PeLibrary
             return type;
         }
 
-        internal static int ArrayElement(int[] registry, int type) =>
-            type >= FirstClass && type - FirstClass < registry[0] ? GenericScalar.Storage(registry[Slot(type) + Element]) : 0;
+        // Key the vector by the enum's defining identity and lower its cells
+        // using the declared underlying storage.
+        internal static int ArrayElement(int[] registry, int type) => SignatureStorage(registry, ArrayElementKey(registry, type));
+
+        internal static bool IsEnumArray(int[] registry, int type) => IsEnumKey(ArrayElementKey(registry, type));
+
+        private static int ArrayElementKey(int[] registry, int type) =>
+            type >= FirstClass && type - FirstClass < registry[0] ? registry[Slot(type) + Element] : 0;
 
         internal static bool HasArguments(int[] registry, int type) =>
             type >= FirstClass && type - FirstClass < registry[0] && registry[Slot(type) + Arity] != 0;
