@@ -156,7 +156,7 @@ namespace PortableCompiler
             var remainderFixup = new int[1];
             var reflection = new RuntimeReflectionPlan();
             var hostUse = new int[1];
-            int functions = 0, length = 0;
+            int functions = 0, length = 0, closedResultsThrough = 0;
             bool externalObjects = false;
             // Any reachable ldind/stind needs the host-lent memory 0 (decision 0060).
             bool linearMemory = false;
@@ -364,6 +364,8 @@ namespace PortableCompiler
                 }
 
                 typeCalls.ApplyDescriptorSignatures(bases, indices, offsets, signatures);
+                typeCalls.ApplyClosedResults(bundle, owners, rows, contexts, offsets, signatures, objects, closedResultsThrough, functions);
+                closedResultsThrough = functions;
                 int parameters = arities[current];
                 int signature = offsets[current];
                 int result = signatures[signature];
@@ -472,6 +474,8 @@ namespace PortableCompiler
                     for (int local = 0; local < frameCells.Length; local++)
                         if (frameCells[local] != 0 && inlineLocations[local] != 0) return -2;
                     typeCalls.ApplyDescriptorSignatures(bases, indices, offsets, signatures);
+                    typeCalls.ApplyClosedResults(bundle, owners, rows, contexts, offsets, signatures, objects, closedResultsThrough, functions);
+                    closedResultsThrough = functions;
                     RuntimeTypeLocals.Specialize(bundle, records, frame, parameters, locals, objects, catchRegion, signatures, offsets);
                     if (location.Length != 0) location[2] = -1;
                     int maximum = body[2];
@@ -499,8 +503,9 @@ namespace PortableCompiler
                     {
                         int resultSource = descriptorMismatch[2] - 1;
                         if (resultSource >= 0 && !IsExported(exports, resultSource) &&
-                            contexts[resultSource] == 0 && instantiations.Arguments(resultSource) == null &&
-                            typeCalls.RequireResult(bundle, owners[resultSource], rows[resultSource], signatures[offsets[resultSource]], objects))
+                            (contexts[resultSource] != 0 || instantiations.Arguments(resultSource) == null) &&
+                            typeCalls.RequireResult(bundle, owners[resultSource], rows[resultSource], signatures[offsets[resultSource]],
+                                objects, contexts[resultSource] != 0))
                         {
                             features[0] = hostFeatures | hostUse[0];
                             return Reemit;

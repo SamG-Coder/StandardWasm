@@ -6,7 +6,7 @@ namespace PortableCompiler
     // and results. A changed signature requires a clean emission pass.
     internal sealed class RuntimeTypeCalls
     {
-        private const int Width = 3, ResultSlot = -1;
+        private const int Width = 3, ResultSlot = -1, ClosedResultSlot = -2;
         private int[] slots = new int[12];
         private int used;
 
@@ -24,7 +24,7 @@ namespace PortableCompiler
             return Add(owner, row, argument);
         }
 
-        internal bool RequireResult(BundleImages bundle, int owner, int row, int type, int[] objects)
+        internal bool RequireResult(BundleImages bundle, int owner, int row, int type, int[] objects, bool specialized)
         {
             if (!RuntimeTypeLocals.IsLinkedSystemType(bundle, objects, type)) return false;
             byte[] image = bundle.Get(owner);
@@ -32,7 +32,7 @@ namespace PortableCompiler
             var heaps = new int[8];
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return false;
             int flags = MethodDefinitions.ReadColumn(image, layout, row, 2);
-            return (flags & 0x2040) == 0 && Add(owner, row, ResultSlot);
+            return (flags & 0x2040) == 0 && Add(owner, row, specialized ? ClosedResultSlot : ResultSlot);
         }
 
         private bool Add(int owner, int row, int argument)
@@ -57,9 +57,29 @@ namespace PortableCompiler
         {
             for (int entry = 0; entry < used; entry += Width)
             {
+                if (slots[entry + 2] == ClosedResultSlot) continue;
                 int function = indices[bases[slots[entry]] + slots[entry + 1]] - 1;
                 if (function >= 0)
                     signatures[offsets[function] + 1 + slots[entry + 2]] = RuntimeTypeMetadata.Type;
+            }
+        }
+
+        internal void ApplyClosedResults(BundleImages bundle, int[] owners, int[] rows, int[] contexts,
+            int[] offsets, int[] signatures, int[] objects, int first, int functions)
+        {
+            // Registry numbers and function indices can change on re-emission.
+            // Match the declaring MethodDef and check the instantiated result.
+            for (int entry = 0; entry < used; entry += Width)
+            {
+                if (slots[entry + 2] != ClosedResultSlot) continue;
+                for (int function = first; function < functions; function++)
+                {
+                    if (contexts[function] == 0 || owners[function] != slots[entry] ||
+                        rows[function] != slots[entry + 1]) continue;
+                    int result = offsets[function];
+                    if (RuntimeTypeLocals.IsLinkedSystemType(bundle, objects, signatures[result]))
+                        signatures[result] = RuntimeTypeMetadata.Type;
+                }
             }
         }
     }

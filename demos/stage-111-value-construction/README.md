@@ -53,6 +53,9 @@ contents. A value constructor also initializes a readonly aggregate field.
 The primitive descriptor fixture compares closed `typeof(T)` against the
 canonical primitive types, including pairs with shared Wasm storage. It also
 checks the `IsValueType` branch on both a primitive and a reference type.
+Descriptor results from direct calls on closed generic structs and classes
+preserve nulls and the identity of each instantiated type. The fixture
+compares a reused getter result and distinguishes `Int32` from `UInt32`.
 
 The closed interface fixture checks implicit and explicit implementations,
 including different `int` and `uint` instantiations on one class, a closed

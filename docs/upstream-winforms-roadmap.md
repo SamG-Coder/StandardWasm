@@ -141,8 +141,10 @@ value cleanup initializes a field by replacing the containing value at its
 managed location, preserving alias and copy semantics. Value constructors
 use the same field initialization against their current value. The startup
 replay compiles through `BitVector32.set_Item` and the closed nullable
-receiver in `Control.SetStyle`. It next stops at a runtime type comparison
-in `PropertyStore.AddOrRemoveValue`.
+receiver in `Control.SetStyle`. A descriptor returned from the address-backed
+value getter now reaches the type comparison in `PropertyStore.AddOrRemoveValue`.
+The replay reaches the `IArrangedElement` interface test in
+`LayoutEngine.CastToArrangedElement`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

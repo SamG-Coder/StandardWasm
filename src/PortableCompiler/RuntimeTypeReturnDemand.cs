@@ -39,6 +39,11 @@ namespace PortableCompiler
                 {
                     if (index >= before - 1) return -1;
                 }
+                else if (kind == Dup)
+                {
+                    if (before == 0 || index > before) return -1;
+                    if (index == before) index = before - 1;
+                }
                 else if (kind != Nop)
                     return -1;
                 at = previous;

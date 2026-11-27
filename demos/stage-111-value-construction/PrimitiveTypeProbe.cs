@@ -1,3 +1,5 @@
+using System;
+
 namespace ValueConstructionDemo
 {
     public static class PrimitiveTypeProbe
@@ -22,6 +24,33 @@ namespace ValueConstructionDemo
 
         public static int CheckClosedValueType(int value) =>
             unchecked(ClassifyClosedType<int>(value) * 5 + ClassifyClosedType<string>(value));
+
+        private struct TypeSlot<T>
+        {
+            private readonly int enabled;
+            public TypeSlot(int enabled) => this.enabled = enabled;
+            public Type Read() => enabled == 0 ? null : typeof(T);
+        }
+
+        private sealed class TypeCarrier<T>
+        {
+            public Type Read() => typeof(T);
+        }
+
+        private sealed class TypeMarker { }
+
+        public static int CheckSpecializedTypeResults(int mode)
+        {
+            var signed = new TypeSlot<int>(mode);
+            var unsigned = new TypeSlot<uint>(mode);
+            Type returned = signed.Read();
+            int result = returned == typeof(int) ? 1 : 0;
+            if (unsigned.Read() == typeof(int)) result |= 2;
+            if (unsigned.Read() == typeof(uint)) result |= 4;
+            if (returned == null) result |= 8;
+            if (new TypeCarrier<TypeMarker>().Read() == typeof(TypeMarker)) result |= 16;
+            return result;
+        }
 
         private static int PrimitiveHash<T>(T value) => value.GetHashCode();
         private static int PrimitiveHashReference<T>(ref T value) => value.GetHashCode();
