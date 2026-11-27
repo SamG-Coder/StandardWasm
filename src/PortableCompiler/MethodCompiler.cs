@@ -438,8 +438,11 @@ namespace PortableCompiler
                 int status = 0;
                 if (stub < 0 && initializerPrologue < 0)
                 {
-                    status = ReferenceExchangeWasm.WriteBody(moduleCode, length, image, layout, heaps, source,
-                        objects, signatures, offsets[current], arities[current], projections);
+                    status = Int32ExchangeWasm.WriteBody(moduleCode, length, image, layout, heaps, source,
+                        signatures, offsets[current], arities[current], projections);
+                    if (status == length)
+                        status = ReferenceExchangeWasm.WriteBody(moduleCode, length, image, layout, heaps, source,
+                            objects, signatures, offsets[current], arities[current], projections);
                     if (status < 0) return status;
                     if (status != length)
                     {
@@ -2017,11 +2020,12 @@ namespace PortableCompiler
                             records[slot] = BranchIl.GetField;
                             continue;
                         }
-                        if (ObjectLayouts.IsValueType(objects, fieldOwner) &&
-                            !ObjectLayouts.IsExplicitValue(objects, fieldOwner) &&
+                        bool valueOwner = ObjectLayouts.IsValueType(objects, fieldOwner);
+                        bool classInt32 = !valueOwner && fieldStorage == I32 && !ObjectLayouts.IsInterface(objects, fieldOwner);
+                        if (classInt32 || valueOwner && !ObjectLayouts.IsExplicitValue(objects, fieldOwner) &&
                             !ObjectLayouts.IsByRefLikeValue(objects, fieldOwner))
                         {
-                            int projected = ValueFieldProjections.Bind(bundle, objects, fieldOwner, field);
+                            int projected = ValueFieldProjections.Bind(bundle, objects, fieldOwner, field, classInt32);
                             if (projected != -2)
                             {
                                 if (projected < 0) return projected;

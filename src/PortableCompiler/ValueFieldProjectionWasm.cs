@@ -9,12 +9,15 @@ namespace PortableCompiler
     {
         internal const int FirstSnapshotHelper = 4, HelperCount = 6;
 
-        internal static int Take(byte[] code, int used, int source, int owner, int selector, int location, bool tracksRoots)
+        internal static int Take(byte[] code, int used, int source, int owner, int selector, int location, bool valueOwner, bool tracksRoots)
         {
-            // The pair points at the mutable cell, not its current value snapshot.
+            // The pair retains the containing object or the stable value cell.
             used = GuardNull(code, used, source);
-            used = LoadOperand(code, used, source, ValueLocation(owner), ValueLocation(owner));
-            used = Const(code, used, selector);
+            used = valueOwner ? LoadOperand(code, used, source, ValueLocation(owner), ValueLocation(owner)) :
+                Local(code, used, 0x20, source);
+            // Array indices and value-cell selectors are nonnegative. Direct
+            // class-field selectors carry the original class as their owner.
+            used = Const(code, used, valueOwner ? selector : ~selector);
             used = Gc(code, used, 0, ObjectLocation);
             // A ValueLocation normally holds a nominal snapshot. An
             // ObjectLocation payload instead describes a projected field.
@@ -79,7 +82,8 @@ namespace PortableCompiler
             int descriptor = aggregate ? parent + 1 : address;
             int locals = aggregate ? 2 : 1;
             for (int i = 0; i < projections.Count; i++)
-                if (ValueFieldProjections.Kind(projections.Location(i)) == kind) locals++;
+                if (ValueFieldProjections.Kind(projections.Location(i)) == kind &&
+                    IsValueType(objects, projections.Owner(i))) locals++;
             if (code.Length - used < 96 || locals > 49998 || locals > (code.Length - used - 96) / 8) return -3;
             used = WasmBinary.Unsigned(code, used, locals);
             code[used++] = 1;
@@ -91,12 +95,18 @@ namespace PortableCompiler
             }
             for (int i = 0; i < projections.Count; i++)
             {
-                if (ValueFieldProjections.Kind(projections.Location(i)) != kind) continue;
+                if (ValueFieldProjections.Kind(projections.Location(i)) != kind ||
+                    !IsValueType(objects, projections.Owner(i))) continue;
                 code[used++] = 1;
                 used = WasmBinary.ValueType(code, used, projections.Owner(i));
             }
 
             used = GuardNull(code, used, address);
+            if (kind == Scalar && projections.ClassScalars)
+            {
+                used = ClassScalars(code, used, objects, projections, address, replacement, write);
+                if (used < 0) return used;
+            }
             used = ProjectionMarker(code, used, address, aggregate);
             int locationType = aggregate ? ObjectLocation : ValueLocation(FirstClass);
             used = RefType(code, used, 0x14, locationType); // ref.test, non-null
@@ -116,6 +126,7 @@ namespace PortableCompiler
                 int location = projections.Location(i);
                 if (ValueFieldProjections.Kind(location) != kind) continue;
                 int owner = projections.Owner(i), field = projections.Ordinal(i);
+                if (!IsValueType(objects, owner)) continue;
                 int fields = write ? FieldCount(objects, owner) : 0;
                 if (code.Length - used < 128 || fields > (code.Length - used - 128) / 16) return -3;
                 used = ManagedLocationWasm.LoadField(code, used, descriptor, 1);
@@ -156,6 +167,37 @@ namespace PortableCompiler
                 if (write) used = Local(code, used, 0x20, replacement);
                 used = Gc(code, used, write ? 0x0e : 0x0b, vector);
             }
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        private static int ClassScalars(byte[] code, int used, int[] objects, ValueFieldProjections projections,
+            int address, int replacement, bool write)
+        {
+            if (code.Length - used < 16) return -3;
+            used = ManagedLocationWasm.LoadField(code, used, address, 1);
+            used = Const(code, used, 0);
+            code[used++] = 0x48; // i32.lt_s
+            code[used++] = 0x04; code[used++] = 0x40;
+            for (int i = 0; i < projections.Count; i++)
+            {
+                int owner = projections.Owner(i);
+                if (IsValueType(objects, owner)) continue;
+                if (code.Length - used < 36) return -3;
+                used = ManagedLocationWasm.LoadField(code, used, address, 1);
+                used = Const(code, used, ~i);
+                code[used++] = 0x46; // i32.eq
+                code[used++] = 0x04; code[used++] = 0x40;
+                used = ManagedLocationWasm.LoadField(code, used, address, 0);
+                used = RefType(code, used, 0x16, owner);
+                if (write) used = Local(code, used, 0x20, replacement);
+                used = Gc(code, used, write ? 5 : 2, owner);
+                used = WasmBinary.Unsigned(code, used, projections.Ordinal(i));
+                code[used++] = 0x0f;
+                code[used++] = 0x0b;
+            }
+            if (code.Length - used < 2) return -3;
+            code[used++] = 0x00; // Negative selectors belong to a registered class field.
             code[used++] = 0x0b;
             return used;
         }

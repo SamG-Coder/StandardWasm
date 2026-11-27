@@ -667,8 +667,13 @@ namespace PortableCompiler
             if (kind == StoreStaticField || kind == StoreNativeStatic)
                 return depth > 0 && Assignable(stack[depth - 1], extra, objects) ? depth - 1 : -1;
             if (kind == TakeProjectedFieldAddress)
-                return Match(stack, depth, ValueLocation(FieldAccess.Owner(extra)))
-                    ? Push(stack, allocated, depth - 1, ValueFieldProjections.DecodeLocation(objects, FieldAccess.Storage(extra))) : -2;
+            {
+                int owner = FieldAccess.Owner(extra);
+                bool valid = IsValueType(objects, owner) ? Match(stack, depth, ValueLocation(owner)) :
+                    depth > 0 && Assignable(stack[depth - 1], owner, objects);
+                return valid ? Push(stack, allocated, depth - 1,
+                    ValueFieldProjections.DecodeLocation(objects, FieldAccess.Storage(extra))) : -2;
+            }
             if (kind == TakeValueFieldAddress)
             {
                 if (depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(extra), objects)) return -1;

@@ -22,7 +22,7 @@ namespace PortableCompiler
                 ReferenceVector = RegisterArray(objects, ObjectReference);
         }
 
-        internal const int Scalar = 1, Reference = 2, Aggregate = 4;
+        internal const int Scalar = 1, Reference = 2, Aggregate = 4, ClassScalar = 8;
 
         internal static int Kind(int location) => location == Int32Location ? Scalar :
             IsReferenceLocation(location) ? Reference : IsValueLocation(location) ? Aggregate : 0;
@@ -30,7 +30,9 @@ namespace PortableCompiler
         internal static int DecodeLocation(int[] objects, int encoded) =>
             IsValueType(objects, encoded) ? ValueLocation(encoded) : encoded;
 
-        internal bool Uses(int location) => (KnownKinds & Kind(location)) != 0;
+        internal bool Uses(int location) =>
+            (KnownKinds & (location == Int32Location ? Scalar | ClassScalar : Kind(location))) != 0;
+        internal bool ClassScalars => (KnownKinds & ClassScalar) != 0;
         internal bool Aggregates => (KnownKinds & Aggregate) != 0;
 
         internal int Owner(int selector) => fields[selector * Width];
@@ -52,7 +54,9 @@ namespace PortableCompiler
                 }
                 int descriptor = records[slot + 3];
                 int location = DecodeLocation(objects, FieldAccess.Storage(descriptor));
-                int selector = Add(FieldAccess.Owner(descriptor), records[slot + 1], location);
+                int owner = FieldAccess.Owner(descriptor);
+                int kind = IsValueType(objects, owner) ? Kind(location) : ClassScalar;
+                int selector = Add(owner, records[slot + 1], location, kind);
                 if (selector < 0)
                 {
                     if (diagnostic.Length != 0) diagnostic[2] = pc;
@@ -63,9 +67,9 @@ namespace PortableCompiler
             return 0;
         }
 
-        private int Add(int owner, int ordinal, int location)
+        private int Add(int owner, int ordinal, int location, int kind)
         {
-            Kinds |= Kind(location);
+            Kinds |= kind;
             int entry = 0;
             while (entry < Count)
             {
@@ -89,7 +93,7 @@ namespace PortableCompiler
 
         // Read the exact CLI type in its closed declaring context before
         // choosing the location ABI. Int32 and UInt32 share field storage.
-        internal static int Bind(BundleImages bundle, int[] objects, int owner, int row)
+        internal static int Bind(BundleImages bundle, int[] objects, int owner, int row, bool classInt32 = false)
         {
             byte[] image = bundle.Get(AssemblyOf(objects, owner));
             var layout = new int[4];
@@ -110,6 +114,13 @@ namespace PortableCompiler
             next[0]++;
             int modifier = ReadFieldModifier(image, heaps, layout, next, end);
             if (modifier != 0) return modifier < 0 ? modifier : -2;
+            if (classInt32)
+            {
+                int type = ManagedReferenceSignatures.Read(bundle, image, layout, heaps,
+                    AssemblyOf(objects, owner), next, end, owner, objects, 0);
+                if (type < 0) return type;
+                return type == GenericScalar.Key(8) && next[0] == end ? Int32Location : -2;
+            }
             int location = ManagedReferenceSignatures.ReadLocation(bundle, image, layout, heaps,
                 AssemblyOf(objects, owner), next, end, owner, objects);
             if (location < 0) return location;

@@ -1419,7 +1419,7 @@ namespace PortableCompiler
                     int descriptor = records[slot + 3], owner = FieldAccess.Owner(descriptor);
                     int location = ValueFieldProjections.DecodeLocation(objects, FieldAccess.Storage(descriptor));
                     int source = Spill(spills, maximum, spillFlags, states[state + top], top);
-                    used = ValueFieldProjectionWasm.Take(code, used, source, owner, operand, location, tracksRoots);
+                    used = ValueFieldProjectionWasm.Take(code, used, source, owner, operand, location, IsValueType(objects, owner), tracksRoots);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, location, top));
                 }
                 else if (kind == ClearInteriorField)
