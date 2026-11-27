@@ -19,3 +19,8 @@ does not start the app.
 Bundle layout references: [.NET HostModel bundler](https://github.com/dotnet/runtime/blob/a84d826750643e4e849c510a443f9a86f3752a4d/src/installer/managed/Microsoft.NET.HostModel/Bundle/Bundler.cs),
 [manifest](https://github.com/dotnet/runtime/blob/a84d826750643e4e849c510a443f9a86f3752a4d/src/installer/managed/Microsoft.NET.HostModel/Bundle/Manifest.cs)
 and [file entries](https://github.com/dotnet/runtime/blob/a84d826750643e4e849c510a443f9a86f3752a4d/src/installer/managed/Microsoft.NET.HostModel/Bundle/FileEntry.cs).
+
+The intake verifier also reads numeric PE resources by type, ID and language.
+It compares SHA-256 digests of the native manifests in both original apphosts
+and the installed Windows Forms assembly with the bytes returned by Windows.
+This is the resource path used by a module-backed activation context.
