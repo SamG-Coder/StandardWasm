@@ -10,7 +10,7 @@ namespace PortableCompiler
             WindowRect = Peek + 1, ClientRect = WindowRect + 1, DeleteFile = ClientRect + 1, PostWindow = DeleteFile + 1,
             NotifyWinEvent = PostWindow + 1, SendMessageTimeout = NotifyWinEvent + 1,
             BeginPaint = SendMessageTimeout + 1, EndPaint = BeginPaint + 1,
-            UpdateRect = EndPaint + 1, ValidateRect = UpdateRect + 1;
+            UpdateRect = EndPaint + 1, ValidateRect = UpdateRect + 1, CoCreateInstance = ValidateRect + 1;
         private const int ImportOwner = -4;
 
         internal static int Find(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int[] counts,
@@ -19,6 +19,9 @@ namespace PortableCompiler
             var mapping = new int[3];
             if (NativeImports.ForMethod(image, heaps, methods, counts, row, mapping) != 1 ||
                 (mapping[0] & ~0x40) != 0x101) return 0;
+            if (ImageBytes.MatchesAscii(image, heaps, (uint)mapping[1], "CoCreateInstance"))
+                return bundle != null && ComOutputPointer.MatchesActivation(bundle, image, methods, heaps, owner, counts[6], row)
+                    ? CoCreateInstance : 0;
             int member = FindEntry(image, heaps, (uint)mapping[2], (uint)mapping[1]);
             if (member == 0) return 0;
 
@@ -196,11 +199,17 @@ namespace PortableCompiler
         }
 
         internal static int Arity(int member) => member == Post || member == PostWindow || member == NotifyWinEvent ? 4 :
-            member == SendMessageTimeout ? 7 : member == Peek ? 5 : member == DeleteFile ? 1 : member == UpdateRect ? 3 : 2;
+            member == SendMessageTimeout ? 7 : member == Peek || member == CoCreateInstance ? 5 :
+            member == DeleteFile ? 1 : member == UpdateRect ? 3 : 2;
         internal static bool NeedsMemory(int member) => member != Post && member != PostWindow && member != NotifyWinEvent;
 
         internal static bool MatchesSignature(BundleImages bundle, int[] objects, int member, int[] types, int offset)
         {
+            if (member == CoCreateInstance)
+                return Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset], I32, "HRESULT") &&
+                    types[offset + 1] == Native && types[offset + 2] == Native &&
+                    Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 3], I32, "CLSCTX", "Windows.Win32.System.Com") &&
+                    types[offset + 4] == Native && types[offset + 5] == Native;
             if (member == SendMessageTimeout)
                 return Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset], Native, "LRESULT") &&
                     Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
@@ -245,14 +254,15 @@ namespace PortableCompiler
         {
             int existing = imports.Find(ImportOwner, member);
             if (existing >= 0) return existing;
-            byte[] module = NativeImportTable.Ascii("standardwasm:win32");
+            byte[] module = NativeImportTable.Ascii(member == CoCreateInstance ? "standardwasm:com" : "standardwasm:win32");
             byte[] name = NativeImportTable.Ascii(member == Post ? "postThreadMessageW" :
                 member == PostWindow ? "postMessageW" : member == Peek ? "peekMessageW" :
                 member == NotifyWinEvent ? "notifyWinEvent" :
                 member == SendMessageTimeout ? "sendMessageTimeoutW" :
                 member == WindowRect ? "getWindowRect" : member == ClientRect ? "getClientRect" :
                 member == BeginPaint ? "beginPaint" : member == EndPaint ? "endPaint" :
-                member == UpdateRect ? "getUpdateRect" : member == ValidateRect ? "validateRect" : "deleteFileW");
+                member == UpdateRect ? "getUpdateRect" : member == ValidateRect ? "validateRect" :
+                member == CoCreateInstance ? "coCreateInstance" : "deleteFileW");
             var types = new byte[Arity(member)];
             for (int i = 0; i < types.Length; i++) types[i] = 0x7f;
             return imports.Add(ImportOwner, member, module, module.Length, name, name.Length, types, types.Length,

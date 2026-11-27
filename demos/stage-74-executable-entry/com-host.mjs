@@ -2,6 +2,8 @@ export const comDispatchSignature = "stdcall:i32(p32)";
 
 export const comCookieLookupSignature = "stdcall:i32(p32,u32,p32,p32)";
 
+export const comActivationName = "coCreateInstance";
+
 export function isComDispatchSignature(signature) {
     return signature === comDispatchSignature || signature === comCookieLookupSignature;
 }
@@ -9,6 +11,13 @@ export function isComDispatchSignature(signature) {
 const pageSize = 65536;
 const wordSize = 4;
 const maxToken = 0x7fffffff;
+const guidSize = 16;
+const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const invalidPointer = 0x80004003 | 0;
+const invalidArgument = 0x80070057 | 0;
+const noInterface = 0x80004002 | 0;
+const noAggregation = 0x80040110 | 0;
+const classNotRegistered = 0x80040154 | 0;
 let nextToken = 1;
 const dispatchTypes = new Map();
 
@@ -31,6 +40,7 @@ function typedDispatch(dispatch, parameters) {
 export function createComHost(memory) {
     const receivers = new Map();
     const targets = new Map();
+    const classes = new Map();
     let nextAddress = 0;
     let limit = 0;
 
@@ -84,6 +94,42 @@ export function createComHost(memory) {
         return receiver;
     }
 
+    function registerClass(classId, interfaces, contexts = 1) {
+        if (typeof classId !== "string" || !guidPattern.test(classId) || !(interfaces instanceof Map) ||
+            interfaces.size === 0 || !Number.isInteger(contexts) || contexts <= 0 || contexts > 0xffffffff)
+            throw new TypeError("StandardWasm: invalid COM class registration");
+        const factories = new Map();
+        for (const [interfaceId, factory] of interfaces) {
+            if (typeof interfaceId !== "string" || !guidPattern.test(interfaceId) ||
+                typeof factory !== "function" || factories.has(interfaceId.toLowerCase()))
+                throw new TypeError("StandardWasm: invalid COM class interface");
+            factories.set(interfaceId.toLowerCase(), factory);
+        }
+        const identity = classId.toLowerCase();
+        if (classes.has(identity)) throw new TypeError("StandardWasm: duplicate COM class registration");
+        classes.set(identity, { contexts, factories });
+    }
+
+    function activate(classPointer, outer, context, interfacePointer, resultPointer) {
+        const words = new DataView(memory.buffer);
+        const output = resultPointer >>> 0;
+        if (!output) return invalidArgument;
+        if (output > words.byteLength - wordSize) return invalidPointer;
+        const classId = readGuid(words, classPointer >>> 0);
+        const interfaceId = readGuid(words, interfacePointer >>> 0);
+        words.setUint32(output, 0, true);
+        if (!classId || !interfaceId) return invalidPointer;
+        const registration = classes.get(classId);
+        if (!registration || !(registration.contexts & context)) return classNotRegistered;
+        if (outer) return noAggregation;
+        const factory = registration.factories.get(interfaceId);
+        if (!factory) return noInterface;
+        const receiver = registerInterface(interfaceId, factory());
+        // The registry can grow the shared memory and detach the previous view.
+        new DataView(memory.buffer).setUint32(output, receiver, true);
+        return 0;
+    }
+
     function dispatch(signature, token, pointer, ...arguments_) {
         const receiver = pointer >>> 0;
         const binding = receivers.get(receiver);
@@ -112,8 +158,22 @@ export function createComHost(memory) {
         imports: {
             [comDispatchSignature]: typedDispatch((token, receiver) => dispatch(comDispatchSignature, token, receiver), 2),
             [comCookieLookupSignature]: typedDispatch((token, receiver, cookie, iid, result) =>
-                dispatch(comCookieLookupSignature, token, receiver, cookie >>> 0, iid >>> 0, result >>> 0), 5)
+                dispatch(comCookieLookupSignature, token, receiver, cookie >>> 0, iid >>> 0, result >>> 0), 5),
+            [comActivationName]: typedDispatch(activate, 5)
         },
-        registerInterface
+        registerInterface,
+        registerClass
     };
+}
+
+function readGuid(view, address) {
+    if (!address || address > view.byteLength - guidSize) return null;
+    // Windows GUID stores Data1 through Data3 little-endian and Data4 as bytes.
+    const first = view.getUint32(address, true).toString(16).padStart(8, "0");
+    const second = view.getUint16(address + 4, true).toString(16).padStart(4, "0");
+    const third = view.getUint16(address + 6, true).toString(16).padStart(4, "0");
+    let tail = "";
+    for (let index = 8; index < guidSize; index++)
+        tail += view.getUint8(address + index).toString(16).padStart(2, "0");
+    return `${first}-${second}-${third}-${tail.slice(0, 4)}-${tail.slice(4)}`;
 }

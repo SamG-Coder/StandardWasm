@@ -1,5 +1,5 @@
 import { comImportModule, isNativeImportModule, nativeImports, nativeIndirectImportModule, windowsScalars } from "../../scripts/native-imports.mjs";
-import { createComHost, isComDispatchSignature } from "./com-host.mjs";
+import { comActivationName, createComHost, isComDispatchSignature } from "./com-host.mjs";
 import { createDynamicLibraryHost, createNativeIndirectDispatch, nativeIndirectSignature, scopedUtf16Signature } from "./dynamic-library-host.mjs";
 import { createNativeSymbolLookup, createWin32Host, win32ImportModule, win32ImportNames, win32MemoryImports } from "./win32-host.mjs";
 import { createWindowsVersionHost, windowsVersionModule } from "./windows-version.mjs";
@@ -160,7 +160,7 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
             continue;
         }
         if (owner === comImportModule) {
-            if (kind !== "function" || !isComDispatchSignature(name) || requestedCom.has(name))
+            if (kind !== "function" || (name !== comActivationName && !isComDispatchSignature(name)) || requestedCom.has(name))
                 throw Error("The generated module requests an invalid COM dispatch import.");
             requestedCom.add(name);
             continue;
@@ -250,10 +250,10 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
             platform?.windowCreationMetrics, filesystem, platform?.win32Desktop === true, platform?.displayCapabilities, platform?.onWinEvent);
     }
     if (requestedCom.size) {
-        const { imports: dispatch, registerInterface } = createComHost(memory);
-        // The platform host is the sole registrar. Managed imports only
-        // receive the dispatch entry point.
-        configureCom?.({ memory, registerInterface });
+        const { imports: dispatch, registerInterface, registerClass } = createComHost(memory);
+        // Only the platform can register browser implementations for this launch.
+        const configure = configureCom ?? platform?.configureCom;
+        configure?.({ memory, registerInterface, registerClass });
         imports[comImportModule] = dispatch;
     }
     if (wantsWindowsVersion) imports[windowsVersionModule] = createWindowsVersionHost(memory, platform?.windowsVersion);

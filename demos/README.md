@@ -326,6 +326,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [353 - WinForms accessibility notifications](stage-353-window-accessibility-events/README.md) | `npm run demo -- stage-353-window-accessibility-events` | Compare ordered WinEvent delivery and the void USER32 import with Windows |
 | [355 - Same-queue window sends](stage-355-send-message-timeout/README.md) | `npm run demo -- stage-355-send-message-timeout` | Compare synchronous SendMessageTimeoutW dispatch, output words, and last-error behavior |
 | [356 - Closed generic interface casts](stage-356-closed-interface-tests/README.md) | `npm run demo -- stage-356-closed-interface-tests` | Verify exact runtime membership of supported closed CoreLib interfaces |
+| [357 - COM class activation](stage-357-com-activation/README.md) | `npm run demo -- stage-357-com-activation` | Compare HRESULT, output pointers and typed vtable dispatch after class activation |
 
 ## Adding a stage
 
