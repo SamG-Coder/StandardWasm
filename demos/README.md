@@ -139,6 +139,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [137 · stackalloc on a shadow stack](stage-137-stackalloc/README.md) | `npm run demo -- stage-137-stackalloc` | `stackalloc` into primitive pointers; frames release on return and exceptions; exhaustion traps |
 | [138 · Inline-array layouts](stage-138-inline-array-layouts/README.md) | `npm run demo -- stage-138-inline-array-layouts` | Preserve the declared element and value copies of managed inline arrays |
 | [143 · Struct pointers and sizeof](stage-143-struct-pointers/README.md) | `npm run demo -- stage-143-struct-pointers` | 32-bit CLR `sizeof`; `p->F`, `&p->F` and `p[i]` on blittable sequential structs in memory 0 |
+| [145 · Struct copies through pointers](stage-145-struct-copies/README.md) | `npm run demo -- stage-145-struct-copies` | `Rect r = *p`, `*p = r`, `*p = default` and nested struct copies between memory 0 and managed values |
 
 ## Adding a stage
 
