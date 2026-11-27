@@ -8,4 +8,6 @@ Number formatting into a fresh string is a separate dependency. It needs the cul
 
 When the stock .NET 10 `blazorwasm` template publish is packed exactly as in Stage 112, it moves from `-2 [2,8671,234]` to `-1 [5,17,26]`. The first is CoreLib `DefaultInterpolatedStringHandler.AppendFormatted<T>` IL_00EA. The second is `ComponentParametersTypeCache.GetParameterType` IL_001A in Microsoft.AspNetCore.Components.WebAssembly.
 
+That new boundary is a known defect, [#315](https://github.com/SamG-Coder/StandardWasm/issues/315), and it predates this stage. When a method returns a `System.Type` value from a field or argument, the operand has the upstream `System.Type` class layout. The method's result type is the opaque runtime Type descriptor instead, so the `ret` check reports `-1` rather than a located diagnostic. The Stage 360 compiler and the integration line give the same result for the minimal trigger in #315. This stage only makes the method reachable.
+
 Set STANDARDWASM_COMPILER_PATH to the compiler image and run `npm run demo -- stage-362-constrained-int32-tostring`. STANDARDWASM_MONO_CORELIB selects the browser Mono CoreLib used for linking. Without it, the runner links the installed x86 CoreCLR CoreLib.
