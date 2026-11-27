@@ -241,7 +241,7 @@ namespace PortableCompiler
                 }
                 if (rows[current] == 0) continue; // Synthetic dispatcher, emitted after discovery.
                 int owner = owners[current], source = rows[current], context = contexts[current];
-                if (context < 0) context = ~context;
+                context = NativeReceiverCalls.DeclaringContext(context);
                 int[] methodArguments = instantiations.Arguments(current);
                 CompileLocation.Set(location, owner, source, -1);
                 if (owner != activeOwner)
@@ -498,7 +498,7 @@ namespace PortableCompiler
                     var descriptorMismatch = new int[3];
                     status = StackDepths.Analyze(records, depths, states, maximum, frame,
                         result, signatures, offsets, arities, location, catchRegion, outgoingNulls, objects, virtualTypes, allocatedStates,
-                        descriptorMismatch);
+                        descriptorMismatch, contexts);
                     if (status < 0)
                     {
                         int resultSource = descriptorMismatch[2] - 1;
@@ -528,6 +528,9 @@ namespace PortableCompiler
                         hostUse[0] = hostUse[0] | WasmImports.Resources;
                         exceptionTags |= ExceptionTypes.Argument | ExceptionTypes.ArgumentNull;
                     }
+                    functions = NativeReceiverCalls.Bind(bundle, records, depths, states, maximum, owners, rows,
+                        contexts, bases, indices, arities, offsets, signatures, objects, functions, location);
+                    if (functions < 0) return functions;
                     if (virtualUsed[0] != 0)
                     {
                         functions = LinkVirtualCalls(bundle, records, depths, states, allocatedStates, maximum, virtualTypes,
@@ -2010,6 +2013,13 @@ namespace PortableCompiler
                     int declaring = ObjectLayouts.Owner(image, heaps, layout, target, false);
                     if (declaring < 1) return -1;
                     int receiver = ObjectLayouts.Find(objects, owner, declaring, new int[0]);
+                    if (receiver == 0)
+                    {
+                        receiver = BundleLayouts.Register(bundle, image, layout, heaps, owner, declaring, objects);
+                        if (receiver == -2 && !virtualMethodLocal)
+                            receiver = BundleLayouts.RegisterValue(bundle, image, layout, heaps, owner, declaring, objects);
+                        if (receiver < 0) return receiver;
+                    }
                     // An unrewritten IL receiver of a value method is a byref.
                     // Address scans that substituted a snapshot mark the call separately.
                     if (UsesLocationReceiver(objects, receiver)) key = -1;
@@ -2508,7 +2518,7 @@ namespace PortableCompiler
         // A function is identified by (assembly, MethodDef, closed declaring
         // layout). Nongeneric definitions use context zero and the dense
         // per-row index; specialized bodies are found by their full key.
-        private static int Lookup(int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int functions,
+        internal static int Lookup(int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int functions,
             int owner, int row, int context)
         {
             if (context == 0) return indices[bases[owner] + row] - 1;
@@ -2525,13 +2535,18 @@ namespace PortableCompiler
             if (functions >= owners.Length) return -3;
             int offset = NextSignature(offsets, arities, functions);
             // A complemented context is the same method specialized for a traced receiver.
-            int arity = MethodShape(bundle, image, layout, heaps, owner, row, context < 0 ? ~context : context,
+            int arity = MethodShape(bundle, image, layout, heaps, owner, row, NativeReceiverCalls.DeclaringContext(context),
                 signatures, offset, objects, allowVirtual, initializer, receiverOverride, methodArguments);
             if (arity < 0) return arity;
             if (context < 0)
             {
                 if (!IsValueMethod(image, layout, heaps, row, signatures, offset, arity, objects)) return -2;
                 signatures[offset + 1] = ValueLocation(signatures[offset + 1]);
+            }
+            else if (NativeReceiverCalls.IsNativeKey(context))
+            {
+                if (!IsValueMethod(image, layout, heaps, row, signatures, offset, arity, objects)) return -2;
+                signatures[offset + 1] = Native;
             }
             owners[functions] = owner;
             rows[functions] = row;

@@ -28,6 +28,8 @@ The kernels cover:
 - a null `Rect*`, which raises `NullReferenceException` and is caught
 - a walk over `rs[i]`, scaled by `sizeof(Rect)`, including an empty walk
 - a generic getter returning `T*` from closed receivers for `Rect` and `int`
+- a mutating struct method called through a native pointer and from a managed local
+  in the same compiled module
 
 `sizeof` of a `Pack = 1` struct (5 on the x86 CLR) and of a `Size = 12` struct (12) must be the
 explicit -2 diagnostic at the `sizeof` instruction. Natural alignment would get them wrong.

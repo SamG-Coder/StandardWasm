@@ -159,8 +159,12 @@ original `Value.get_Type` and carries the descriptor through its local and
 return. The `TypeFlag.get_Type` dispatch and its resolved overrides now
 share the descriptor result representation. The linker now binds the
 generic `get_Value` call in `ActiveXImpl.UpdateAccelTable` by resolving
-`T*` in the closed declaring type. The replay reaches the following
-`IOleControlSite.OnControlInfoChanged` call at `IL_0030`.
+`T*` in the closed declaring type. The following
+`IOleControlSite.OnControlInfoChanged` call receives a native address.
+The compiler gives that receiver a separate body from the one it uses
+for a traced value location. Stage 143 verifies writes through both
+receiver forms. The replay next reports a diagnostic at the base finalizer
+call in CoreLib's `FileStream.Finalize` at `IL_000a`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

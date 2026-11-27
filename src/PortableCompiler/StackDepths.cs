@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal static int Analyze(int[] records, int[] depths, int[] states, int maximum,
             int[] frame, int result, int[] signatures, int[] offsets, int[] arities, int[] location, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects, int[] virtualTypes, byte[] allocatedStates, int[] descriptorMismatch)
+            byte[] outgoingNulls, int[] objects, int[] virtualTypes, byte[] allocatedStates, int[] descriptorMismatch, int[] contexts)
         {
             if (depths.Length == 0)
                 return -1;
@@ -112,6 +112,14 @@ namespace PortableCompiler
                         operand == PeLibrary.ReflectionMembers.ModuleName ? String : PeLibrary.RuntimeTypeMetadata.Assembly;
                     if (depth == 0 || !Assignable(stack[depth - 1], receiver, objects)) return -2;
                     next = Push(stack, allocated, depth - 1, resultType);
+                }
+                else if (kind == Call && records[slot + 3] == 0 &&
+                    NativeReceiverCalls.UsesNativeReceiver(contexts[operand], stack, depth - arities[operand]))
+                {
+                    // Check the unchanged call shape. Binding uses the original
+                    // receiver stored in states to select a native body.
+                    stack[depth - arities[operand]] = signatures[offsets[operand] + 1];
+                    next = CallShape(stack, allocated, depth, signatures, offsets[operand], arities[operand], 0, objects);
                 }
                 else next = Transition(stack, allocated, depth, kind, operand, records[slot + 3], frame,
                     signatures, offsets, arities, objects);

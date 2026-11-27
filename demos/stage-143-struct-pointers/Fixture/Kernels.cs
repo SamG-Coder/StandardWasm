@@ -30,6 +30,19 @@ namespace StructPointerFixture
         }
     }
 
+    public struct MethodCounter
+    {
+        private int value;
+
+        public MethodCounter(int value) => this.value = value;
+
+        public int Add(int delta)
+        {
+            value = unchecked(value + delta);
+            return value;
+        }
+    }
+
     // Pack and Size change the CLR byte layout: sizeof stays a located diagnostic (x86 CLR: 5, 12).
     [StructLayout(LayoutKind.Sequential, Pack = 1)] public struct Packed { public byte B; public int I; }
     [StructLayout(LayoutKind.Sequential, Size = 12)] public struct Sized { public int I; }
@@ -72,6 +85,17 @@ namespace StructPointerFixture
             var rectangleAddress = new Address<Rect>(rectangle);
             var numberAddress = new Address<int>(number);
             return rectangleAddress.Value->Bottom + *numberAddress.Value;
+        }
+
+        public static int MutateNativeReceiver(MethodCounter* incoming, int value)
+        {
+            return unchecked(incoming->Add(value) + incoming->Add(1));
+        }
+
+        public static int MutateBothReceivers(MethodCounter* incoming, int value)
+        {
+            var local = new MethodCounter(17);
+            return unchecked(incoming->Add(value) + local.Add(value) + local.Add(1));
         }
 
         public static int ConstructorFieldStores(ConstructorPair* other, int value)
