@@ -21,9 +21,10 @@ runtime Wasm substitution are rejected. Results are saved as `results.json`
 under the run directory. The comparison records the current compiler boundary
 before application execution. Stage 130 admits the fieldless
 `System.Threading.Tasks.VoidTaskResult` in the async `Program::<Main>$`.
-The current boundary is `-2 [0, 1, 28]` at IL offset `0x1c`, where the
-method starts taking managed addresses of its state machine and nested
-builder for `AsyncTaskMethodBuilder.Start`. Localized satellite assemblies,
+The current boundary is `-2 [0, 1, 30]` at IL offset `0x1e`, where
+`ldflda` takes the address of the nested builder for
+`AsyncTaskMethodBuilder.Start`. The preceding local state-machine address
+compiles. Localized satellite assemblies,
 alternate boot formats and application rendering through StandardWasm
 remain future work.
 

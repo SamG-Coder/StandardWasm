@@ -48,9 +48,9 @@ const node = await inspectStandaloneEntry(compilerBytes, selection);
 assert.equal(node.entryToken, reference.token);
 assert.ok(node.managedAssemblies > 1);
 assert.equal(node.compilerStatus, -2);
-// Stage 130 admits the fieldless VoidTaskResult. The async Program::<Main>$
-// now reaches the managed addresses of its state machine and nested builder.
-assert.deepEqual(node.diagnostic, [0, 1, 0x1c]);
+// The local state-machine address is supported. The adjacent ldflda
+// still needs an interior byref to the nested async method builder.
+assert.deepEqual(node.diagnostic, [0, 1, 0x1e]);
 assert.equal(node.diagnosticAssembly, node.entry);
 
 const pages = new Map();
