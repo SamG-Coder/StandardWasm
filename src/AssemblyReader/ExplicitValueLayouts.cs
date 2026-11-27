@@ -8,7 +8,8 @@ namespace PeLibrary
         // ClassLayout size leaves the extent to the declared field offsets.
         private const int BackingBytes = 8;
 
-        internal static int Read(byte[] image, int[] heaps, int[] methods, int row, int first, int[] offsets)
+        internal static int Read(byte[] image, int[] heaps, int[] methods, int row, int first, int[] offsets,
+            bool typedFields = false)
         {
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;
@@ -27,7 +28,8 @@ namespace PeLibrary
                     found = true;
                     uint pack = U16(image, at);
                     uint size = U32(image, at + 2);
-                    if (size > BackingBytes || pack > 128 || (pack & (pack - 1)) != 0) return -2;
+                    if (typedFields ? size != 0 || pack != 0 :
+                        size > BackingBytes || pack > 128 || (pack & (pack - 1)) != 0) return -2;
                     if (size != 0) extent = (int)size;
                 }
             }
@@ -43,7 +45,7 @@ namespace PeLibrary
                 if (field < 0 || field >= offsets.Length) continue;
                 if (offsets[field] != 0) return -1;
                 uint offset = U32(image, at);
-                if (offset >= BackingBytes) return -2;
+                if (offset >= (typedFields ? int.MaxValue - 8u : BackingBytes)) return -2;
                 offsets[field] = (int)offset + 1;
             }
             return extent;

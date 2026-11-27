@@ -1627,7 +1627,7 @@ namespace PortableCompiler
                             int source = states[state + top];
                             used = LoadOperand(code, used, Spill(spills, maximum, spillFlags, source, top), source, storage);
                         }
-                        if (IsExplicitValue(objects, type))
+                        if (UsesPackedExplicitValue(objects, type))
                             used = ExplicitValueWasm.Load(code, used, objects, type, operand, storage, Spill(spills, maximum, spillFlags, I64, top));
                         else
                         {
@@ -1671,7 +1671,7 @@ namespace PortableCompiler
                     int replacement = Spill(spills, maximum, spillFlags, source, top);
                     if (inlineLocations[local] != 0)
                         used = InlineObjectStorageWasm.Set(code, used, inlineLocations[local], local, operand, replacement);
-                    else if (IsExplicitValue(objects, type))
+                    else if (UsesPackedExplicitValue(objects, type))
                         used = ExplicitValueWasm.Update(code, used, objects, type, local, operand, FieldAccess.Storage(descriptor), replacement, source);
                     else
                     {

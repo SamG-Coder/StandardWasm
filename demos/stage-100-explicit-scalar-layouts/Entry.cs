@@ -81,6 +81,25 @@ namespace ScalarOverlayDemo
 
         public static int RejectLarge(LargeFrame frame) => frame == null ? 0 : 1;
         public static int RejectNested(NestedFrame frame) => frame == null ? 0 : 1;
+        public static int RejectWidePartial(WidePartialFrame frame) => frame == null ? 0 : 1;
+
+        public static int ManagedAlias(int initial, int replacement)
+        {
+            ManagedOverlay value = default;
+            value.Prefix = 7;
+            value.MoveIndex = initial;
+            value.Name = "original";
+            ManagedOverlay copy = value;
+            value.EditIndex = replacement;
+            value.Name = "new";
+            return (copy.EditIndex ^ value.MoveIndex) + copy.Name.Length * 10 + value.Name.Length + value.Prefix;
+        }
+
+        public static int ManagedDefault()
+        {
+            ManagedOverlay value = default;
+            return value.EditIndex + value.MoveIndex + value.Prefix + (value.Name == null ? 1 : 0);
+        }
     }
 
     public static class Demo

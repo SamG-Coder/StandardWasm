@@ -141,6 +141,8 @@ namespace PortableCompiler
             bool byRefLike = ObjectLayouts.IsByRefLikeValue(objects, type);
             int[] offsets = new int[overlay ? fields : 0];
             int limit = overlay ? ExplicitValueLayouts.Read(image, heaps, layout, ObjectLayouts.TypeDef(objects, type), first, offsets) : 0;
+            if (limit == -2)
+                return BindTypedExplicitFields(bundle, image, layout, heaps, owner, type, objects);
             if (limit < 0) return limit;
             for (int offset = 0; offset < fields; offset++)
             {
@@ -162,6 +164,57 @@ namespace PortableCompiler
                     ObjectLayouts.SetExplicitField(objects, type, offset, storage, start);
                 }
                 else ObjectLayouts.SetFieldType(objects, type, offset, storage);
+            }
+            return type;
+        }
+
+        private static int BindTypedExplicitFields(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int type, int[] objects)
+        {
+            int fields = ObjectLayouts.FieldCount(objects, type), first = ObjectLayouts.FirstRow(objects, type);
+            int table = ObjectLayouts.TableOf(objects, type);
+            var offsets = new int[fields];
+            int read = ExplicitValueLayouts.Read(image, heaps, layout, ObjectLayouts.TypeDef(objects, type),
+                first, offsets, typedFields: true);
+            if (read < 0) return read;
+            var storage = new int[fields];
+            var widths = new int[fields];
+            var elements = new int[fields];
+            var aliases = new int[fields];
+            var reference = new int[3];
+            for (int field = 0; field < fields; field++)
+            {
+                int stored = ReadFieldStorage(bundle, image, layout, heaps, owner, table, first + field,
+                    type, objects, reference, false);
+                if (stored < 0) return stored;
+                if (stored == 0) continue;
+                int offset = offsets[field] - 1;
+                if (offset < 0) return -1;
+                // Use the wider CLR reference size for the separation proof.
+                // References always remain GC fields and are never packed into bytes.
+                int width = stored == SignatureTypes.String ? 8 : ExplicitValueLayouts.Width(stored);
+                if (width == 0 || stored == SignatureTypes.String && offset % 8 != 0) return -2;
+                for (int earlier = 0; earlier < field; earlier++)
+                {
+                    int start = offsets[earlier] - 1;
+                    if (widths[earlier] == 0 || start + widths[earlier] <= offset || offset + width <= start)
+                        continue;
+                    // Only CLI int32 fields may share a typed slot. Different
+                    // sizes, bit reinterpretation and reference unions remain diagnosed.
+                    if (start != offset || reference[2] != 8 || elements[earlier] != 8) return -2;
+                    if (earlier >= ushort.MaxValue) return -3;
+                    aliases[field] = earlier + 1;
+                    break;
+                }
+                widths[field] = width;
+                elements[field] = reference[2];
+                storage[field] = stored;
+            }
+            ObjectLayouts.MarkTypedExplicitFields(objects, type);
+            for (int field = 0; field < fields; field++)
+            {
+                if (aliases[field] == 0) ObjectLayouts.SetFieldType(objects, type, field, storage[field]);
+                else ObjectLayouts.SetExplicitField(objects, type, field, storage[field], aliases[field] - 1);
             }
             return type;
         }

@@ -12,6 +12,7 @@ namespace PeLibrary
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
         private const int Arguments = 10, Arity = 11, Element = 12;
         private const int ValueShape = 0x40000000, NullableShape = 0x20000000, InlineArrayShape = 0x10000000, ByRefLikeShape = 0x08000000;
+        private const int TypedExplicitShape = 0x04000000;
         private const int FieldStorageBits = 16, FieldStorageMask = (1 << FieldStorageBits) - 1;
         private const int EnumHead = 3, EnumKeyBase = 0x100000;
         internal const int FieldMapStart = Header + MaxClasses * Width;
@@ -82,7 +83,7 @@ namespace PeLibrary
             int fieldColumn = 4 + 2 * strings + extends;
             int defWidth = fieldColumn + fieldIndex + methodIndex;
             uint def = (uint)(defs + (row - 1) * defWidth);
-            uint flags = U32(image, def);
+            uint flags = U32(image, def) & ~(uint)TypedExplicitShape;
             bool isInterface = (flags & 0x20) != 0;
             uint baseType = ReadIndex(image, def + (uint)(4 + 2 * strings), extends);
             if (isInterface ? baseType != 0 : baseType == 0 || (baseType & 3) == 3) return -2;
@@ -468,6 +469,15 @@ namespace PeLibrary
         internal static bool IsExplicitValue(int[] registry, int type) =>
             IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & 0x18) == 0x10;
 
+        private static bool HasTypedExplicitFields(int[] registry, int type) =>
+            type >= FirstClass && (registry[Slot(type) + ShapeFlags] & TypedExplicitShape) != 0;
+
+        internal static bool UsesPackedExplicitValue(int[] registry, int type) =>
+            IsExplicitValue(registry, type) && !HasTypedExplicitFields(registry, type);
+
+        internal static void MarkTypedExplicitFields(int[] registry, int type) =>
+            registry[Slot(type) + ShapeFlags] |= TypedExplicitShape;
+
         // A sequential class outside the platform CoreLib needs a parent with
         // layout. CoreCLR throws TypeLoadException for a sequential class
         // derived from an auto class other than Object. The runtime that ships
@@ -564,7 +574,7 @@ namespace PeLibrary
 
         internal static int LayoutFieldCount(int[] registry, int type)
         {
-            if (IsExplicitValue(registry, type)) return 1;
+            if (UsesPackedExplicitValue(registry, type)) return 1;
             int count = 0;
             for (int current = type; current != 0; current = Parent(registry, current))
                 count += FieldCount(registry, current);
@@ -581,7 +591,8 @@ namespace PeLibrary
         {
             // The GC type stores shared bytes in one immutable i64. Its CLI
             // field metadata and bit offsets remain independently addressable.
-            if (IsExplicitValue(registry, type)) return WideStorage.Scalar;
+            if (UsesPackedExplicitValue(registry, type)) return WideStorage.Scalar;
+            if (HasTypedExplicitFields(registry, type)) return FieldTypeAt(registry, type, index);
             // Base fields are the prefix required by Wasm struct subtyping.
             int current = type;
             while (true)
@@ -602,8 +613,14 @@ namespace PeLibrary
         internal static int DeclaredFieldCount(int[] registry, int type) =>
             IsInlineArray(registry, type) ? 1 : FieldCount(registry, type);
 
-        internal static int FieldTypeAt(int[] registry, int type, int offset) =>
-            registry[registry[Slot(type) + Storage] + offset] & FieldStorageMask;
+        internal static int FieldTypeAt(int[] registry, int type, int offset)
+        {
+            int storage = registry[registry[Slot(type) + Storage] + offset];
+            // An alias keeps its CLI storage on direct FieldDef lookup, while
+            // physical walks see one Wasm field per distinct location.
+            return HasTypedExplicitFields(registry, type) && (storage >> FieldStorageBits) != 0
+                ? 0 : storage & FieldStorageMask;
+        }
 
         internal static void SetFieldType(int[] registry, int type, int offset, int fieldType) =>
             registry[registry[Slot(type) + Storage] + offset] = fieldType;
@@ -620,7 +637,7 @@ namespace PeLibrary
         }
 
         internal static int FieldType(int[] registry, int type, int row) =>
-            FieldTypeAt(registry, type, row - registry[Slot(type) + FirstField]);
+            registry[registry[Slot(type) + Storage] + row - FirstRow(registry, type)] & FieldStorageMask;
 
         internal static int FieldOrdinal(int[] registry, int type, int field)
         {
@@ -628,14 +645,19 @@ namespace PeLibrary
             int index = field - registry[slot + FirstField], storage = registry[slot + Storage];
             if (index < 0 || index >= DeclaredFieldCount(registry, type) || registry[storage + index] == 0)
                 return -1;
-            if (IsExplicitValue(registry, type))
+            if (UsesPackedExplicitValue(registry, type))
                 return (registry[storage + index] >> FieldStorageBits) - 1;
+            if (HasTypedExplicitFields(registry, type))
+            {
+                int earlier = (int)((uint)registry[storage + index] >> FieldStorageBits) - 1;
+                if (earlier >= 0) index = earlier;
+            }
             int ordinal = 0;
             for (int parent = Parent(registry, type); parent != 0; parent = Parent(registry, parent))
                 for (int i = 0; i < FieldCount(registry, parent); i++)
                     if (FieldTypeAt(registry, parent, i) != 0) ordinal++;
             for (int i = 0; i < index; i++)
-                if (registry[storage + i] != 0) ordinal++;
+                if (FieldTypeAt(registry, type, i) != 0) ordinal++;
             return ordinal;
         }
 

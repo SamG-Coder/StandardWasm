@@ -26,6 +26,9 @@ internal static class ExplicitScalarCases
             Check(nameof(Kernels.CopyAndWrite), [bits, -2], Kernels.CopyAndWrite(bits, -2));
         }
         Check(nameof(Kernels.DefaultParts), [], Kernels.DefaultParts());
+        Check(nameof(Kernels.ManagedDefault), [], Kernels.ManagedDefault());
+        Check(nameof(Kernels.ManagedAlias), [17, -20], Kernels.ManagedAlias(17, -20));
+        Check(nameof(Kernels.ManagedAlias), [int.MinValue, 0], Kernels.ManagedAlias(int.MinValue, 0));
 
         foreach (int bits in new[] { int.MinValue, 0, 1, 0x3f800000, 0x7f800000, 0x7fc12345 })
             Check(nameof(Kernels.SingleBits), [bits], Kernels.SingleBits(bits));
@@ -36,10 +39,12 @@ internal static class ExplicitScalarCases
             Check(nameof(Kernels.UnsignedHigh), [Wide(bits)], Kernels.UnsignedHigh(bits));
         }
 
-        if (Kernels.RejectLarge(new LargeFrame()) != 1 || Kernels.RejectNested(new NestedFrame()) != 1)
+        if (Kernels.RejectLarge(new LargeFrame()) != 1 || Kernels.RejectNested(new NestedFrame()) != 1 ||
+            Kernels.RejectWidePartial(new WidePartialFrame()) != 1)
             throw new InvalidOperationException("CLR did not accept the explicit layout fixture types.");
         Reject(nameof(Kernels.RejectLarge));
         Reject(nameof(Kernels.RejectNested));
+        Reject(nameof(Kernels.RejectWidePartial));
 
         void Check(string name, object[] arguments, object expected)
         {
