@@ -185,3 +185,15 @@ The debugger fixture links the original .NET 10 `Debugger.IsAttached` getter.
 The browser host reports detached by default and can supply a managed
 debugger state through `standardwasm:runtime`. The test checks detached and
 attached transitions in one instance and runs alongside the monitor import.
+
+The browser COM registry owns interface pointers and their vtables in the
+instance's Wasm memory. Each registered slot has a typed callback and an opaque
+token. The one supported dispatch import is `standardwasm:com`'s
+`stdcall:i32(p32)`. A guest's token and receiver must match an intact
+registered vtable. The platform supplies the callbacks that implement an
+interface. The registry reports unbound calls explicitly.
+
+Run `node demos/stage-74-executable-entry/verify-com-host.mjs` to exercise
+the loader in Node and Edge with pure COM and mixed COM/P/Invoke imports.
+The probe checks the callback result, binding isolation, corrupt vtables,
+import validation, and preservation of the P/Invoke error slots.
