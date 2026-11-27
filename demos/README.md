@@ -320,6 +320,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [347 · Interior constructor arguments](stage-347-interior-constructor-arguments/README.md) | `npm run demo -- stage-347-interior-constructor-arguments` | Evaluate a nested field read while preserving a generic value constructor's destination |
 | [348 · Scalar bit reinterpretation](stage-348-scalar-bitcasts/README.md) | `npm run demo -- stage-348-scalar-bitcasts` | Preserve bits across genuine equal-width CoreLib integer and float bit casts |
 | [349 - CoreLib runtime type comparisons](stage-349-core-type-comparison/README.md) | `npm run demo -- stage-349-core-type-comparison` | Compare canonical runtime type descriptors at direct CoreLib operator calls |
+| [350 - Default equality comparer activation](stage-350-default-equality-comparers/README.md) | `npm run demo -- stage-350-default-equality-comparers` | Pin the CoreCLR generic activation checkpoint with six CLR comparer cases |
 
 ## Adding a stage
 
