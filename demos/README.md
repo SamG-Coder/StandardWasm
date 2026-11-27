@@ -317,6 +317,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [344 · Native addresses of nested local fields](stage-344-native-frame-field-paths/README.md) | `npm run demo -- stage-344-native-frame-field-paths` | Preserve the native addresses and managed reads of nested blittable fields |
 | [345 · CoreLib Windows version out parameter](stage-345-corelib-version-out/README.md) | `npm run demo -- stage-345-corelib-version-out` | Bind the original CoreLib out helper and verify the browser version profile |
 | [346 · Multiplication in readonly byte-span indices](stage-346-multiplied-byte-span-indices/README.md) | `npm run demo -- stage-346-multiplied-byte-span-indices` | Compile wrapping products in ordinary readonly byte-span index expressions |
+| [347 · Interior constructor arguments](stage-347-interior-constructor-arguments/README.md) | `npm run demo -- stage-347-interior-constructor-arguments` | Evaluate a nested field read while preserving a generic value constructor's destination |
 
 ## Adding a stage
 
