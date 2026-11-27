@@ -21,6 +21,10 @@ public static class ScopedSpanProbe
         }
 
         internal void Reset() => this = default;
+
+        internal Span<char> SliceFromPosition() => Characters.Slice(Count);
+
+        internal Span<char> SliceFromPositionWithLength() => Characters.Slice(Count, Count);
     }
 
     public static int CheckScopedReference(int seed)
@@ -128,6 +132,21 @@ public static class ScopedSpanProbe
 
     public static unsafe int CheckSpanSlices(int scenario)
     {
+        if (scenario >= 9)
+        {
+            var array = new[] { 'a', 'b', 'c' };
+            int position = scenario == 11 ? 3 : scenario == 12 ? -1 : scenario == 13 ? 2 : 1;
+            var view = new MutableCharacterView(new Span<char>(array), position);
+            try
+            {
+                Span<char> slice = scenario == 10 || scenario == 13
+                    ? view.SliceFromPositionWithLength() : view.SliceFromPosition();
+                if (slice.IsEmpty) return slice.Length;
+                slice[0] = 'x';
+                return array[0] + 100 * array[1] + 10_000 * slice.Length;
+            }
+            catch (ArgumentOutOfRangeException) { return -103; }
+        }
         if (scenario == 5)
         {
             ReadOnlySpan<char> empty = default;

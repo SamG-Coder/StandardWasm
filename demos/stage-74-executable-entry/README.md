@@ -100,6 +100,8 @@ a pointer-backed span over the shadow stack, a readonly view over the same
 memory, and typed exceptions for a negative length and invalid indices.
 The slice cases compare both managed slice overloads, shared backing storage,
 UTF-16 offsets for pointer-backed slices, the empty span, and typed range failures.
+The field-sourced slice cases use a span and its start or length from the same
+ref struct, and check that writes through the slice still reach the original array.
 An application extension named `Slice` shifts the requested offset and calls the
 framework member internally. The fixture compares its result with a direct
 framework call and invokes a second extension using member syntax.

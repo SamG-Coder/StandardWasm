@@ -34,12 +34,12 @@ namespace PortableCompiler
             }
             else if (indexed)
             {
-                call = Next(records, call, clauses);
+                call = AfterArgumentRead(records, call, clauses);
                 if (call < 0) return 0;
-                // Plain loads cannot replace the original span before the call,
-                // so a descriptor snapshot is equivalent to the receiver byref.
+                // Argument reads cannot replace the original span before the call.
+                // The descriptor snapshot still shares its backing storage.
                 bool explicitLength = records[call] == Load || records[call] == Constant;
-                int slice = explicitLength ? Next(records, call, clauses) : call;
+                int slice = explicitLength ? AfterArgumentRead(records, call, clauses) : call;
                 int arity = explicitLength ? 2 : 1;
                 if (slice >= 0 && IsDirectMemberCall(records, slice) &&
                     SpanMetadata.IsSlice(bundle, image, layout, heaps, owner, records[slice + 1],
@@ -103,6 +103,16 @@ namespace PortableCompiler
         {
             int next = records[slot + 2];
             return next < records.Length / Width && !ValueOperands.Entry(records, next, clauses) ? next * Width : -1;
+        }
+
+        private static int AfterArgumentRead(int[] records, int read, int[] clauses)
+        {
+            int next = Next(records, read, clauses);
+            // A receiver load followed by a field read supplies one argument,
+            // for example this._pos in Span<T>.Slice(this._pos).
+            if (next >= 0 && records[read] == Load && records[next] == GetField)
+                next = Next(records, next, clauses);
+            return next;
         }
 
         private static bool IsDirectMemberCall(int[] records, int slot) =>
