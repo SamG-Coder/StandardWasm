@@ -5,7 +5,7 @@ import { createWindowState, windowImportNames } from "./window-state.mjs";
 
 export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
-    "getModuleHandleW", "loadLibraryExW", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom"
+    "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom"
 ]);
 export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, "deactivateActCtx", "releaseActCtx",
@@ -82,6 +82,24 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         return dynamicLibraries.loadLibrary(name, reserved, flags);
     }
 
+    function getProcAddress(handle, pointer) {
+        const address = pointer >>> 0;
+        // The Win32 API treats values below 64 KiB as ordinals. The
+        // registered browser providers currently advertise named exports.
+        if (address <= 0xffff) return dynamicLibraries.getProcAddress(handle, address);
+        const bytes = new Uint8Array(memory.buffer);
+        const end = bytes.indexOf(0, address);
+        if (end < 0) {
+            errors.system = noAccess;
+            return 0;
+        }
+        // Preserve the raw PCSTR bytes. In particular, export lookup is
+        // case-sensitive and does not normalize or decode a UTF-8 name.
+        let name = "";
+        for (let at = address; at < end; at++) name += String.fromCharCode(bytes[at]);
+        return dynamicLibraries.getProcAddress(handle, name);
+    }
+
     function getModuleHandleW(pointer) {
         const address = pointer >>> 0;
         if (!address) return executableHandle;
@@ -90,7 +108,8 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
             errors.system = noAccess;
             return 0;
         }
-        let name = normalize(text);
+        const requested = normalize(text);
+        let name = requested;
         if (name) {
             const leaf = baseName(name);
             if (!leaf.includes(".")) name += ".dll";
@@ -98,6 +117,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
             const handle = (name.includes("/") ? byPath : byBaseName).get(name);
             if (handle !== undefined) return handle;
         }
+        if (dynamicLibraries) return dynamicLibraries.getModuleHandle(requested);
         errors.system = moduleNotFound;
         return 0;
     }
@@ -126,6 +146,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
     return {
         getModuleHandleW,
         loadLibraryExW,
+        getProcAddress,
         ...createActivationContexts(memory, findManifest, value => { errors.system = value; }),
         ...createDpiAwareness(value => { errors.system = value; }),
         isWindowEnabled: handle => windows.isWindowEnabled(handle),

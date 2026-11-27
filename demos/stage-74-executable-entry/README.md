@@ -246,3 +246,24 @@ The temp-path verifier also runs the original `Path.GetTempPath()` against a
 code unit for the terminator, so CoreLib grows its buffer and retries.
 Node and Edge compare the complete buffers from the two hosted exports
 against Windows on both sides of that boundary.
+
+### Default window procedure lookup
+
+The name-based `GetProcAddress` host entry resolves a PCSTR against explicit
+exports from an instance's loaded browser libraries. The existing
+`GetModuleHandleW` entry can find those libraries alongside the executable
+and its managed companion images. Library names are case-insensitive and
+export names match their original bytes. The registry currently exposes
+named exports. An ordinal produces the missing-procedure result for a
+valid library that supplies no ordinal map.
+
+Run `node demos/stage-74-executable-entry/verify-window-proc-lookup.mjs` to
+compare the browser loader with Windows x86. The Windows oracle calls the
+original WinForms getter and confirms it matches and caches User32's
+`DefWindowProcW`. The browser fixture verifies that the registered token
+can be stored and read as a window's procedure, and that missing or foreign
+registrations fail. This test exercises lookup and window state. Invoking
+the default procedure and implementing its message behavior are separate
+platform work.
+[WinForms getter](https://github.com/dotnet/winforms/blob/v10.0.10/src/System.Windows.Forms/System/Windows/Forms/NativeWindow.cs#L149-L169) ·
+[Win32 GetProcAddress](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getprocaddress)
