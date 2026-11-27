@@ -79,7 +79,56 @@ namespace PortableCompiler
                 if (symbol.Length > 2) symbol[2] = bodyContext;
                 return 0;
             }
-            return -2;
+            if (primitiveMap || IsValueType(objects, receiver)) return -2;
+            int flagsOfDeclaration = MethodDefinitions.ReadColumn(declaration, declarationLayout, row, 2);
+            if ((flagsOfDeclaration & 0x2450) != 0x40 ||
+                MethodDefinitions.ReadColumn(declaration, declarationLayout, row, 0) <= 0) return -2;
+
+            // The CLR gives class mappings priority. At this point the
+            // declaration is a default candidate only if every applicable
+            // interface map is present and no derived interface fills its slot.
+            for (int type = receiver; type >= FirstClass; type = Parent(objects, type))
+            {
+                int complete = CheckInterfaceMap(bundle, objects, type, layout, heaps);
+                if (complete != 0) return complete;
+            }
+            for (int type = FirstClass; type - FirstClass < objects[0]; type++)
+            {
+                if (!IsInterface(objects, type) || !Implements(objects, receiver, type)) continue;
+                int complete = CheckInterfaceMap(bundle, objects, type, layout, heaps);
+                if (complete != 0) return complete;
+                if (type == declared || !Implements(objects, type, declared)) continue;
+
+                int targetOwner = AssemblyOf(objects, type), targetType = TypeDef(objects, type);
+                int bodyContext = HasArguments(objects, type) ? type : 0;
+                int overrideBody = ExplicitInterfaceSlots.Find(bundle, objects, bundle.Get(targetOwner), layout, heaps,
+                    targetOwner, targetType, owner, row, declaration, declarationLayout, declarationHeaps,
+                    name, signature, declaredContext, bodyContext);
+                if (overrideBody != 0) return overrideBody < 0 ? overrideBody : -2;
+            }
+
+            symbol[0] = owner;
+            symbol[1] = row;
+            // A selected default carries its declaring interface even when it has no type arguments.
+            if (symbol.Length > 2) symbol[2] = declared;
+            return 0;
+        }
+
+        private static int CheckInterfaceMap(BundleImages bundle, int[] objects, int type, int[] layout, int[] heaps)
+        {
+            byte[] image = bundle.Get(AssemblyOf(objects, type));
+            if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+            var table = new int[3];
+            int count = InterfaceImplementations.ReadTable(image, heaps, layout, table);
+            if (count < 0) return count;
+            int owner = TypeDef(objects, type), declared = 0;
+            for (int i = 0; i < count; i++)
+            {
+                int coded = InterfaceImplementations.Read(image, table, i, owner);
+                if (coded < 0) return coded;
+                if (coded != 0) declared++;
+            }
+            return declared == DeclaredInterfaceCount(objects, type) ? 0 : -2;
         }
     }
 }

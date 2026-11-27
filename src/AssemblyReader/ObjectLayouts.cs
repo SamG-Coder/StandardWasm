@@ -525,6 +525,14 @@ namespace PeLibrary
             return false;
         }
 
+        internal static int DeclaredInterfaceCount(int[] registry, int source)
+        {
+            int count = 0;
+            for (int edge = registry[Slot(source) + Interfaces]; edge != 0; edge = registry[edge + 1])
+                count++;
+            return count;
+        }
+
         internal static bool Implements(int[] registry, int source, int target)
         {
             if (source < FirstClass || !IsInterface(registry, target)) return false;
