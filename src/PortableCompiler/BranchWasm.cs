@@ -8,7 +8,8 @@ namespace PortableCompiler
     {
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection, int[] nativePlans)
+            byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection, int[] nativePlans,
+            FunctionPointerPlan pointers)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -526,6 +527,28 @@ namespace PortableCompiler
                         returned = signatures[shape + 1];
                         used = Local(code, used, 0x20, temp);
                     }
+                    if (returned != Void)
+                        used = Local(code, used, 0x21, Spill(spills, maximum, StackType(returned), first));
+                }
+                else if (kind == FunctionAddress)
+                {
+                    used = Const(code, used, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, Native, depth));
+                }
+                else if (kind == CallIndirect)
+                {
+                    // [arguments, pointer] -> [result]. The carrier supplies the signature.
+                    int arity = arities[operand], shape = offsets[operand];
+                    int first = depth - arity - 1;
+                    for (int i = 0; i < arity; i++)
+                    {
+                        int argument = first + i;
+                        int source = states[state + argument];
+                        used = LoadOperand(code, used, Spill(spills, maximum, source, argument), source, signatures[shape + 1 + i]);
+                    }
+                    used = Local(code, used, 0x20, Spill(spills, maximum, Native, depth - 1));
+                    used = FunctionPointerWasm.CallIndirect(code, used, frameShape[7], pointers, records[slot + 3]);
+                    int returned = signatures[shape];
                     if (returned != Void)
                         used = Local(code, used, 0x21, Spill(spills, maximum, StackType(returned), first));
                 }
