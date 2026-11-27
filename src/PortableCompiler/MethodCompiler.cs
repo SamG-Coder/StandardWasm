@@ -26,16 +26,16 @@ namespace PortableCompiler
             entries[8] = 0x72;
             entries[9] = 0x75;
             entries[10] = 0x6e;
-            return CompileProgram(BundleImages.Single(image), entries, output, location, 0);
+            return CompileProgram(BundleImages.Single(image), entries, output, location, 0, new MissingAssemblyStubs());
         }
 
         internal static int CompileExports(byte[] image, byte[] entries, byte[] output) =>
-            CompileProgram(BundleImages.Single(image), entries, output, new int[0], 0);
+            CompileProgram(BundleImages.Single(image), entries, output, new int[0], 0, new MissingAssemblyStubs());
 
         internal static int CompileModuleDetailed(byte[] image, byte[] entries, byte[] output, int[] location)
         {
             if (location.Length < CompileLocation.Size) return -3;
-            return CompileProgram(BundleImages.Single(image), entries, output, location, 0);
+            return CompileProgram(BundleImages.Single(image), entries, output, location, 0, new MissingAssemblyStubs());
         }
 
         internal static int CompileBundle(byte[] bundle, byte[] entries, byte[] output) =>
@@ -51,13 +51,77 @@ namespace PortableCompiler
         {
             CompileLocation.Clear(location);
             BundleImages images = BundleImages.Unpack(bundle);
-            return images == null ? -1 : CompileProgram(images, entries, output, location, 0);
+            return images == null ? -1 : CompileProgram(images, entries, output, location, 0, new MissingAssemblyStubs());
         }
+
+        // Issue #299 (opt in): a method whose body needs an assembly missing from the bundle (-4)
+        // compiles to a stub that fails on entry, as the CLR's JIT fails that method and the
+        // call site throws FileNotFoundException. Each -4 names the method being compiled; it is
+        // recorded and the program is recompiled. warnings receives [count, then
+        // (assembly, MethodDef row, IL offset) per stubbed method].
+        internal static int CompileBundleDeferred(byte[] bundle, byte[] entries, byte[] output, int[] location, int[] warnings)
+        {
+            if (location.Length < CompileLocation.Size || warnings.Length < 1) return -3;
+            BundleImages images = BundleImages.Unpack(bundle);
+            if (images == null) return -1;
+            images.DeferMissing = true;
+            int capacity = (warnings.Length - 1) / 3;
+            var stubs = new MissingAssemblyStubs();
+            warnings[0] = 0;
+            while (true)
+            {
+                images.MissingReference = null;
+                int status = CompileProgram(images, entries, output, location, 0, stubs);
+                if (status != -4 || location[1] <= 0) return status;
+                // No progress (a stub could not be lowered), no exact display name, or no room:
+                // report the strict located diagnostic.
+                if (stubs.Find(location[0], location[1]) >= 0 || stubs.Count == capacity) return status;
+                int offset = location[2];
+                if (!stubs.Add(location[0], location[1], images)) return status;
+                int count = stubs.Count - 1;
+                warnings[1 + 3 * count] = location[0];
+                warnings[2 + 3 * count] = location[1];
+                warnings[3 + 3 * count] = offset;
+                warnings[0] = stubs.Count;
+            }
+        }
+
+        // The stub body (decision for #299): ldstr message; ldstr fileName; newobj CoreLib
+        // FileNotFoundException::.ctor(string, string); throw. Pre-linked, so it bypasses IL decode.
+        private static int LinkStub(BundleImages bundle, MissingAssemblyStubs stubs, int stub, int[] records,
+            int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets,
+            int[] signatures, int[] objects, int functions, byte[] literals, int[] literalSize)
+        {
+            var found = new int[2];
+            if (MissingAssemblyStubs.FindConstructor(bundle, found) < 0 || found[0] < 0) return -4;
+            byte[] coreLib = bundle.Get(found[0]);
+            var coreLayout = new int[4];
+            var coreHeaps = new int[8];
+            if (CompressedTables.FindWithHeaps(coreLib, coreLayout, coreHeaps) < 0) return -1;
+            int constructor = indices[bases[found[0]] + found[1]] - 1;
+            if (constructor < 0)
+            {
+                functions = Register(bundle, coreLib, coreLayout, coreHeaps, found[0], found[1], 0, owners, rows, contexts,
+                    bases, indices, arities, offsets, signatures, objects, functions);
+                if (functions < 0) return functions;
+                constructor = functions - 1;
+            }
+            int messageStart = literalSize[0];
+            int messageLength = stubs.WriteLiteral(stub, true, literals, messageStart);
+            if (messageLength < 0) return messageLength;
+            int nameStart = messageStart + 2 * messageLength;
+            int nameLength = stubs.WriteLiteral(stub, false, literals, nameStart);
+            if (nameLength < 0) return nameLength;
+            literalSize[0] = nameStart + 2 * nameLength;
+            MissingAssemblyStubs.Records(records, messageStart, messageLength, nameStart, nameLength, constructor);
+            return functions;
+        }
+
 
         // Imported functions precede defined functions. Discovery can add
         // a host feature, so re-emit with its function indices reserved.
         private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location,
-            int hostFeatures)
+            int hostFeatures, MissingAssemblyStubs stubs)
         {
             int hostImports = WasmImports.FunctionCount(hostFeatures);
             CompileLocation.Clear(location);
@@ -199,6 +263,8 @@ namespace PortableCompiler
                 }
                 if (rows[current] == 0) continue; // Synthetic dispatcher, emitted after discovery.
                 int owner = owners[current], source = rows[current], context = contexts[current];
+                // Issue #299: a deferred stub replaces this body with a FileNotFoundException throw.
+                int stub = stubs.Find(owner, source);
                 CompileLocation.Set(location, owner, source, -1);
                 if (owner != activeOwner)
                 {
@@ -237,10 +303,22 @@ namespace PortableCompiler
                         initializerPrologue = initializerSlot[0];
                     }
                 }
-                uint rva = unchecked((uint)MethodDefinitions.ReadColumn(image, layout, source, 0));
-                int status = MethodBodies.Read(image, rva, body);
-                if (status != 0)
-                    return status == MethodBodies.Malformed ? -1 : -2;
+                uint rva = 0;
+                int status = 0;
+                if (stub >= 0)
+                {
+                    // The CLR fails the JIT before the method runs, so a stub triggers no type
+                    // initializer. Its body is four synthetic instructions with a stack of two.
+                    initializerPrologue = -1;
+                    body[0] = 0; body[1] = 4; body[2] = 2; body[3] = 0; body[4] = 0; body[5] = 0;
+                }
+                else
+                {
+                    rva = unchecked((uint)MethodDefinitions.ReadColumn(image, layout, source, 0));
+                    status = MethodBodies.Read(image, rva, body);
+                    if (status != 0)
+                        return status == MethodBodies.Malformed ? -1 : -2;
+                }
                 int[] catchRegion = noCatch;
                 bool hasFinally = false;
                 if (body[5] != 0)
@@ -321,11 +399,24 @@ namespace PortableCompiler
                     return -2;
 
                 var code = new byte[body[1] * 4 + 2];
-                int used = scalar && locals == 0 && catchRegion.Length == 0 && initializerPrologue < 0
+                int used = stub < 0 && scalar && locals == 0 && catchRegion.Length == 0 && initializerPrologue < 0
                     ? StraightLineIl.Translate(image, body, parameters, code) : -2;
                 if (used < 0)
                 {
                     var records = new int[body[1] * BranchIl.Width];
+                    if (stub >= 0)
+                    {
+                        functions = LinkStub(bundle, stubs, stub, records, owners, rows, contexts, bases, indices,
+                            arities, offsets, signatures, objects, functions, literals, literalSize);
+                        if (functions < 0)
+                        {
+                            // No bindable CoreLib FileNotFoundException: keep the located diagnostic.
+                            location[0] = owner; location[1] = source; location[2] = 0;
+                            return functions;
+                        }
+                    }
+                    else
+                    {
                     status = resourceOpen
                         ? ResourceOpenIl.Decode(image, body, records, location, parameters)
                         : BranchIl.Decode(image, body[0], body[1], parameters, locals, records, location, catchRegion.Length != 0);
@@ -350,6 +441,7 @@ namespace PortableCompiler
                         contexts, arities, offsets, signatures, objects, functions, pointers, location);
                     if (functions < 0)
                         return functions;
+                    }
 
                     if (location.Length != 0) location[2] = -1;
                     int maximum = body[2];
@@ -610,7 +702,7 @@ namespace PortableCompiler
                 length += used;
             }
             if ((hostUse[0] & ~hostFeatures) != 0)
-                return CompileProgram(bundle, entries, output, location, hostFeatures | hostUse[0]);
+                return CompileProgram(bundle, entries, output, location, hostFeatures | hostUse[0], stubs);
             length = dispatch.Write(moduleCode, bodyOffsets, sizes, arities, offsets, signatures, length, hostImports, location);
             if (length < 0) return length;
             for (int c = 0; c < pointers.CarrierCount; c++)

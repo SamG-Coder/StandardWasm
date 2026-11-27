@@ -20,6 +20,13 @@ namespace BootstrapLibrary
             PortableCompiler.MethodCompiler.CompileModuleDetailed(image, entries, output, location);
         public static int CompileBundleDetailed(byte[] bundle, byte[] entries, byte[] output, int[] location) =>
             PortableCompiler.MethodCompiler.CompileBundleDetailed(bundle, entries, output, location);
+        // Issue #299 (opt in): methods that need an assembly missing from the bundle compile to
+        // stubs that throw the bundled CoreLib's FileNotFoundException when called. warnings
+        // receives [count, then (assembly, MethodDef row, IL offset) per stubbed method].
+        public static int[] CreateWarnings(int capacity) => new int[1 + 3 * capacity];
+        public static int ReadWarning(int[] warnings, int index) => warnings[index];
+        public static int CompileBundleDeferred(byte[] bundle, byte[] entries, byte[] output, int[] location, int[] warnings) =>
+            PortableCompiler.MethodCompiler.CompileBundleDeferred(bundle, entries, output, location, warnings);
         public static int BundleModuleOrigins() => 1;
         // The low 32 bits identify the original file offset. The high bits
         // hold the byte length. A negative result is a reader diagnostic.
