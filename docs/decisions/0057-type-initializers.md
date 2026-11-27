@@ -77,7 +77,34 @@ initialized type:
   `TypeInitializationException` and continues does something this compiler
   cannot yet reproduce. #170 stays open for that gap.
 
-## Root objects
+## Typed failure (#170)
+
+When the bundle supplies CoreLib, a **managed exception object** escaping an initializer body
+becomes the CLR's `TypeInitializationException`:
+
+- **Catching.** The guard's `try_table` catches the object tag with its payload, separately
+  from `catch_all`.
+- **Construction.** It builds CoreLib's own `TypeInitializationException` through the upstream
+  internal constructor `(string fullTypeName, string message, Exception innerException)`:
+  - `fullTypeName` is `Type.FullName` (`Namespace.Outer+Inner`), written at compile time.
+  - `message` is `The type initializer for '<fullTypeName>' threw an exception.`
+  - The constructor's untaken `SR` fallback compiles because #304 folds CoreLib resource
+    strings (decision 0081).
+- **Caching.** The object goes in a per-initializer global (owner 0, a reserved negative row).
+  The guard is marked failed and the object is thrown on the object tag. Every later trigger
+  rethrows the **same** object, as the CLR does.
+- **No epoch advance.** A managed exception unwinds frame by frame, so each enclosing
+  initializer's guard catches and wraps it in turn, and the epoch does not advance. An
+  initializer that reads a failing one fails with a `TypeInitializationException` whose inner
+  exception is the first.
+
+These cases still trap as described above:
+- a fixed-tag exception such as divide-by-zero or a null dereference, which carries no object
+  (step 2 constructs the matching CoreLib exception)
+- a bundle without CoreLib's constructor
+- a type name that is not ASCII
+
+
 
 `newobj System.Object::.ctor` allocates the reserved zero-field struct in the
 native-vector recursive group (`RootObjectHeap`). Each allocation has its own

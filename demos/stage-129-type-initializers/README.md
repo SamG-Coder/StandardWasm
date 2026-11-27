@@ -26,6 +26,7 @@ The kernels cover:
   needs no initializer
 - distinct `new object()` allocations, root-object identity through a static field, and a
   failed nominal test against an unrelated class
+- an initializer throwing a managed exception, caught as CoreLib's `TypeInitializationException` on two triggers, and a nested type's failing initializer (#170)
 
 The failure cases run several exports on one instance. The CLR raises the same
 `TypeInitializationException` on each trigger. The compiled module traps on each trigger,

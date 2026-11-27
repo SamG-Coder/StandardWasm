@@ -46,6 +46,21 @@ namespace TypeInitializerFixture
     }
 
     // Never reached at run time, but compiled into a kernel's untaken branch.
+    public static class ThrowsObject
+    {
+        public static int Value = Fail();
+        static int Fail() => throw new System.InvalidOperationException();
+    }
+
+    public static class Outer
+    {
+        public static class InnerThrows
+        {
+            public static int Value = Fail();
+            static int Fail() => throw new System.NotSupportedException();
+        }
+    }
+
     public static class Unrelated
     {
         public static int Value;
@@ -266,6 +281,27 @@ namespace TypeInitializerFixture
         }
 
         public static int NotNominalClass() => Fresh() is Empty ? 0 : 1;
+
+        // Issue #170: an initializer that throws a managed exception object. The CLR wraps it in
+        // TypeInitializationException, raised again on every later trigger; the compiler builds
+        // CoreLib's own TypeInitializationException when the bundle supplies CoreLib.
+        public static int ObjectFailureCaught()
+        {
+            int score = 0;
+            for (int i = 0; i < 2; i++)
+            {
+                try { score += ThrowsObject.Value; }
+                catch (TypeInitializationException) { score += 10; }
+                catch (InvalidOperationException) { score += 1000; }
+            }
+            return score + Unrelated.Value;
+        }
+
+        public static int NestedObjectFailure()
+        {
+            try { return Outer.InnerThrows.Value; }
+            catch (TypeInitializationException) { return 3; }
+        }
 
         // Object members on a root object and Monitor stay explicit diagnostics.
         public static int RootHashCode() => Fresh().GetHashCode() == 0 ? 0 : 1;
