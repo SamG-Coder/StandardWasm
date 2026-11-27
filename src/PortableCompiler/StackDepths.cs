@@ -553,7 +553,7 @@ namespace PortableCompiler
             // A managed heap location requires separate pinning support.
             if (kind == NativeAddressView || kind == NativeFieldPointer)
                 return depth > 0 && IsNativeInteger(stack[depth - 1]) ? depth : -2;
-            if (kind == ReinterpretPacked16Location)
+            if (kind == ReinterpretManagedLocation)
             {
                 // Unsafe.As<char, char> preserves the address and its readonly provenance.
                 if (operand == CharacterLocation && extra == CharacterLocation &&

@@ -82,7 +82,7 @@ namespace PortableCompiler
         internal const int EnumHasFlag = 169, TakeProjectedFieldAddress = 170, CallNativeIndirect = 171;
         internal const int NativeAddressView = 172, NullManagedLocation = 173, TestNullLocation = 174;
         internal const int BoxAggregate = 175, UnboxAggregate = 176, TestAggregateBox = 177, UnboxAggregateAddress = 178;
-        internal const int CallDynamicNative = 179, CallPinnedCharacterNative = 180, ReinterpretPacked16Location = 181, CopyCharacterSpan = 182, PinStaticBytes = 183, ArrayClear = 184;
+        internal const int CallDynamicNative = 179, CallPinnedCharacterNative = 180, ReinterpretManagedLocation = 181, CopyCharacterSpan = 182, PinStaticBytes = 183, ArrayClear = 184;
         // [ReadOnlySpan<char>, char, char] -> [first matching index or -1].
         internal const int FindCharacterInSpan = 186, EqualCharacterSpans = 187, TakeReadOnlyCharacterLocation = 188;
         internal const int NativeFieldPointer = 189, NativeFrameFieldAddress = 190, FormatEnum = 191, TypeToHandle = 192;

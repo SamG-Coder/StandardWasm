@@ -2031,7 +2031,7 @@ namespace PortableCompiler
             // Stage 221: general delegate keys share the invocation-list bank (decision 0092).
             type == DelegateReference || PeLibrary.DelegateShapes.IsKey(type) ? EventHandlerReference - 1 :
             type == CharacterSpanCallback ? Delegate - 1 :
-            // ReinterpretPacked16Location is verifier-only. Both nominal
+            // ReinterpretManagedLocation is verifier-only. Both nominal
             // views keep the same reference in the shared location bank.
             IsManagedLocation(type) ? LastScalarBank :
             IsSpan(type) ? LastScalarBank + (flags & LocationSpill) :

@@ -2086,11 +2086,14 @@ namespace PortableCompiler
                             int targetLocation = ManagedReferenceSignatures.ElementLocation(objects, elements[1]);
                             if (IsPacked16Location(sourceLocation) && IsPacked16Location(targetLocation))
                             {
-                                records[slot] = BranchIl.ReinterpretPacked16Location;
+                                records[slot] = BranchIl.ReinterpretManagedLocation;
                                 records[slot + 1] = sourceLocation;
                                 records[slot + 3] = targetLocation;
                                 continue;
                             }
+                            int alias = BooleanStorageAliases.Lower(bundle, owner, objects, elements[0], elements[1], records, slot, clauses);
+                            if (alias < 0) return alias;
+                            if (alias > 0) continue;
                         }
                         int searchArity = spec[MethodSpecifications.Arity] == 1
                             ? SpanMetadata.ReadOnlySearchArity(image, layout, heaps, counts, spec[MethodSpecifications.Target]) : 0;
