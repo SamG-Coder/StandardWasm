@@ -13,6 +13,16 @@ namespace PortableCompiler
         {
             int call = records[address + 2] * Width;
             if (call >= records.Length || ValueOperands.Entry(records, call / Width, clauses)) return 0;
+            if ((spanType == SignatureTypes.CharacterSpan || spanType == SignatureTypes.WritableCharacterSpan) &&
+                ToStringCall(bundle, image, layout, heaps, owner, context, methodArguments, records, call, spanType, objects))
+            {
+                // The exact CoreLib character override copies the view into an
+                // immutable string. The descriptor itself is only read.
+                records[address] = field ? GetField : Load;
+                records[call] = StringFromSpan;
+                records[call + 3] = spanType;
+                return 1;
+            }
             int lengthCall = -1;
             bool indexed = records[call] == Load || records[call] == Constant;
             if (records[call] == Dup)
@@ -102,6 +112,27 @@ namespace PortableCompiler
                 records[lengthCall + 3] = spanType;
             }
             return 1;
+        }
+
+        private static bool ToStringCall(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int context, int[] methodArguments, int[] records, int call, int spanType, int[] objects)
+        {
+            if (IsDirectMemberCall(records, call))
+                return SpanMetadata.IsToString(bundle, image, layout, heaps, owner, records[call + 1],
+                    context, methodArguments, spanType, objects);
+            if (records[call] != ConstrainedInstance) return false;
+            int type = records[call + 1];
+            if (type >> 24 != 0x1b || ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps,
+                owner, type & 0xffffff, context, objects, methodArguments) != spanType) return false;
+
+            var declaration = new int[2];
+            if (ConstrainedValueCalls.ResolveObjectDeclaration(bundle, image, layout, heaps, owner, records[call + 3],
+                context, methodArguments, objects, declaration) < 0) return false;
+            byte[] core = bundle.Get(declaration[0]);
+            var methods = new int[4];
+            var streams = new int[8];
+            return CompressedTables.FindWithHeaps(core, methods, streams) >= 0 &&
+                RuntimeTypeMetadata.IsCoreObjectToString(core, streams, methods, declaration[1]);
         }
 
         private static int Next(int[] records, int slot, int[] clauses)

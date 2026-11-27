@@ -41,7 +41,14 @@ async function verify(compiler, bytes, cases) {
             continue;
         }
         const wasm = Uint8Array.from({ length: status }, (_, i) => tool.ReadByte(output, i));
-        const { instance } = await WebAssembly.instantiate(wasm);
+        const module = await WebAssembly.compile(wasm);
+        const imports = {};
+        for (const entry of WebAssembly.Module.imports(module)) {
+            if (entry.module !== "standardwasm:resources" || entry.name !== "memory" || entry.kind !== "memory")
+                throw Error("Unexpected fixture import " + entry.module + "." + entry.name);
+            imports[entry.module] = { memory: new WebAssembly.Memory({ initial: 1 }) };
+        }
+        const instance = await WebAssembly.instantiate(module, imports);
         try {
             const result = instance.exports.run();
             results.push({ name: test.name, expected: test.expected, result });

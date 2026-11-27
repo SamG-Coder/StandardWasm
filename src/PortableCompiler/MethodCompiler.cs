@@ -2018,6 +2018,13 @@ namespace PortableCompiler
                     records[slot + 3] = symbol[1];
                     continue;
                 }
+                if (kind == BranchIl.StringFromSpan)
+                {
+                    int empty = StringLiterals.Empty(globals);
+                    if (empty < 0) return empty;
+                    records[slot + 1] = empty;
+                    continue;
+                }
                 if (kind == BranchIl.LoadString)
                 {
                     int status = StringLiterals.Lower(image, heaps, records, slot, literals, literalSize, globals);
@@ -2036,7 +2043,7 @@ namespace PortableCompiler
                     if (empty < 0) return empty;
                     records[slot] = BranchIl.StringFromSpan;
                     records[slot + 1] = empty;
-                    records[slot + 3] = 0;
+                    records[slot + 3] = CharacterSpan;
                     continue;
                 }
                 if ((kind == BranchIl.Call || kind == BranchIl.MemberCall) && records[slot + 3] ==

@@ -211,6 +211,20 @@ namespace PortableCompiler
             return cursor[0] == end;
         }
 
+        internal static bool IsToString(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int member, int context, int[] methodArguments, int spanType, int[] objects)
+        {
+            var reference = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadMember(image, heaps, layout, member, reference, allowClosedParent: true) < 0 ||
+                !MatchesAscii(image, heaps, (uint)reference[4], "ToString")) return false;
+            int parent = reference[AssemblyReferences.GenericParent];
+            if (parent == 0 || ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps, owner,
+                parent, objects, context, methodArguments) != spanType) return false;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, reference[5], 0, cursor);
+            return end >= 0 && SignatureReader.TakeElement(image, cursor, end, 0x0e) && cursor[0] == end;
+        }
+
         internal static int Accessor(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int member, int context, int[] methodArguments, int spanType, int[] objects)
         {

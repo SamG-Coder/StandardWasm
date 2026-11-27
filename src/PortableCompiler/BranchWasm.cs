@@ -476,7 +476,7 @@ namespace PortableCompiler
                 }
                 else if (kind == StringFromSpan)
                 {
-                    int span = Spill(spills, maximum, spillFlags, CharacterSpan, top);
+                    int span = Spill(spills, maximum, spillFlags, records[slot + 3], top);
                     used = StringWasm.CopySpan(code, used, span, operand, scratch, frameShape[25] != 0);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, String, top));
                 }

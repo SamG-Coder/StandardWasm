@@ -30,7 +30,8 @@ internal static class Program
             OriginalExceptionGetType, OriginalDerivedExceptionGetType, NullExceptionGetType, OriginalObjectDisplayName,
             ClosedTypeDisplayName, OpenTypeDisplayName, ArrayTypeDisplayName, RepeatedTypeDisplayName, NamespacedTypeDisplayName, NullTypeDisplayName,
             ExactRootDispatch, DynamicRootDispatch, NullRootDispatch, PrimitiveVectorRootDispatch,
-            TypeSimpleNames, NullTypeSimpleName, TypeNameAndDisplayName
+            TypeSimpleNames, NullTypeSimpleName, TypeNameAndDisplayName,
+            WritableSpanString, ReadOnlySpanString, EmptySpanString, NativeSpanString
         };
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
@@ -73,6 +74,41 @@ internal static class Program
         Type type = typeof(NominalNameProbe);
         return type.Name == "NominalNameProbe" && type.ToString() == "Program+NominalNameProbe" &&
             ReferenceEquals(type.Name, type.Name) ? 73 : 0;
+    }
+
+    public static int WritableSpanString()
+    {
+        char[] data = { '!', '\ud800', 'Ω', '?' };
+        var view = new Span<char>(data).Slice(1, 2);
+        string snapshot = view.ToString();
+        view[0] = 'x';
+        return snapshot.Length * 100 + (snapshot[0] == '\ud800' ? 1 : 0) +
+            (snapshot[1] == 'Ω' ? 2 : 0) + (data[1] == 'x' ? 4 : 0);
+    }
+
+    public static int ReadOnlySpanString()
+    {
+        ReadOnlySpan<char> view = "prefix😀suffix".AsSpan().Slice(6, 2);
+        return view.ToString() == "😀" ? 91 : 0;
+    }
+
+    public static int EmptySpanString()
+    {
+        Span<char> writable = default;
+        ReadOnlySpan<char> readOnly = default;
+        return ReferenceEquals(writable.ToString(), "") && ReferenceEquals(readOnly.ToString(), "") ? 93 : 0;
+    }
+
+    public static unsafe int NativeSpanString()
+    {
+        char* data = stackalloc char[3];
+        data[0] = 'x';
+        data[1] = 'Ω';
+        data[2] = 'z';
+        var view = new Span<char>(data, 3).Slice(1, 1);
+        string snapshot = view.ToString();
+        view[0] = 'y';
+        return snapshot == "Ω" && data[1] == 'y' ? 97 : 0;
     }
 
     public static int ExactRootDispatch() => new object().ToString() == "System.Object" ? 67 : 0;

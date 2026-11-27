@@ -43,6 +43,11 @@ The Type.Name cases share the runtime descriptor cache machinery. They
 verify simple names for nested generic types and arrays, typed null
 behavior, and the distinction between simple names and display names.
 
+Character span string conversions exercise constrained calls to the platform
+Object slot. Writable and read-only spans copy the exact view into an immutable
+string. The cases check slicing, unpaired UTF-16 surrogates, supplementary
+characters, the default empty view and a stack-backed buffer.
+
 Both `Int32` cases have CLR answers. The compiler now binds the original
 `Number.TryFormatInt32<char>` generic method. Until the formatting pipeline
 lowers, the verifier accepts only the located diagnostic at the pinned local
