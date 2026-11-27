@@ -151,6 +151,9 @@ export function createWindowClassState(memory, isProcedure, setError) {
     }
 
     return {
+        style(record) {
+            return classFields.get(record)?.[0] ?? 0;
+        },
         findClass(instance, identifier) {
             const found = findClass(new DataView(memory.buffer), instance, identifier >>> 0, cannotFindWindowClass);
             if (!found) return null;

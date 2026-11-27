@@ -26,6 +26,7 @@ export function serveInteractiveConsole(port, compiler) {
         script("stage-74-executable-entry/window-station-host.mjs"),
         script("stage-74-executable-entry/activation-context.mjs"),
         script("stage-74-executable-entry/dpi-awareness.mjs"),
+        script("stage-74-executable-entry/display-context.mjs"),
         script("stage-74-executable-entry/frameworks.mjs"),
         script("stage-73-executable-intake/loader/pe.mjs")
     ]));

@@ -242,6 +242,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [245 · Strong GC handles](stage-245-strong-gc-handles/README.md) | `npm run demo -- stage-245-strong-gc-handles` | Compare normal handle lifecycle, typed errors and finalizer reachability with Windows |
 | [247 · Projected native-word exchange](stage-247-projected-native-word-exchange/README.md) | `npm run demo -- stage-247-projected-native-word-exchange` | Compare live native-word aliases and native Interlocked.Exchange with Windows |
 | [248 · Class fields with 32-bit enum addresses](stage-248-int32-enum-class-field-projection/README.md) | `npm run demo -- stage-248-int32-enum-class-field-projection` | Compare writable enum field aliases and out parameters with Windows |
+| [249 · Display device capabilities](stage-249-display-device-capabilities/README.md) | `npm run demo -- stage-249-display-device-capabilities` | Compare display capability queries and common device-context lifetime with Windows |
 
 ## Adding a stage
 

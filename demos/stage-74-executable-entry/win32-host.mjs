@@ -1,6 +1,7 @@
 import { readPeResource } from "../stage-73-executable-intake/loader/pe.mjs";
 import { createActivationContexts } from "./activation-context.mjs";
 import { createDpiAwareness, dpiImportNames } from "./dpi-awareness.mjs";
+import { createDisplayContexts, displayContextImportNames } from "./display-context.mjs";
 import { createFullPathHost } from "./full-path-host.mjs";
 import { createWindowMessageRegistration } from "./window-messages.mjs";
 import { createThreadHandleHost } from "./thread-handle-host.mjs";
@@ -14,7 +15,8 @@ export const win32MemoryImports = new Set([
     "getWindowThreadProcessId", "duplicateHandle", "getExitCodeThread", "getUserObjectInformationW"
 ]);
 export const win32ImportNames = new Set([
-    ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, "callWindowProcW", "setClassLongW", "deactivateActCtx", "releaseActCtx",
+    ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, ...displayContextImportNames,
+    "callWindowProcW", "setClassLongW", "deactivateActCtx", "releaseActCtx",
     "getCurrentProcess", "getCurrentThread", "getCurrentThreadId", "closeHandle", "getProcessWindowStation",
     "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError"
 ]);
@@ -53,7 +55,8 @@ export function createNativeSymbolLookup(memory, libraries, errors) {
 }
 
 export function createWin32Host(memory, executablePath, assets = [], windows = createWindowState(),
-    errors = { system: 0, pinvoke: 0 }, dynamicLibraries, windowCreationMetrics, win32FileSystem, desktop = false) {
+    errors = { system: 0, pinvoke: 0 }, dynamicLibraries, windowCreationMetrics, win32FileSystem, desktop = false,
+    displayCapabilities) {
     if (desktop && dynamicLibraries && !dynamicLibraries.hasLibrary("user32.dll")) {
         dynamicLibraries.registerLibrary("user32.dll", new Map([["DefWindowProcW", {
             signature: windowProcedureSignature,
@@ -198,6 +201,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         },
         ...createActivationContexts(memory, findManifest, value => { errors.system = value; }),
         ...createDpiAwareness(value => { errors.system = value; }),
+        ...createDisplayContexts(windows, hwnd => classes.style(windows.getWindowClass(hwnd)), displayCapabilities),
         isWindowEnabled: handle => windows.isWindowEnabled(handle),
         enableWindow: (handle, enable) => windows.enableWindow(handle, enable),
         getWindowLongW: getWindowLong,

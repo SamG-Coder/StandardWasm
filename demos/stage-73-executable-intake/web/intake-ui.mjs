@@ -50,7 +50,9 @@ run.addEventListener("click", async () => {
         const framework = await Promise.all(frameworkFiles.map(async file => ({
             path: file.name, bytes: new Uint8Array(await file.arrayBuffer())
         })));
-        if (current === revision && active === cancel) worker.postMessage({ ...selection, framework });
+        const { browserDisplayCapabilities } = await import("/launch/display-context.mjs");
+        if (current === revision && active === cancel)
+            worker.postMessage({ ...selection, framework, displayCapabilities: browserDisplayCapabilities() });
     } catch (error) {
         finish("error", error.message);
     }

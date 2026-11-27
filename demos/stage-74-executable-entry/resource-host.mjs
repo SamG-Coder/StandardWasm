@@ -226,7 +226,7 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         const usesModules = requestedWin32.has("getModuleHandleW") || requestedWin32.has("createActCtxW");
         const filesystem = requestedWin32.has("getFullPathNameW") ? platform?.win32FileSystem : undefined;
         imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : [], windows, errors, dynamicLibraries,
-            platform?.windowCreationMetrics, filesystem, platform?.win32Desktop === true);
+            platform?.windowCreationMetrics, filesystem, platform?.win32Desktop === true, platform?.displayCapabilities);
     }
     if (wantsCom) {
         const { imports: dispatch, registerInterface } = createComHost(memory);

@@ -17,7 +17,8 @@ namespace PortableCompiler
             GetWindowThreadProcessId = 32, GetCurrentProcess = 33, GetCurrentThread = 34, GetCurrentThreadId = 35,
             DuplicateHandle = 36, GetExitCodeThread = 37, CloseHandle = 38,
             GetProcessWindowStation = 39, GetUserObjectInformation = 40,
-            GetLongPathName = 41, SetClassLong = 42, Count = SetClassLong;
+            GetLongPathName = 41, SetClassLong = 42, GetDeviceCaps = 43,
+            GetDC = 44, ReleaseDC = 45, Count = ReleaseDC;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -44,11 +45,12 @@ namespace PortableCompiler
             member == GetProcessWindowStation ? "GetProcessWindowStation" :
             member == GetUserObjectInformation ? "GetUserObjectInformationW" :
             member == GetLongPathName ? "GetLongPathNameW" :
-            member == SetClassLong ? "SetClassLongW" : "BCryptGenRandom";
+            member == SetClassLong ? "SetClassLongW" : member == GetDeviceCaps ? "GetDeviceCaps" :
+            member == GetDC ? "GetDC" : member == ReleaseDC ? "ReleaseDC" : "BCryptGenRandom";
 
         private static string Library(int member) => member == LoadLibrary || member == GetFullPathName ||
             member == GetLongPathName ? "kernel32.dll" :
-            member == SetClassLong ? "user32.dll" :
+            member == SetClassLong ? "user32.dll" : member == GetDeviceCaps ? "GDI32.dll" :
             member <= ReleaseContext || member == GetProcedure || IsThreadImport(member) ? "KERNEL32.dll" :
             member == SetProcessAwareness ? "api-ms-win-shcore-scaling-l1-1-1.dll" :
             member == BCryptGenRandom ? "BCrypt.dll" : "USER32.dll";
@@ -64,6 +66,7 @@ namespace PortableCompiler
             member == GetProcessWindowStation ? 0 :
             member == GetProcedure || member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts ||
             member == EnableWindow || member == GetWindowThreadProcessId || member == GetExitCodeThread ||
+            member == GetDeviceCaps || member == ReleaseDC ||
             UsesLastError(member) ? 2 : 1;
 
         internal static bool UsesLastError(int member) =>
@@ -89,6 +92,10 @@ namespace PortableCompiler
                     // wasm32 uses one procedure-word ABI for both raw names.
                     member == SetClassLong &&
                     NativeImports.Find(image, heaps, methods, counts, "user32.dll", "SetClassLongPtrW", row, 0x100) == row ||
+                    member == GetDeviceCaps &&
+                    NativeImports.Find(image, heaps, methods, counts, "gdi32.dll", "GetDeviceCaps", row, 0x101) == row ||
+                    (member == GetDC || member == ReleaseDC) &&
+                    NativeImports.Find(image, heaps, methods, counts, "user32.dll", EntryName(member), row, 0x101) == row ||
                     IsWindowStationImport(member) &&
                     NativeImports.Find(image, heaps, methods, counts, "user32.dll", EntryName(member), row, 0x101) == row))
                 {
@@ -98,6 +105,8 @@ namespace PortableCompiler
                         return 0;
                     if ((member == DuplicateHandle || member == GetExitCodeThread) &&
                         !MatchesThreadOutputPointer(image, heaps, methods, row, member)) return 0;
+                    if (member >= GetDeviceCaps && !MatchesDisplaySignature(image, heaps, methods, row, member))
+                        return 0;
                     return member;
                 }
             return 0;
@@ -160,6 +169,23 @@ namespace PortableCompiler
             return token > 0 ? token : -1;
         }
 
+        private static bool MatchesDisplaySignature(byte[] image, int[] heaps, int[] methods, int row, int member)
+        {
+            const int signedInt = 0x08, nativeInt = 0x18;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4), Arity(member), cursor);
+            if (end < 0) return false;
+            // Verify the raw storage before Wasm erases integer signedness.
+            // MatchesSignature checks the nominal SDK handle types.
+            if (member == GetDC)
+                return ReadAbiWord(image, cursor, end, nativeInt) >= 0 &&
+                    ReadAbiWord(image, cursor, end, nativeInt) >= 0 && cursor[0] == end;
+            if (!SignatureReader.TakeElement(image, cursor, end, signedInt) ||
+                ReadAbiWord(image, cursor, end, nativeInt) < 0) return false;
+            return (member == GetDeviceCaps ? SignatureReader.TakeElement(image, cursor, end, signedInt) :
+                ReadAbiWord(image, cursor, end, nativeInt) >= 0) && cursor[0] == end;
+        }
+
         private static bool IsWindowLongImport(byte[] image, int[] heaps, int[] methods, int[] counts, int row, int member)
         {
             // WinForms' generated declarations and ordinary exact-spelling P/Invokes
@@ -178,6 +204,14 @@ namespace PortableCompiler
                 return arity == 2 && IsAbiShape(bundle, objects, types[offset + 1], Native, "HANDLE") &&
                     types[offset + 2] == Int32Location && IsAbiShape(bundle, objects, result, I32, "HRESULT");
             if (arity != Arity(member)) return false;
+            if (member == GetDeviceCaps)
+                return result == I32 && IsDisplayContext(bundle, objects, types[offset + 1]) && types[offset + 2] == I32;
+            if (member == GetDC)
+                return IsDisplayContext(bundle, objects, result) &&
+                    IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND");
+            if (member == ReleaseDC)
+                return result == I32 && IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
+                    IsDisplayContext(bundle, objects, types[offset + 2]);
             if (IsThreadImport(member)) return MatchesThreadSignature(bundle, objects, member, types, offset);
             if (member == GetProcessWindowStation)
                 return IsAbiShape(bundle, objects, result, Native, "HWINSTA", "Windows.Win32.System.StationsAndDesktops");
@@ -308,6 +342,9 @@ namespace PortableCompiler
 
         private static bool IsDpiContext(BundleImages bundle, int[] objects, int type) =>
             IsAbiShape(bundle, objects, type, Native, "DPI_AWARENESS_CONTEXT", "Windows.Win32.UI.HiDpi");
+
+        private static bool IsDisplayContext(BundleImages bundle, int[] objects, int type) =>
+            IsAbiShape(bundle, objects, type, Native, "HDC", "Windows.Win32.Graphics.Gdi");
 
         private static bool IsAbiShape(BundleImages bundle, int[] objects, int type, int field, string name,
             string space = "Windows.Win32.Foundation")
