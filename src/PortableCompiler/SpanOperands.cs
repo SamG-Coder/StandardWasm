@@ -24,7 +24,7 @@ namespace PortableCompiler
                 records[call + 3] = spanType;
                 return 1;
             }
-            int lengthCall = -1;
+            int argument = call, lengthCall = -1;
             bool indexed = records[call] == Load || records[call] == Constant;
             if (records[call] == Dup)
             {
@@ -63,8 +63,11 @@ namespace PortableCompiler
                     return 1;
                 }
             }
-            if (!IsDirectMemberCall(records, call)) return 0;
-            if (!field && indexed && lengthCall < 0 &&
+            bool directCall = IsDirectMemberCall(records, call);
+            if (!directCall && !field && indexed && lengthCall < 0 && spanType == SignatureTypes.ReadOnlyByteSpan)
+                call = ByteIndexCall(records, argument, clauses);
+            if (call < 0 || !IsDirectMemberCall(records, call)) return 0;
+            if (directCall && !field && indexed && lengthCall < 0 &&
                 (spanType == SignatureTypes.WritableCharacterSpan || spanType == SignatureTypes.ReadOnlyByteSpan))
             {
                 int span = SpanMetadata.ClassifySpanCall(bundle, image, layout, heaps, owner,
@@ -113,6 +116,24 @@ namespace PortableCompiler
                 records[lengthCall + 3] = spanType;
             }
             return 1;
+        }
+
+        // Track only values above the descriptor. Reads and integer operators
+        // cannot use or replace it, and Next excludes branch and handler entries.
+        private static int ByteIndexCall(int[] records, int first, int[] clauses)
+        {
+            int depth = 0;
+            for (int slot = first; slot >= 0; slot = Next(records, slot, clauses))
+            {
+                int kind = records[slot], operand = records[slot + 1];
+                if (kind == Load || kind == Constant) depth++;
+                else if (kind == Binary && depth >= 2 &&
+                    (operand == 0x6a || operand == 0x6b || operand >= 0x71 && operand <= 0x76))
+                    depth--;
+                else if (kind != LoadIndirect || operand != 0x47 || depth < 1)
+                    return depth == 1 && IsDirectMemberCall(records, slot) ? slot : -1;
+            }
+            return -1;
         }
 
         private static bool ToStringCall(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
