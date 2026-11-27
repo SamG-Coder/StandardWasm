@@ -15,29 +15,43 @@ export const frameworkMissingExitCode = 0x80008096 | 0; // -2147450730 as a sign
 
 export const builtInFrameworks = Object.freeze([{ name: "Microsoft.NETCore.App", version: "10.0.10" }]);
 
+// [major, minor, patch, prerelease]. The prerelease label is kept: hostfxr treats
+// 10.0.10-preview.1 and 10.0.10 as different versions (Codex review of 4f86a51).
 function parseVersion(text) {
-    const parts = String(text).split("-")[0].split(".").map(Number);
-    return parts.length >= 2 && parts.every(Number.isInteger) ? [parts[0], parts[1], parts[2] ?? 0] : null;
+    const [release, ...labels] = String(text).split("-");
+    const parts = release.split(".").map(Number);
+    if (parts.length < 2 || !parts.every(Number.isInteger)) return null;
+    return [parts[0], parts[1], parts[2] ?? 0, labels.join("-")];
 }
 
+// Numeric order, then a release above any prerelease of the same number.
 function compare(a, b) {
     for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i];
-    return 0;
+    if (a[3] === b[3]) return 0;
+    if (!a[3]) return 1;
+    if (!b[3]) return -1;
+    return a[3] < b[3] ? -1 : 1;
 }
+
+const format = version => version.slice(0, 3).join(".") + (version[3] ? "-" + version[3] : "");
 
 // The frameworks runtimeconfig.json requests: runtimeOptions.framework or .frameworks.
 export function requestedFrameworks(config) {
     const options = config?.runtimeOptions ?? {};
     const list = Array.isArray(options.frameworks) ? options.frameworks : options.framework ? [options.framework] : [];
-    return list.map(entry => ({ name: entry.name, version: entry.version, rollForward: options.rollForward ?? entry.rollForward ?? "Minor" }));
+    // A framework entry's own rollForward takes precedence over runtimeOptions.rollForward, as in
+    // hostfxr (Codex review of 4f86a51).
+    return list.map(entry => ({ name: entry.name, version: entry.version, rollForward: entry.rollForward ?? options.rollForward ?? "Minor" }));
 }
 
-// hostfxr's default roll-forward (Minor): the same major version, at least the requested
-// minor and patch; the lowest such minor, then its highest patch. LatestPatch keeps the
-// minor; Major allows a higher major; Disable needs the exact version.
+// hostfxr's roll-forward: Minor (default) keeps the major and takes the lowest fitting minor,
+// then its highest patch; LatestPatch keeps the minor; Major allows a higher major;
+// Disable needs the exact version, prerelease label included. A supplied pack whose
+// version the host cannot state ("unverified") satisfies every policy except Disable.
 function selectVersion(requested, candidates, policy) {
     const want = parseVersion(requested);
     if (!want) return null;
+    if (candidates.includes("unverified") && policy !== "Disable") return "unverified";
     const versions = candidates.map(parseVersion).filter(Boolean).filter(have => compare(have, want) >= 0);
     let fitting;
     if (policy === "Disable") fitting = versions.filter(have => compare(have, want) === 0);
@@ -48,7 +62,25 @@ function selectVersion(requested, candidates, policy) {
     fitting.sort(compare);
     const minor = policy === "LatestMinor" || policy === "LatestMajor" ? fitting[fitting.length - 1] : fitting[0];
     const patches = fitting.filter(have => have[0] === minor[0] && have[1] === minor[1]);
-    return patches[patches.length - 1].join(".");
+    return format(patches[patches.length - 1]);
+}
+
+// The single inventory for preflight and loading: the built-in platform plus the framework
+// assets the caller supplies in selection.framework (the companions the compiler then
+// receives). A marker assembly names the framework they provide. selection.frameworkVersions
+// may state their version ({ "Microsoft.WindowsDesktop.App": "10.0.10" }); otherwise it is
+// unverified.
+const frameworkMarkers = [
+    ["Microsoft.WindowsDesktop.App", "system.windows.forms.dll"],
+    ["Microsoft.NETCore.App", "system.private.corelib.dll"]
+];
+
+export function frameworkInventory(selection) {
+    const inventory = [...builtInFrameworks];
+    const names = new Set((selection.framework ?? []).map(asset => asset.path.replaceAll("\\", "/").split("/").at(-1).toLowerCase()));
+    for (const [name, marker] of frameworkMarkers)
+        if (names.has(marker)) inventory.push({ name, version: selection.frameworkVersions?.[name] ?? "unverified", supplied: true });
+    return inventory;
 }
 
 // { ok: true, frameworks: [{ name, version }] } or { ok: false, missing: { name, version } }.
