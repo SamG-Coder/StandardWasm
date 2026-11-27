@@ -37,7 +37,8 @@ internal static class Program
             OriginalCoreLibPrimitiveAllocation,
             PrimitiveVectorTypeIdentity, PrimitiveVectorAliases, InitializedPrimitiveVectorIdentity,
             ClosedValueIsNotNull, ClosedValueIsNull, ClosedReferenceNullCheck, ClosedBoxNullBranches,
-            NarrowEnumFlags, WideEnumFlags, UnsetEnumFlags, WideEnumSmallConstants
+            NarrowEnumFlags, WideEnumFlags, UnsetEnumFlags, WideEnumSmallConstants,
+            ClosedEnumTypeBranches, ClosedNonEnumPrunesUnsafeBranch
         };
         foreach (var run in cases)
         {
@@ -84,6 +85,25 @@ internal static class Program
         UnsignedWideFlag unsigned = UnsignedWideFlag.High | UnsignedWideFlag.Low;
         return signed.HasFlag(WideFlag.Low) && !signed.HasFlag(WideFlag.Other) &&
             unsigned.HasFlag(UnsignedWideFlag.Low) && !unsigned.HasFlag(UnsignedWideFlag.Other) ? 109 : 0;
+    }
+
+    public static int ClosedEnumTypeBranches() =>
+        EnumBranch<WideFlag>() * 1000 + EnumBranch<NullProbeValue>() * 100 +
+        EnumBranch<int>() * 10 + EnumBranch<string>();
+
+    public static int ClosedNonEnumPrunesUnsafeBranch() =>
+        (int)ReadEnumBits<string>(null!) + (int)ReadEnumBits<IComparable>(null!);
+
+    private static int EnumBranch<T>()
+    {
+        if (typeof(T).IsEnum) return 7;
+        return 3;
+    }
+
+    private static long ReadEnumBits<T>(T value)
+    {
+        if (typeof(T).IsEnum) return unchecked((long)Unsafe.As<T, ulong>(ref value));
+        return 37;
     }
 
     private static bool TestNarrow(NarrowFlag value, NarrowFlag mask) =>

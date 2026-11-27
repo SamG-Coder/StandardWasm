@@ -25,7 +25,7 @@ namespace PortableCompiler
                 if (second >= records.Length) continue;
                 if (records[second] != LoadTypeToken)
                 {
-                    if (FoldValueTypeBranch(bundle, image, layout, heaps, owner, context, methodArguments, objects,
+                    if (FoldTypePropertyBranch(bundle, image, layout, heaps, owner, context, methodArguments, objects,
                         records, clauses, first, leftCall, second)) changed = true;
                     continue;
                 }
@@ -118,12 +118,14 @@ namespace PortableCompiler
                     RuntimeTypeMetadata.IsCoreGetTypeFromHandle(image, heaps, layout, records[slot + 1])
                 : IsStaticMember(records, slot) && RuntimeTypeMetadata.IsGetTypeFromHandle(image, heaps, layout, records[slot + 1]));
 
-        private static bool FoldValueTypeBranch(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
+        private static bool FoldTypePropertyBranch(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
             int context, int[] methodArguments, int[] objects, int[] records, int[] clauses, int first, int handle, int getter)
         {
             int coded = records[first + 1];
-            if ((coded & 3) != 2 || records[getter] != Call && records[getter] != MemberCall ||
-                !RuntimeTypeMetadata.IsValueTypeGetter(image, heaps, layout, records[getter + 1], records[getter] == Call)) return false;
+            if ((coded & 3) != 2 || records[getter] != Call && records[getter] != MemberCall) return false;
+            int property = RuntimeTypeMetadata.ClosedTypeProperty(image, heaps, layout,
+                records[getter + 1], records[getter] == Call);
+            if (property == 0) return false;
             int branch = Next(records, getter);
             if (branch >= records.Length || records[branch] != Conditional ||
                 (records[branch + 3] != 0x45 && records[branch + 3] != 0) ||
@@ -131,14 +133,16 @@ namespace PortableCompiler
                 ValueOperands.Entry(records, branch / Width, clauses)) return false;
             int type = ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps, owner,
                 coded >> 2, context, objects, methodArguments);
-            bool isValue = GenericScalar.IsScalar(type) || ObjectLayouts.IsEnumKey(type) || ObjectLayouts.IsValueType(objects, type);
+            bool isEnum = ObjectLayouts.IsEnumKey(type);
+            bool isValue = GenericScalar.IsScalar(type) || isEnum || ObjectLayouts.IsValueType(objects, type);
             if (!isValue && type != SignatureTypes.String && type != ObjectLayouts.ObjectReference &&
                 (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0])) return false;
 
             records[first] = Nop;
             records[handle] = Nop;
             records[getter] = Nop;
-            bool taken = records[branch + 3] == 0x45 ? !isValue : isValue;
+            bool result = property == RuntimeTypeMetadata.EnumProperty ? isEnum : isValue;
+            bool taken = records[branch + 3] == 0x45 ? !result : result;
             records[branch] = taken ? Branch : Nop;
             records[branch + 3] = 0;
             return true;

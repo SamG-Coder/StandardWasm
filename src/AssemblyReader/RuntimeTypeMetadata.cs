@@ -189,31 +189,35 @@ namespace PeLibrary
             return parameter > 0 && (parameter & 3) == 0 && next[0] == end &&
                 ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, parameter >> 2, "System", "RuntimeTypeHandle");
         }
-        internal static bool IsValueTypeGetter(byte[] image, int[] heaps, int[] layout, int row, bool definition)
+        internal const int ValueTypeProperty = 1, EnumProperty = 2;
+
+        internal static int ClosedTypeProperty(byte[] image, int[] heaps, int[] layout, int row, bool definition)
         {
-            int signature;
+            int signature, name;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
-            if (first < 0) return false;
+            if (first < 0) return 0;
             if (definition)
             {
-                if (row < 1 || row > counts[6] || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return false;
+                if (row < 1 || row > counts[6] || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return 0;
                 int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
-                if (owner < 1 || !ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, owner, "System", "Type") ||
-                    !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "get_IsValueType")) return false;
+                if (owner < 1 || !ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, owner, "System", "Type")) return 0;
+                name = MethodDefinitions.ReadColumn(image, layout, row, 3);
                 signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
             }
             else
             {
                 var member = new int[AssemblyReferences.SymbolWidth];
                 if (AssemblyReferences.ReadMember(image, heaps, layout, row, member) < 0 || member[AssemblyReferences.Depth] != 0 ||
-                    !MatchesAscii(image, heaps, (uint)member[4], "get_IsValueType") ||
                     PlatformTypeReferences.Identify(image, heaps, layout, counts, first, member[AssemblyReferences.Leaf]) != PlatformTypeReferences.Type)
-                    return false;
+                    return 0;
+                name = member[4];
                 signature = member[5];
             }
-            if (signature < 1 || !Fits((uint)signature, 4, (uint)heaps[1])) return false;
-            return U32(image, (uint)(heaps[0] + signature)) == 0x02002003; // instance bool (); length prefix 3
+            if (signature < 1 || !Fits((uint)signature, 4, (uint)heaps[1]) ||
+                U32(image, (uint)(heaps[0] + signature)) != 0x02002003) return 0; // instance bool (); length prefix 3
+            if (MatchesAscii(image, heaps, (uint)name, "get_IsValueType")) return ValueTypeProperty;
+            return MatchesAscii(image, heaps, (uint)name, "get_IsEnum") ? EnumProperty : 0;
         }
     }
 }
