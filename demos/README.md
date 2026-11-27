@@ -144,6 +144,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [150 · Function pointers](stage-150-function-pointers/README.md) | `npm run demo -- stage-150-function-pointers` | `delegate*<...>` through `ldftn` and `calli`: a funcref table slot and `call_indirect` |
 | [151 · Interactive standard input](stage-151-interactive-stdin/README.md) | `npm run demo -- stage-151-interactive-stdin` | an unmodified console publish calling `Console.ReadLine`: stdin in Node, and lines typed into a responsive Edge page |
 | [153 · Missing dependencies](stage-153-missing-dependencies/README.md) | `npm run demo -- stage-153-missing-dependencies` | a referenced DLL absent at run time: methods that need it throw CoreLib's `FileNotFoundException` as on the CLR (opt-in `CompileBundleDeferred`) |
+| [154 · CoreLib resource strings](stage-154-corelib-resource-strings/README.md) | `npm run demo -- stage-154-corelib-resource-strings` | CoreLib `SR` resource strings folded at compile time, so default-message framework exceptions compile and match the x86 CLR |
 
 ## Adding a stage
 
