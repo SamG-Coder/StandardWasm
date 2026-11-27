@@ -247,11 +247,11 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [248 · Class fields with 32-bit enum addresses](stage-248-int32-enum-class-field-projection/README.md) | `npm run demo -- stage-248-int32-enum-class-field-projection` | Compare writable enum field aliases and out parameters with Windows |
 | [249 · Display device capabilities](stage-249-display-device-capabilities/README.md) | `npm run demo -- stage-249-display-device-capabilities` | Compare display capability queries and common device-context lifetime with Windows |
 | [251 · CoreLib string interface tests](stage-251-string-interface-type-tests/README.md) | `npm run demo -- stage-251-string-interface-type-tests` | Compare dynamic string interface membership, reference identity and typed cast failure with Windows |
+| [254 · Virtual long-path lookup](stage-254-virtual-long-paths/README.md) | `npm run demo -- stage-254-virtual-long-paths` | Match Windows UTF-16 path expansion over an explicitly mounted browser filesystem |
 | [258 · Constrained Int32 object equality](stage-258-constrained-int32-equals/README.md) | `npm run demo -- stage-258-constrained-int32-equals` | Compare the original override, exact box identity and null managed locations with Windows |
 | [259 · Zero initialization through managed Int32 locations](stage-259-int32-managed-zero/README.md) | `npm run demo -- stage-259-int32-managed-zero` | Compare zero writes through closed generic local and field aliases with Windows |
-| [263 · Canonical String generic constraints](stage-263-canonical-string-constraints/README.md) | `npm run demo -- stage-263-canonical-string-constraints` | Compare real String interface constraints and closed type identity with Windows |
-| [254 · Virtual long-path lookup](stage-254-virtual-long-paths/README.md) | `npm run demo -- stage-254-virtual-long-paths` | Match Windows UTF-16 path expansion over an explicitly mounted browser filesystem |
 | [261 · Hidden window invalidation](stage-261-hidden-window-invalidation/README.md) | `npm run demo -- stage-261-hidden-window-invalidation` | Match Windows client invalidation and paint timing for hidden top-level HWNDs |
+| [263 · Canonical String generic constraints](stage-263-canonical-string-constraints/README.md) | `npm run demo -- stage-263-canonical-string-constraints` | Compare real String interface constraints and closed type identity with Windows |
 
 ## Adding a stage
 
