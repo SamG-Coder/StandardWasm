@@ -57,13 +57,15 @@ namespace PeLibrary
 
         internal const int GenericKind = 1, GenericDefinition = 2, GenericArguments = 3, EnumKind = 4, ValueKind = 5;
 
+        internal static bool IsValueKindCandidate(int flags) => (flags & 0x2857) == 0x0806;
+
         internal static int CoreTypeDescriptorOperation(byte[] image, int[] heaps, int[] layout, int row)
         {
             int flags = MethodDefinitions.ReadColumn(image, layout, row, 2);
             int access = flags & 0x2057;
             uint name = (uint)MethodDefinitions.ReadColumn(image, layout, row, 3);
             int operation;
-            if (access == 6 && (flags & 0x0800) != 0 && MatchesAscii(image, heaps, name, "get_IsValueType"))
+            if (IsValueKindCandidate(flags) && MatchesAscii(image, heaps, name, "get_IsValueType"))
                 operation = ValueKind;
             else if (access != 0x0046) return 0;
             else if ((flags & 0x0800) != 0)

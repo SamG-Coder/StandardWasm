@@ -138,7 +138,7 @@ namespace PortableCompiler
                 if (symbol.Length > 6 && !isStatic && !constructor) symbol[6] = declaring;
                 if (symbol.Length > 7 && opcode == 0x28 && !valueAddress && closed == 0 && !constructor)
                     symbol[7] = PrimitiveReceivers.DirectInt32(target, targetLayout, targetHeaps, declaring, candidate);
-                if (allowVirtual) symbol[4] = flags & 0x60; // Virtual and Final
+                if (allowVirtual) symbol[4] = flags; // Declaration attributes for deferred call binding.
                 if (family && !constructor) symbol[5] = callerReceiver;
             }
             if (row == 0) return -6;

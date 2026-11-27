@@ -3088,8 +3088,7 @@ namespace PortableCompiler
                         bool finalClosedMethod = targetContext > 0 && (symbol[4] & 0x20) != 0;
                         bool deferred = opcode == 0x6f && virtualMethod && !finalClosedMethod;
                         bool valueKindCandidate = !addressed && (opcode == 0x28 || opcode == 0x6f) &&
-                            RuntimeTypeMetadata.ClosedTypeProperty(image, heaps, layout, member, false) ==
-                                RuntimeTypeMetadata.ValueTypeProperty;
+                            RuntimeTypeMetadata.IsValueKindCandidate(symbol[4]);
                         if (deferred || valueKindCandidate || linked < 0)
                         {
                             byte[] targetImage = bundle.Get(targetOwner);
@@ -3302,7 +3301,7 @@ namespace PortableCompiler
                 bool virtualMethodLocal = (targetFlags & 0x40) != 0;
                 if (virtualMethodLocal && kind == BranchIl.LoadFunction) return -2;
                 if (kind == BranchIl.Call && (virtualMethodLocal && records[slot + 3] != 0 ||
-                    (targetFlags & 0x2857) == 0x0806 &&
+                    RuntimeTypeMetadata.IsValueKindCandidate(targetFlags) &&
                     RuntimeTypeMetadata.CoreTypeDescriptorOperation(image, heaps, layout, target) == RuntimeTypeMetadata.ValueKind))
                 {
                     int staged = StageVirtualCall(bundle, image, layout, heaps, owner, target,
