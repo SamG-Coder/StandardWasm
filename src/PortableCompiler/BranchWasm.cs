@@ -845,6 +845,9 @@ namespace PortableCompiler
                     }
                     else if (type == PeLibrary.RuntimeTypeMetadata.Assembly)
                         used = RuntimeReflectionWasm.TestAssembly(code, used, frameShape[7], sourceLocal, targetLocal, reflection);
+                    else if (type == PeLibrary.RuntimeTypeMetadata.Type)
+                        used = RuntimeTypeWasm.Cast(code, used, frameShape[7], sourceLocal, targetLocal,
+                            source == PeLibrary.RuntimeTypeMetadata.Type || source == NullValue, kind == CastClass, reflection);
                     else if (shape == ReferenceCastWasm.CheckedInterface)
                         used = ReferenceCastWasm.EmitInterface(code, used, sourceLocal, targetLocal, type,
                             kind == CastClass, frameShape[7], reflection.InterfaceTests);

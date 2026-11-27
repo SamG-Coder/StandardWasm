@@ -12,7 +12,7 @@ namespace PortableCompiler
 
         internal bool Require(BundleImages bundle, int owner, int row, int argument, int type, int[] objects)
         {
-            if (type < ObjectLayouts.FirstClass || !RuntimeTypeLocals.IsLinkedSystemType(bundle, objects, type))
+            if (type < ObjectLayouts.FirstClass || !RuntimeTypeLocals.IsLinkedSystemType(bundle, objects, type, includeRuntimeType: true))
                 return false;
             byte[] image = bundle.Get(owner);
             var layout = new int[4];

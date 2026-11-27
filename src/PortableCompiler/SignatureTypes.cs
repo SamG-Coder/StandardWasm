@@ -18,6 +18,7 @@ namespace PortableCompiler
         internal const int EventHandlerLocation = 0x8c, Int16Location = 0x8d, NativeIntLocation = 0x8e, ReadOnlyCharacterLocation = 0x8f;
         internal const int ReadOnlyInt32Span = 0x90, Int64Location = 0x91;
         internal const int WritableByteSpan = 0x92, WritableByteLocation = 0x93;
+        internal const int RuntimeTypeLocation = 0x94;
         // Reference locations retain their nominal element type in the verifier,
         // even when their Wasm representation is the shared object cell.
         private const int ReferenceLocationBase = 32768;
@@ -34,12 +35,13 @@ namespace PortableCompiler
             IsPacked16Location(type) || type == ReadOnlyCharacterLocation;
 
         internal static bool IsReferenceLocation(int type) =>
-            type == ObjectLocation || type == StringLocation || type == EventHandlerLocation ||
+            type == ObjectLocation || type == StringLocation || type == EventHandlerLocation || type == RuntimeTypeLocation ||
             type >= ReferenceLocationBase + ObjectLayouts.FirstClass &&
             type < ReferenceLocationBase + ObjectLayouts.FirstClass + ObjectLayouts.MaxClasses;
 
         internal static int LocationFromIdentity(int[] objects, int type) =>
             type == ObjectLayouts.ObjectReference ? ObjectLocation : type == String ? StringLocation :
+            type == RuntimeTypeMetadata.Type ? RuntimeTypeLocation :
             type == ObjectLayouts.EventHandlerReference ? EventHandlerLocation :
             type == GenericScalar.Key(3) ? CharacterLocation : type == GenericScalar.Key(2) ? BooleanLocation :
             type == GenericScalar.Key(6) ? Int16Location :
@@ -54,6 +56,7 @@ namespace PortableCompiler
             location == BooleanLocation || location == Int32Location ? I32 : location == Int64Location ? I64 :
             location == NativeIntLocation ? Native : location == StringLocation ? String :
             location == ObjectLocation ? ObjectLayouts.ObjectReference :
+            location == RuntimeTypeLocation ? RuntimeTypeMetadata.Type :
             location == EventHandlerLocation ? ObjectLayouts.EventHandlerReference : location - ReferenceLocationBase;
 
         internal static bool IsSpan(int type) => type == ObjectSpan || type == CharacterSpan || type == WritableCharacterSpan ||

@@ -23,6 +23,7 @@ namespace PortableCompiler
         internal readonly RuntimeGenericArguments GenericArguments = new RuntimeGenericArguments();
         internal readonly RuntimeGenericDefinitions GenericDefinitions = new RuntimeGenericDefinitions();
         internal readonly int[] HeapFixups = new int[1];
+        internal readonly int[] RuntimeTypeCastFixups = new int[1];
         internal readonly RuntimeGenericTypes GenericTypes = new RuntimeGenericTypes();
         internal readonly RuntimeTypeRelations TypeRelations = new RuntimeTypeRelations();
         internal readonly AssemblyTypeLookup AssemblyTypes = new AssemblyTypeLookup();

@@ -1656,6 +1656,21 @@ namespace PortableCompiler
             if (length < 0) return length;
             length = reflection.NeutralResources.Write(moduleCode, length, bodyOffsets, sizes, hostImports, reflection);
             if (length < 0) return length;
+            if (reflection.RuntimeTypeCastFixups[0] != 0)
+            {
+                int offset = NextSignature(offsets, arities, functions);
+                if (functions >= owners.Length || offset + 1 >= signatures.Length) return -3;
+                signatures[offset] = RuntimeTypeMetadata.Type;
+                signatures[offset + 1] = ObjectReference;
+                arities[functions] = 1;
+                offsets[functions] = offset;
+                bodyOffsets[functions] = length;
+                length = RuntimeTypeWasm.WriteCastHelper(moduleCode, length, globals);
+                if (length < 0) return length;
+                WasmIndexFixups.Resolve(moduleCode, reflection.RuntimeTypeCastFixups[0], hostImports + functions);
+                sizes[functions] = length - bodyOffsets[functions];
+                functions++;
+            }
             var projectionHelpers = new int[ValueFieldProjectionWasm.HelperCount];
             for (int helper = 0; helper < projectionHelpers.Length; helper++)
             {
@@ -1932,6 +1947,12 @@ namespace PortableCompiler
                         records[slot + 1] = RuntimeTypeMetadata.Assembly;
                         continue;
                     }
+                }
+                if ((kind == BranchIl.CastClass || kind == BranchIl.TestClass) &&
+                    RuntimeTypeMetadata.IsRuntimeTypeDefinition(image, heaps, layout, records[slot + 1]))
+                {
+                    records[slot + 1] = RuntimeTypeMetadata.Type;
+                    continue;
                 }
                 if (kind == BranchIl.BoxValue || kind == BranchIl.UnboxValue || kind == BranchIl.UnboxAggregateAddress || kind == BranchIl.TestClass)
                 {

@@ -321,6 +321,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [348 · Scalar bit reinterpretation](stage-348-scalar-bitcasts/README.md) | `npm run demo -- stage-348-scalar-bitcasts` | Preserve bits across genuine equal-width CoreLib integer and float bit casts |
 | [349 - CoreLib runtime type comparisons](stage-349-core-type-comparison/README.md) | `npm run demo -- stage-349-core-type-comparison` | Compare canonical runtime type descriptors at direct CoreLib operator calls |
 | [350 - Default equality comparer activation](stage-350-default-equality-comparers/README.md) | `npm run demo -- stage-350-default-equality-comparers` | Pin the CoreCLR generic activation checkpoint with six CLR comparer cases |
+| [351 - Canonical RuntimeType casts](stage-351-runtime-type-casts/README.md) | `npm run demo -- stage-351-runtime-type-casts` | Preserve identity, null and typed failures for casts to CoreLib RuntimeType |
 
 ## Adding a stage
 

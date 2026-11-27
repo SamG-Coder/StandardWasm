@@ -43,7 +43,7 @@ namespace PortableCompiler
             for (int local = 0; local < locals; local++)
             {
                 int slot = local + parameters;
-                if (writes[local] == 1 && IsLinkedSystemType(bundle, objects, frame[slot]))
+                if (writes[local] == 1 && IsLinkedSystemType(bundle, objects, frame[slot], includeRuntimeType: true))
                     frame[slot] = RuntimeTypeMetadata.Type;
             }
         }
@@ -62,12 +62,13 @@ namespace PortableCompiler
             }
             int kind = records[slot];
             return kind == TypeFromHandle || kind == GetObjectType ||
+                (kind == CastClass || kind == TestClass) && records[slot + 1] == RuntimeTypeMetadata.Type ||
                 kind == VirtualCall && virtualTypes[records[slot + 1]] == RuntimeTypeMetadata.Type ||
                 kind == Call && signatures[offsets[records[slot + 1]]] == RuntimeTypeMetadata.Type ||
                 readsDefinition && kind == Load && frame[records[slot + 1]] == RuntimeTypeMetadata.Type;
         }
 
-        internal static bool IsLinkedSystemType(BundleImages bundle, int[] objects, int type)
+        internal static bool IsLinkedSystemType(BundleImages bundle, int[] objects, int type, bool includeRuntimeType = false)
         {
             if (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0]) return false;
             int owner = ObjectLayouts.AssemblyOf(objects, type);
@@ -78,8 +79,10 @@ namespace PortableCompiler
             var counts = new int[45];
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return false;
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            int row = ObjectLayouts.TypeDef(objects, type);
             return first >= 0 && PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts) &&
-                ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, ObjectLayouts.TypeDef(objects, type), "System", "Type");
+                (ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row, "System", "Type") ||
+                    includeRuntimeType && ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row, "System", "RuntimeType"));
         }
     }
 }

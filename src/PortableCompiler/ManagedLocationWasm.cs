@@ -49,7 +49,8 @@ namespace PortableCompiler
 
         internal static int CastCellValue(byte[] code, int used, int representation)
         {
-            if (representation == PeLibrary.ObjectLayouts.ObjectReference) return used;
+            if (representation == PeLibrary.ObjectLayouts.ObjectReference || PeLibrary.RuntimeTypeMetadata.IsStorage(representation))
+                return used;
             code[used++] = 0xfb;
             code[used++] = 0x17; // Restore the typed reference from eqref.
             return WasmBinary.Signed(code, used, WasmBinary.HeapType(representation));
