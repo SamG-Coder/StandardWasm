@@ -145,12 +145,13 @@ namespace PortableCompiler
                 }
                 else if (kind == ReadReflection)
                 {
+                    bool typeText = PeLibrary.ReflectionMembers.IsTypeText(operand);
                     int receiver = operand == PeLibrary.ReflectionMembers.TypeModule ||
                         operand == PeLibrary.ReflectionMembers.TypeAssembly ||
-                        operand == PeLibrary.ReflectionMembers.TypeName ? PeLibrary.RuntimeTypeMetadata.Type : PeLibrary.RuntimeTypeMetadata.Module;
+                        typeText ? PeLibrary.RuntimeTypeMetadata.Type : PeLibrary.RuntimeTypeMetadata.Module;
                     int resultType = operand == PeLibrary.ReflectionMembers.TypeModule ? PeLibrary.RuntimeTypeMetadata.Module :
                         operand == PeLibrary.ReflectionMembers.ModuleName ||
-                        operand == PeLibrary.ReflectionMembers.TypeName ? String : PeLibrary.RuntimeTypeMetadata.Assembly;
+                        typeText ? String : PeLibrary.RuntimeTypeMetadata.Assembly;
                     if (depth == 0 || !Assignable(stack[depth - 1], receiver, objects)) return -2;
                     next = Push(stack, allocated, depth - 1, resultType);
                 }

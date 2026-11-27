@@ -12,6 +12,7 @@ namespace PortableCompiler
 
         internal readonly int[] TypeNameFixups = new int[1];
         internal readonly int[] TypeSimpleNameFixups = new int[1];
+        internal readonly int[] TypeNamespaceFixups = new int[1];
         internal readonly int[] HeapFixups = new int[1];
         internal readonly RuntimeObjectTypes ObjectTypes = new RuntimeObjectTypes();
         internal readonly RuntimeInterfaceTests InterfaceTests = new RuntimeInterfaceTests();
@@ -19,6 +20,9 @@ namespace PortableCompiler
         internal int[] Slots { get; private set; }
         internal int ResourceOwner { get; private set; } = -1;
         internal int ResourceOpen { get; private set; }
+
+        internal int[] TypeTextFixups(int form) => form == RuntimeTypeNames.Display ? TypeNameFixups :
+            form == RuntimeTypeNames.Simple ? TypeSimpleNameFixups : TypeNamespaceFixups;
 
         internal int BindResource(BundleImages bundle)
         {

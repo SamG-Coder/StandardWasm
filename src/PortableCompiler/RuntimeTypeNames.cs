@@ -7,10 +7,11 @@ namespace PortableCompiler
     // from linked metadata and cache the formatted String for each descriptor.
     internal static class RuntimeTypeNames
     {
+        internal const int Display = 0, Simple = 1, Namespace = 2;
         private const int CacheOwner = int.MaxValue - 1;
 
         internal static int Write(BundleImages bundle, byte[] code, int used, int[] objects,
-            int[] globals, byte[] literals, int[] literalSize, bool simple)
+            int[] globals, byte[] literals, int[] literalSize, int form)
         {
             if (code.Length - used < 3) return -3;
             code[used++] = 0; // no locals besides the descriptor parameter
@@ -18,19 +19,29 @@ namespace PortableCompiler
             for (int index = 0; index < descriptors; index++)
             {
                 int owner = StaticFields.Owner(globals, index);
-                if (!RuntimeTypeTokens.IsDescriptorOwner(owner) || StaticFields.Row(globals, index) < 0) continue;
+                int row = StaticFields.Row(globals, index);
+                if (!RuntimeTypeTokens.IsDescriptorOwner(owner) || row < 0) continue;
                 int start = literalSize[0];
-                int end = AppendIdentity(bundle, objects, RuntimeTypeTokens.ModuleSlot(owner) - 1,
-                    StaticFields.Row(globals, index), literals, start, 0, simple);
+                int module = RuntimeTypeTokens.ModuleSlot(owner) - 1;
+                int end = form == Namespace ? AppendNamespace(bundle, objects, module, row, literals, start, 0) :
+                    AppendIdentity(bundle, objects, module, row, literals, start, 0, form == Simple);
                 if (end < 0) return end;
-                int cache = StaticFields.Register(globals, CacheOwner, index, SignatureTypes.String, simple ? 1 : 0);
-                if (cache < 0) return cache;
                 if (code.Length - used < 76) return -3;
                 used = Local(code, used, 0x20, 0);
                 used = Global(code, used, 0x23, index);
                 code[used++] = 0xd3; // ref.eq with the canonical descriptor
                 code[used++] = 0x04;
                 code[used++] = 0x40;
+                if (form == Namespace && end == start)
+                {
+                    code[used++] = 0xd0; // ref.null
+                    code[used++] = NullSpillWasm.NullRef;
+                    code[used++] = 0x0f;
+                    code[used++] = 0x0b;
+                    continue;
+                }
+                int cache = StaticFields.Register(globals, CacheOwner, index, SignatureTypes.String, form);
+                if (cache < 0) return cache;
                 used = Global(code, used, 0x23, cache);
                 code[used++] = 0xd1; // ref.is_null
                 code[used++] = 0x04;
@@ -58,6 +69,30 @@ namespace PortableCompiler
         {
             code[used++] = op;
             return WasmBinary.Unsigned(code, used, slot);
+        }
+
+        private static int AppendNamespace(BundleImages bundle, int[] objects, int owner, int row,
+            byte[] data, int used, int depth)
+        {
+            if (depth >= ObjectLayouts.MaxTypeDepth) return -2;
+            if (row >= RuntimeTypeTokens.PrimitiveVectorKey || owner == AssemblyBundle.ObjectOwner && row == 0)
+                return Text(data, used, "System");
+            if (row >= RuntimeTypeTokens.ClosedTypeKey)
+            {
+                int type = row - RuntimeTypeTokens.ClosedTypeKey;
+                int element = ObjectLayouts.ArrayElementKey(objects, type);
+                if (element != 0)
+                {
+                    if (GenericScalar.IsScalar(element) || element == SignatureTypes.String)
+                        return Text(data, used, "System");
+                    var identity = new int[2];
+                    int status = RuntimeTypeTokens.ReadClosedIdentity(bundle, objects, element, identity);
+                    return status < 0 ? status :
+                        AppendNamespace(bundle, objects, identity[0], identity[1], data, used, depth + 1);
+                }
+                row = ObjectLayouts.TypeDef(objects, type);
+            }
+            return AppendDefinition(bundle, owner, row, data, used, false, false, true);
         }
 
         private static int AppendIdentity(BundleImages bundle, int[] objects, int owner, int row,
@@ -104,7 +139,8 @@ namespace PortableCompiler
             return status < 0 ? status : AppendIdentity(bundle, objects, identity[0], identity[1], data, used, depth, simple);
         }
 
-        private static int AppendDefinition(BundleImages bundle, int owner, int row, byte[] data, int used, bool open, bool simple)
+        private static int AppendDefinition(BundleImages bundle, int owner, int row, byte[] data, int used, bool open, bool simple,
+            bool namespaceOnly = false)
         {
             if (used < 0) return used;
             if (owner < 0 || owner >= bundle.Count) return -2;
@@ -114,6 +150,24 @@ namespace PortableCompiler
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0 || row < 2 || row > counts[2]) return -1;
+            if (namespaceOnly)
+            {
+                // CLR namespace comes from the outer TypeDef, even if an
+                // inner TypeDef has its own encoded namespace.
+                for (int depth = 0; depth < ObjectLayouts.MaxTypeDepth; depth++)
+                {
+                    int parent = NestedTypes.Enclosing(image, heaps, layout, counts, row);
+                    if (parent < 0) return parent;
+                    if (parent == 0)
+                    {
+                        var names = new int[2];
+                        if (ObjectLayouts.TypeDefinitionNames(image, heaps, layout, row, names) < 0) return -1;
+                        return Metadata(image, heaps, names[1], data, used, false);
+                    }
+                    row = parent;
+                }
+                return -2;
+            }
             if (simple)
             {
                 var names = new int[2];
@@ -152,7 +206,7 @@ namespace PortableCompiler
             return Metadata(image, heaps, names[0], data, used);
         }
 
-        private static int Metadata(byte[] image, int[] heaps, int index, byte[] data, int used)
+        private static int Metadata(byte[] image, int[] heaps, int index, byte[] data, int used, bool escape = true)
         {
             if (used < 0) return used;
             if (index < 0 || index >= heaps[3]) return -1;
@@ -165,8 +219,8 @@ namespace PortableCompiler
                 int scalar = Utf8Scalars.Read(image, cursor, end, next);
                 if (scalar < 0) return scalar;
                 cursor = next[0];
-                if (scalar == '\\' || scalar == '+' || scalar == ',' || scalar == '[' ||
-                    scalar == ']' || scalar == '&' || scalar == '*') used = Put(data, used, '\\');
+                if (escape && (scalar == '\\' || scalar == '+' || scalar == ',' || scalar == '[' ||
+                    scalar == ']' || scalar == '&' || scalar == '*')) used = Put(data, used, '\\');
                 if (scalar <= 0xffff) used = Put(data, used, scalar);
                 else
                 {

@@ -1110,7 +1110,7 @@ namespace PortableCompiler
                                 if (fields > (int.MaxValue - capacity) / 16) return -3;
                                 capacity += fields * 16;
                             }
-                            if (kind == BranchIl.ReadReflection && operation != ReflectionMembers.TypeName)
+                            if (kind == BranchIl.ReadReflection && !ReflectionMembers.IsTypeText(operation))
                             {
                                 int bytes = reflection.BodyCapacity(int.MaxValue - capacity);
                                 if (bytes < 0) return bytes;
@@ -1301,9 +1301,9 @@ namespace PortableCompiler
                 sizes[functions] = length - bodyOffsets[functions];
                 functions++;
             }
-            for (int nameForm = 0; nameForm < 2; nameForm++)
+            for (int nameForm = RuntimeTypeNames.Display; nameForm <= RuntimeTypeNames.Namespace; nameForm++)
             {
-                int[] fixups = nameForm == 0 ? reflection.TypeNameFixups : reflection.TypeSimpleNameFixups;
+                int[] fixups = reflection.TypeTextFixups(nameForm);
                 if (fixups[0] == 0) continue;
                 if (functions >= owners.Length) return -3;
                 int offset = NextSignature(offsets, arities, functions);
@@ -1313,7 +1313,7 @@ namespace PortableCompiler
                 arities[functions] = 1;
                 offsets[functions] = offset;
                 bodyOffsets[functions] = length;
-                length = RuntimeTypeNames.Write(bundle, moduleCode, length, objects, globals, literals, literalSize, nameForm != 0);
+                length = RuntimeTypeNames.Write(bundle, moduleCode, length, objects, globals, literals, literalSize, nameForm);
                 if (length < 0) return length;
                 WasmIndexFixups.Resolve(moduleCode, fixups[0], hostImports + functions);
                 sizes[functions] = length - bodyOffsets[functions];
@@ -2458,7 +2458,7 @@ namespace PortableCompiler
                     }
                     if (reflectionMember != 0)
                     {
-                        if (reflectionMember != ReflectionMembers.TypeName)
+                        if (!ReflectionMembers.IsTypeText(reflectionMember))
                         {
                             int status = reflection.Bind(bundle, globals, literals, literalSize);
                             if (status < 0) return status;
@@ -2718,6 +2718,13 @@ namespace PortableCompiler
                         if (status < 0) return status;
                         records[slot] = BranchIl.ReadReflection;
                         records[slot + 1] = ReflectionMembers.TypeAssembly;
+                        continue;
+                    }
+                    int coreTypeText = records[slot + 3] != 0 ? ReflectionMembers.CoreTypeTextGetter(image, heaps, layout, target) : 0;
+                    if (coreTypeText != 0)
+                    {
+                        records[slot] = BranchIl.ReadReflection;
+                        records[slot + 1] = coreTypeText;
                         continue;
                     }
                     int accessor = StringMetadata.AccessorDefinition(image, heaps, layout, target);

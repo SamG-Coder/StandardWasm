@@ -5,26 +5,51 @@ namespace PeLibrary
 {
     internal static class ReflectionMembers
     {
-        internal const int TypeModule = 1, TypeAssembly = 2, ModuleAssembly = 3, ModuleName = 4, ResourceStream = 5, ExecutingAssembly = 6, TypeName = 7;
+        internal const int TypeModule = 1, TypeAssembly = 2, ModuleAssembly = 3, ModuleName = 4,
+            ResourceStream = 5, ExecutingAssembly = 6, TypeName = 7, TypeNamespace = 8;
+
+        internal static bool IsTypeText(int member) => member == TypeName || member == TypeNamespace;
 
         internal static bool IsCoreTypeAssemblyGetter(byte[] image, int[] heaps, int[] layout, int row)
         {
-            if (!MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "get_Assembly") ||
-                (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x450) != 0x440) return false;
-
+            if (!IsAbstractGetter(image, heaps, layout, row, "get_Assembly")) return false;
             var counts = new int[45];
-            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
-            if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return false;
-            int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
-            if (owner < 1 || !ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, owner, "System", "Type"))
-                return false;
-
+            int first = CoreGetter(image, heaps, layout, row, counts, "System", "Type");
+            if (first < 0) return false;
             var cursor = new int[1];
             int end = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), 0, cursor);
             if (end < 0 || !SignatureReader.TakeElement(image, cursor, end, 0x12)) return false;
             int result = CompressedUnsigned(image, cursor[0], end, cursor);
             return result > 0 && (result & 3) == 0 && cursor[0] == end &&
                 ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, result >> 2, "System.Reflection", "Assembly");
+        }
+
+        internal static int CoreTypeTextGetter(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x450) != 0x440) return 0;
+            uint name = (uint)MethodDefinitions.ReadColumn(image, layout, row, 3);
+            int kind = MatchesAscii(image, heaps, name, "get_Namespace") ? TypeNamespace :
+                MatchesAscii(image, heaps, name, "get_Name") ? TypeName : 0;
+            if (kind == 0) return 0;
+            var counts = new int[45];
+            bool simpleName = kind == TypeName;
+            if (CoreGetter(image, heaps, layout, row, counts, simpleName ? "System.Reflection" : "System",
+                simpleName ? "MemberInfo" : "Type") < 0) return 0;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), 0, cursor);
+            return end >= 0 && SignatureReader.TakeElement(image, cursor, end, 0x0e) && cursor[0] == end ? kind : 0;
+        }
+
+        private static bool IsAbstractGetter(byte[] image, int[] heaps, int[] layout, int row, string name) =>
+            (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x450) == 0x440 &&
+            MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), name);
+
+        private static int CoreGetter(byte[] image, int[] heaps, int[] layout, int row, int[] counts, string space, string type)
+        {
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return -1;
+            int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+            return owner >= 1 && ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, owner, space, type) ? first : -1;
         }
 
         internal static int Identify(byte[] image, int[] heaps, int[] layout, int row, bool staticCall)
@@ -68,6 +93,11 @@ namespace PeLibrary
             else if (typeName)
             {
                 kind = TypeName;
+                result = String;
+            }
+            else if (owner == Type && MatchesAscii(image, heaps, name, "get_Namespace"))
+            {
+                kind = TypeNamespace;
                 result = String;
             }
             else if (owner == Module && Named(image, heap, length, name, 8, 0x5f746567, 0x656d614e, 0)) // get_Name
