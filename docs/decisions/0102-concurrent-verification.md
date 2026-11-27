@@ -11,7 +11,7 @@ Status: proposed (#316).
 - **Fallthrough.** When a state's constant successor is the next emitted state, the `br` is omitted and control falls into the next test. `pcLocal` is still written, so exception dispatch reads the same state as before.
 - **Groups.** A body with more than 32 states puts consecutive states into blocks of about √n. Each block starts with `br_if 0 (pc >= first pc of the next group)`, so a branch back to the loop skips a whole group with one comparison. The branch to the loop leaves one extra block. A pc that matches no state still reaches the trailing `unreachable`.
 
-Semantics are unchanged. Every generated module's bytes change, and the compiler module grows by about 3%. The evidence is the existing suite: C = G1 = G2 = G3 byte for byte, all CLR comparisons in Node and Edge, and every generated-code case.
+Semantics are unchanged. Every generated module's bytes change. The compiler module shrinks from 2,026,278 to 1,950,182 bytes, because dropped branches outweigh the group headers. The evidence is the existing suite: C = G1 = G2 = G3 byte for byte, all CLR comparisons in Node and Edge, and every generated-code case.
 
 ## 2. Concurrent jobs (harness)
 
