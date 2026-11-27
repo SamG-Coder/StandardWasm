@@ -232,7 +232,7 @@ namespace PortableCompiler
                 exports[export] = index;
             }
             var body = new int[6];
-            var frameShape = new int[22];
+            var frameShape = new int[22 + TypeInitializerWasm.FailureWidth + 1];
             var shadowStack = new int[3]; // $sp, base, limit globals + 1
             var pinRegistry = new int[1]; // the live-pin count global + 1 (decision 0077)
             // Each emitted global needs at least five bytes in the destination.
@@ -497,6 +497,25 @@ namespace PortableCompiler
                     capacity += narrowParameters * 16;
                     if (initializerGuard >= 0 || initializerPrologue >= 0)
                         capacity += TypeInitializerWasm.Capacity;
+                    // Issue #170: an initializer body wraps an escaping managed exception in CoreLib's
+                    // TypeInitializationException when the bundle supplies it.
+                    var failure = new int[TypeInitializerWasm.FailureWidth];
+                    bool wrapsFailure = false;
+                    if (initializerGuard >= 0)
+                    {
+                        functions = BindInitializerFailure(bundle, image, heaps, layout, owner, source, owners, rows, contexts,
+                            bases, indices, arities, offsets, signatures, objects, functions, globals, literals, literalSize, failure);
+                        if (functions < 0) return functions;
+                        wrapsFailure = failure[TypeInitializerWasm.FailureCache] != 0;
+                        if (wrapsFailure)
+                        {
+                            failure[TypeInitializerWasm.FailureCache]--; // stored as index + 1
+                            failure[TypeInitializerWasm.FailureConstructor] += hostImports;
+                            exceptionTags |= ExceptionTypes.Object;
+                            if (capacity > int.MaxValue - 192) return -3;
+                            capacity += 192;
+                        }
+                    }
                     if (resourceOpen)
                     {
                         if (capacity > int.MaxValue - 320) return -3;
@@ -677,6 +696,8 @@ namespace PortableCompiler
                     frameShape[20] = pins ? pinRegistry[0] : 0;
                     // Stage 151 (decision 0079): readLine's function index + 1, when the body reads a line.
                     frameShape[21] = readsLine ? WasmImports.InputFunction(hostFeatures) + 1 : 0;
+                    frameShape[22] = wrapsFailure ? 1 : 0;
+                    for (int i = 0; i < TypeInitializerWasm.FailureWidth; i++) frameShape[23 + i] = failure[i];
                     frameShape[19] = resourceOpen ? ((hostFeatures & WasmImports.Console) != 0 ? ConsoleWasm.ImportCount + 1 : 1) : 0;
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
@@ -1586,6 +1607,53 @@ namespace PortableCompiler
             int at = next[0];
             return size == 5 && image[at] == 0x20 && image[at + 1] == 2 && image[at + 2] == 1 &&
                 image[at + 3] == 0x1c && image[at + 4] == 0x18;
+        }
+
+        // Issue #170: binds CoreLib's internal TypeInitializationException(string, string, Exception)
+        // for the initializer `source`, writes its type-name and message literals, and registers the
+        // global that records the failure. failure[FailureCache] stays 0 (no wrapping, the trap
+        // remains) when the bundle has no such constructor or the name cannot be written exactly.
+        private static int BindInitializerFailure(BundleImages bundle, byte[] image, int[] heaps, int[] layout, int owner,
+            int source, int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets,
+            int[] signatures, int[] objects, int functions, int[] globals, byte[] literals, int[] literalSize, int[] failure)
+        {
+            var found = new int[2];
+            if (InitializerFailures.FindConstructor(bundle, found) < 0 || found[0] < 0) return functions;
+            int typeRow = ObjectLayouts.Owner(image, heaps, layout, source, false);
+            if (typeRow < 1) return functions;
+            int nameStart = literalSize[0];
+            int nameLength = InitializerFailures.WriteFullName(image, heaps, layout, typeRow, literals, nameStart);
+            if (nameLength <= 0) return functions;
+            int messageStart = nameStart + 2 * nameLength;
+            int messageLength = InitializerFailures.WriteMessage(literals, messageStart, nameStart, nameLength);
+            if (messageLength <= 0) return functions;
+            byte[] coreLib = bundle.Get(found[0]);
+            var coreLayout = new int[4];
+            var coreHeaps = new int[8];
+            if (CompressedTables.FindWithHeaps(coreLib, coreLayout, coreHeaps) < 0) return -1;
+            int constructor = indices[bases[found[0]] + found[1]] - 1;
+            if (constructor < 0)
+            {
+                functions = Register(bundle, coreLib, coreLayout, coreHeaps, found[0], found[1], 0, owners, rows, contexts,
+                    bases, indices, arities, offsets, signatures, objects, functions);
+                if (functions < 0) return functions;
+                constructor = functions - 1;
+            }
+            int shape = offsets[constructor];
+            if (arities[constructor] != 4) return functions;
+            int exceptionType = signatures[shape + 4];
+            int cache = StaticFields.Register(globals, int.MinValue + 200 + owner, source, ObjectReference);
+            if (cache < 0) return cache;
+            literalSize[0] = messageStart + 2 * messageLength;
+            failure[TypeInitializerWasm.FailureConstructor] = constructor;
+            failure[TypeInitializerWasm.FailureClass] = signatures[shape + 1];
+            failure[TypeInitializerWasm.FailureNameStart] = nameStart;
+            failure[TypeInitializerWasm.FailureNameLength] = nameLength;
+            failure[TypeInitializerWasm.FailureMessageStart] = messageStart;
+            failure[TypeInitializerWasm.FailureMessageLength] = messageLength;
+            failure[TypeInitializerWasm.FailureExceptionClass] = exceptionType;
+            failure[TypeInitializerWasm.FailureCache] = cache + 1;
+            return functions;
         }
 
         // Decision 0078: link each calli to the carrier for its StandAloneSig. Only the

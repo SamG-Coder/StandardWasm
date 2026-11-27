@@ -24,7 +24,13 @@ namespace PortableCompiler
 
         // Emitted before the body's dispatch loop. `scratch` is the pc local, which
         // is reset to the entry offset afterwards. Leaves `block; try_table` open.
-        internal static int Begin(byte[] code, int used, int guard, int epoch, int active, int scratch)
+        // Issue #170: when the bundle supplies CoreLib's TypeInitializationException, `failure`
+        // describes it (indices below; null keeps the trap). Function and heap indices are final.
+        internal const int FailureConstructor = 0, FailureClass = 1, FailureNameStart = 2, FailureNameLength = 3,
+            FailureMessageStart = 4, FailureMessageLength = 5, FailureCache = 6, FailureExceptionClass = 7,
+            FailureInner = 8, FailureWidth = 9;
+
+        internal static int Begin(byte[] code, int used, int guard, int epoch, int active, int scratch, int[] failure = null)
         {
             used = Global(code, used, 0x23, guard);
             used = BranchWasm.Local(code, used, 0x21, scratch);
@@ -51,6 +57,18 @@ namespace PortableCompiler
             code[used++] = 0x0f; // running in this epoch: recursive trigger returns
             code[used++] = 0x0b;
             code[used++] = 0x0b;
+            if (failure != null)
+            {
+                // A recorded TypeInitializationException is raised again: the same object,
+                // with the same inner exception, as the CLR does on every later trigger.
+                used = Global(code, used, 0x23, failure[FailureCache]);
+                code[used++] = 0xd1; // ref.is_null
+                code[used++] = 0x45; // i32.eqz
+                code[used++] = 0x04; code[used++] = 0x40;
+                used = Global(code, used, 0x23, failure[FailureCache]);
+                used = ExceptionTagsWasm.Throw(code, used, ExceptionTagsWasm.ObjectTag);
+                code[used++] = 0x0b;
+            }
             code[used++] = 0x00; // failed, or interrupted by an earlier failure: trap
             code[used++] = 0x0b;
 
@@ -65,6 +83,18 @@ namespace PortableCompiler
             used = BranchWasm.Local(code, used, 0x21, scratch);
 
             code[used++] = 0x02; code[used++] = 0x40; // block: managed failure lands here
+            if (failure != null)
+            {
+                code[used++] = 0x02; code[used++] = 0x6d; // block (result eqref): a managed object
+                code[used++] = 0x1f; code[used++] = 0x40; // try_table
+                code[used++] = 2;
+                code[used++] = 0x00; // catch the object tag, carrying the exception object
+                code[used++] = ExceptionTagsWasm.ObjectTag;
+                code[used++] = 0;
+                code[used++] = 0x02; // catch_all: fixed tags, which carry no object
+                code[used++] = 1;
+                return used;
+            }
             code[used++] = 0x1f; code[used++] = 0x40; // try_table
             code[used++] = 1;
             code[used++] = 0x02; // catch_all: every managed tag, fixed or object
@@ -81,9 +111,36 @@ namespace PortableCompiler
         }
 
         // Closes Begin's try_table and block after the (unreachable) loop exit.
-        internal static int End(byte[] code, int used, int guard, int epoch, int active)
+        internal static int End(byte[] code, int used, int guard, int epoch, int active, int[] failure = null)
         {
             code[used++] = 0x0b; // end try_table
+            if (failure != null)
+            {
+                code[used++] = 0x00; // the body never falls through (its dispatch loop only branches)
+                code[used++] = 0x0b; // end block (result eqref): the escaped managed object
+                used = BranchWasm.Local(code, used, 0x21, failure[FailureInner]);
+                // new TypeInitializationException(fullTypeName, message, (Exception)inner), recorded.
+                code[used++] = 0xfb; code[used++] = 1; // struct.new_default
+                used = WasmBinary.Unsigned(code, used, WasmBinary.HeapType(failure[FailureClass]));
+                used = Global(code, used, 0x24, failure[FailureCache]);
+                used = Global(code, used, 0x23, failure[FailureCache]);
+                code[used++] = 0xfb; code[used++] = 0x17; // ref.cast (ref null class)
+                used = WasmBinary.Signed(code, used, WasmBinary.HeapType(failure[FailureClass]));
+                used = Literal(code, used, failure[FailureNameStart], failure[FailureNameLength]);
+                used = Literal(code, used, failure[FailureMessageStart], failure[FailureMessageLength]);
+                used = BranchWasm.Local(code, used, 0x20, failure[FailureInner]);
+                code[used++] = 0xfb; code[used++] = 0x17;
+                used = WasmBinary.Signed(code, used, WasmBinary.HeapType(failure[FailureExceptionClass]));
+                code[used++] = 0x10; // call the constructor
+                used = WasmBinary.Unsigned(code, used, failure[FailureConstructor]);
+                // A managed exception unwinds frame by frame, so each enclosing initializer
+                // catches it in turn: only this guard fails, and no epoch advance is needed.
+                used = BranchWasm.Const(code, used, Failed);
+                used = Global(code, used, 0x24, guard);
+                used = Adjust(code, used, active, -1);
+                used = Global(code, used, 0x23, failure[FailureCache]);
+                used = ExceptionTagsWasm.Throw(code, used, ExceptionTagsWasm.ObjectTag);
+            }
             code[used++] = 0x0b; // end block
             used = BranchWasm.Const(code, used, Failed);
             used = Global(code, used, 0x24, guard);
@@ -153,6 +210,15 @@ namespace PortableCompiler
         }
 
         internal const int Capacity = 96, TriggerCapacity = 6;
+
+        // A String from the module literal pool: units [start, start + 2 * length) of data segment 0.
+        private static int Literal(byte[] code, int used, int start, int length)
+        {
+            used = BranchWasm.Const(code, used, start);
+            used = BranchWasm.Const(code, used, length);
+            code[used++] = 0xfb; code[used++] = 9; code[used++] = 4; code[used++] = 0; // array.new_data Char[]
+            return StringWasm.Wrap(code, used);
+        }
 
         private static int Global(byte[] code, int used, byte instruction, int index)
         {
