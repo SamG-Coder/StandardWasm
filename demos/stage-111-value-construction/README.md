@@ -82,6 +82,9 @@ The interface cast fixture checks `isinst` and `castclass` against a
 nongeneric interface. It covers implementations inherited through a class
 and an interface, dispatch after the test, reference identity, null, and
 the typed invalid-cast exception.
+The CoreLib interface fixture casts through `ICustomFormatter`, invokes the
+original interface contract on a managed implementation, and compares success,
+null, and typed cast-failure behavior with the CLR.
 
 The primitive hash fixture invokes the original CoreLib `Int32` and `UInt32`
 `GetHashCode` overrides through constrained generic calls. It covers signed

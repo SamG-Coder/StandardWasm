@@ -11,17 +11,22 @@ namespace PortableCompiler
 
         internal static bool UsesClassLayouts(BundleImages bundle, int[] objects, int type)
         {
-            // CoreLib interfaces can also be implemented by split representations
-            // such as strings, arrays and primitive boxes.
             int owner = AssemblyOf(objects, type);
             if (owner < 0 || owner >= bundle.Count) return false;
             byte[] image = bundle.Get(owner);
             var layout = new int[4];
             var heaps = new int[8];
             var counts = new int[45];
-            return CompressedTables.FindWithHeaps(image, layout, heaps) >= 0 &&
-                MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) >= 0 &&
-                !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts);
+            if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0 ||
+                MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return false;
+            if (!PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return true;
+
+            // A nongeneric contract without an InterfaceImpl reference anywhere
+            // in CoreLib has no CoreLib implementer or interface that extends it.
+            // Split representations (strings, arrays and primitive boxes) then
+            // cannot match; implementations in other images use class layouts.
+            return !HasArguments(objects, type) &&
+                !InterfaceImplementations.HasDefinitionReference(image, heaps, layout, TypeDef(objects, type));
         }
 
         internal int Call(byte[] code, int used, int bodyStart, int type)
