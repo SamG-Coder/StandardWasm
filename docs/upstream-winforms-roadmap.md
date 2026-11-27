@@ -84,8 +84,9 @@ cyclic object graph starting with a single published root. A Wasm mark pass
 consumes those edges from live frames and managed statics, and releases its
 snapshot when cleared. The queue discovery pass uses the resulting mark set
 to select registered receivers and includes previously pending receivers when
-tracing. The remaining work includes registering finalizable allocations,
-dispatching their callbacks, binding suppression, and tracing runtime wrappers.
+tracing. The probe registers new objects before their constructors when the
+allocated type overrides the trusted `Object.Finalize` slot. The remaining
+work includes callback dispatch, suppression, and tracing runtime wrappers.
 JavaScript cleanup notifications can release independent host resources, but
 notification timing and delivery alone cannot satisfy the managed queue and
 resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)

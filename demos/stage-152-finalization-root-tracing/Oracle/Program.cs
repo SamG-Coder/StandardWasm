@@ -38,6 +38,7 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     frameRootCases = FrameRootCases.Verify(),
     rootProbeResult = EmitRootProbe.Write(Path.Combine(Path.GetDirectoryName(args[0])!, "root-probe.wasm")),
     graph = EmitRootProbe.DescribeGraph(),
+    allocationFinalizers = EmitRootProbe.ObserveAllocations(),
 }));
 
 [MethodImpl(MethodImplOptions.NoInlining)]

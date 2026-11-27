@@ -12,7 +12,7 @@ namespace PortableCompiler
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
             byte[] outgoingNulls, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection,
             int[] inlineLocations, int[] nativePlans, int[] filters, int[] frameCells,
-            FunctionPointerPlan pointers, int rootCount, byte[] frameRoots)
+            FunctionPointerPlan pointers, int rootCount, byte[] frameRoots, FinalizerSlots finalizers)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -688,6 +688,13 @@ namespace PortableCompiler
                         used = Gc(code, used, 1, type); // struct.new_default
                         used = Local(code, used, 0x22, temp);
                         if (tracksRoots) used = RootStackWasm.Store(code, used, rootFrame, tracked - 1, temp);
+                        if (finalizers != null && finalizers.Registers(type))
+                        {
+                            // Allocation registers this receiver even if its constructor later throws.
+                            used = Local(code, used, 0x20, temp);
+                            code[used++] = 0x10;
+                            used = WasmIndexFixups.Write(code, used, frameShape[7], finalizers.RegistrationFixups);
+                        }
                     }
                     if (kind == Call && (records[slot + 3] & 1) != 0)
                     {

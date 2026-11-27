@@ -61,9 +61,18 @@ child is eligible only after its pending parent leaves the queue, that a
 pending receiver retains its original identity and fields, and that duplicate
 registrations produce separate entries.
 
-The diagnostic exports drive registration and dequeue in the verifier.
-Binding the queue to the original CoreLib APIs still needs automatic
-registration at allocation, suppression and callback dispatch, host roots,
+The probe reads the trusted CoreLib `Object.Finalize` declaration and uses
+the allocated type's virtual slot, including the explicit override metadata
+emitted by C#. Allocation registers the receiver before entering its
+constructor. The CLR, Node and Edge agree on four eligible receivers covering
+direct, inherited and overriding destructors and a constructor that throws.
+The unrelated virtual method named `Finalize` creates a different slot and
+does not register its receiver.
+
+The diagnostic exports also support manual queue tests. The allocation test
+uses automatic registration and inspects the pending receivers. Running
+their managed callbacks and binding the original CoreLib suppression APIs
+remain open, along with host roots,
 traversal of runtime wrappers such as view owners and event delegates,
 managed addresses, protected regions, indirect calls and a cleanup policy for
 raw Wasm traps. JavaScript invokes the pass at a probe observation point and

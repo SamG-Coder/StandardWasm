@@ -7,7 +7,7 @@ namespace PortableCompiler
     internal static class VirtualSlots
     {
         internal static int SelectVirtualBody(BundleImages bundle, int[] objects,
-            int actual, bool allocated, int declared, int owner, int row, int[] symbol)
+            int actual, bool allocated, int declared, int owner, int row, int[] symbol, bool finalizer = false)
         {
             int receiver = actual == NullValue ? declared : actual;
             if (receiver < FirstClass || receiver - FirstClass >= objects[0] ||
@@ -55,8 +55,15 @@ namespace PortableCompiler
                 byte[] image = bundle.Get(targetOwner);
                 if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
                 explicitSlot = HasClassMethodImpl(bundle, objects, type, targetOwner, image, heaps, layout,
-                    source, sourceHeaps, name, rootDeclaration);
-                if (explicitSlot != 0) return explicitSlot < 0 ? explicitSlot : -2;
+                    source, sourceHeaps, name, rootDeclaration, finalizer);
+                if (explicitSlot < 0) return explicitSlot;
+                if (explicitSlot > 0)
+                {
+                    if (!finalizer || final) return -2;
+                    symbol[0] = targetOwner;
+                    symbol[1] = explicitSlot;
+                    final = (MethodDefinitions.ReadColumn(image, layout, explicitSlot, 2) & 0x20) != 0;
+                }
 
                 if (hidden) continue;
                 int status = VirtualSlotMetadata.ReadMethodRange(image, heaps, layout, typeRow, range);
@@ -87,6 +94,7 @@ namespace PortableCompiler
                     hidden = true;
                     continue;
                 }
+                if (explicitSlot > 0) continue;
                 if (final) return -2;
                 symbol[0] = targetOwner;
                 symbol[1] = selected;
@@ -97,26 +105,37 @@ namespace PortableCompiler
 
         private static int HasClassMethodImpl(BundleImages bundle, int[] objects, int type, int owner,
             byte[] image, int[] heaps, int[] layout, byte[] declaration, int[] declarationHeaps, int name,
-            bool rootDeclaration)
+            bool rootDeclaration, bool finalizer = false)
         {
             var cursor = new int[1];
             var parent = new int[2];
+            var implementation = finalizer ? new int[2] : null;
             int typeRow = TypeDef(objects, type);
             while (true)
             {
                 int coded = VirtualSlotMetadata.NextNamedMethodImplParent(image, heaps, layout, typeRow,
-                    declaration, declarationHeaps, name, cursor);
+                    declaration, declarationHeaps, name, cursor, implementation);
                 if (coded <= 0) return coded;
                 int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, coded, parent);
                 if (status < 0) return status == -1 ? -1 : -2;
 
-                if (rootDeclaration && parent[0] == AssemblyBundle.ObjectOwner) return 1;
+                if (rootDeclaration && parent[0] == AssemblyBundle.ObjectOwner)
+                {
+                    if (!finalizer) return 1;
+                    // C# destructors can explicitly override Object.Finalize in MethodImpl metadata.
+                    if (!FinalizerSlots.Signature(image, heaps, implementation[1]) || (implementation[0] & 1) != 0) return -2;
+                    int body = implementation[0] >> 1;
+                    int declaringType = ObjectLayouts.Owner(image, heaps, layout, body, false);
+                    if (declaringType != typeRow || (MethodDefinitions.ReadColumn(image, layout, body, 2) & 0x50) != 0x40 ||
+                        !FinalizerSlots.Signature(image, heaps, MethodDefinitions.ReadColumn(image, layout, body, 4))) return -2;
+                    return body;
+                }
 
                 // An interface MethodImpl can share a name with this virtual
                 // slot. Only a declaration on the class chain can remap it.
                 for (int current = type; current >= FirstClass; current = Parent(objects, current))
                     if (AssemblyOf(objects, current) == parent[0] && TypeDef(objects, current) == parent[1])
-                        return 1;
+                        return finalizer ? -2 : 1;
             }
         }
     }

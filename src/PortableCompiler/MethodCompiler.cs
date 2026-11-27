@@ -203,6 +203,13 @@ namespace PortableCompiler
             int registeredCount = rootProbe ? StaticFields.Register(globals, 0, FinalizerQueueWasm.RegisteredKey, I32) : -1;
             int pendingCount = rootProbe ? StaticFields.Register(globals, 0, FinalizerQueueWasm.PendingKey, I32) : -1;
             if (rootProbe && (rootCount < 0 || markedCount < 0 || registeredCount < 0 || pendingCount < 0)) return -3;
+            FinalizerSlots finalizers = null;
+            if (rootProbe)
+            {
+                finalizers = new FinalizerSlots();
+                int rootStatus = finalizers.ReadRoot(bundle);
+                if (rootStatus < 0) return rootStatus;
+            }
             var initializers = new TypeInitializerPlan(functionCapacity, output.Length / 5 + 1);
             var nativePlans = new NativeAggregatePlans();
             var pointers = new FunctionPointerPlan();
@@ -510,6 +517,17 @@ namespace PortableCompiler
                     int capacity = body[1] * 64 + 32;
                     if (rootProbe)
                     {
+                        for (int pc = 0; pc < depths.Length; pc++)
+                        {
+                            int slot = pc * BranchIl.Width;
+                            if (depths[pc] == 0 || records[slot] != BranchIl.NewObject) continue;
+                            int constructor = records[slot + 1];
+                            int type = signatures[offsets[constructor] + 1];
+                            status = finalizers.Includes(bundle, objects, type);
+                            if (status >= 0) continue;
+                            if (location.Length != 0) location[2] = pc;
+                            return status;
+                        }
                         long extra = (long)body[1] * (96L + 20L * (parameters + locals + maximum));
                         if (extra > int.MaxValue - capacity) return -3;
                         capacity += (int)extra;
@@ -769,7 +787,7 @@ namespace PortableCompiler
                     code = new byte[capacity];
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
                         arities, code, remainderFixup, catchRegion, outgoingNulls, objects, initializers.FieldInitializers,
-                        reflection, inlineLocations, nativePlans.Plans, filters, frameCells, pointers, rootCount, frameRoots);
+                        reflection, inlineLocations, nativePlans.Plans, filters, frameCells, pointers, rootCount, frameRoots, finalizers);
                 }
 
                 if (used < 0) return used;
@@ -843,6 +861,7 @@ namespace PortableCompiler
             if (rootProbe)
             {
                 rootWalker = hostImports + functions;
+                WasmIndexFixups.Resolve(moduleCode, finalizers.RegistrationFixups[0], rootWalker + FinalizerQueueWasm.Register);
                 for (int entry = 0; entry < FinalizerQueueWasm.End; entry++)
                 {
                     bool read = entry == 1;

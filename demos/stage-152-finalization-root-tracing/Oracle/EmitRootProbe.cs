@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using BootstrapLibrary;
 using ManagedFinalizationExperiment;
@@ -11,16 +12,26 @@ internal static class EmitRootProbe
     internal static int[] Write(string outputPath)
     {
         byte[] image = File.ReadAllBytes(typeof(RootProbe).Assembly.Location);
-        byte[] bundle = new byte[image.Length + sizeof(int)];
+        // Finalizer binding uses the trusted Object slot's metadata without lowering CoreLib bodies.
+        byte[] core = File.ReadAllBytes(typeof(object).Assembly.Location);
+        byte[] bundle = new byte[image.Length + core.Length + 2 * sizeof(int)];
         BinaryPrimitives.WriteInt32LittleEndian(bundle, image.Length);
         image.CopyTo(bundle, sizeof(int));
+        int companion = image.Length + sizeof(int);
+        BinaryPrimitives.WriteInt32LittleEndian(bundle.AsSpan(companion), core.Length);
+        core.CopyTo(bundle, companion + sizeof(int));
         using var manifest = new MemoryStream();
         using var entries = new BinaryWriter(manifest);
         foreach (string name in new[] { nameof(RootProbe.ObserveFrames), nameof(RootProbe.ObserveConstructor),
             nameof(RootProbe.ThrowWithRoot), nameof(RootProbe.BuildGraph), nameof(RootProbe.SetStaticRoot) })
+            Export(typeof(RootProbe), name);
+        Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.Allocate));
+        Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.ValueOf));
+
+        void Export(Type type, string name)
         {
             byte[] label = Encoding.UTF8.GetBytes(name);
-            entries.Write(typeof(RootProbe).GetMethod(name)!.MetadataToken & 0x00ffffff);
+            entries.Write(type.GetMethod(name)!.MetadataToken & 0x00ffffff);
             entries.Write(label.Length);
             entries.Write(label);
         }
@@ -43,6 +54,28 @@ internal static class EmitRootProbe
             throw new Exception("The CLR root probe did not throw NullReferenceException");
         }
         finally { Console.SetOut(original); }
+    }
+
+    internal static object ObserveAllocations()
+    {
+        AllocateAndRelease();
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        if (FinalizableAllocations.Finalized != 4 || FinalizableAllocations.Total != 40 || FinalizableAllocations.OverridesRan != 1)
+            throw new Exception("Actual CLR finalizer allocation results changed");
+        return new { count = FinalizableAllocations.Finalized, total = FinalizableAllocations.Total };
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static void AllocateAndRelease()
+        {
+            GC.KeepAlive(FinalizableAllocations.Allocate(0, 0));
+            GC.KeepAlive(FinalizableAllocations.Allocate(1, 13));
+            GC.KeepAlive(FinalizableAllocations.Allocate(2, 17));
+            GC.KeepAlive(FinalizableAllocations.Allocate(3, 19));
+            try { FinalizableAllocations.Allocate(2, -9); }
+            catch (NullReferenceException) { return; }
+            throw new Exception("Expected the finalizable constructor to throw");
+        }
     }
 
     internal static object DescribeGraph()
