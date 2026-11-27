@@ -156,13 +156,10 @@ namespace PeLibrary
             byte[] candidate, int[] heaps, int[] methods)
         {
             var counts = new int[45];
-            if (MetadataTableRows.ReadCounts(candidate, heaps[4], heaps[5], counts) < 0 || counts[32] != 1)
-                return -1;
-            int table = MetadataTableRows.TableStart(heaps, methods, counts, 32);
+            int table = AssemblyDefinitionRecord.Find(candidate, heaps, methods, counts);
             if (table < 0) return -1;
             uint row = (uint)table;
-            int strings = methods[2], blobs = methods[3];
-            int name = (int)Index(candidate, row + (uint)(16 + blobs), strings);
+            int name = AssemblyDefinitionRecord.NameIndex(candidate, methods, row);
             if (!SameString(source, sourceHeaps, reference[1], candidate, heaps, name))
                 return 0;
             uint version = (uint)reference[0];
@@ -171,13 +168,13 @@ namespace PeLibrary
                     candidate, row, counts))
                 return 0;
             uint flags = U32(candidate, row + 12);
-            uint key = Index(candidate, row + 16, blobs);
-            if ((flags & ~1u) != 0 || Index(candidate, row + (uint)(16 + blobs + strings), strings) != 0)
+            int key = AssemblyDefinitionRecord.KeyIndex(candidate, methods, row);
+            if ((flags & ~1u) != 0 || AssemblyDefinitionRecord.CultureIndex(candidate, methods, row) != 0)
                 return 0;
             if ((flags & 1) == 0) return key == 0 && reference[KeyLength] == 0 ? 1 : 0;
             if (reference[KeyLength] == 0) return 0;
             var data = new int[1];
-            int length = StrongNames.ReadKey(candidate, heaps, (int)key, data);
+            int length = StrongNames.ReadKey(candidate, heaps, key, data);
             if (length <= 0) return -1;
             if (reference[FullKey] != 0)
                 return length == reference[KeyLength] &&

@@ -25,6 +25,28 @@ namespace PortableCompiler
         internal readonly int[] HeapFixups = new int[1];
         internal readonly RuntimeGenericTypes GenericTypes = new RuntimeGenericTypes();
         internal readonly RuntimeTypeRelations TypeRelations = new RuntimeTypeRelations();
+        internal int[] MonoAssemblyNameBodies { get; private set; }
+        internal int MonoAssemblyHandle { get; private set; } = -1;
+
+        internal int BindMonoAssemblyHandle(int[] arities, int[] offsets, int[] signatures, int functions)
+        {
+            if (MonoAssemblyHandle >= 0) return functions;
+            int offset = MethodCompiler.NextSignature(offsets, arities, functions);
+            if (functions >= arities.Length || signatures.Length - offset < 2) return -3;
+            MonoAssemblyHandle = functions;
+            arities[functions] = 1;
+            offsets[functions] = offset;
+            signatures[offset] = SignatureTypes.Native;
+            signatures[offset + 1] = RuntimeTypeMetadata.Assembly;
+            return functions + 1;
+        }
+
+        internal int[] MonoAssemblyNameIndices(int count)
+        {
+            if (MonoAssemblyNameBodies == null) MonoAssemblyNameBodies = new int[count];
+            return MonoAssemblyNameBodies;
+        }
+
         internal readonly AssemblyTypeLookup AssemblyTypes = new AssemblyTypeLookup();
         internal readonly RuntimeAssemblyMetadata AssemblyMetadata = new RuntimeAssemblyMetadata();
         internal readonly RuntimeObjectTypes ObjectTypes = new RuntimeObjectTypes();

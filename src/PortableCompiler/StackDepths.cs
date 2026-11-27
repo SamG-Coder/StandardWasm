@@ -135,6 +135,10 @@ namespace PortableCompiler
                         next = Push(stack, allocated, depth - 1,
                             operation == RuntimeTypeIsGeneric || operation == RuntimeTypeIsEnum || operation == RuntimeTypeIsValue ? I32 : operation == RuntimeTypeGenericDefinition ? PeLibrary.RuntimeTypeMetadata.Type :
                                 records[slot + 2 * Width + 1]);
+                    else if (operation == PeLibrary.MonoAssemblyNameMetadata.GetNameSlot && depth >= arity &&
+                        stack[depth - arity] == PeLibrary.RuntimeTypeMetadata.Assembly)
+                        next = arity == 1 || arity == 2 && Assignable(stack[depth - 1], I32, objects)
+                            ? Push(stack, allocated, depth - arity, virtualTypes[operand]) : -1;
                     else next = CallShape(stack, allocated, depth, virtualTypes, operand, arity, 0, objects);
                     // An unlowered reflection member is valid IL, but a
                     // compiler descriptor cannot be sent to an upstream body.

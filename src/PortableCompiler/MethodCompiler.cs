@@ -1571,6 +1571,16 @@ namespace PortableCompiler
             length = reflection.TypeRelations.WriteAssignableTo(bundle, moduleCode, length, objects, globals,
                 reflection.GenericTypes, bodyOffsets, sizes);
             if (length < 0) return length;
+            if (reflection.MonoAssemblyHandle >= 0)
+            {
+                int handle = reflection.MonoAssemblyHandle;
+                if (moduleCode.Length - length < 32) return -3;
+                bodyOffsets[handle] = length;
+                moduleCode[length++] = 0;
+                length = RuntimeReflectionWasm.ModuleSlot(moduleCode, length, 0, 0, reflection);
+                moduleCode[length++] = 0x0b;
+                sizes[handle] = length - bodyOffsets[handle];
+            }
             if (reflection.AssemblyTypes.Function >= 0)
             {
                 exceptionTags |= ExceptionTypes.NullReference | ExceptionTypes.ArgumentNull | ExceptionTypes.Argument;
@@ -1736,6 +1746,9 @@ namespace PortableCompiler
             FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers, int scopedReceiver, FalseBooleanSpecializations falseBooleans)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
+            bool monoAssemblyName = callerReceiver == RuntimeTypeMetadata.Assembly &&
+                reflection.MonoAssemblyNameBodies != null &&
+                MonoAssemblyNameMetadata.IsRuntimeBody(image, layout, heaps, callerRow);
             bool arrayEnumerator = ArrayElementKey(objects, callerReceiver) != 0 &&
                 SzArrayEnumeration.IsFactory(image, layout, heaps, callerRow);
             bool classConstructor = context != 0 && callerReceiver == context && !ObjectLayouts.IsValueType(objects, context) &&
@@ -1746,6 +1759,28 @@ namespace PortableCompiler
                 int kind = records[slot];
                 if (kind == 0) continue;
                 if (location.Length != 0) location[2] = slot / BranchIl.Width;
+                if (monoAssemblyName && slot == BranchIl.Width)
+                {
+                    // The verified original wrapper uses this only as the
+                    // opaque AssemblyName.Create handle. No CLR pointer escapes.
+                    if (kind != BranchIl.GetField) return -2;
+                    functions = reflection.BindMonoAssemblyHandle(arities, offsets, signatures, functions);
+                    if (functions < 0) return functions;
+                    records[slot] = BranchIl.Call;
+                    records[slot + 1] = reflection.MonoAssemblyHandle;
+                    records[slot + 3] = 0;
+                    continue;
+                }
+                if (monoAssemblyName && slot == 8 * BranchIl.Width)
+                {
+                    // Browser Mono loads bundled images in memory. The
+                    // authenticated CodeBase query returns the null origin.
+                    // Both inputs are the proven this load and literal kind.
+                    records[6 * BranchIl.Width] = BranchIl.Nop;
+                    records[7 * BranchIl.Width] = BranchIl.Nop;
+                    records[slot] = BranchIl.NullLiteral;
+                    continue;
+                }
                 if (kind == BranchIl.BoundScopedFieldLoad || kind == BranchIl.BoundScopedFieldStore)
                 {
                     // The earlier field-address record already bound the declaring type and ordinal.
@@ -3705,6 +3740,8 @@ namespace PortableCompiler
                 records[slot + 2 * BranchIl.Width + 1] = vector;
                 records[slot + 2 * BranchIl.Width + 2] = types[shape];
             }
+            if (MonoAssemblyNameMetadata.IdentifySlot(image, layout, heaps, row) == arity)
+                records[slot + BranchIl.Width + 2] = MonoAssemblyNameMetadata.GetNameSlot;
             records[slot + BranchIl.Width + 3] = row;
             return 0;
         }
@@ -3763,7 +3800,30 @@ namespace PortableCompiler
                 }
                 bool allocated = allocatedStates[receiver] != 0;
                 int function;
-                if (operation == BranchIl.RuntimeTypeIsValue)
+                if (operation == MonoAssemblyNameMetadata.GetNameSlot && actual == RuntimeTypeMetadata.Assembly)
+                {
+                    // Select only after stack provenance identifies the canonical
+                    // runtime receiver. Authored Assembly subclasses keep their slots.
+                    byte[] source = bundle.Get(owner);
+                    var layout = new int[4];
+                    var heaps = new int[8];
+                    if (CompressedTables.FindWithHeaps(source, layout, heaps) < 0) return -1;
+                    int body = MonoAssemblyNameMetadata.ResolveRuntimeBody(source, layout, heaps, row, arity);
+                    if (body < 0) return body;
+                    int[] runtimeIndices = reflection.MonoAssemblyNameIndices(indices.Length);
+                    function = Lookup(owners, rows, contexts, bases, runtimeIndices, functions, owner, body, 0);
+                    if (function < 0)
+                    {
+                        int status = Register(bundle, source, layout, heaps, owner, body, 0,
+                            owners, rows, contexts, bases, runtimeIndices, arities, offsets, signatures, objects, functions,
+                            allowVirtual: true, receiverOverride: RuntimeTypeMetadata.Assembly);
+                        if (status < 0) return status;
+                        function = functions;
+                    }
+                    if (arities[function] != arity || signatures[offsets[function]] != types[shape] ||
+                        signatures[offsets[function] + 1] != RuntimeTypeMetadata.Assembly) return -2;
+                }
+                else if (operation == BranchIl.RuntimeTypeIsValue)
                 {
                     // A nominal receiver still executes the original wrapper.
                     // Its protected virtual call selects a user-defined override.
