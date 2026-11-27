@@ -7,7 +7,7 @@ namespace PortableCompiler
         // Real assembly slots are bounded by the packed input. This reserved
         // owner keeps literal globals separate from fields and type descriptors.
         private const int LiteralOwner = int.MaxValue;
-        private const int HeaderSize = 4;
+        internal const int HeaderSize = 4;
 
         internal static int Empty(int[] globals) =>
             StaticFields.Register(globals, LiteralOwner, -1, SignatureTypes.String);
@@ -28,7 +28,14 @@ namespace PortableCompiler
             if (data.Length - start < HeaderSize) return -3;
             int length = StringMetadata.CopyLiteral(image, heaps, records[slot + 1], data, start + HeaderSize);
             if (length < 0) return length;
+            return LowerPrepared(records, slot, data, used, globals, length);
+        }
+
+        // Synthetic IL writes its UTF-16 payload directly but uses the same intern cache.
+        internal static int LowerPrepared(int[] records, int slot, byte[] data, int[] used, int[] globals, int length)
+        {
             if (length == 0) return LowerEmpty(records, slot, globals);
+            int start = used[0];
 
             int global = Find(globals, data, start + HeaderSize, length);
             if (global < 0)

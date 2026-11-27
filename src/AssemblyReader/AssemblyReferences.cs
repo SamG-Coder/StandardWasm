@@ -5,7 +5,7 @@ namespace PeLibrary
     internal static class AssemblyReferences
     {
         internal const int SymbolWidth = 14;
-        private const int FullKey = 6, KeyStart = 7, KeyLength = 8;
+        internal const int FullKey = 6, KeyStart = 7, KeyLength = 8;
         internal const int Leaf = 9;
         internal const int Depth = 10, AssemblyRow = 11, GenericParent = 12, ParentType = 13;
 

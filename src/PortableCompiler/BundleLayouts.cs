@@ -194,8 +194,13 @@ namespace PortableCompiler
                 RuntimeTypeFields.HasCanonicalInitializer(image, heaps, layout, readonlyInitializer, row))
                 storage = RuntimeTypeMetadata.Type;
             else if (reference[0] != 0)
+            {
+                bool valueType = reference[1] == 1;
                 storage = RegisterType(bundle, image, layout, heaps, owner,
-                    reference[0], objects, reference[1] == 1);
+                    reference[0], objects, valueType);
+                // A value-type field needs its layout, so it keeps the -4 (CLR probe 3).
+                if (storage == -4 && !valueType && bundle.DeferMissing) storage = ObjectLayouts.ObjectReference;
+            }
             if (SignatureTypes.IsSpan(storage))
                 return !staticField && ObjectLayouts.IsByRefLikeValue(objects, receiver) ? storage : -2;
             return ObjectLayouts.IsByRefLikeValue(objects, storage) ? -2 : storage;

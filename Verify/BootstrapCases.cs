@@ -10,7 +10,8 @@ internal static class BootstrapCases
         byte[] dll = File.ReadAllBytes(type.Assembly.Location);
         string[] exports = ["CompileModule", "CompileBundle", "Compile", "CreateBytes", "SetByte", "ReadByte", "FindRow",
             "CreateDiagnostic", "ReadDiagnostic", "CompileDetailed", "CompileModuleDetailed", "CompileBundleDetailed",
-            "ReadWebcilEntryToken", "BundleModuleOrigins", "FindEmbeddedResource"];
+            "ReadWebcilEntryToken", "BundleModuleOrigins", "FindEmbeddedResource",
+            "CreateWarnings", "ReadWarning", "CompileBundleDeferred"];
         byte[] manifest = Manifest(exports.Select(name => (name, Row(name))));
         var image = Encode(dll);
         var compiler = new byte[capacity];

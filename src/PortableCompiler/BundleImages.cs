@@ -11,6 +11,16 @@ namespace PortableCompiler
         // Generic arguments can re-enter reservation through ordinary type
         // binding. The shared depth bounds that path and direct inheritance.
         internal int LayoutDepth;
+        // Issue #299 (deferred missing assemblies): a reference-typed field whose class lives in
+        // an assembly missing from the bundle is stored as an opaque object reference. The CLR
+        // does not load that class for the layout, and the field can only ever hold null.
+        internal bool DeferMissing;
+        // The AssemblyRef behind the latest -4: the referencing image, its heaps and the
+        // AssemblyReferences symbol (name index, version offset, key range). A deferred stub
+        // formats the CLR's FileNotFoundException display name from it.
+        internal byte[] MissingImage;
+        internal int[] MissingHeaps;
+        internal int[] MissingReference;
         // Zero retains the standalone compilation policy. A one-image
         // packed bundle still uses the bundle linking policy.
         internal readonly int Length;

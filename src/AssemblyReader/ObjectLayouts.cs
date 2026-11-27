@@ -384,6 +384,31 @@ namespace PeLibrary
         }
 
         // Publish the half-open MethodDef rows [range[0], range[1]) owned by a TypeDef.
+        // The TypeDef row of a top-level type named ns.name in this image, or 0 (issue #299 uses it
+        // to bind CoreLib's System.IO.FileNotFoundException). Nested types are not searched.
+        internal static int FindTypeDefinition(byte[] image, int[] streams, int[] methods, string ns, string name)
+        {
+            var counts = new int[45];
+            int start = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
+            if (start < 0) return 0;
+            int strings = methods[2];
+            int refs = TypeRefStart(image, streams, counts, start, strings);
+            int defs = refs + counts[1] * (ResolutionWidth(counts) + 2 * strings);
+            int fieldIndex = IndexWidth(counts[4]), methodIndex = IndexWidth(counts[6]);
+            int width = 4 + 2 * strings + CodedWidth(counts[2], counts[1], counts[27]) + fieldIndex + methodIndex;
+            for (int row = 1; row <= counts[2]; row++)
+            {
+                uint at = (uint)(defs + (row - 1) * width);
+                if ((ReadIndex(image, at, 4) & 7) > 1) continue; // nested visibility
+                uint typeName = ReadIndex(image, at + 4, strings);
+                uint typeNamespace = ReadIndex(image, at + 4 + (uint)strings, strings);
+                if (ImageBytes.MatchesAscii(image, streams, typeName, name) &&
+                    ImageBytes.MatchesAscii(image, streams, typeNamespace, ns))
+                    return row;
+            }
+            return 0;
+        }
+
         internal static int MethodRange(byte[] image, int[] streams, int[] methods, int typeRow, int[] range)
         {
             var counts = new int[45];

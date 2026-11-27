@@ -26,16 +26,16 @@ namespace PortableCompiler
             entries[8] = 0x72;
             entries[9] = 0x75;
             entries[10] = 0x6e;
-            return CompileProgram(BundleImages.Single(image), entries, output, location, 0);
+            return CompileProgram(BundleImages.Single(image), entries, output, location, 0, new MissingAssemblyStubs());
         }
 
         internal static int CompileExports(byte[] image, byte[] entries, byte[] output) =>
-            CompileProgram(BundleImages.Single(image), entries, output, new int[0], 0);
+            CompileProgram(BundleImages.Single(image), entries, output, new int[0], 0, new MissingAssemblyStubs());
 
         internal static int CompileModuleDetailed(byte[] image, byte[] entries, byte[] output, int[] location)
         {
             if (location.Length < CompileLocation.Size) return -3;
-            return CompileProgram(BundleImages.Single(image), entries, output, location, 0);
+            return CompileProgram(BundleImages.Single(image), entries, output, location, 0, new MissingAssemblyStubs());
         }
 
         internal static int CompileBundle(byte[] bundle, byte[] entries, byte[] output) =>
@@ -53,21 +53,86 @@ namespace PortableCompiler
             if (location.Length < CompileLocation.Size) return -3;
             CompileLocation.Clear(location);
             BundleImages images = BundleImages.Unpack(bundle);
-            return images == null ? -1 : CompileProgram(images, entries, output, location, 0, true);
+            return images == null ? -1 : CompileProgram(images, entries, output, location, 0, new MissingAssemblyStubs(), true);
         }
 
         private static int CompileBundleCore(byte[] bundle, byte[] entries, byte[] output, int[] location)
         {
             CompileLocation.Clear(location);
             BundleImages images = BundleImages.Unpack(bundle);
-            return images == null ? -1 : CompileProgram(images, entries, output, location, 0);
+            return images == null ? -1 : CompileProgram(images, entries, output, location, 0, new MissingAssemblyStubs());
         }
+
+        // Issue #299 (opt in): a method whose body needs an assembly missing from the bundle (-4)
+        // compiles to a stub that fails on entry, as the CLR's JIT fails that method and the
+        // call site throws FileNotFoundException. Each -4 names the method being compiled; it is
+        // recorded and the program is recompiled. warnings receives [count, then
+        // (assembly, MethodDef row, IL offset) per stubbed method].
+        internal static int CompileBundleDeferred(byte[] bundle, byte[] entries, byte[] output, int[] location, int[] warnings)
+        {
+            if (location.Length < CompileLocation.Size || warnings.Length < 1) return -3;
+            BundleImages images = BundleImages.Unpack(bundle);
+            if (images == null) return -1;
+            images.DeferMissing = true;
+            int capacity = (warnings.Length - 1) / 3;
+            var stubs = new MissingAssemblyStubs();
+            warnings[0] = 0;
+            while (true)
+            {
+                images.MissingReference = null;
+                int status = CompileProgram(images, entries, output, location, 0, stubs);
+                if (status != -4 || location[1] <= 0) return status;
+                // No progress (a stub could not be lowered), no exact display name, or no room:
+                // report the strict located diagnostic.
+                if (stubs.Find(location[0], location[1]) >= 0 || stubs.Count == capacity) return status;
+                int offset = location[2];
+                if (!stubs.Add(location[0], location[1], images)) return status;
+                int count = stubs.Count - 1;
+                warnings[1 + 3 * count] = location[0];
+                warnings[2 + 3 * count] = location[1];
+                warnings[3 + 3 * count] = offset;
+                warnings[0] = stubs.Count;
+            }
+        }
+
+        // The stub body (decision for #299): ldstr message; ldstr fileName; newobj CoreLib
+        // FileNotFoundException::.ctor(string, string); throw. Pre-linked, so it bypasses IL decode.
+        private static int LinkStub(BundleImages bundle, MissingAssemblyStubs stubs, int stub, int[] records,
+            int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets,
+            int[] signatures, int[] objects, int functions, byte[] literals, int[] literalSize, int[] globals)
+        {
+            var found = new int[2];
+            if (MissingAssemblyStubs.FindConstructor(bundle, found) < 0 || found[0] < 0) return -4;
+            byte[] coreLib = bundle.Get(found[0]);
+            var coreLayout = new int[4];
+            var coreHeaps = new int[8];
+            if (CompressedTables.FindWithHeaps(coreLib, coreLayout, coreHeaps) < 0) return -1;
+            int constructor = indices[bases[found[0]] + found[1]] - 1;
+            if (constructor < 0)
+            {
+                functions = Register(bundle, coreLib, coreLayout, coreHeaps, found[0], found[1], 0, owners, rows, contexts,
+                    bases, indices, arities, offsets, signatures, objects, functions);
+                if (functions < 0) return functions;
+                constructor = functions - 1;
+            }
+            MissingAssemblyStubs.Records(records, constructor);
+            int messageLength = stubs.WriteLiteral(stub, true, literals, literalSize[0] + StringLiterals.HeaderSize);
+            if (messageLength < 0) return messageLength;
+            int status = StringLiterals.LowerPrepared(records, 0, literals, literalSize, globals, messageLength);
+            if (status < 0) return status;
+            int nameLength = stubs.WriteLiteral(stub, false, literals, literalSize[0] + StringLiterals.HeaderSize);
+            if (nameLength < 0) return nameLength;
+            status = StringLiterals.LowerPrepared(records, 2 * BranchIl.Width, literals, literalSize, globals, nameLength);
+            return status < 0 ? status : functions;
+        }
+
 
         // Imported functions precede defined functions. Discovery can add
         // a host feature, so re-emit with its function indices reserved.
         internal const int Reemit = -1000;
 
-        private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location, int hostFeatures, bool rootProbe = false)
+        private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location,
+            int hostFeatures, MissingAssemblyStubs stubs, bool rootProbe = false)
         {
             // Finalization is an internal runtime feature and has no host import indices.
             var features = new int[] { hostFeatures, rootProbe ? 1 : 0 };
@@ -75,12 +140,12 @@ namespace PortableCompiler
             var typeCalls = new RuntimeTypeCalls();
             int status = Reemit;
             while (status == Reemit)
-                status = CompileProgramPass(bundle, entries, output, location, features, addressedStatics, typeCalls, rootProbe);
+                status = CompileProgramPass(bundle, entries, output, location, features, addressedStatics, typeCalls, stubs, rootProbe);
             return status;
         }
 
         private static int CompileProgramPass(BundleImages bundle, byte[] entries, byte[] output, int[] location,
-            int[] features, AddressedStaticFields addressedStatics, RuntimeTypeCalls typeCalls, bool rootProbe)
+            int[] features, AddressedStaticFields addressedStatics, RuntimeTypeCalls typeCalls, MissingAssemblyStubs stubs, bool rootProbe)
         {
             int hostFeatures = features[0];
             bool tracksFinalizers = features[1] != 0;
@@ -249,6 +314,8 @@ namespace PortableCompiler
                 int owner = owners[current], source = rows[current], context = contexts[current];
                 context = NativeReceiverCalls.DeclaringContext(context);
                 int[] methodArguments = instantiations.Arguments(current);
+                // Issue #299: a deferred stub replaces this body with a FileNotFoundException throw.
+                int stub = stubs.Find(owner, source);
                 CompileLocation.Set(location, owner, source, -1);
                 if (owner != activeOwner)
                 {
@@ -270,7 +337,7 @@ namespace PortableCompiler
                     initializerGuard = initializers.Guard(current);
                     if (initializerGuard < 0) return -1;
                 }
-                else
+                else if (stub < 0)
                 {
                     int declaringType = ObjectLayouts.Owner(image, heaps, layout, source, false);
                     if (declaringType < 1) return -1;
@@ -287,7 +354,7 @@ namespace PortableCompiler
                         initializerPrologue = initializerSlot[0];
                     }
                 }
-                if ((MethodDefinitions.ReadColumn(image, layout, source, 2) & 0x2000) != 0)
+                if (stub < 0 && (MethodDefinitions.ReadColumn(image, layout, source, 2) & 0x2000) != 0)
                 {
                     // MethodShape proved the named native leaf and both sides
                     // of the ABI. Keep the SDK's managed caller and error logic.
@@ -314,10 +381,22 @@ namespace PortableCompiler
                     sizes[current] = length - bodyOffsets[current];
                     continue;
                 }
-                uint rva = unchecked((uint)MethodDefinitions.ReadColumn(image, layout, source, 0));
-                int status = MethodBodies.Read(image, rva, body);
-                if (status != 0)
-                    return status == MethodBodies.Malformed ? -1 : -2;
+                uint rva = 0;
+                int status = 0;
+                if (stub >= 0)
+                {
+                    // The CLR fails the JIT before the method runs, so a stub triggers no type
+                    // initializer. Its body is four synthetic instructions with a stack of two.
+                    initializerPrologue = -1;
+                    body[0] = 0; body[1] = 6; body[2] = 2; body[3] = 0; body[4] = 0; body[5] = 0;
+                }
+                else
+                {
+                    rva = unchecked((uint)MethodDefinitions.ReadColumn(image, layout, source, 0));
+                    status = MethodBodies.Read(image, rva, body);
+                    if (status != 0)
+                        return status == MethodBodies.Malformed ? -1 : -2;
+                }
                 int[] catchRegion = noCatch;
                 int[] filterEnds = null, filters = noCatch;
                 bool hasFinally = false;
@@ -377,7 +456,7 @@ namespace PortableCompiler
                 int parameters = arities[current];
                 int signature = offsets[current];
                 int result = signatures[signature];
-                bool resourceOpen = reflection.ResourceOwner == owner && reflection.ResourceOpen == source;
+                bool resourceOpen = stub < 0 && reflection.ResourceOwner == owner && reflection.ResourceOpen == source;
                 // The Wasm result of a value constructor is its receiver's final
                 // value. Its IL returns void, so stack analysis checks void.
                 bool valueConstructor = IsValueConstructor(image, layout, heaps, source, signatures, signature, parameters, objects);
@@ -421,12 +500,23 @@ namespace PortableCompiler
                     return -2;
 
                 var code = new byte[body[1] * 4 + 2];
-                int used = scalar && locals == 0 && catchRegion.Length == 0 && initializerPrologue < 0
+                int used = stub < 0 && scalar && locals == 0 && catchRegion.Length == 0 && initializerPrologue < 0
                     ? StraightLineIl.Translate(image, body, parameters, code) : -2;
                 if (used < 0)
                 {
                     var records = new int[body[1] * BranchIl.Width];
-                    if (resourceOpen) status = ResourceOpenIl.Decode(image, body, records, location, parameters);
+                    if (stub >= 0)
+                    {
+                        functions = LinkStub(bundle, stubs, stub, records, owners, rows, contexts, bases, indices,
+                            arities, offsets, signatures, objects, functions, literals, literalSize, globals);
+                        if (functions < 0)
+                        {
+                            // No bindable CoreLib FileNotFoundException: keep the located diagnostic.
+                            location[0] = owner; location[1] = source; location[2] = 0;
+                            return functions;
+                        }
+                    }
+                    else if (resourceOpen) status = ResourceOpenIl.Decode(image, body, records, location, parameters);
                     else if (parameters == 3 && locals == 1 && frame[parameters] == Native &&
                         CoreStringRange.Lower(image, layout, heaps, source, body, records)) status = 0;
                     else status = BranchIl.Decode(image, body[0], body[1], parameters, locals, records,
@@ -469,25 +559,28 @@ namespace PortableCompiler
                         frame, parameters, frameCells, location);
                     if (status < 0) return status;
                     if (frameRoots != null) NativeFrameWasm.ExcludeNativeRoots(frameRoots, frameCells);
-                    functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
-                        parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
-                        bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
-                        initializers, reflection, instantiations, methodArguments, inlineLocations, frameCells, parameters,
-                        nativePlans, addressedStatics, booleanLocals, pointers, finalizers, tracksFinalizers);
-                    if (functions == Reemit)
+                    if (stub < 0)
                     {
-                        // Allocation can precede the first reachable suppression call.
-                        // Re-emit every body so its registration and roots agree.
-                        features[0] = hostFeatures | hostUse[0];
-                        features[1] = 1;
-                        return Reemit;
+                        functions = LinkOperands(bundle, image, layout, heaps, owner, source, context,
+                            parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
+                            bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
+                            initializers, reflection, instantiations, methodArguments, inlineLocations, frameCells, parameters,
+                            nativePlans, addressedStatics, booleanLocals, pointers, finalizers, tracksFinalizers);
+                        if (functions == Reemit)
+                        {
+                            // Allocation can precede the first reachable suppression call.
+                            // Re-emit every body so its registration and roots agree.
+                            features[0] = hostFeatures | hostUse[0];
+                            features[1] = 1;
+                            return Reemit;
+                        }
+                        if (functions < 0)
+                            return functions;
+                        functions = LinkCallIndirect(bundle, image, heaps, layout, count, owner, context, records, owners, rows,
+                            contexts, arities, offsets, signatures, objects, functions, pointers, location);
+                        if (functions < 0)
+                            return functions;
                     }
-                    if (functions < 0)
-                        return functions;
-                    functions = LinkCallIndirect(bundle, image, heaps, layout, count, owner, context, records, owners, rows,
-                        contexts, arities, offsets, signatures, objects, functions, pointers, location);
-                    if (functions < 0)
-                        return functions;
 
                     for (int local = 0; local < frameCells.Length; local++)
                         if (frameCells[local] != 0 && inlineLocations[local] != 0) return -2;
