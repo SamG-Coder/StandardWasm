@@ -60,6 +60,7 @@ Console.WriteLine(JsonSerializer.Serialize(new { executable, results, errors = n
     compiledStringField = Enumerable.Range(0, 5).Select(CoreStringFieldProbe.CheckCoreStringFirstCharacter).ToArray(),
     compiledStringTrim = Enumerable.Range(0, 8).Select(CoreStringFieldProbe.CheckCoreStringTrim).ToArray(),
     scopedWritableSpan = new[] { 0, 65, 0x2000, 0xffff }.Select(ScopedSpanProbe.ScopedWritableSpan).ToArray(),
+    scopedReceiverReset = new[] { 0, 65, 0x2000, 0xffff }.Select(ScopedSpanProbe.CheckScopedReceiverReset).ToArray(),
     stackBackedSpan = Enumerable.Range(0, 6).Select(ScopedSpanProbe.CheckStackBackedSpan).ToArray(),
     scopedReference = new[] { 0, -1, 65, 0xffff }.Select(ScopedSpanProbe.CheckScopedReference).ToArray(),
     debuggerStatus = DebuggerProbe.ReadManagedDebuggerStatus(),

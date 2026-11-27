@@ -177,8 +177,10 @@ assembly identity as method access. The browser window host now binds
 preserves the managed P/Invoke error slot. The original `HWND.op_Explicit`
 now reads its native argument through `IntPtr.ToPointer()`. The startup
 bundle includes the original `System.ComponentModel.EventBasedAsync`
-assembly for `AsyncOperationManager`. The replay next reports a diagnostic
-at the value receiver in CoreLib's `ValueStringBuilder.Dispose` at `IL_0007`.
+assembly for `AsyncOperationManager`. `ValueStringBuilder.Dispose` now
+clears its receiver through the caller's managed location. The replay next
+reports a diagnostic at the static field in CoreLib's
+`Interop.GetRandomBytes` at `IL_0000`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

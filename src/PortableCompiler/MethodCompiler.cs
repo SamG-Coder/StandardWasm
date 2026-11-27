@@ -1140,7 +1140,13 @@ namespace PortableCompiler
                     if (kind == BranchIl.Store) return -2;
                     // A traced receiver is already a real managed byref.
                     // Keep it on the evaluation stack for ordinary field operations and calls.
-                    if (IsValueLocation(callerReceiver)) continue;
+                    if (IsValueLocation(callerReceiver))
+                    {
+                        int reset = ValueOperands.BindReceiverInitialization(bundle, image, layout, heaps, owner,
+                            records, slot, callerReceiver, objects, clauses, context, methodArguments);
+                        if (reset < 0) return reset;
+                        continue;
+                    }
                     int lowered = ValueOperands.LowerReceiver(bundle, image, layout, heaps,
                         owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses, readOnlyReceiver, context, methodArguments);
                     if (lowered == -2 && valueConstructor)

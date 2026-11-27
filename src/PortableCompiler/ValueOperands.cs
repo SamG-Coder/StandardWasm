@@ -25,8 +25,26 @@ namespace PortableCompiler
                 records[slot] = Load;
                 return 0;
             }
-            bool locationAvailable = !ObjectLayouts.IsExplicitValue(objects, type) && !ObjectLayouts.IsByRefLikeValue(objects, type);
+            bool locationAvailable = !ObjectLayouts.IsExplicitValue(objects, type);
             return LowerAddressUse(image, layout, heaps, methodCount, records, slot, local, clauses, locationAvailable: locationAvailable);
+        }
+
+        internal static int BindReceiverInitialization(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int[] records, int address, int receiver, int[] objects, int[] clauses,
+            int context, int[] methodArguments)
+        {
+            int next = records[address + 2] * Width;
+            if (next >= records.Length || records[next] != InitializeValue || Entry(records, next / Width, clauses))
+                return 0;
+            int status = CheckInitialization(bundle, image, layout, heaps, owner, objects, context, methodArguments,
+                records[next + 1], SignatureTypes.LocatedValue(receiver));
+            if (status < 0) return status;
+            // The caller and any other aliases keep the same cell. Only its
+            // current snapshot changes to the CLI default value.
+            records[next] = ClearManagedCell;
+            records[next + 1] = 0;
+            records[next + 3] = receiver;
+            return 0;
         }
 
         // In a value-type instance constructor, ldarg.0 pushes the managed

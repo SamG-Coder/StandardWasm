@@ -19,6 +19,8 @@ public static class ScopedSpanProbe
             Characters = characters;
             Count = count;
         }
+
+        internal void Reset() => this = default;
     }
 
     public static int CheckScopedReference(int seed)
@@ -41,6 +43,24 @@ public static class ScopedSpanProbe
         Span<char> alias = view.Characters;
         alias[1] = (char)view.Count;
     }
+
+    public static int CheckScopedReceiverReset(int seed)
+    {
+        var owner = new char[2];
+        owner[0] = (char)seed;
+        var view = new MutableCharacterView(new Span<char>(owner), seed);
+        var snapshot = view;
+        var direct = view;
+        ResetView(ref view);
+        direct.Reset();
+        Span<char> cleared = view.Characters;
+        Span<char> clearedDirect = direct.Characters;
+        Span<char> prior = snapshot.Characters;
+        return view.Count + cleared.Length + direct.Count + clearedDirect.Length +
+            snapshot.Count + prior.Length + prior[0];
+    }
+
+    private static void ResetView(ref MutableCharacterView view) => view.Reset();
 
     public static unsafe int CheckStackBackedSpan(int scenario)
     {
