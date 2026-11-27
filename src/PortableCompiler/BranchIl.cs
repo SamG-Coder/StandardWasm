@@ -86,6 +86,7 @@ namespace PortableCompiler
         // [ReadOnlySpan<char>, char, char] -> [first matching index or -1].
         internal const int FindCharacterInSpan = 186, EqualCharacterSpans = 187, TakeReadOnlyCharacterLocation = 188;
         internal const int NativeFieldPointer = 189, NativeFrameFieldAddress = 190, FormatEnum = 191, TypeToHandle = 192;
+        internal const int LoadStaticPrimitiveSpan = 193;
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

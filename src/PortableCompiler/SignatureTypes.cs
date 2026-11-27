@@ -16,6 +16,7 @@ namespace PortableCompiler
         internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84, BooleanLocation = 0x86, StringLocation = 0x87;
         internal const int ReadOnlyByteSpan = 0x88, StaticByteLocation = 0x89, CharacterSpanCallback = 0x8a, Int32Location = 0x8b;
         internal const int EventHandlerLocation = 0x8c, Int16Location = 0x8d, NativeIntLocation = 0x8e, ReadOnlyCharacterLocation = 0x8f;
+        internal const int ReadOnlyInt32Span = 0x90;
         // Reference locations retain their nominal element type in the verifier,
         // even when their Wasm representation is the shared object cell.
         private const int ReferenceLocationBase = 32768;
@@ -51,7 +52,8 @@ namespace PortableCompiler
             location == ObjectLocation ? ObjectLayouts.ObjectReference :
             location == EventHandlerLocation ? ObjectLayouts.EventHandlerReference : location - ReferenceLocationBase;
 
-        internal static bool IsSpan(int type) => type == ObjectSpan || type == CharacterSpan || type == WritableCharacterSpan || type == ReadOnlyByteSpan;
+        internal static bool IsSpan(int type) => type == ObjectSpan || type == CharacterSpan || type == WritableCharacterSpan ||
+            type == ReadOnlyByteSpan || type == ReadOnlyInt32Span;
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
         // Keep the located CLI type in the verifier even though all cells share a Wasm heap.
         private const int ValueLocationBase = 65536;

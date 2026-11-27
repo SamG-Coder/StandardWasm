@@ -438,8 +438,14 @@ namespace PortableCompiler
                 }
                 else if (kind == LoadStaticByteSpan)
                 {
-                    used = SpanWasm.FromStaticBytes(code, used, operand, records[slot + 3], records[slot + Width + 1]);
+                    used = SpanWasm.FromStaticData(code, used, operand, records[slot + 3], records[slot + Width + 1], Bytes, ReadOnlyByteSpan);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, ReadOnlyByteSpan, depth));
+                }
+                else if (kind == LoadStaticPrimitiveSpan)
+                {
+                    int count = records[slot + Width + 1], vector = records[slot + Width + 2], span = records[slot + 3];
+                    used = SpanWasm.FromStaticData(code, used, operand, count, count, vector, span);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, span, depth));
                 }
                 else if (kind == TakeStaticByteLocation || kind == TakeCharacterSpanLocation || kind == TakeReadOnlyCharacterLocation)
                 {

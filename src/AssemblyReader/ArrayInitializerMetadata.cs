@@ -15,18 +15,20 @@ namespace PeLibrary
             if (!IsInitializeArray(image, heaps, methods, counts, first, member))
                 return -2;
 
-            return FindStaticData(image, heaps, methods, counts, first, field, byteCount, null);
+            return FindStaticData(image, heaps, methods, counts, first, field, byteCount, null, 1);
         }
 
-        internal static int FindStaticData(byte[] image, int[] heaps, int[] methods, int field, int byteCount, int[] backingSize)
+        internal static int FindStaticData(byte[] image, int[] heaps, int[] methods, int field, int byteCount, int[] backingSize,
+            int alignment = 1)
         {
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
             if (first < 0 || field < 1 || field > counts[4] || byteCount < 0) return -1;
-            return FindStaticData(image, heaps, methods, counts, first, field, byteCount, backingSize);
+            return FindStaticData(image, heaps, methods, counts, first, field, byteCount, backingSize, alignment);
         }
 
-        private static int FindStaticData(byte[] image, int[] heaps, int[] methods, int[] counts, int first, int field, int byteCount, int[] backingSize)
+        private static int FindStaticData(byte[] image, int[] heaps, int[] methods, int[] counts, int first, int field, int byteCount,
+            int[] backingSize, int alignment)
         {
             int strings = methods[2], blobs = methods[3];
             int fieldWidth = 2 + strings + blobs;
@@ -48,7 +50,10 @@ namespace PeLibrary
                 rva = U32(image, entry);
                 if (rva == 0) return -1;
             }
-            int source = rva == 0 ? -1 : PeLocator.MapImageRange(image, rva, (uint)size);
+            if (rva == 0) return -1;
+            // A loaded PE module base is aligned independently of file layout.
+            if ((rva & (uint)(alignment - 1)) != 0) return -2;
+            int source = PeLocator.MapImageRange(image, rva, (uint)size);
             if (source >= 0 && backingSize != null) backingSize[0] = size;
             return source;
         }

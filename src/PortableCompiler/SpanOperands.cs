@@ -165,11 +165,13 @@ namespace PortableCompiler
                 int load = Next(records, call, clauses);
                 if (load < 0) return 0;
                 int indirect = spanType == SignatureTypes.CharacterSpan ? 0x49 :
-                    spanType == SignatureTypes.ReadOnlyByteSpan ? 0x47 : 0;
+                    spanType == SignatureTypes.ReadOnlyByteSpan ? 0x47 :
+                    spanType == SignatureTypes.ReadOnlyInt32Span ? 0x4a : 0;
                 if (indirect != 0 ? records[load] != LoadIndirect || records[load + 1] != indirect :
                     records[load] != LoadObjectIndirect) return 0;
                 int vector = spanType == SignatureTypes.CharacterSpan ? SignatureTypes.Chars :
                     spanType == SignatureTypes.ReadOnlyByteSpan ? SignatureTypes.Bytes :
+                    spanType == SignatureTypes.ReadOnlyInt32Span ? SignatureTypes.Ints :
                     ObjectLayouts.RegisterArray(objects, ObjectLayouts.ObjectReference);
                 if (vector < 0) return vector;
                 records[call + 1] = vector;

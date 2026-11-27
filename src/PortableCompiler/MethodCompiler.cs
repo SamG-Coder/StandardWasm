@@ -705,6 +705,8 @@ namespace PortableCompiler
                     status = StaticByteSpans.Lower(bundle, image, layout, heaps, owner, context, methodArguments,
                         records, objects, catchRegion, literals, literalSize, location);
                     if (status < 0) return status;
+                    status = StaticPrimitiveSpans.Lower(image, layout, heaps, records, catchRegion, literals, literalSize, location);
+                    if (status < 0) return status;
                     if (locals != 0 && !resourceOpen)
                     {
                         PinnedByteSpans.Lower(bundle, image, heaps, layout, owner, context, methodArguments,

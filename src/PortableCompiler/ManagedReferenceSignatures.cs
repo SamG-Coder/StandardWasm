@@ -133,7 +133,8 @@ namespace PortableCompiler
             {
                 int type = arguments[0] == ObjectLayouts.ObjectReference ? ObjectSpan :
                     arguments[0] == GenericScalar.Key(3) ? CharacterSpan :
-                    arguments[0] == GenericScalar.Key(5) ? ReadOnlyByteSpan : 0;
+                    arguments[0] == GenericScalar.Key(5) ? ReadOnlyByteSpan :
+                    arguments[0] == GenericScalar.Key(8) ? ReadOnlyInt32Span : 0;
                 if (type != 0 && SpanMetadata.IsDefinition(image, layout, heaps, head[0])) return type;
                 if (type == CharacterSpan && SpanMetadata.IsDefinition(image, layout, heaps, head[0], writable: true))
                     return WritableCharacterSpan;
