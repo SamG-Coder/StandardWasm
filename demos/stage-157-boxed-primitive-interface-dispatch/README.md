@@ -53,6 +53,10 @@ Object slot. Writable and read-only spans copy the exact view into an immutable
 string. The cases check slicing, unpaired UTF-16 surrogates, supplementary
 characters, the default empty view and a stack-backed buffer.
 
+The generic null-test cases compare references and closed non-nullable
+values against the CLR. When the IL only tests nullness, the compiler
+evaluates the source value and folds away the non-nullable box.
+
 Both `Int32` cases have CLR answers. The compiler now binds the original
 `Number.TryFormatInt32<char>` generic method. Until the formatting pipeline
 lowers, the verifier accepts only the located diagnostic at the pinned local

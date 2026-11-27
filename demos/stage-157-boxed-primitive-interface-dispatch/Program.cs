@@ -29,7 +29,8 @@ internal static class Program
             ExactRootDispatch, DynamicRootDispatch, NullRootDispatch, PrimitiveVectorRootDispatch,
             TypeSimpleNames, NullTypeSimpleName, TypeNameAndDisplayName,
             WritableSpanString, ReadOnlySpanString, EmptySpanString, NativeSpanString,
-            PrimitiveVectorTypeIdentity, PrimitiveVectorAliases, InitializedPrimitiveVectorIdentity
+            PrimitiveVectorTypeIdentity, PrimitiveVectorAliases, InitializedPrimitiveVectorIdentity,
+            ClosedValueIsNotNull, ClosedValueIsNull, ClosedReferenceNullCheck
         };
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
@@ -42,6 +43,20 @@ internal static class Program
                 Path.Combine(runtime, "System.Memory.dll")
             }, cases = results
         }));
+    }
+
+    public static int ClosedValueIsNotNull() => IsPresent(new NullProbeValue(7)) ? 81 : 0;
+    public static int ClosedValueIsNull() => IsMissing(new NullProbeValue(0)) ? 0 : 83;
+    public static int ClosedReferenceNullCheck() =>
+        IsPresent("value") && IsMissing<string?>(null) ? 89 : 0;
+
+    private static bool IsPresent<T>(T item) => (object?)item != null;
+    private static bool IsMissing<T>(T item) => (object?)item == null;
+
+    private readonly struct NullProbeValue
+    {
+        internal readonly int Number;
+        internal NullProbeValue(int number) => Number = number;
     }
 
     public static int TypeSimpleNames()

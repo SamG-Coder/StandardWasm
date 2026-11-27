@@ -1377,6 +1377,10 @@ namespace PortableCompiler
                         int type = ManagedReferenceSignatures.TypeSpecIdentity(bundle, image, layout, heaps,
                             owner, operand & 0xffffff, context, objects, methodArguments);
                         if (type < 0) return type;
+                        if ((ObjectLayouts.IsEnumKey(type) || ObjectLayouts.IsValueType(objects, type) &&
+                            !ObjectLayouts.IsNullableValueType(objects, type) && !ObjectLayouts.IsByRefLikeValue(objects, type)) &&
+                            BoxNullTests.Fold(records, slot, clauses))
+                            continue;
                         if (IsObjectReference(type) && !ObjectLayouts.IsValueType(objects, type))
                         {
                             // A closed reference T is already a CLR object. box T widens its type and preserves identity.
