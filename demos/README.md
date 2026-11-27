@@ -182,6 +182,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [176 · String span ranges](stage-176-string-span-ranges/README.md) | `npm run demo -- stage-176-string-span-ranges` | Compare UTF-16 string ranges, null and bounds checks, and argument order across CLR, Node, and Edge |
 | [177 · String copy to span](stage-177-string-copy-to-span/README.md) | `npm run demo -- stage-177-string-copy-to-span` | Run original CoreLib string copy into managed and native spans with typed failure parity |
 | [179 · Character span search](stage-179-character-span-search/README.md) | `npm run demo -- stage-179-character-span-search` | Compare bounded UTF-16 searches on managed and native-backed views across CLR, Node, and Edge |
+| [180 · CoreLib monitors](stage-180-corelib-monitors/README.md) | `npm run demo -- stage-180-corelib-monitors` | Run original AppContext code and verify monitor depth and typed failures |
 
 ## Adding a stage
 

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
+import { createMonitorHost } from "../demos/stage-74-executable-entry/resource-host.mjs";
 import { runOn32BitClr, wasm32Runtime } from "./runtime-packs.mjs";
 import { root } from "./toolchain.mjs";
 
@@ -23,7 +24,7 @@ export async function verifyManagedDemo(stageName) {
         return [header, image];
     }));
 
-    async function verify(compiler, bundle, cases) {
+    async function verify(compiler, bundle, cases, createMonitor) {
         const { instance: { exports: tool } } = await WebAssembly.instantiate(compiler);
         function upload(bytes) {
             const array = tool.CreateBytes(bytes.length);
@@ -34,7 +35,7 @@ export async function verifyManagedDemo(stageName) {
         const output = tool.CreateBytes(2 << 20);
         const diagnostic = tool.CreateDiagnostic();
         const outcomes = [];
-        for (const { name, row, expected, memory } of cases) {
+        for (const { name, row, expected, memory, monitor } of cases) {
             const manifest = Uint8Array.from([0, 0, 0, 0, 3, 0, 0, 0, 114, 117, 110]);
             new DataView(manifest.buffer).setUint32(0, row, true);
             const length = tool.CompileBundleDetailed(input, upload(manifest), output, diagnostic);
@@ -46,18 +47,27 @@ export async function verifyManagedDemo(stageName) {
             const bytes = Uint8Array.from({ length }, (_, i) => tool.ReadByte(output, i));
             const module = await WebAssembly.compile(bytes);
             const declarations = WebAssembly.Module.imports(module);
-            const requested = declarations[0];
-            if (memory ? declarations.length !== 1 || requested.module !== "standardwasm:resources" ||
-                requested.name !== "memory" || requested.kind !== "memory" : declarations.length !== 0)
+            const imports = {};
+            const allowed = [];
+            if (memory) {
+                allowed.push("standardwasm:resources/memory/memory");
+                imports["standardwasm:resources"] = { memory: new WebAssembly.Memory({ initial: 1 }) };
+            }
+            if (monitor) {
+                allowed.push("standardwasm:threading/changeMonitorDepth/function");
+                imports["standardwasm:threading"] = createMonitor();
+            }
+            const requested = declarations.map(item => item.module + "/" + item.name + "/" + item.kind).sort();
+            allowed.sort();
+            if (requested.length !== allowed.length || requested.some((item, index) => item !== allowed[index]))
                 throw Error(name + " has unexpected host imports");
-            const imports = memory ? { "standardwasm:resources": { memory: new WebAssembly.Memory({ initial: 1 }) } } : {};
             const instance = await WebAssembly.instantiate(module, imports);
             outcomes.push({ name, expected, result: instance.exports.run() });
         }
         return outcomes;
     }
 
-    const node = await verify(compiler, bundle, oracle.cases);
+    const node = await verify(compiler, bundle, oracle.cases, createMonitorHost);
     const browser = await chromium.launch({ channel: "msedge" });
     try {
         const page = await browser.newPage();
@@ -68,11 +78,12 @@ export async function verifyManagedDemo(stageName) {
                 route.fulfill({ body: "<!doctype html>", contentType: "text/html" });
         });
         await page.goto("http://127.0.0.1/");
-        const edge = await page.evaluate(async ({ source, cases }) => {
+        const edge = await page.evaluate(async ({ source, cases, monitorSource }) => {
             const inputs = await Promise.all(["/compiler", "/bundle"].map(async path =>
                 (await fetch(path)).arrayBuffer()));
-            return (0, eval)("(" + source + ")")(...inputs, cases);
-        }, { source: verify.toString(), cases: oracle.cases });
+            const createMonitor = (0, eval)("(" + monitorSource + ")");
+            return (0, eval)("(" + source + ")")(...inputs, cases, createMonitor);
+        }, { source: verify.toString(), cases: oracle.cases, monitorSource: createMonitorHost.toString() });
         const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
         const result = { compiler: sha256(compiler), assembly: sha256(assembly), clr: oracle.runtime,
             node: process.version, edge: browser.version(), outcomes: node };
