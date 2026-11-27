@@ -1137,6 +1137,11 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - CharacterSpanSearchWasm.Capacity) return -3;
                                 capacity += CharacterSpanSearchWasm.Capacity;
                             }
+                            else if (kind == BranchIl.EqualCharacterSpans)
+                            {
+                                if (capacity > int.MaxValue - SpanWasm.EqualityCapacity) return -3;
+                                capacity += SpanWasm.EqualityCapacity;
+                            }
                             else if (kind == BranchIl.ArrayClear)
                             {
                                 tags = ExceptionTypes.ArgumentNull | ExceptionTypes.IndexOutOfRange;
@@ -2299,6 +2304,15 @@ namespace PortableCompiler
                     bool addressed = address != 0;
                     if (!addressed && (opcode == 0x73 || opcode == 0x28))
                     {
+                        int equality = opcode == 0x28 ? SpanMetadata.CharacterEquality(bundle, image, layout, heaps,
+                            owner, member, context, methodArguments, objects) : 0;
+                        if (equality != 0)
+                        {
+                            records[slot] = BranchIl.EqualCharacterSpans;
+                            records[slot + 1] = equality < 0 ? 1 : 0;
+                            records[slot + 3] = equality < 0 ? -equality : equality;
+                            continue;
+                        }
                         int span = SpanMetadata.ClassifySpanCall(bundle, image, layout, heaps,
                             owner, member, context, methodArguments, objects, opcode == 0x73);
                         if (span == BranchIl.NativeCharacterSpan && opcode == 0x73)

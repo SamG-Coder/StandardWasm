@@ -224,6 +224,30 @@ namespace PortableCompiler
                 OpenSpan(image, layout, heaps, cursor[0], end, cursor, true) == end;
         }
 
+        // A negative result denotes inequality on the same verified span type.
+        internal static int CharacterEquality(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int member, int context, int[] methodArguments, int[] objects)
+        {
+            var reference = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadMember(image, heaps, layout, member, reference, allowClosedParent: true) < 0)
+                return 0;
+            int parent = reference[AssemblyReferences.GenericParent];
+            if (parent == 0) return 0;
+            uint name = (uint)reference[4];
+            bool unequal = MatchesAscii(image, heaps, name, "op_Inequality");
+            if (!unequal && !MatchesAscii(image, heaps, name, "op_Equality")) return 0;
+            int type = ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps, owner,
+                parent, objects, context, methodArguments);
+            bool writable = type == WritableCharacterSpan;
+            if (!writable && type != CharacterSpan) return 0;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, reference[5], 2, cursor);
+            if (end < 0 || !SignatureReader.TakeElement(image, cursor, end, SignatureReader.Boolean)) return 0;
+            int second = OpenSpan(image, layout, heaps, cursor[0], end, cursor, writable);
+            return second >= 0 && OpenSpan(image, layout, heaps, second, end, cursor, writable) == end
+                ? unequal ? -type : type : 0;
+        }
+
         internal static bool IsSingleObjectConstructor(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int member, int context, int[] methodArguments, int[] objects)
         {

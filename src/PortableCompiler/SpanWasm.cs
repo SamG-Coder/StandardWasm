@@ -5,7 +5,7 @@ namespace PortableCompiler
 {
     internal static class SpanWasm
     {
-        internal const int TypeBytes = 8;
+        internal const int TypeBytes = 8, EqualityCapacity = 144;
 
         internal static int WriteType(byte[] output, int cursor)
         {
@@ -107,6 +107,45 @@ namespace PortableCompiler
             used = Const(code, used, 0);
             code[used++] = 0x05;
             used = LoadField(code, used, view, 2);
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        internal static int Equal(byte[] code, int used, int left, int right)
+        {
+            used = Length(code, used, left);
+            used = Length(code, used, right);
+            code[used++] = 0x46; // i32.eq
+            code[used++] = 0x04; code[used++] = 0x7f; // if (result i32)
+            used = AnchorField(code, used, left, 0);
+            used = AnchorField(code, used, right, 0);
+            code[used++] = 0xd3; // ref.eq
+            used = AnchorField(code, used, left, 1);
+            used = AnchorField(code, used, right, 1);
+            code[used++] = 0x46;
+            code[used++] = 0x71; // i32.and
+            code[used++] = 0x05;
+            used = Const(code, used, 0);
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        // The default view has a null reference. An explicit native zero
+        // address describes that same anchor. Empty managed owners stay distinct.
+        private static int AnchorField(byte[] code, int used, int view, byte field)
+        {
+            used = Local(code, used, 0x20, view);
+            code[used++] = 0xd1;
+            code[used++] = 0x04;
+            code[used++] = field == 0 ? (byte)0x6d : (byte)0x7f;
+            if (field == 0)
+            {
+                code[used++] = 0xd0;
+                code[used++] = 0x6d;
+            }
+            else used = Const(code, used, 0);
+            code[used++] = 0x05;
+            used = LoadField(code, used, view, field);
             code[used++] = 0x0b;
             return used;
         }

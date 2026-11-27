@@ -1273,6 +1273,15 @@ namespace PortableCompiler
                     used = SpanWasm.Slice(code, used, type, view, start, length, frameShape[25] != 0);
                     used = Local(code, used, 0x21, view);
                 }
+                else if (kind == EqualCharacterSpans)
+                {
+                    int type = records[slot + 3];
+                    used = SpanWasm.Equal(code, used,
+                        Spill(spills, maximum, spillFlags, type, top - 1),
+                        Spill(spills, maximum, spillFlags, type, top));
+                    if (operand != 0) code[used++] = 0x45; // i32.eqz
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top - 1));
+                }
                 else if (kind == ArrayClear)
                 {
                     int first = depth - operand;
