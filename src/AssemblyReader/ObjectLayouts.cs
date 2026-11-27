@@ -393,7 +393,8 @@ namespace PeLibrary
         private static int Slot(int type) => Header + (type - FirstClass) * Width;
 
         internal static int Parent(int[] registry, int type) => registry[Slot(type) + Base];
-        internal static bool IsSealed(int[] registry, int type) => (registry[Slot(type) + ShapeFlags] & 0x100) != 0;
+        internal static bool IsSealed(int[] registry, int type) =>
+            type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & 0x100) != 0;
         internal static bool IsAbstract(int[] registry, int type) => (registry[Slot(type) + ShapeFlags] & 0x80) != 0;
         internal static bool IsInterface(int[] registry, int type) =>
             type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & 0x20) != 0;
