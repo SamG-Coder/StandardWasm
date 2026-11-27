@@ -64,6 +64,10 @@ The runtime type fixture compares `Object.GetType` for a derived instance,
 a plain object, a string, and boxed `Int32` and `UInt32` against the CLR.
 It includes an interface receiver, a null receiver, and the identity shared
 by `typeof(string)` and `typeof(T)` when `T` is `string`.
+The array descriptor fixture compares exact identities for primitive,
+enum, reference and jagged vectors. Generic methods return the same
+descriptors as their closed type tokens. It also tests `GetType` on a
+reference array viewed through `object`.
 
 The closed interface fixture checks implicit and explicit implementations,
 including different `int` and `uint` instantiations on one class, a closed

@@ -65,7 +65,7 @@ namespace PortableCompiler
         }
 
         internal void ApplyClosedResults(BundleImages bundle, int[] owners, int[] rows, int[] contexts,
-            int[] offsets, int[] signatures, int[] objects, int first, int functions)
+            MethodInstantiations instantiations, int[] offsets, int[] signatures, int[] objects, int first, int functions)
         {
             // Registry numbers and function indices can change on re-emission.
             // Match the declaring MethodDef and check the instantiated result.
@@ -74,8 +74,8 @@ namespace PortableCompiler
                 if (slots[entry + 2] != ClosedResultSlot) continue;
                 for (int function = first; function < functions; function++)
                 {
-                    if (contexts[function] == 0 || owners[function] != slots[entry] ||
-                        rows[function] != slots[entry + 1]) continue;
+                    if (owners[function] != slots[entry] || rows[function] != slots[entry + 1] ||
+                        contexts[function] == 0 && instantiations.Arguments(function) == null) continue;
                     int result = offsets[function];
                     if (RuntimeTypeLocals.IsLinkedSystemType(bundle, objects, signatures[result]))
                         signatures[result] = RuntimeTypeMetadata.Type;

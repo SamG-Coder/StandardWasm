@@ -364,7 +364,7 @@ namespace PortableCompiler
                 }
 
                 typeCalls.ApplyDescriptorSignatures(bases, indices, offsets, signatures);
-                typeCalls.ApplyClosedResults(bundle, owners, rows, contexts, offsets, signatures, objects, closedResultsThrough, functions);
+                typeCalls.ApplyClosedResults(bundle, owners, rows, contexts, instantiations, offsets, signatures, objects, closedResultsThrough, functions);
                 closedResultsThrough = functions;
                 int parameters = arities[current];
                 int signature = offsets[current];
@@ -474,7 +474,7 @@ namespace PortableCompiler
                     for (int local = 0; local < frameCells.Length; local++)
                         if (frameCells[local] != 0 && inlineLocations[local] != 0) return -2;
                     typeCalls.ApplyDescriptorSignatures(bases, indices, offsets, signatures);
-                    typeCalls.ApplyClosedResults(bundle, owners, rows, contexts, offsets, signatures, objects, closedResultsThrough, functions);
+                    typeCalls.ApplyClosedResults(bundle, owners, rows, contexts, instantiations, offsets, signatures, objects, closedResultsThrough, functions);
                     closedResultsThrough = functions;
                     RuntimeTypeLocals.Specialize(bundle, records, frame, parameters, locals, objects, catchRegion, signatures, offsets);
                     if (location.Length != 0) location[2] = -1;
@@ -503,9 +503,8 @@ namespace PortableCompiler
                     {
                         int resultSource = descriptorMismatch[2] - 1;
                         if (resultSource >= 0 && !IsExported(exports, resultSource) &&
-                            (contexts[resultSource] != 0 || instantiations.Arguments(resultSource) == null) &&
                             typeCalls.RequireResult(bundle, owners[resultSource], rows[resultSource], signatures[offsets[resultSource]],
-                                objects, contexts[resultSource] != 0))
+                                objects, contexts[resultSource] != 0 || instantiations.Arguments(resultSource) != null))
                         {
                             features[0] = hostFeatures | hostUse[0];
                             return Reemit;

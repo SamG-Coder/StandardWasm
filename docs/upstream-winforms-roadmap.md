@@ -148,12 +148,14 @@ The replay compiles the `IArrangedElement` interface test in
 against the final class layouts and preserves the tested reference.
 `Object.GetType` in that method's error path now resolves concrete class
 identity from an object reference. Plain objects, strings and observed
-primitive boxes use their own canonical descriptors. Arrays and other
-representations without exact runtime type identity remain outside this
-lookup. Internal calls now carry supported managed locations as results,
+primitive boxes use their own canonical descriptors. Array tokens retain
+the exact CLR element type, and arrays with registered nominal layouts
+can participate in `Object.GetType`. Runtime lookup for primitive arrays
+that share a Wasm heap still needs exact allocation identity. Internal calls
+now carry supported managed locations as results,
 which lets the replay bind the by-reference `FindValue` return in
-`Dictionary.TryGetValue`. The next diagnostic is the `Byte[]` type token
-in the original `Value.get_Type`.
+`Dictionary.TryGetValue`. The replay binds the `Byte[]` token in the
+original `Value.get_Type` and next stops at that method's return.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

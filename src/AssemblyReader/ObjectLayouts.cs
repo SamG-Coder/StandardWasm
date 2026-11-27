@@ -41,6 +41,13 @@ namespace PeLibrary
         // defining identity survives substitution until storage is requested.
         internal static bool IsEnumKey(int key) => key >= EnumKeyBase;
 
+        internal static void EnumIdentity(int[] registry, int key, int[] identity)
+        {
+            int slot = key - EnumKeyBase;
+            identity[0] = registry[slot];
+            identity[1] = registry[slot + 1];
+        }
+
         internal static int SignatureStorage(int[] registry, int key) =>
             IsEnumKey(key) ? registry[key - EnumKeyBase + 2] : GenericScalar.Storage(key);
 
@@ -204,7 +211,7 @@ namespace PeLibrary
 
         internal static bool IsEnumArray(int[] registry, int type) => IsEnumKey(ArrayElementKey(registry, type));
 
-        private static int ArrayElementKey(int[] registry, int type) =>
+        internal static int ArrayElementKey(int[] registry, int type) =>
             type >= FirstClass && type - FirstClass < registry[0] ? registry[Slot(type) + Element] : 0;
 
         internal static bool HasArguments(int[] registry, int type) =>

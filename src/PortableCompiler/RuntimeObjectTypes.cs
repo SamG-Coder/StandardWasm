@@ -34,8 +34,8 @@ namespace PortableCompiler
             {
                 int type = FirstClass + index;
                 if (IsValueType(objects, type) || IsInterface(objects, type) || PrimitiveBoxing.IsLayout(objects, type) ||
-                    ArrayElement(objects, type) != 0 || !Includes(objects, type)) continue;
-                int descriptor = RuntimeTypeTokens.BindLayout(objects, type, globals);
+                    !Includes(objects, type)) continue;
+                int descriptor = RuntimeTypeTokens.BindLayout(bundle, objects, type, globals);
                 if (descriptor < 0) return descriptor;
                 position = HeapCase(code, position, WasmBinary.HeapType(type), descriptor);
                 if (position < 0) return position;

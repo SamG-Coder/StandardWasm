@@ -12,6 +12,7 @@ namespace PeLibrary
         internal static int Element(int key) => key & ElementMask;
 
         internal static bool IsScalar(int key) => (key & ~ElementMask) == ScalarBase;
+        internal static bool IsVector(int key) => (key & ~ElementMask) == VectorBase;
 
         internal static int VectorKey(int scalar)
         {
@@ -22,7 +23,7 @@ namespace PeLibrary
         internal static int Storage(int key)
         {
             int element = key & ElementMask;
-            if ((key & ~ElementMask) == VectorBase) return ArrayTypeRefs.Storage(element);
+            if (IsVector(key)) return ArrayTypeRefs.Storage(element);
             if (!IsScalar(key)) return key;
             if (element <= 7) return NarrowStorage.FromElement(element);
             if (element == 8 || element == 9) return 1; // CLI int32 stack category.
