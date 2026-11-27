@@ -78,7 +78,11 @@ async function verify() {
         assert.equal(result.target, "net10.0");
     }
     assert.equal(nodeDesktop.state, "unsupported");
-    assert.equal(nodeDesktop.compilerStatus, -2);
+    // The framework-dependent desktop publish does not ship System.Windows.Forms. Since the
+    // pointer stages (#297, #298) the compiler links Main up to newobj MainForm::.ctor
+    // (IL_0005) and reports the missing referenced assembly there (-4, AssemblyBundle.FindOwner).
+    assert.equal(nodeDesktop.compilerStatus, -4);
+    assert.deepEqual(nodeDesktop.diagnostic, [0, 2, 5]);
 
     const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
     const browser = await chromium.launch({
