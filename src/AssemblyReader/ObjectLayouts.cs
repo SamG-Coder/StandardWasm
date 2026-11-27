@@ -566,8 +566,8 @@ namespace PeLibrary
             if (!IsInterface(registry, target) || (registry[Slot(target) + ShapeFlags] & ArrayEnumerableShape) == 0)
                 return false;
             int element = ArrayElementKey(registry, source);
-            return element >= FirstClass && ArrayElementKey(registry, element) == 0 &&
-                !IsInterface(registry, element) && !IsValueType(registry, element) &&
+            return element >= FirstClass && element - FirstClass < registry[0] &&
+                ArrayElementKey(registry, element) == 0 && !IsInterface(registry, element) && !IsValueType(registry, element) &&
                 element == Argument(registry, target, 0);
         }
 
