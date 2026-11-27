@@ -45,6 +45,15 @@ namespace PeLibrary
                     ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2, "System.Reflection", "RuntimeAssembly"));
         }
 
+        internal static bool IsRuntimeTypeDefinition(byte[] image, int[] heaps, int[] layout, int coded)
+        {
+            if ((coded & 3) != 0) return false;
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            return first >= 0 && PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts) &&
+                ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2, "System", "RuntimeType");
+        }
+
         internal static bool ValidDefinition(byte[] image, int[] heaps, int row)
         {
             // TypeDef row 1 is the module pseudo-type and has no runtime Type.

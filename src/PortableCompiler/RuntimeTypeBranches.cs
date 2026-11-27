@@ -23,9 +23,25 @@ namespace PortableCompiler
                 if (!GetTypeCall(image, layout, heaps, records, leftCall, methodCount)) continue;
                 int second = Next(records, leftCall);
                 if (second >= records.Length) continue;
+                int cast = -1, store = -1, reload = -1;
+                if (records[second] == CastClass &&
+                    RuntimeTypeMetadata.IsRuntimeTypeDefinition(image, heaps, layout, records[second + 1]))
+                    cast = second;
+                int candidate = cast < 0 ? second : Next(records, cast);
+                if (candidate < records.Length && records[candidate] == Store)
+                {
+                    int load = Next(records, candidate);
+                    if (load < records.Length && records[load] == Load && records[load + 1] == records[candidate + 1])
+                    {
+                        store = candidate;
+                        reload = load;
+                        second = Next(records, load);
+                    }
+                }
+                if (second >= records.Length) continue;
                 if (records[second] != LoadTypeToken)
                 {
-                    if (FoldTypePropertyBranch(bundle, image, layout, heaps, owner, context, methodArguments, objects,
+                    if (store < 0 && FoldTypePropertyBranch(bundle, image, layout, heaps, owner, context, methodArguments, objects,
                         records, clauses, first, leftCall, second)) changed = true;
                     continue;
                 }
@@ -38,6 +54,9 @@ namespace PortableCompiler
                 if (branch >= records.Length || records[branch] != Conditional ||
                     (records[branch + 3] != 0x45 && records[branch + 3] != 0)) continue;
                 if (ValueOperands.Entry(records, leftCall / Width, clauses) ||
+                    cast >= 0 && ValueOperands.Entry(records, cast / Width, clauses) ||
+                    store >= 0 && (ValueOperands.Entry(records, store / Width, clauses) ||
+                        ValueOperands.Entry(records, reload / Width, clauses)) ||
                     ValueOperands.Entry(records, second / Width, clauses) ||
                     ValueOperands.Entry(records, rightCall / Width, clauses) ||
                     ValueOperands.Entry(records, compare / Width, clauses) ||
@@ -50,16 +69,36 @@ namespace PortableCompiler
                 bool equal = left[0] == right[0] && left[1] == right[1];
                 bool result = operation == 2 ? equal : !equal;
                 bool taken = records[branch + 3] == 0x45 ? !result : result;
-                records[first] = Nop;
-                records[leftCall] = Nop;
                 records[second] = Nop;
                 records[rightCall] = Nop;
                 records[compare] = Nop;
                 records[branch] = taken ? Branch : Nop;
                 records[branch + 3] = 0;
+                if (store >= 0)
+                {
+                    // Fold the independent comparison first. The producer is
+                    // removable only when no live code can read or address its local.
+                    records[reload] = Nop;
+                    RemoveUnreachable(records);
+                    if (LocalIsRead(records, records[store + 1])) continue;
+                    records[store] = Nop;
+                    if (cast >= 0) records[cast] = Nop;
+                }
+                records[first] = Nop;
+                records[leftCall] = Nop;
                 changed = true;
             }
             if (changed) RemoveUnreachable(records);
+        }
+
+        private static bool LocalIsRead(int[] records, int local)
+        {
+            for (int slot = 0; slot < records.Length; slot += Width)
+            {
+                int kind = records[slot];
+                if ((kind == Load || kind == FrameAddress) && records[slot + 1] == local) return true;
+            }
+            return false;
         }
 
         // A closed sizeof is a literal CLI size. Fold only an independent
