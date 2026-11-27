@@ -1499,7 +1499,7 @@ namespace PortableCompiler
                     if (status < 0) return status;
                     if (!checkReceiver)
                     {
-                        int intrinsic = StaticByteIntrinsics.Identify(image, layout, heaps, counts, spec);
+                        int intrinsic = StaticByteIntrinsics.Identify(image, layout, heaps, counts, spec, methodArguments);
                         if (intrinsic != 0)
                         {
                             records[slot] = intrinsic;
@@ -1598,6 +1598,14 @@ namespace PortableCompiler
                         int locationType = ManagedReferenceSignatures.TypeSpecLocation(bundle, image, layout, heaps,
                             owner, row, context, objects, methodArguments);
                         if (locationType < 0) return locationType;
+                        if (locationType == CharacterLocation && kind != BranchIl.InitializeValue)
+                        {
+                            // Closed generic char ldobj/stobj has the same storage as ldind.u2/stind.i2.
+                            bool load = kind == BranchIl.LoadObject;
+                            records[slot] = load ? BranchIl.LoadIndirect : BranchIl.StoreIndirect;
+                            records[slot + 1] = load ? 0x49 : 0x53;
+                            continue;
+                        }
                         if (!IsValueLocation(locationType) && locationType != BooleanLocation &&
                             !IsReferenceLocation(locationType)) return -2;
                         int vector = IsValueLocation(locationType) ? 0 :

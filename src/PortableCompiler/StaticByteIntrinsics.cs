@@ -21,12 +21,23 @@ namespace PortableCompiler
             return U16(image, signature) == 0x0602 && image[signature + 2] == 2;
         }
 
-        internal static int Identify(byte[] image, int[] layout, int[] heaps, int[] counts, int[] spec)
+        internal static int Identify(byte[] image, int[] layout, int[] heaps, int[] counts, int[] spec,
+            int[] methodArguments)
         {
             int argument = spec[MethodSpecifications.Arguments];
-            if (spec[MethodSpecifications.Arity] != 1 || spec[MethodSpecifications.End] != argument + 1) return 0;
+            int end = spec[MethodSpecifications.End];
+            if (spec[MethodSpecifications.Arity] != 1 || argument >= end) return 0;
             int key = image[argument];
-            if (key != 5 && key != 7) return 0; // Byte or UInt16.
+            if (key == 0x1e && methodArguments != null)
+            {
+                var afterIndex = new int[1];
+                int index = CompressedUnsigned(image, argument + 1, end, afterIndex);
+                if (index < 0 || index >= methodArguments.Length || afterIndex[0] != end ||
+                    methodArguments[index] != GenericScalar.Key(3)) return 0;
+                key = 3;
+            }
+            else if (end != argument + 1) return 0;
+            if (key != 3 && key != 5 && key != 7) return 0; // Char, Byte or UInt16.
 
             int target = spec[MethodSpecifications.Target], row = target >> 1;
             int signature, name;
@@ -63,8 +74,9 @@ namespace PortableCompiler
             int size = CompressedUnsigned(image, heaps[0] + signature, limit, next);
             int start = next[0];
             if (size <= 0 || size > limit - start) return 0;
-            if (marshal && key == 5 && MatchesAscii(image, heaps, (uint)name, "GetReference"))
-                return IsReadOnlySpanReference(image, layout, heaps, start, start + size, next) ? TakeStaticByteLocation : 0;
+            if (marshal && (key == 3 || key == 5) && MatchesAscii(image, heaps, (uint)name, "GetReference") &&
+                IsSpanReference(image, layout, heaps, start, start + size, next, writable: key == 3))
+                return key == 3 ? TakeCharacterSpanLocation : TakeStaticByteLocation;
 
             if (!unsafeType) return 0;
             // static T& AddByteOffset<T>(T&, nint/nuint)
@@ -80,15 +92,16 @@ namespace PortableCompiler
             return 0;
         }
 
-        // static T& GetReference<T>(valuetype ReadOnlySpan<T>).
-        private static bool IsReadOnlySpanReference(byte[] image, int[] layout, int[] heaps, int start, int end, int[] next)
+        // static T& GetReference<T>(valuetype Span<T> or ReadOnlySpan<T>).
+        private static bool IsSpanReference(byte[] image, int[] layout, int[] heaps, int start, int end,
+            int[] next, bool writable)
         {
             if (end - start < 12 || U32(image, (uint)start) != 0x10010110 ||
                 U32(image, (uint)(start + 4)) != 0x1115001e) return false;
             int span = CompressedUnsigned(image, start + 8, end, next);
             int at = next[0];
             return span > 0 && end - at == 3 && image[at] == 1 && image[at + 1] == 0x1e &&
-                image[at + 2] == 0 && SpanMetadata.IsDefinition(image, layout, heaps, span);
+                image[at + 2] == 0 && SpanMetadata.IsDefinition(image, layout, heaps, span, writable);
         }
     }
 }

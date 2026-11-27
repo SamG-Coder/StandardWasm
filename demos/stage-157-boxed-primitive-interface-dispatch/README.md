@@ -15,7 +15,10 @@ The runner also passes runtime `Type` descriptors through the original
 The override cases pass two descriptors and a null argument.
 The byte-span cases exercise implicit conversion and construction from a
 managed array, including aliasing, slicing, a returned view, null, empty views
-and bounds.
+and bounds. Writable character span cases get references through CoreLib's
+`MemoryMarshal.GetReference` and verify writes to sliced array storage,
+including a generic caller. Dereferencing the default span's reference
+must raise the same typed exception as on the CLR.
 
 Both `Int32` cases have CLR answers. The compiler now binds the original
 `Number.TryFormatInt32<char>` generic method. Until the formatting pipeline

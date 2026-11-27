@@ -69,7 +69,7 @@ namespace PortableCompiler
 
         internal static int OffsetStaticByte(byte[] code, int used, int location, int offset)
         {
-            used = SpanWasm.OpenByteLocation(code, used, location);
+            used = SpanWasm.OpenLocation(code, used, location, StaticByteLocation);
             used = LoadField(code, used, location, 0);
             used = LoadField(code, used, location, 1);
             used = Local(code, used, 0x20, offset);

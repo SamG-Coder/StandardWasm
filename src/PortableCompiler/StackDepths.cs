@@ -239,6 +239,8 @@ namespace PortableCompiler
             if (kind == LoadStaticByteSpan) return Push(stack, allocated, depth, ReadOnlyByteSpan);
             if (kind == TakeStaticByteLocation)
                 return Match(stack, depth, ReadOnlyByteSpan) ? Push(stack, allocated, depth - 1, StaticByteLocation) : -2;
+            if (kind == TakeCharacterSpanLocation)
+                return Match(stack, depth, WritableCharacterSpan) ? Push(stack, allocated, depth - 1, CharacterLocation) : -2;
             if (kind == OffsetStaticByteLocation)
                 return depth >= 2 && Match(stack, depth - 1, StaticByteLocation) && IsNativeInteger(stack[depth - 1]) ? depth - 1 : -2;
             if (kind == ReadStaticUInt16)

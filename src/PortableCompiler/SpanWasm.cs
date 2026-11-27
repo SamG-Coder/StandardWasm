@@ -72,26 +72,27 @@ namespace PortableCompiler
             return Gc(code, used, 0, ReadOnlyByteSpan);
         }
 
-        internal static int TakeStaticByteLocation(byte[] code, int used, int view)
+        internal static int TakeLocation(byte[] code, int used, int view, int type)
         {
-            used = OpenByteLocation(code, used, view);
+            // Preserve the backing owner and the span's current offset for subsequent reads and writes.
+            used = OpenLocation(code, used, view, type);
             used = LoadField(code, used, view, 0);
             used = LoadField(code, used, view, 1);
-            used = Gc(code, used, 0, StaticByteLocation);
+            used = Gc(code, used, 0, type);
             code[used++] = 0x0b;
             return used;
         }
 
         // GetReference(default) yields a null location. Taking or advancing
         // the address doesn't dereference its owner.
-        internal static int OpenByteLocation(byte[] code, int used, int local)
+        internal static int OpenLocation(byte[] code, int used, int local, int type)
         {
             used = Local(code, used, 0x20, local);
             code[used++] = 0xd1; // ref.is_null
             code[used++] = 0x04;
-            used = WasmBinary.ValueType(code, used, StaticByteLocation);
+            used = WasmBinary.ValueType(code, used, type);
             code[used++] = 0xd0; // ref.null
-            used = WasmBinary.Signed(code, used, WasmBinary.HeapType(StaticByteLocation));
+            used = WasmBinary.Signed(code, used, WasmBinary.HeapType(type));
             code[used++] = 0x05;
             return used;
         }

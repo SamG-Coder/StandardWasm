@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 internal static class Program
@@ -20,7 +21,8 @@ internal static class Program
             BoxedIntMatch, BoxedDoubleMatch, BoxedBooleanMiss, StringMiss, NullMiss, ReferenceMatch, BoxIdentity,
             OriginalIntWrites, OriginalIntTooShort, OriginalCharWrites, OriginalCharTooShort, ReferenceWrites,
             FormatProviderDescriptor, VirtualDescriptorArguments,
-            ImplicitByteView, ConstructedByteView, ReturnedByteView, NullByteView, EmptyByteView, ByteViewBounds
+            ImplicitByteView, ConstructedByteView, ReturnedByteView, NullByteView, EmptyByteView, ByteViewBounds,
+            WritableSpanReference, ClosedGenericSpanReference, DefaultSpanReference
         };
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
@@ -34,6 +36,39 @@ internal static class Program
             }, cases = results
         }));
     }
+
+    public static int WritableSpanReference()
+    {
+        char[] data = ['a', 'b', 'c'];
+        Span<char> view = new Span<char>(data).Slice(1);
+        ref char start = ref MemoryMarshal.GetReference(view);
+        start = 'x';
+        return data[0] * 10000 + data[1] * 100 + view[1];
+    }
+
+    public static int ClosedGenericSpanReference()
+    {
+        char[] data = ['a', 'b', 'c'];
+        Span<char> view = new Span<char>(data).Slice(2);
+        WriteSpanStart(view, 'z');
+        return data[1] * 100 + data[2];
+    }
+
+    public static int DefaultSpanReference()
+    {
+        try
+        {
+            ref char start = ref MemoryMarshal.GetReference(default(Span<char>));
+            return start;
+        }
+        catch (NullReferenceException)
+        {
+            return -1;
+        }
+    }
+
+    private static void WriteSpanStart<T>(Span<T> view, T value) =>
+        MemoryMarshal.GetReference(view) = value;
 
     private static bool Matches(object value) => value is ISpanFormattable;
 
