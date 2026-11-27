@@ -438,6 +438,16 @@ namespace PortableCompiler
                 int status = 0;
                 if (stub < 0 && initializerPrologue < 0)
                 {
+                    int intrinsic = PlatformMembers.CoreMathInternalCall(image, heaps, layout, source);
+                    if (intrinsic != 0)
+                    {
+                        if (moduleCode.Length - length < 96) return -3;
+                        bodyOffsets[current] = length;
+                        length = MathWasm.WriteBody(moduleCode, length, intrinsic);
+                        sizes[current] = length - bodyOffsets[current];
+                        if (MathWasm.CanOverflow(intrinsic)) exceptionTags |= ExceptionTypes.Overflow;
+                        continue;
+                    }
                     status = Int32ExchangeWasm.WriteBody(moduleCode, length, image, layout, heaps, source,
                         signatures, offsets[current], arities[current], projections);
                     if (status == length)

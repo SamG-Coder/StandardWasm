@@ -58,6 +58,25 @@ namespace PeLibrary
             return Overload(image, streams, name, signature);
         }
 
+        // A runtime-defined leaf uses the same mapping as the corresponding
+        // MemberRef, but an ordinary CoreLib method keeps its managed body.
+        internal static int CoreMathInternalCall(byte[] image, int[] streams, int[] methods, int row)
+        {
+            if (MethodDefinitions.ReadColumn(image, methods, row, 0) != 0 ||
+                MethodDefinitions.ReadColumn(image, methods, row, 1) != 0x1000 ||
+                (MethodDefinitions.ReadColumn(image, methods, row, 2) & 0x2057) != 0x16) return 0;
+            uint name = (uint)MethodDefinitions.ReadColumn(image, methods, row, 3);
+            uint signature = (uint)MethodDefinitions.ReadColumn(image, methods, row, 4);
+            int intrinsic = Overload(image, streams, name, signature);
+            if (intrinsic == 0) return 0;
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
+            if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, streams, methods, counts)) return 0;
+            int declaring = ObjectLayouts.Owner(image, streams, methods, row, false);
+            return declaring > 0 && ObjectLayouts.NamedDefinition(image, streams, methods, counts, first, declaring, "System", "Math")
+                ? intrinsic : 0;
+        }
+
         // AssemblyRef row: version (8 bytes), flags (4), PublicKeyOrToken blob, Name string, Culture string, HashValue blob.
         private static bool IsPlatformAssembly(byte[] image, int[] streams, uint assembly, int strings, int blobs)
         {
