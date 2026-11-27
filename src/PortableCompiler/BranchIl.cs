@@ -45,6 +45,8 @@ namespace PortableCompiler
         // StandAloneSig row, then linked to a carrier function index. FunctionAddress:
         // ldftn into a pointer, operand the table-2 slot. [] -> [Native].
         internal const int CallIndirect = 119, FunctionAddress = 120;
+        // Console.ReadLine() (decision 0079): [] -> [String or null at EOF].
+        internal const int ConsoleReadLine = 121;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;

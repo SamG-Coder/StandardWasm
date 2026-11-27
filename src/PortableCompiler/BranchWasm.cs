@@ -28,6 +28,7 @@ namespace PortableCompiler
             int resourceFunction = frameShape[19] - 1;
             // Stage 149 (decision 0077): a pinning frame also saves the live-pin count.
             int pins = frameShape[20] - 1;
+            int readLine = frameShape[21] - 1; // decision 0079
             bool hasNull = outgoingNulls.Length != 0;
             int spillKinds = PeLibrary.ConsoleStorage.Writer + classes;
             // V8 counts parameters together with function locals. Reject
@@ -294,6 +295,12 @@ namespace PortableCompiler
                         code[used++] = 0x0f;
                     }
                     used = Local(code, used, 0x21, spills + at);
+                }
+                else if (kind == ConsoleReadLine)
+                {
+                    // The String scratch bank supplies the Char[] and two i32 locals.
+                    used = ConsoleInputWasm.ReadLine(code, used, readLine, scratch, scratch + 3, scratch + 4,
+                        Spill(spills, maximum, String, depth));
                 }
                 else if (kind == ConsoleWriter)
                 {

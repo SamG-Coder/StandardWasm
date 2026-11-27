@@ -28,7 +28,7 @@ internal static class StringVectorCases
 
         Type unsupported = typeof(Unsupported);
         Reject(nameof(Unsupported.StaticWriteLine), At(unsupported, nameof(Unsupported.StaticWriteLine), OpCodes.Call));
-        Reject(nameof(Unsupported.ReadLine), At(unsupported, nameof(Unsupported.ReadLine), OpCodes.Call));
+        Reject(nameof(Unsupported.Read), At(unsupported, nameof(Unsupported.Read), OpCodes.Call));
         Reject(nameof(Unsupported.Flush), At(unsupported, nameof(Unsupported.Flush), OpCodes.Callvirt));
         Reject(nameof(Unsupported.WriteCharacter), At(unsupported, nameof(Unsupported.WriteCharacter), OpCodes.Callvirt));
         // A TextWriter local reaches the ordinary class linker, which has no
@@ -42,6 +42,13 @@ internal static class StringVectorCases
         string emitted = Encoding.Latin1.GetString(output, 0, Math.Max(supported, 0));
         if (supported <= 0 || !emitted.Contains("\u0014standardwasm:console\u0005write") || !emitted.Contains("\u0007newLine"))
             throw new InvalidOperationException($"Console write did not import the host contract: {supported}");
+        if (emitted.Contains("\u0008readLine"))
+            throw new InvalidOperationException("A module that only writes imported Console.ReadLine.");
+        // Stage 151 (decision 0079): Console.ReadLine imports the separate input pair.
+        int reads = CompilerExports.Compile(image, Row(unsupported.GetMethod(nameof(Unsupported.ReadLine))!), output);
+        string input = Encoding.Latin1.GetString(output, 0, Math.Max(reads, 0));
+        if (reads <= 0 || !input.Contains("\u0014standardwasm:console\u0008readLine") || !input.Contains("\u0008readUnit"))
+            throw new InvalidOperationException($"Console.ReadLine did not import the input contract: {reads}");
         int storeLength = CompilerExports.Compile(image, Row(typeof(Kernels).GetMethod(nameof(Kernels.Store))!), output);
         if (Encoding.Latin1.GetString(output, 0, storeLength).Contains("standardwasm:console"))
             throw new InvalidOperationException("A module without Console calls imported the host contract.");

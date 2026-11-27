@@ -142,6 +142,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [145 · Struct copies through pointers](stage-145-struct-copies/README.md) | `npm run demo -- stage-145-struct-copies` | `Rect r = *p`, `*p = r`, `*p = default` and nested struct copies between memory 0 and managed values |
 | [149 · Fixed strings](stage-149-fixed-strings/README.md) | `npm run demo -- stage-149-fixed-strings` | `fixed (char* p = s)` in the netstandard2.0 and net10.0 IL forms, read through a frame-owned UTF-16 copy |
 | [150 · Function pointers](stage-150-function-pointers/README.md) | `npm run demo -- stage-150-function-pointers` | `delegate*<...>` through `ldftn` and `calli`: a funcref table slot and `call_indirect` |
+| [151 · Interactive standard input](stage-151-interactive-stdin/README.md) | `npm run demo -- stage-151-interactive-stdin` | an unmodified console publish calling `Console.ReadLine`: stdin in Node, and lines typed into a responsive Edge page |
 
 ## Adding a stage
 
