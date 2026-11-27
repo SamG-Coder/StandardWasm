@@ -21,6 +21,17 @@ namespace ValueConstructionDemo
 
         private static ref int GetCached() => ref cached;
 
+        private static ref int Forward(ref int value) => ref value;
+
+        public static int CheckFrameInt32Aliases(int input)
+        {
+            int local = unchecked(input * 3);
+            ref int alias = ref Forward(ref local);
+            int same = Update(ref local, ref alias, 2);
+            int distinct = Update(ref input, ref alias, 5);
+            return unchecked(same * 1000 + distinct * 100 + local * 10 + input);
+        }
+
         public static int CheckStaticInt32Aliases(int delta)
         {
             cached = unchecked(cached + delta);

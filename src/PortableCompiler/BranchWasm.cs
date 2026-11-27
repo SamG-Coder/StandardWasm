@@ -189,7 +189,7 @@ namespace PortableCompiler
                         continue;
                     }
                     if (i < arguments) used = Local(code, used, 0x20, i);
-                    else if (vector == Bytes) used = Const(code, used, 0);
+                    else if (vector == Bytes || vector == Ints) used = Const(code, used, 0);
                     else
                     {
                         code[used++] = 0xd0; // ref.null eq

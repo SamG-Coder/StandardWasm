@@ -1336,13 +1336,13 @@ namespace PortableCompiler
                     }
                     bool booleanSlot = type == I32 && local >= parameterCount && booleanLocals[local - parameterCount] != 0;
                     int referenceLocation = LocationFromIdentity(objects, type);
-                    if (booleanSlot || IsReferenceLocation(referenceLocation))
+                    if (type == I32 || IsReferenceLocation(referenceLocation))
                     {
-                        int vector = booleanSlot ? Bytes : ObjectLayouts.RegisterArray(objects, ObjectReference);
+                        int vector = type == I32 ? booleanSlot ? Bytes : Ints : ObjectLayouts.RegisterArray(objects, ObjectReference);
                         if (vector < 0) return vector;
                         frameCells[local] = vector;
                         records[slot] = BranchIl.LoadFrameLocation;
-                        records[slot + 3] = booleanSlot ? BooleanLocation : referenceLocation;
+                        records[slot + 3] = type == I32 ? booleanSlot ? BooleanLocation : Int32Location : referenceLocation;
                         continue;
                     }
                     if (IsSpan(type))
