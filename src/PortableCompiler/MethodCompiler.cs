@@ -296,6 +296,7 @@ namespace PortableCompiler
             var primitiveArrays = new PrimitiveArrayWasm();
             var reflection = new RuntimeReflectionPlan();
             var nativeUtf8 = new NativeUtf8Plan();
+            var byteTransfer = new NativeByteTransfer();
             var hostUse = new long[1];
             int functions = 0, length = 0, closedSignaturesThrough = 0;
             bool externalObjects = false, externalVectors = false;
@@ -840,7 +841,7 @@ namespace PortableCompiler
                             initializers, reflection, typeCalls, instantiations, methodArguments, inlineLocations, frameCells, parameters, signatures[signature],
                             nativePlans, addressedFields, localElements, pointers, finalizers, tracksFinalizers, scopedReceiver, falseBooleans,
                             reflection.MonoAssemblyNameBodies != null &&
-                            reflection.MonoAssemblyNameBodies[bases[owner] + source] == current + 1, nativeUtf8);
+                            reflection.MonoAssemblyNameBodies[bases[owner] + source] == current + 1, nativeUtf8, byteTransfer);
                         if (functions == Reemit)
                         {
                             // Allocation can precede the first reachable suppression call.
@@ -1603,6 +1604,12 @@ namespace PortableCompiler
                 length = NativeUtf8Wasm.WriteLength(moduleCode, length, nativeUtf8.Measure, bodyOffsets, sizes);
                 if (length < 0) return length;
             }
+            if (byteTransfer.Function >= 0)
+            {
+                exceptionTags |= ExceptionTypes.ArgumentOutOfRange;
+                length = NativeByteTransferWasm.Write(moduleCode, length, byteTransfer.Function, bodyOffsets, sizes);
+                if (length < 0) return length;
+            }
             length = NativeUtf8Wasm.Write(moduleCode, length, nativeUtf8, bodyOffsets, sizes);
             if (length < 0) return length;
             length = MonoAssemblyIdentityWasm.Write(moduleCode, length, reflection.MonoAssemblyIdentity, bodyOffsets, sizes);
@@ -1769,7 +1776,7 @@ namespace PortableCompiler
             MethodInstantiations instantiations, int[] methodArguments,
             int[] inlineLocations, int[] frameCells, int parameterCount, int result, NativeAggregatePlans nativePlans,
             AddressedFields addressedFields, byte[] localElements,
-            FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers, int scopedReceiver, FalseBooleanSpecializations falseBooleans, bool canonicalMonoNameBody, NativeUtf8Plan nativeUtf8)
+            FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers, int scopedReceiver, FalseBooleanSpecializations falseBooleans, bool canonicalMonoNameBody, NativeUtf8Plan nativeUtf8, NativeByteTransfer byteTransfer)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             bool monoAssemblyName = callerReceiver == RuntimeTypeMetadata.Assembly &&
@@ -1785,6 +1792,15 @@ namespace PortableCompiler
                 int kind = records[slot];
                 if (kind == 0) continue;
                 if (location.Length != 0) location[2] = slot / BranchIl.Width;
+                if (NativeByteTransfer.IsCopy(image, layout, heaps, callerRow, methodArguments, records, slot, clauses))
+                {
+                    functions = byteTransfer.Bind(arities, offsets, signatures, functions);
+                    if (functions < 0) return functions;
+                    hostUse[0] = hostUse[0] | WasmImports.Memory;
+                    byteTransfer.Rewrite(records);
+                    slot = NativeByteTransfer.CallSlot;
+                    continue;
+                }
                 if (kind == BranchIl.Call && NativeUtf8Plan.IsLengthCall(image, layout, heaps, callerRow, records, slot, clauses))
                 {
                     functions = nativeUtf8.BindLength(arities, offsets, signatures, functions);
