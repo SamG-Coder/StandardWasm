@@ -19,7 +19,7 @@ namespace PortableCompiler
         private int[] cases = new int[0];
         private int allocationsCount, sitesUsed, casesUsed = CaseWidth, boxes;
         private int primitiveArrays;
-        private bool typeDescriptors, unsupportedRootReceiver;
+        private bool typeDescriptors, unsupportedRootReceiver, enumBoxes;
 
         internal VirtualDispatch(int capacity, RuntimeTypeCalls typeCalls)
         {
@@ -51,7 +51,11 @@ namespace PortableCompiler
             allocations[allocationsCount++] = type;
         }
 
-        internal void AddBox(int element) => boxes |= 1 << element;
+        internal void AddBox(int element)
+        {
+            if (BoxedEnums.IsTag(element)) enumBoxes = true;
+            else boxes |= 1 << element;
+        }
         internal void AddPrimitiveArray(int element) => primitiveArrays |= 1 << element;
 
         // Every produced evaluation-stack value is at the top on an incoming
@@ -103,7 +107,7 @@ namespace PortableCompiler
                 if (receiver == ObjectReference)
                 {
                     CompileLocation.Set(location, sites[site + CallerOwner], sites[site + CallerRow], sites[site + CallerOffset]);
-                    if (unsupportedRootReceiver) return -2;
+                    if (unsupportedRootReceiver || enumBoxes) return -2;
                     if (sites[site + RootTarget] == 0)
                     {
                         int root = MethodCompiler.BindVirtualBody(bundle, objects, ObjectReference, true, ObjectReference,
@@ -118,6 +122,18 @@ namespace PortableCompiler
                         if (text == functions) functions++;
                         int added = AddCase(site, SignatureTypes.String, text, 0);
                         if (added < 0) return added;
+                    }
+                }
+                if (enumBoxes)
+                {
+                    // A boxed enum is not a boxed copy of its backing integer.
+                    // An unsupported slot gets a located diagnostic before any
+                    // primitive or root Object fallback can be selected.
+                    int implements = BoxedEnums.Implements(bundle, objects, sites[site + Declared]);
+                    if (implements != 0)
+                    {
+                        CompileLocation.Set(location, sites[site + CallerOwner], sites[site + CallerRow], sites[site + CallerOffset]);
+                        return implements < 0 ? implements : -2;
                     }
                 }
                 for (int index = sites[site + Scanned]; index < allocationsCount; index++)

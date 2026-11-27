@@ -17,16 +17,19 @@ namespace DiagnosticLibrary
         public static int CheckedIncrement(int value) => checked(value + 1);
         public static int CheckedByte(int value) => checked((byte)value);
         public static object BoxedEnum(int value) => (CostValue)value;
+        public static int RoundTripBoxedEnum(int value) => (int)(CostValue)BoxedEnum(value);
         public static int ViaHelper(int value) => ClampCost(value) + 1;
         private static int ClampCost(int value) => checked(value * 3);
         public static int ViaConversionHelper(int value) => ConvertCost(value) + 1;
         private static int ConvertCost(int value) => checked((byte)value);
         public static object ViaBoxingHelper(int value) => BoxCost(value);
+        public static int RoundTripBoxingHelper(int value) => (int)(CostValue)ViaBoxingHelper(value);
         private static object BoxCost(int value) => (CostValue)value;
 
         public static int ViaDependency(int value) => DiagnosticDependency.Costs.Estimate(value) + 1;
         public static int ViaUnsupportedDependency(int value) => DiagnosticDependency.Costs.ConvertHours(value) + 1;
         public static int ViaBoxedDependency(int value) => DiagnosticDependency.Costs.BoxHours(value) + 1;
+        public static int ViaUnsupportedInstruction(int value) => DiagnosticDependency.Costs.UnsupportedSign(value);
         public static int LinkedRate(int value) => DiagnosticDependency.Costs.FlatRate(value) + 1;
 
         // Math.Sign is outside the exact intrinsic table (decision 0003), so this call stays an unsupported diagnostic.

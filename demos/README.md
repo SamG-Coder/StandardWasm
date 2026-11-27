@@ -31,7 +31,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [24 · Portable 64-bit integers](stage-24-portable-i64/README.md) | `npm run demo -- stage-24-portable-i64` | Calculate(9007199254740993, 1) = 95496328098598384 |
 | [25 · Switch dispatch](stage-25-switch-dispatch/README.md) | `npm run demo -- stage-25-switch-dispatch` | TokenizeSample(-1, 0) = 20203 |
 | [26 · Portable switch dispatch](stage-26-portable-switch/README.md) | `npm run demo -- stage-26-portable-switch` | Classify(-3) = 17 |
-| [27 · Portable compiler diagnostics](stage-27-portable-diagnostics/README.md) | `npm run demo -- stage-27-portable-diagnostics` | BoxedEnum yields -2 for unsupported nominal enum boxing |
+| [27 · Portable compiler diagnostics](stage-27-portable-diagnostics/README.md) | `npm run demo -- stage-27-portable-diagnostics` | Resolve a located diagnostic for an unsupported framework call |
 | [28 · Managed 64-bit storage](stage-28-wide-storage/README.md) | `npm run demo -- stage-28-wide-storage` | Apply(9007199254740993, 1, 3) = 36028797018963972 |
 | [29 · Math intrinsics](stage-29-math-intrinsics/README.md) | `npm run demo -- stage-29-math-intrinsics` | Hypotenuse(3, 4) = 5 |
 | [30 · Portable floating point](stage-30-portable-floats/README.md) | `npm run demo -- stage-30-portable-floats` | Filter(9, 3) = 8 |
@@ -247,6 +247,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [252 · SZ-array arguments to generic lists](stage-252-sz-array-list-arguments/README.md) | `npm run demo -- stage-252-sz-array-list-arguments` | Compare exact array interface arguments and preservation of original array identity |
 | [253 · Constraints on another type parameter](stage-253-dependent-type-constraints/README.md) | `npm run demo -- stage-253-dependent-type-constraints` | Check substituted bounds for closed generic methods |
 | [255 · Generic method constructor constraints](stage-255-method-default-constructors/README.md) | `npm run demo -- stage-255-method-default-constructors` | Validate real closed type constructors before specializing methods |
+| [256 · Nominal enum boxes](stage-256-nominal-enum-boxes/README.md) | `npm run demo -- stage-256-nominal-enum-boxes` | Preserve runtime identity and checked unboxing for original enum values |
 
 ## Adding a stage
 

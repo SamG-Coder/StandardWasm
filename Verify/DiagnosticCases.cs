@@ -16,14 +16,12 @@ internal static class DiagnosticCases
         byte[] output = new byte[capacity];
         int[] diagnostic = CompilerExports.CreateDiagnostic();
         int[] noLocation = [-1, 0, -1];
-        const BindingFlags methodFlags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
         Type estimates = typeof(Estimates);
 
-        var direct = estimates.GetMethod(nameof(Estimates.BoxedEnum))!;
-        Reject(nameof(Estimates.BoxedEnum), image, Row(direct), -2, At(0, direct, OpCodes.Box));
-        var entry = estimates.GetMethod(nameof(Estimates.ViaBoxingHelper))!;
-        var helper = estimates.GetMethod("BoxCost", methodFlags)!;
-        Reject(nameof(Estimates.ViaBoxingHelper), image, Row(entry), -2, At(0, helper, OpCodes.Box));
+        var direct = estimates.GetMethod(nameof(Estimates.RoundTripBoxedEnum))!;
+        Succeed(nameof(Estimates.RoundTripBoxedEnum), image, Row(direct), Estimates.RoundTripBoxedEnum);
+        var entry = estimates.GetMethod(nameof(Estimates.RoundTripBoxingHelper))!;
+        Succeed(nameof(Estimates.RoundTripBoxingHelper), image, Row(entry), Estimates.RoundTripBoxingHelper);
         var unsupported = estimates.GetMethod(nameof(Estimates.UnsupportedDecimal))!;
         Reject(nameof(Estimates.UnsupportedDecimal), image, Row(unsupported), -2, [0, Row(unsupported), -1]);
 
@@ -32,15 +30,17 @@ internal static class DiagnosticCases
         Reject("invalid metadata", [0], 1, -1, [0, 0, -1]);
 
         var linked = estimates.GetMethod(nameof(Estimates.ViaBoxedDependency))!;
-        var dependencyMethod = typeof(Costs).GetMethod(nameof(Costs.BoxHours))!;
-        Reject("dependency opcode", bundle, Manifest(linked), -2, At(1, dependencyMethod, OpCodes.Box), bundled: true);
+        Succeed("linked boxed enum", bundle, Manifest(linked), Estimates.ViaBoxedDependency, bundled: true);
+        var unsupportedEntry = estimates.GetMethod(nameof(Estimates.ViaUnsupportedInstruction))!;
+        var dependencyMethod = typeof(Costs).GetMethod(nameof(Costs.UnsupportedSign))!;
+        Reject("dependency opcode", bundle, Manifest(unsupportedEntry), -2, At(1, dependencyMethod, OpCodes.Call), bundled: true);
         Reject("missing dependency", BundleCases.Pack(image), Manifest(linked), -4,
             At(0, linked, OpCodes.Call), bundled: true);
         Reject("invalid dependency metadata", BundleCases.Pack(image, [1]), Manifest(linked), -1,
             [1, 0, -1], bundled: true);
         Reject("invalid bundle", [1], Manifest(linked), -1, noLocation, bundled: true);
         Reject("invalid module manifest", image, new byte[] { 1 }, -1, noLocation, multiExport: true);
-        Reject("unsupported method in module", image, Manifest(direct), -2, At(0, direct, OpCodes.Box), multiExport: true);
+        Reject("unsupported method in module", image, Manifest(absolute), -2, At(0, absolute, OpCodes.Call), multiExport: true);
 
         var supported = estimates.GetMethod(nameof(Estimates.Supported))!;
         Succeed("single export", image, Row(supported), Estimates.Supported);

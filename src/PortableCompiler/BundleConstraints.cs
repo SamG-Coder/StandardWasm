@@ -157,6 +157,20 @@ namespace PortableCompiler
             return -2;
         }
 
+        internal static int ImplementsCoreEnum(BundleImages bundle, int[] objects, int[] required)
+        {
+            var identity = new int[2];
+            var arguments = new int[0];
+            int status = RuntimeTypeTokens.FindCoreType(bundle, "Enum", identity);
+            if (status < 0) return status;
+            status = Search(bundle, objects, required, identity[0], identity[1], arguments, 0, 0);
+            if (status != 0) return status;
+            // Read the interfaces directly. System.Enum and its ValueType base
+            // are CLR runtime types, not ordinary reference layout definitions.
+            status = RuntimeTypeTokens.FindCoreType(bundle, "ValueType", identity);
+            return status < 0 ? status : Search(bundle, objects, required, identity[0], identity[1], arguments, 0, 0);
+        }
+
         private static int Search(BundleImages bundle, int[] objects, int[] required,
             int owner, int row, int[] substitutions, int context, int depth)
         {

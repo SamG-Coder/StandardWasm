@@ -1369,7 +1369,8 @@ namespace PortableCompiler
                 hostImports, location, reflection, primitiveArrays);
             if (length < 0) return length;
             var interfacePosition = new[] { length };
-            functions = reflection.InterfaceTests.Write(bundle, moduleCode, interfacePosition, objects, reflection.AggregateBoxes, offsets, signatures,
+            functions = reflection.InterfaceTests.Write(bundle, moduleCode, interfacePosition, objects, reflection.AggregateBoxes,
+                reflection.ObjectTypes.HasEnumBoxes, offsets, signatures,
                 sizes, bodyOffsets, arities, functions, hostImports);
             if (functions < 0) return functions;
             length = interfacePosition[0];
@@ -1693,6 +1694,18 @@ namespace PortableCompiler
                             records[slot + 1] = type;
                             continue;
                         }
+                    }
+                    if (ObjectLayouts.IsEnumKey(type))
+                    {
+                        if (kind == BranchIl.UnboxAggregateAddress) return -2;
+                        int tag = BoxedEnums.Bind(bundle, objects, type, globals);
+                        if (tag < 0) return tag;
+                        int box = PrimitiveBoxing.Layout(objects);
+                        if (box < 0) return box;
+                        if (kind == BranchIl.TestClass) records[slot] = BranchIl.TestBox;
+                        records[slot + 1] = tag;
+                        records[slot + 3] = box;
+                        continue;
                     }
                     if (ObjectLayouts.IsValueType(objects, type))
                     {

@@ -772,7 +772,8 @@ namespace PortableCompiler
                     int type = records[slot + 3];
                     if (kind == BoxValue)
                     {
-                        reflection.ObjectTypes.IncludeBox(operand);
+                        int boxStatus = reflection.ObjectTypes.IncludeBox(operand);
+                        if (boxStatus < 0) return boxStatus;
                         used = PrimitiveBoxing.Box(code, used, local, operand, type);
                     }
                     else if (kind == UnboxValue) used = PrimitiveBoxing.Unbox(code, used, local, operand, type);
