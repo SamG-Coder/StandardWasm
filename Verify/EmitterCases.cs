@@ -28,7 +28,7 @@ internal static class EmitterCases
         VerifyMethod("Mix", pairs, a => Kernels.Mix(a[0], a[1]));
         VerifyMethod("Quotient", [.. pairs, [int.MinValue, -1]], a => Kernels.Quotient(a[0], a[1]), capacity: 512);
 
-        VerifyMethod("UnsupportedSignature", [[-32769], [0], [32768]], a => Kernels.UnsupportedSignature(a[0]));
+        VerifyMethod("UnsupportedSignature", [[-32769], [0], [32768]], a => Kernels.UnsupportedSignature(a[0]), capacity: 512);
         Reject("method call", rows["UnsupportedCall"], 256, -2);
         Reject("insufficient capacity", rows["DemoKernel"], 8, -3);
         Reject("missing row", 0, 256, -1);
