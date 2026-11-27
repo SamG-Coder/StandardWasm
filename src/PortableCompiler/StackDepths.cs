@@ -431,6 +431,9 @@ namespace PortableCompiler
             if (kind == NullLiteral) return Push(stack, allocated, depth, NullValue);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, allocated, depth, EventArgsReference);
             if (kind == NewRootObject) return Push(stack, allocated, depth, ObjectReference, true);
+            if (kind == DelegateEquality)
+                return depth >= 2 && Assignable(stack[depth - 1], DelegateReference, objects) &&
+                    Assignable(stack[depth - 2], DelegateReference, objects) ? Push(stack, allocated, depth - 2, I32) : -2;
             if (kind == CombineHandler || kind == RemoveHandler)
             {
                 if (depth < 2 || !Assignable(stack[depth - 1], DelegateReference, objects) ||

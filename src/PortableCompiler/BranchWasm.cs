@@ -659,6 +659,14 @@ namespace PortableCompiler
                     else used = Gc(code, used, 0, closureType); // struct.new scalar closure
                     used = Local(code, used, 0x21, destination);
                 }
+                else if (kind == DelegateEquality)
+                {
+                    int left = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);
+                    int right = Spill(spills, maximum, spillFlags, states[state + top], top);
+                    used = EventWasm.ListsEqual(code, used, left, right, eventLocals);
+                    if (operand != 0) code[used++] = 0x45; // i32.eqz: op_Inequality
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top - 1));
+                }
                 else if (kind == CombineHandler || kind == RemoveHandler)
                 {
                     int left = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);

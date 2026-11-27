@@ -58,14 +58,21 @@ there, and raises with `((PaintEventHandler)Events[key])?.Invoke(this, e)`.
   `Action<uint>` stay distinct.
 - `Func<int>` (decision 0088's scalar closure) and the `SpanAction<char, IntPtr>` callback keep heap
   3. They aren't `Delegate` values here, so combining one, or storing one as `object`, stays -2.
-- Delegate equality (`op_Equality`, `Equals`, `GetHashCode`), `Target`, `Method`,
-  `GetInvocationList` and `DynamicInvoke` aren't lowered. They reach CoreLib's bodies and are -2.
+- **Equality.** `Delegate.op_Equality` and `op_Inequality`, which back C#'s `==` and `!=` on any
+  delegate type, lower to `DelegateEquality`, following `MulticastDelegate.Equals`:
+  - Two nulls, or the same reference, are equal. A single null is unequal.
+  - Otherwise the lists must have the same length, and each entry must have the same target
+    (`ref.eq`), the same method identity and the same nominal type.
+
+  A different nominal type compares unequal and doesn't throw. This covers EventHandler too.
+- `Delegate.Equals(object)`, `GetHashCode`, `Target`, `Method`, `GetInvocationList` and
+  `DynamicInvoke` aren't lowered. They reach CoreLib's bodies and are -2.
 - Every entry runs on one Wasm agent, and `ExchangeHandlerField` reads and writes with no call in
   between, the same as for EventHandler.
 
 ## Verification
 
 `npm run demo -- stage-221-multicast-delegates` runs the fixture on the x86 CLR 10.0.10 and compares
-Node and Edge with it. The fixture has 21 value kernels and 3 `Reject*` kernels that must be
+Node and Edge with it. The fixture has 27 value kernels and 2 `Reject*` kernels that must be
 diagnosed. The Stage 164, 181 and 204 fixtures, self-generation and the full suite are rerun on the
 stage's head.

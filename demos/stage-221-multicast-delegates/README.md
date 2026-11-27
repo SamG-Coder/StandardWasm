@@ -34,7 +34,9 @@ and Edge must return the CLR's value for every kernel:
 - `Combine` and `Remove` of mismatched types (`ArgumentException`)
 - `Action<int>` and `Action<uint>` as distinct types
 - `CompareExchange` identity on a delegate field
+- `==` and `!=`: same and different methods and targets, nulls, multicast order, different
+  nominal types and EventHandler
 
 The `Reject*` kernels must be diagnosed. `Func<int>` keeps decision 0088's single closure, so it
-can't be combined or stored as `object`. Delegate equality (`==`, `Equals`) isn't lowered yet. The
+can't be combined or stored as `object`. `Delegate.Equals(object)` isn't lowered yet. The
 design is decision 0092.

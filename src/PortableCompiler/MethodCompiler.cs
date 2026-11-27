@@ -1252,7 +1252,7 @@ namespace PortableCompiler
                             kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine || kind == BranchIl.CopyCharacterSpan ||
                             kind == BranchIl.FindCharacterInSpan) frameShape[5] |= 1;
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
-                        if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
+                        if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler || kind == BranchIl.DelegateEquality ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
                             frameShape[6] = 1;
                     }
@@ -2544,6 +2544,13 @@ namespace PortableCompiler
                         }
                         if (eventMember == EventMetadata.ConstructHandler && opcode == 0x73)
                             constructorType = EventHandlerReference;
+                        if ((eventMember == EventMetadata.DelegateEqual || eventMember == EventMetadata.DelegateNotEqual) && opcode == 0x28)
+                        {
+                            records[slot] = BranchIl.DelegateEquality;
+                            records[slot + 1] = eventMember == EventMetadata.DelegateNotEqual ? 1 : 0;
+                            records[slot + 3] = 0;
+                            continue;
+                        }
                         if ((eventMember == EventMetadata.CombineHandler || eventMember == EventMetadata.RemoveHandler) && opcode == 0x28)
                         {
                             records[slot] = eventMember == EventMetadata.CombineHandler ? BranchIl.CombineHandler : BranchIl.RemoveHandler;

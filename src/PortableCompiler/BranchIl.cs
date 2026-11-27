@@ -90,6 +90,8 @@ namespace PortableCompiler
         internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
+        // #256 (Claude): reserved high so integration slices do not collide. Operand 1 negates.
+        internal const int DelegateEquality = 401; // [Delegate, Delegate] -> [Boolean]
 
         // Records are keyed by IL byte offset. Operand bytes retain kind zero.
         // Record fields are kind, operand, next IL offset and auxiliary operand (such as a comparison or high literal word).
