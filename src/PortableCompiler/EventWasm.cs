@@ -6,10 +6,15 @@ namespace PortableCompiler
 {
     internal static class EventWasm
     {
-        // Stack on entry: target, typed thunk. Wrap the callback in a one-entry list.
-        internal static int NewList(byte[] code, int used, int method, int singleton)
+        // Entry fields (decision 0092): target, method (ref func), method identity, nominal delegate
+        // type, singleton list.
+        internal const byte EntryTarget = 0, EntryMethod = 1, EntryIdentity = 2, EntryDelegateType = 3, EntrySingleton = 4;
+
+        // Stack on entry: target, thunk. Wrap the callback in a one-entry list of this nominal type.
+        internal static int NewList(byte[] code, int used, int method, int singleton, int delegateType)
         {
             used = Local(code, used, 0x20, method);
+            used = Const(code, used, delegateType);
             used = NullList(code, used);
             used = Instruction(code, used, 0, EventEntryHeap); // struct.new
             used = Instruction(code, used, 8, EventHandlerHeap); // array.new_fixed
@@ -19,7 +24,7 @@ namespace PortableCompiler
             used = Instruction(code, used, 11, EventHandlerHeap);
             used = Local(code, used, 0x20, singleton);
             used = Instruction(code, used, 5, EventEntryHeap); // struct.set singleton
-            code[used++] = 3;
+            code[used++] = EntrySingleton;
             used = Local(code, used, 0x20, singleton);
             return used;
         }
@@ -159,7 +164,7 @@ namespace PortableCompiler
             code[used++] = 0x45;
             code[used++] = 0x1b;
             used = Local(code, used, 0x21, skip);
-            used = EntryField(code, used, source, skip, 3);
+            used = EntryField(code, used, source, skip, EntrySingleton);
             code[used++] = 0x05;
             used = Local(code, used, 0x20, remaining);
             used = Instruction(code, used, 7, EventHandlerHeap);
@@ -201,7 +206,10 @@ namespace PortableCompiler
             used = EntryField(code, used, list, index, 0);
             used = Local(code, used, 0x20, sender);
             used = Local(code, used, 0x20, arguments);
-            used = EntryField(code, used, list, index, 1);
+            used = EntryField(code, used, list, index, EntryMethod);
+            code[used++] = 0xfb; // ref.cast (ref EventThunkType): the entry holds any function
+            code[used++] = 0x16;
+            code[used++] = EventThunkType;
             code[used++] = 0x14; // call_ref
             code[used++] = EventThunkType;
             used = Local(code, used, 0x20, index);

@@ -649,7 +649,7 @@ namespace PortableCompiler
                     if (closureType == EventHandlerReference)
                     {
                         used = CastThunk(code, used, WasmBinary.EventThunkType);
-                        used = EventWasm.NewList(code, used, pointer, destination);
+                        used = EventWasm.NewList(code, used, pointer, destination, 0);
                     }
                     else used = Gc(code, used, 0, closureType); // struct.new scalar closure
                     used = Local(code, used, 0x21, destination);

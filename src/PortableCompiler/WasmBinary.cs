@@ -116,7 +116,7 @@ namespace PortableCompiler
             // review of f6e0ba1: 110 delegate types crossed a width boundary).
             int delegateTypes = DelegateShapes.EntryCount(objects);
             typeEntries += delegateTypes;
-            int prefix = UnsignedSize(typeEntries) + 70 + ManagedValueLocationWasm.TypeBytes(rootCount >= 0) +
+            int prefix = UnsignedSize(typeEntries) + 72 + ManagedValueLocationWasm.TypeBytes(rootCount >= 0) +
                 ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + 7 + PrimitiveArrayWasm.BaseTypeOverhead +
                 primitiveArrays.TypeBytes +
                 (recursive ? 1 + UnsignedSize(objects[0]) : 0);
@@ -306,14 +306,20 @@ namespace PortableCompiler
             // is set once at construction and retains the original singleton.
             output[cursor++] = 0x4e;
             output[cursor++] = 2;
+            // Stage 221 (decision 0092): every multicast-capable delegate shares this entry, so the
+            // method is any function reference (cast to the delegate's thunk type at the call) and
+            // the entry records its nominal delegate type: 0 for EventHandler, a general delegate
+            // key's ordinal + 1 otherwise.
             output[cursor++] = 0x5f;
-            output[cursor++] = 4;
+            output[cursor++] = 5;
             output[cursor++] = 0x6d;
             output[cursor++] = 0;
-            output[cursor++] = 0x63;
-            output[cursor++] = EventThunkType;
+            output[cursor++] = 0x64; // (ref func)
+            output[cursor++] = 0x70;
             output[cursor++] = 0;
             output[cursor++] = 0x7f; // method identity, independent of the receiver
+            output[cursor++] = 0;
+            output[cursor++] = 0x7f; // nominal delegate type
             output[cursor++] = 0;
             output[cursor++] = 0x63;
             output[cursor++] = EventHandlerHeap;
