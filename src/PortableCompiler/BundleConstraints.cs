@@ -100,7 +100,7 @@ namespace PortableCompiler
         // Runtime representations such as String do not have nominal layouts.
         // Walk the metadata hierarchy without reserving an unused class layout.
         internal static int ImplementsCoreReference(BundleImages bundle, int[] objects, int[] required,
-            string name, string space, int depth = 0)
+            string name, string space, int depth = 0, bool requireComplete = false)
         {
             if (depth >= ObjectLayouts.MaxTypeDepth) return -2;
             var identity = new int[2];
@@ -114,7 +114,7 @@ namespace PortableCompiler
             {
                 int owner = identity[0], row = identity[1];
                 if (owner == AssemblyBundle.ObjectOwner) return 0;
-                status = Search(bundle, objects, required, owner, row, arguments, 0, depth);
+                status = Search(bundle, objects, required, owner, row, arguments, 0, depth, requireComplete);
                 if (status != 0) return status;
                 byte[] image = bundle.Get(owner);
                 if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
@@ -126,8 +126,46 @@ namespace PortableCompiler
             return -2;
         }
 
+        // Value layouts intentionally omit interface edges and their ValueType/Enum
+        // bases. Use the original metadata for reflection rather than the Wasm layout.
+        internal static int CompareInvariantInterfaceMetadata(BundleImages bundle, int[] objects, int source, int target)
+        {
+            var required = new[] { ObjectLayouts.AssemblyOf(objects, target), ObjectLayouts.TypeDef(objects, target),
+                ObjectLayouts.Argument(objects, target, 0) };
+            if (source == SignatureTypes.String)
+                return ImplementsCoreReference(bundle, objects, required, "String", "System", requireComplete: true);
+            var definition = new int[2];
+            bool enumeration = ObjectLayouts.IsEnumKey(source);
+            int context = 0;
+            if (enumeration) ObjectLayouts.EnumIdentity(objects, source, definition);
+            else if (GenericScalar.IsScalar(source))
+            {
+                int found = FindPrimitive(bundle, source, definition);
+                if (found <= 0) return found < 0 ? found : -2;
+            }
+            else
+            {
+                if (!ObjectLayouts.IsValueType(objects, source) || ObjectLayouts.IsNullableValueType(objects, source)) return -2;
+                definition[0] = ObjectLayouts.AssemblyOf(objects, source);
+                definition[1] = ObjectLayouts.TypeDef(objects, source);
+                context = source;
+            }
+            int result = Search(bundle, objects, required, definition[0], definition[1],
+                new int[0], context, 0, requireComplete: true);
+            if (result != 0) return result;
+            if (enumeration)
+            {
+                result = RuntimeTypeTokens.FindCoreType(bundle, "Enum", definition);
+                if (result < 0) return result;
+                result = Search(bundle, objects, required, definition[0], definition[1],
+                    new int[0], 0, 0, requireComplete: true);
+                if (result != 0) return result;
+            }
+            return ImplementsCoreReference(bundle, objects, required, "ValueType", "System", requireComplete: true);
+        }
+
         private static int Search(BundleImages bundle, int[] objects, int[] required,
-            int owner, int row, int[] substitutions, int context, int depth)
+            int owner, int row, int[] substitutions, int context, int depth, bool requireComplete = false)
         {
             if (depth >= ObjectLayouts.MaxTypeDepth) return -2;
             byte[] image = bundle.Get(owner);
@@ -138,6 +176,7 @@ namespace PortableCompiler
             int count = InterfaceImplementations.ReadTable(image, heaps, layout, table);
             if (count < 0) return count;
 
+            bool incomplete = false;
             // Visit direct edges before following inherited interfaces. An
             // unrelated unavailable edge cannot prove a nominal constraint.
             for (int pass = 0; pass < 2; pass++)
@@ -148,18 +187,27 @@ namespace PortableCompiler
                     if (coded == 0) continue;
                     int[] edge = ReadInterface(bundle, image, layout, heaps, owner, objects, coded, substitutions, context);
                     if (edge[0] == -1) return -1;
-                    if (edge[0] < 0) continue;
+                    if (edge[0] < 0)
+                    {
+                        incomplete = true;
+                        continue;
+                    }
                     if (Same(edge, required)) return 1;
                     if (pass == 0) continue;
                     int valid = ValidateInterface(bundle, objects, edge, depth + 1);
                     if (valid == -1) return -1;
-                    if (valid <= 0) continue;
+                    if (valid <= 0)
+                    {
+                        incomplete = true;
+                        continue;
+                    }
                     var args = new int[edge.Length - 2];
                     for (int a = 0; a < args.Length; a++) args[a] = edge[2 + a];
-                    int status = Search(bundle, objects, required, edge[0], edge[1], args, 0, depth + 1);
-                    if (status != 0) return status;
+                    int status = Search(bundle, objects, required, edge[0], edge[1], args, 0, depth + 1, requireComplete);
+                    if (status > 0 || status == -1 || !requireComplete && status < 0) return status;
+                    if (status < 0) incomplete = true;
                 }
-            return 0;
+            return requireComplete && incomplete ? -2 : 0;
         }
 
         private static int ValidateInterface(BundleImages bundle, int[] objects, int[] identity, int depth)

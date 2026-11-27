@@ -261,13 +261,20 @@ namespace PeLibrary
                 : PlatformTypeReferences.Identify(image, heaps, layout, counts, first, declaring) == PlatformTypeReferences.Type;
         }
 
-        internal static bool IsTypeAssignableFrom(byte[] image, int[] heaps, int[] layout, int row, bool definition)
+        internal static bool IsTypeAssignableFrom(byte[] image, int[] heaps, int[] layout, int row, bool definition) =>
+            IsTypeAssignability(image, heaps, layout, row, definition, false);
+
+        internal static bool IsTypeAssignableTo(byte[] image, int[] heaps, int[] layout, int row, bool definition) =>
+            IsTypeAssignability(image, heaps, layout, row, definition, true);
+
+        private static bool IsTypeAssignability(byte[] image, int[] heaps, int[] layout, int row, bool definition, bool to)
         {
             int signature, declaring;
+            string name = to ? "IsAssignableTo" : "IsAssignableFrom";
             if (definition)
             {
-                if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x2050) != 0x40 ||
-                    !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "IsAssignableFrom"))
+                if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & (to ? 0x2450 : 0x2050)) != (to ? 0 : 0x40) ||
+                    !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), name))
                     return false;
                 declaring = ObjectLayouts.Owner(image, heaps, layout, row, false);
                 signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
@@ -277,7 +284,7 @@ namespace PeLibrary
                 var member = new int[AssemblyReferences.SymbolWidth];
                 if (AssemblyReferences.ReadMember(image, heaps, layout, row, member) < 0 ||
                     member[AssemblyReferences.Depth] != 0 ||
-                    !MatchesAscii(image, heaps, (uint)member[4], "IsAssignableFrom")) return false;
+                    !MatchesAscii(image, heaps, (uint)member[4], name)) return false;
                 declaring = member[AssemblyReferences.Leaf];
                 signature = member[5];
             }

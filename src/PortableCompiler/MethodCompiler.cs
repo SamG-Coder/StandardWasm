@@ -1445,7 +1445,11 @@ namespace PortableCompiler
                 sizes[functions] = length - bodyOffsets[functions];
                 functions++;
             }
+            if (reflection.TypeRelations.HasAssignableTo) exceptionTags |= ExceptionTypes.NullReference;
             length = reflection.TypeRelations.Write(bundle, moduleCode, length, objects, globals, bodyOffsets, sizes);
+            if (length < 0) return length;
+            length = reflection.TypeRelations.WriteAssignableTo(bundle, moduleCode, length, objects, globals,
+                reflection.GenericTypes, bodyOffsets, sizes);
             if (length < 0) return length;
             var projectionHelpers = new int[ValueFieldProjectionWasm.HelperCount];
             for (int helper = 0; helper < projectionHelpers.Length; helper++)
@@ -1621,6 +1625,22 @@ namespace PortableCompiler
                 }
                 if ((kind == BranchIl.Call || kind == BranchIl.MemberCall) &&
                     RuntimeTypeTokens.LowerExactHandleGetter(image, layout, heaps, records, slot, clauses)) continue;
+                if ((kind == BranchIl.Call || kind == BranchIl.MemberCall && records[slot + 3] != 0x73) &&
+                    RuntimeTypeMetadata.IsTypeAssignableTo(image, heaps, layout, records[slot + 1], kind == BranchIl.Call))
+                {
+                    var helper = new[] { -1 };
+                    bool callvirt = records[slot + 3] == (kind == BranchIl.Call ? 1 : 0x6f);
+                    functions = reflection.TypeRelations.BindTo(bundle, objects, globals, reflection.GenericTypes,
+                        records, slot, clauses, owners, arities, offsets, signatures, functions, helper, callvirt);
+                    if (functions < 0) return functions;
+                    if (helper[0] >= 0)
+                    {
+                        records[slot] = BranchIl.Call;
+                        records[slot + 1] = helper[0];
+                        records[slot + 3] = 0;
+                        continue;
+                    }
+                }
                 if (kind == BranchIl.Call && records[slot + 3] == 1 ||
                     kind == BranchIl.MemberCall && records[slot + 3] == 0x6f)
                 {

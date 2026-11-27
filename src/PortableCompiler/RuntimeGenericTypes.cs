@@ -11,13 +11,18 @@ namespace PortableCompiler
     // ordinary descriptor array and never replaces the original managed comparer.
     internal sealed class RuntimeGenericTypes
     {
-        private const int Owner = 0, Row = 1, Vector = 2, Function = 3, Width = 4;
+        private const int Owner = 0, Row = 1, Vector = 2, Function = 3, Related = 4, Width = 5;
+        internal const int RelationWidth = 5, FactoryFunction = 0, ArgumentGlobal = 1,
+            ResultGlobal = 2, ArgumentType = 3, ResultType = 4;
+        internal int[] Relations = new int[4 * RelationWidth];
+        internal int RelationCount;
         private const int VoidArgument = -7;
         private int[] entries = new int[4 * Width];
         private int count;
         internal bool HasFactories => count != 0;
 
-        internal static int OpenDefinition(BundleImages bundle, int[] objects, int[] records, int slot, int[] clauses, int[] literalArgument)
+        internal static int OpenDefinition(BundleImages bundle, int[] objects, int[] records, int slot, int[] clauses,
+            int[] literalArgument, int[] operands = null)
         {
             // Only accept an inline length-one Type[] with index zero and an
             // exact Type producer. Every step has exactly one fall-through inlet.
@@ -29,7 +34,7 @@ namespace PortableCompiler
             {
                 value = RuntimeTypeRelations.Previous(records, value, clauses);
                 if (value < 0 || records[value] != LoadTypeToken) return -1;
-                literalArgument[0] = records[value + 1];
+                if (literalArgument != null) literalArgument[0] = records[value + 1];
             }
             else if (records[value] != Load) return -1;
             int index = RuntimeTypeRelations.Previous(records, value, clauses);
@@ -45,7 +50,13 @@ namespace PortableCompiler
             int conversion = RuntimeTypeRelations.Previous(records, length, clauses);
             if (conversion < 0 || records[conversion] != TypeFromHandle) return -1;
             int receiver = RuntimeTypeRelations.Previous(records, conversion, clauses);
-            return receiver >= 0 && records[receiver] == LoadTypeToken ? records[receiver + 1] : -1;
+            if (receiver < 0 || records[receiver] != LoadTypeToken) return -1;
+            if (operands != null)
+            {
+                operands[0] = receiver;
+                operands[1] = value;
+            }
+            return records[receiver + 1];
         }
 
         internal int Bind(BundleImages bundle, int[] objects, int[] globals, int open, int literalArgument,
@@ -119,6 +130,40 @@ namespace PortableCompiler
             return used + 1;
         }
 
+        internal int RequireInvariantRelation(BundleImages bundle, int[] objects, int function)
+        {
+            for (int entry = 0; entry < count * Width; entry += Width)
+            {
+                if (entries[entry + Function] != function) continue;
+                byte[] image = bundle.Get(entries[entry + Owner]);
+                var layout = new int[4];
+                var heaps = new int[8];
+                if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+                int status = GenericParameters.Check(image, heaps, layout, entries[entry + Row],
+                    new[] { GenericScalar.Key(8) }, objects, new int[8], invariant: true);
+                if (status != 0) return status < 0 ? status : -2;
+                entries[entry + Related] = 1;
+                return 1;
+            }
+            return 0;
+        }
+
+        private void AddRelation(int function, int argumentGlobal, int resultGlobal, int argument, int result)
+        {
+            int at = RelationCount++ * RelationWidth;
+            if (at == Relations.Length)
+            {
+                var grown = new int[at * 2];
+                for (int i = 0; i < at; i++) grown[i] = Relations[i];
+                Relations = grown;
+            }
+            Relations[at + FactoryFunction] = function;
+            Relations[at + ArgumentGlobal] = argumentGlobal;
+            Relations[at + ResultGlobal] = resultGlobal;
+            Relations[at + ArgumentType] = argument;
+            Relations[at + ResultType] = result;
+        }
+
         internal int Write(BundleImages bundle, byte[] code, int used, int[] objects, int[] globals,
             int[] offsets, int[] sizes)
         {
@@ -162,6 +207,7 @@ namespace PortableCompiler
                         if (type < 0) return type;
                         result = RuntimeTypeTokens.BindLayout(bundle, objects, type, globals);
                         if (result < 0) return result;
+                        if (entries[entry + Related] != 0) AddRelation(function, global, result, argument, type);
                     }
                     if (code.Length - used < 24) return -3;
                     used = Local(code, used, 0x20, 2);
@@ -185,7 +231,7 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int[] CoreTypes(BundleImages bundle)
+        internal static int[] CoreTypes(BundleImages bundle)
         {
             var identity = new int[2];
             var core = new int[3]; // owner, String TypeDef, Void TypeDef
@@ -200,7 +246,7 @@ namespace PortableCompiler
             return core;
         }
 
-        private static int Argument(BundleImages bundle, int[] objects, int[] globals, int global,
+        internal static int Argument(BundleImages bundle, int[] objects, int[] globals, int global,
             int[] core, int[] noArguments, bool prepareLiteral = false)
         {
             int key = StaticFields.Owner(globals, global), row = StaticFields.Row(globals, global);

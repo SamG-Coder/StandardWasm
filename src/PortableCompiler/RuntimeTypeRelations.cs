@@ -8,7 +8,7 @@ namespace PortableCompiler
 {
     // Each known receiver uses a predicate over canonical runtime Type
     // references. Unknown graph entries reach the explicit unsupported trap.
-    internal sealed class RuntimeTypeRelations
+    internal sealed partial class RuntimeTypeRelations
     {
         private int[] targets = new int[4], functions = new int[4];
         private int count;

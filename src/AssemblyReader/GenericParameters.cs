@@ -7,7 +7,7 @@ namespace PeLibrary
         private const uint Variance = 3, Reference = 4, NonNullableValue = 8,
             DefaultConstructor = 0x10, AllowByRefLike = 0x20;
 
-        internal static int Check(byte[] image, int[] heaps, int[] methods, int typeRow, int[] arguments, int[] objects, int[] deferred, bool method = false)
+        internal static int Check(byte[] image, int[] heaps, int[] methods, int typeRow, int[] arguments, int[] objects, int[] deferred, bool method = false, bool invariant = false)
         {
             int arity = arguments.Length;
             var counts = new int[45];
@@ -37,7 +37,8 @@ namespace PeLibrary
                 // Permission widens the CLR's allowed argument set. The compiler
                 // keeps scoped value layouts out of generic specialization for now.
                 if (ObjectLayouts.IsByRefLikeValue(objects, arguments[low - first])) return -2;
-                if ((flags & ~(Variance | Reference | NonNullableValue | DefaultConstructor | AllowByRefLike)) != 0)
+                if ((flags & ~(Variance | Reference | NonNullableValue | DefaultConstructor | AllowByRefLike)) != 0 ||
+                    invariant && (flags & Variance) != 0)
                     return -2;
                 bool requiresValue = (flags & NonNullableValue) != 0;
                 if ((flags & DefaultConstructor) != 0 && !requiresValue) return -2;
