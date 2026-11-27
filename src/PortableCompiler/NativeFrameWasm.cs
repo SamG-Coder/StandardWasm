@@ -34,8 +34,17 @@ namespace PortableCompiler
             for (int at = 0; at < records.Length; at += BranchIl.Width)
             {
                 if (records[at] != BranchIl.FrameAddress || !IsCell(cells[records[at + 1]])) continue;
-                // A slot with a stable native address cannot also expose a managed carrier.
-                if (!ConvertsToPointer(records, at, clauses)) return At(location, at, -2);
+                // Immediate initialization and field reads name the local
+                // without exposing a managed carrier. The ordinary lowerer
+                // still verifies the operand and folds the address.
+                if (!ConvertsToPointer(records, at, clauses))
+                {
+                    int next = records[at + 2] * BranchIl.Width;
+                    if (cells[records[at + 1]] < 0 && next < records.Length &&
+                        (records[next] == BranchIl.InitializeValue || records[next] == BranchIl.GetField) &&
+                        !ValueOperands.Entry(records, next / BranchIl.Width, clauses)) continue;
+                    return At(location, at, -2);
+                }
                 records[at] = BranchIl.LoadFrameLocation;
                 records[at + 3] = Native;
                 records[records[at + 2] * BranchIl.Width] = BranchIl.Nop;

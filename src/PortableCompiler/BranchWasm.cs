@@ -1314,7 +1314,9 @@ namespace PortableCompiler
                 }
                 else if (kind == ClearValue)
                 {
-                    if (IsValueLocation(frameCells[operand]))
+                    if (frameCells[operand] < 0)
+                        used = NativeAggregates.Clear(code, used, nativePlans, -frameCells[operand], cellLocals[operand]);
+                    else if (IsValueLocation(frameCells[operand]))
                         used = ManagedValueLocationWasm.ClearFrameCell(code, used, cellLocals[operand]);
                     else if (inlineLocations[operand] != 0)
                         used = InlineObjectStorageWasm.Clear(code, used, inlineLocations[operand], operand, FieldCount(objects, frame[operand]));

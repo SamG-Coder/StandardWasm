@@ -167,8 +167,11 @@ receiver forms. CoreLib's base finalizer call binds the original
 `Object.Finalize` body through the canonical object receiver. The static
 switch cache in `LocalAppContextSwitches.get_EnableMsoComponentManager`
 now has one managed location shared by direct access and byref callers.
-The replay next reports a diagnostic at the local structure address in
-`SystemInformation.get_UserInteractive` at `IL_0036`.
+The native storage planner now ignores static fields when mapping the
+instance layout of the `USEROBJECTFLAGS` local. Initializing or resetting a
+native-backed local clears the same bytes its pointer aliases use. The
+replay next reports a diagnostic at `HWINSTA.Value` in
+`SystemInformation.get_UserInteractive` at `IL_002b`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

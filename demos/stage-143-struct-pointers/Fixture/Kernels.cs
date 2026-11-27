@@ -43,6 +43,13 @@ namespace StructPointerFixture
         }
     }
 
+    public struct LocalFlags
+    {
+        public static int Shared;
+        public int First;
+        public int Second;
+    }
+
     // Pack and Size change the CLR byte layout: sizeof stays a located diagnostic (x86 CLR: 5, 12).
     [StructLayout(LayoutKind.Sequential, Pack = 1)] public struct Packed { public byte B; public int I; }
     [StructLayout(LayoutKind.Sequential, Size = 12)] public struct Sized { public int I; }
@@ -96,6 +103,16 @@ namespace StructPointerFixture
         {
             var local = new MethodCounter(17);
             return unchecked(incoming->Add(value) + local.Add(value) + local.Add(1));
+        }
+
+        public static int InitializeAddressedLocal(int value)
+        {
+            LocalFlags flags = default(LocalFlags);
+            LocalFlags* address = &flags;
+            address->First = value;
+            int first = flags.First;
+            flags = default(LocalFlags);
+            return unchecked(first * 13 + address->First + address->Second);
         }
 
         public static int ConstructorFieldStores(ConstructorPair* other, int value)

@@ -30,6 +30,8 @@ Run("ConstructorFieldStores", Pattern(9), [Pointer(32), Int(17)]);
 Run("ReadGenericAddresses", Pattern(9), [Pointer(32), Pointer(64)]);
 Run("MutateNativeReceiver", Pattern(5), [Pointer(32), Int(17)]);
 Run("MutateBothReceivers", Pattern(9), [Pointer(64), Int(int.MinValue)]);
+Run("InitializeAddressedLocal", Pattern(5), [Int(17)]);
+Run("InitializeAddressedLocal", Pattern(9), [Int(int.MaxValue)]);
 
 // Pack and Size: the CLR measures them (5 and 12), and the compiler diagnoses the sizeof (-2).
 foreach (string name in new[] { "PackedSize", "SizedSize" })
