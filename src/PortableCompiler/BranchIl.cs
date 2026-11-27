@@ -438,9 +438,9 @@ namespace PortableCompiler
                         uint member = ImageBytes.U32(image, (uint)(start + pc));
                         pc += 4;
                         uint table = member >> 24;
-                        if ((member & 0xffffff) == 0 || (table != 0x0a && (call != 0x6f || table != 6))) return -2;
+                        if ((member & 0xffffff) == 0 || (table != 0x0a && table != 6)) return -2;
                         kind = call == 0x28 ? ConstrainedStatic : ConstrainedInstance;
-                        comparison = kind == ConstrainedStatic ? (int)(member & 0xffffff) : (int)member;
+                        comparison = (int)member;
                     }
                     else if (extended == 0x1c)
                     {

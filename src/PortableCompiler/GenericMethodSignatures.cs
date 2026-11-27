@@ -40,7 +40,7 @@ namespace PortableCompiler
                     if (index < 0 || element == 0x1e && index >= arity) return -1;
                     if (index != CompressedUnsigned(target, right[0], rightEnd, right)) return 0;
                 }
-                else if (element == 0x11 || element == 0x12 || element == 0x15)
+                else if (element == 0x11 || element == 0x12 || element == 0x15 || element == 0x1f || element == 0x20)
                 {
                     bool constructed = element == 0x15;
                     if (constructed)
@@ -61,6 +61,9 @@ namespace PortableCompiler
                         targetOwner, rightToken, targetIdentity);
                     if (status < 0 || callerIdentity[0] != targetIdentity[0] || callerIdentity[1] != targetIdentity[1])
                         return 0;
+                    // A custom modifier has its own nominal identity and
+                    // leaves the modified type to be matched next.
+                    if (element == 0x1f || element == 0x20) pending++;
                     if (constructed)
                     {
                         int arguments = CompressedUnsigned(caller, left[0], leftEnd, left);

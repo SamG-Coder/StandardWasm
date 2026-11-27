@@ -8,7 +8,7 @@ namespace PortableCompiler
         // A closed constrained call has no receiver on the evaluation stack.
         // Resolve the declaration first and then the concrete type's MethodImpl.
         internal static int Resolve(BundleImages bundle, byte[] caller, int[] layout, int[] heaps,
-            int owner, int typeToken, int member, int context, int[] methodArguments, int[] objects, int[] result)
+            int owner, int typeToken, int memberToken, int context, int[] methodArguments, int[] objects, int[] result)
         {
             if (bundle.Length == 0 || (uint)typeToken >> 24 != 0x1b) return -2;
             int blob = AssemblyReferences.TypeSpecBlob(caller, heaps, layout, typeToken & 0xffffff);
@@ -23,13 +23,31 @@ namespace PortableCompiler
             if (constraint < 0) return constraint;
             if (cursor[0] != end) return -1;
 
-            var reference = new int[AssemblyReferences.SymbolWidth];
-            int status = AssemblyReferences.ReadMember(caller, heaps, layout, member, reference, allowClosedParent: true, allowLocalParent: true);
-            if (status < 0) return status;
-            int[] contract = BundleConstraints.ReadInterface(bundle, caller, layout, heaps, owner, objects,
-                reference[AssemblyReferences.ParentType], null, context, methodArguments);
+            int slot = memberToken & 0xffffff;
+            int[] contract, reference = null;
+            if ((uint)memberToken >> 24 == 6)
+            {
+                // A local MethodDef already identifies the nominal slot and has
+                // no generic parent substitution. Its declaring type must be an interface.
+                int type = ObjectLayouts.Owner(caller, heaps, layout, slot, false);
+                if (type < 1) return -1;
+                if (!IsStaticDeclaration(caller, layout, slot, true)) return -2;
+                var shape = new int[5];
+                if (ObjectLayouts.ReadShape(caller, heaps, layout, type, shape) < 0) return -1;
+                if ((shape[4] & 0x20) == 0) return -2;
+                contract = new[] { owner, type };
+            }
+            else
+            {
+                reference = new int[AssemblyReferences.SymbolWidth];
+                int resolved = AssemblyReferences.ReadMember(caller, heaps, layout, slot, reference,
+                    allowClosedParent: true, allowLocalParent: true);
+                if (resolved < 0) return resolved;
+                contract = BundleConstraints.ReadInterface(bundle, caller, layout, heaps, owner, objects,
+                    reference[AssemblyReferences.ParentType], null, context, methodArguments);
+            }
             if (contract[0] < 0) return contract[0];
-            status = BundleConstraints.Implements(bundle, objects, constraint, contract, 0);
+            int status = BundleConstraints.Implements(bundle, objects, constraint, contract, 0);
             if (status <= 0) return status < 0 ? status : -2;
 
             int declaredOwner = contract[0];
@@ -37,9 +55,12 @@ namespace PortableCompiler
             var declaredLayout = new int[4];
             var declaredHeaps = new int[8];
             if (CompressedTables.FindWithHeaps(declared, declaredLayout, declaredHeaps) < 0) return -1;
-            int slot = FindDeclaration(bundle, caller, layout, heaps, owner, reference, contract[1],
-                declared, declaredLayout, declaredHeaps, declaredOwner);
-            if (slot <= 0) return slot < 0 ? slot : -2;
+            if (reference != null)
+            {
+                slot = FindDeclaration(bundle, caller, layout, heaps, owner, reference, contract[1],
+                    declared, declaredLayout, declaredHeaps, declaredOwner);
+                if (slot <= 0) return slot < 0 ? slot : -2;
+            }
 
             var definition = new int[2];
             int targetContext = 0;
@@ -81,8 +102,7 @@ namespace PortableCompiler
             int slot = 0;
             for (int row = range[0]; row < range[1]; row++)
             {
-                int flags = MethodDefinitions.ReadColumn(declared, layout, row, 2);
-                if ((flags & 0x457) != 0x456) continue; // public static abstract virtual
+                if (!IsStaticDeclaration(declared, layout, row, callerOwner == owner)) continue;
                 int name = MethodDefinitions.ReadColumn(declared, layout, row, 3);
                 if (!AssemblyReferences.SameString(caller, callerHeaps, reference[4], declared, heaps, name)) continue;
                 int signature = MethodDefinitions.ReadColumn(declared, layout, row, 4);
@@ -94,6 +114,12 @@ namespace PortableCompiler
                 slot = row;
             }
             return slot;
+        }
+
+        private static bool IsStaticDeclaration(byte[] image, int[] layout, int row, bool sameAssembly)
+        {
+            int flags = MethodDefinitions.ReadColumn(image, layout, row, 2), access = flags & 7;
+            return (flags & 0x450) == 0x450 && (access == 6 || sameAssembly && access == 3);
         }
 
         private static int FindImplementation(BundleImages bundle, int[] objects, int[] contract,
@@ -166,6 +192,14 @@ namespace PortableCompiler
             for (int i = 0; i <= count; i++)
             {
                 if (left[0] >= leftEnd || right[0] >= rightEnd) return 0;
+                if (i == 0)
+                {
+                    int returnKind = ReadReturnKind(bundle, declared, declaredLayout, declaredHeaps, contract[0], left, leftEnd);
+                    if (returnKind < 0) return returnKind;
+                    int bodyKind = ReadReturnKind(bundle, image, layout, heaps, owner, right, rightEnd);
+                    if (bodyKind < 0 || returnKind != bodyKind) return bodyKind < 0 ? bodyKind : 0;
+                    if (left[0] >= leftEnd || right[0] >= rightEnd) return 0;
+                }
                 if (i == 0 && declared[left[0]] == 1 && image[right[0]] == 1)
                 {
                     left[0] = left[0] + 1;
@@ -179,6 +213,15 @@ namespace PortableCompiler
                 if (actual != expected) return 0;
             }
             return left[0] == leftEnd && right[0] == rightEnd ? 1 : 0;
+        }
+
+        private static int ReadReturnKind(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int[] cursor, int end)
+        {
+            bool readOnly = image[cursor[0]] == 0x1f;
+            if (readOnly && !ReadOnlyReferenceReturns.ReadModifier(bundle, image, layout, heaps, owner, cursor, end)) return -2;
+            if (!SignatureReader.TakeElement(image, cursor, end, 0x10)) return 0;
+            return readOnly ? 2 : 1;
         }
 
         private static int Index(byte[] image, uint at, int width) =>

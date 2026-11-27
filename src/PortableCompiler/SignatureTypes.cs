@@ -213,6 +213,13 @@ namespace PortableCompiler
                 if (cursor >= end)
                     return -2;
                 int element = image[cursor++];
+                if (!locals && i == 0 && element == 0x1f)
+                {
+                    next[0] = cursor - 1;
+                    if (!ReadOnlyReferenceReturns.ReadModifier(bundle, image, methods, heap, assembly, next, end)) return -2;
+                    cursor = next[0] + 1;
+                    element = 0x10;
+                }
                 int filterLocal = locals && filters != null ? ExceptionFilters.LocalKind(filters, i) : 0;
                 if (filterLocal == 2 && element != 2) return -2;
                 if (filterLocal == 1 && element != 0x12) return -2;
