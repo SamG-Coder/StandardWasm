@@ -4,7 +4,7 @@ using RuntimeGenericInterfaces;
 if (IntPtr.Size != 4) throw new InvalidOperationException("Expected Windows x86 CLR.");
 Func<int>[] inputs = [Probe.StringIdentity, Probe.RuntimeChoice, Probe.SeparateDefinitions,
     Probe.NullArgument, Probe.ArrayTypeArgument, Probe.RepeatWithoutClosedToken, Probe.EnumTypeArgument,
-    Probe.ObjectDiscoveredArgument, Probe.NominalPrimitiveLayout, Probe.BareNominalType, Probe.VoidTypeArgument];
+    Probe.ObjectDiscoveredArgument, Probe.NominalPrimitiveLayout, Probe.BareNominalType, Probe.VoidTypeArgument, Probe.NestedLiteralFactory];
 var runtime = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
 File.WriteAllText(args[0], JsonSerializer.Serialize(new
 {

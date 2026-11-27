@@ -77,6 +77,17 @@ namespace PortableCompiler
                 var core = CoreTypes(bundle);
                 int argument = Argument(bundle, objects, globals, literalArgument, core, new int[0], prepareLiteral: true);
                 if (argument != VoidArgument && argument <= 0) return argument == 0 ? -2 : argument;
+                if (argument > 0)
+                {
+                    // A literal call contributes its exact result to the linked
+                    // descriptor set. A later factory can consume that result
+                    // without constructing an unbounded closure of possible types.
+                    int constructed = BundleLayouts.RegisterInstantiation(bundle, image, layout, heaps, owner,
+                        row << 2, objects, new[] { argument }, false);
+                    if (constructed < 0) return constructed;
+                    int descriptor = RuntimeTypeTokens.BindLayout(bundle, objects, constructed, globals);
+                    if (descriptor < 0) return descriptor;
+                }
             }
             for (int entry = 0; entry < count * Width; entry += Width)
                 if (entries[entry + Owner] == owner && entries[entry + Row] == row)

@@ -15,7 +15,9 @@ reserves the corresponding closed interface layout. The same descriptor
 global serves the generated result and any IL token for that type. Canonical
 primitive keys take precedence over nominal layouts reserved for managed
 method bodies. A literal-only TypeDef is registered at its call site so
-layout failures retain that instruction's diagnostic.
+layout failures retain that instruction's diagnostic. A factory with a literal
+argument contributes its exact result to the linked descriptors. A later
+factory can use that type as an argument.
 
 The emitted helper uses the existing argument exception tags for null and
 Void. The finite table covers reachable argument descriptors represented

@@ -111,6 +111,13 @@ namespace RuntimeGenericInterfaces
             }
         }
 
+        public static int NestedLiteralFactory()
+        {
+            Type first = typeof(IChosen<>).MakeGenericType(typeof(int));
+            Type second = typeof(IAlternate<>).MakeGenericType(first);
+            return second != null ? 157 : 0;
+        }
+
         public static int ArrayTypeArgument()
         {
             Type result = typeof(IChosen<>).MakeGenericType(typeof(int[]));
