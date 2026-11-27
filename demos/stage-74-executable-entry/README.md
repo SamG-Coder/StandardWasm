@@ -15,7 +15,9 @@ The existing intake page remains available without the run feature.
 
 If the compiler exhausts its workspace, the launcher retries with the same
 uploaded assemblies and increases the buffer from 1 MiB to at most 8 MiB.
-The returned diagnostic comes from the final attempt.
+The returned diagnostic comes from the final attempt. An isolated Wasm test
+compiler checks recovery, input reuse, the limit, and immediate reporting of a
+missing dependency in Node and Edge.
 
 The runner accepts parameterless managed entries with an integer exit result
 and no runtime imports. [Stage 95](../stage-95-managed-companions/README.md)

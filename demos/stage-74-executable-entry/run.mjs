@@ -10,6 +10,7 @@ import { openExecutable } from "../stage-73-executable-intake/loader/intake.mjs"
 import { serveLaunch } from "./launch-server.mjs";
 import { resolveFrameworks } from "./frameworks.mjs";
 import { runManagedEntry } from "./launch.mjs";
+import { verifyRetries } from "./verify-retry.mjs";
 
 const stage = "demos/stage-74-executable-entry";
 const compiler = process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts", "StandardWasm.Compiler.wasm");
@@ -165,6 +166,7 @@ async function verify() {
         await page.locator("#framework").setInputFiles([]);
         assert.notEqual(edgeDesktopSupplied.state, "framework-missing");
         assert.deepEqual(edgeDesktopSupplied, nodeDesktopSupplied);
+        const workspaceRetries = await verifyRetries(page);
         assert.deepEqual(errors, []);
         writeFileSync(join(evidence, "results.json"), JSON.stringify({
             node: process.version, browser: browser.version(), clrExit: clr.status, nativeSingleExit: native.status,
@@ -177,7 +179,8 @@ async function verify() {
                 })),
                 node: nodeDesktopSupplied, edge: edgeDesktopSupplied
             },
-            disablePrerelease: { hostfxrExit: hostfxrPreview.status | 0, node: nodePreview.state }, hostfxrMatrix
+            disablePrerelease: { hostfxrExit: hostfxrPreview.status | 0, node: nodePreview.state },
+            hostfxrMatrix, workspaceRetries
         }, null, 2) + "\n");
         console.log("Node and Edge ran both original console publishes with Windows exit parity and reported the missing Microsoft.WindowsDesktop.App framework as hostfxr does; " +
             "with its desktop framework supplied the publish reached the compiler (" + nodeDesktopSupplied.state + "), and a Disable prerelease matched hostfxr's 0x80008096.");
