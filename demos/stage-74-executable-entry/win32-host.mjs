@@ -7,12 +7,12 @@ import { createLongPathHost } from "./long-path-host.mjs";
 import { createWindowMessageRegistration } from "./window-messages.mjs";
 import { createThreadHandleHost } from "./thread-handle-host.mjs";
 import { createWindowStationHost } from "./window-station-host.mjs";
-import { createDefaultWindowProcedure, createWindowClassState, createWindowCreation, createRedrawWindow, createWindowState, windowImportNames } from "./window-state.mjs";
+import { createDefaultWindowProcedure, createWindowClassState, createWindowCreation, createInvalidateRect, createRedrawWindow, createWindowState, windowImportNames } from "./window-state.mjs";
 
 export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
     "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom",
-    "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "getLongPathNameW", "redrawWindow", "registerWindowMessageW",
+    "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "getLongPathNameW", "redrawWindow", "invalidateRect", "registerWindowMessageW",
     "getWindowThreadProcessId", "duplicateHandle", "getExitCodeThread", "getUserObjectInformationW"
 ]);
 export const win32ImportNames = new Set([
@@ -216,6 +216,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         getClassInfoW: classes.getClassInfoW,
         createWindowExW: createWindowCreation(memory, windows, classes, bindProcedure, setError, windowCreationMetrics),
         redrawWindow: createRedrawWindow(memory, windows, setError),
+        invalidateRect: createInvalidateRect(memory, windows, setError),
         ...createThreadHandleHost(memory, () => windows.getCurrentThreadId(), setError),
         ...createWindowStationHost(memory, desktop, setError),
         registerWindowMessageW: createWindowMessageRegistration(memory, setError),

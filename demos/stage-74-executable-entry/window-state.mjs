@@ -234,6 +234,28 @@ const maximumCaptionUnits = 32767;
 const visibleOrChildStyle = 0x50000000; // WS_VISIBLE | WS_CHILD
 const hiddenRedrawFlags = 0x0001 | 0x0004 | 0x0008 | 0x0080 | 0x0100 | 0x0200 | 0x0400;
 
+export function createInvalidateRect(memory, windows, setError) {
+    return function invalidateRect(hwnd, rectangle, _erase) {
+        const fail = error => { setError(error); return 0; };
+        // Broadcast invalidation and paint delivery for shown/child windows
+        // require the full update-region and message-queue contract.
+        if (hwnd === 0) return fail(notSupported);
+        if (!windows.hasWindow(hwnd)) {
+            // Windows x86 reports ERROR_INVALID_WINDOW_HANDLE but returns
+            // TRUE for a stale or otherwise invalid non-null HWND.
+            setError(invalidWindow);
+            return 1;
+        }
+        if ((windows.getWindowLong(hwnd, -16, setError) & visibleOrChildStyle) !== 0)
+            return fail(notSupported);
+        if (rectangle !== 0 && (rectangle >>> 0) > memory.buffer.byteLength - rectBytes)
+            return fail(noAccess);
+        // A hidden top-level client stays clean with either BOOL erase value.
+        // The RECT is borrowed read-only, and no WM_PAINT is sent or queued.
+        return 1;
+    };
+}
+
 export function createRedrawWindow(memory, windows, setError) {
     return function redrawWindow(hwnd, rectangle, region, flags) {
         // A null HWND requests desktop-wide invalidation on Windows.

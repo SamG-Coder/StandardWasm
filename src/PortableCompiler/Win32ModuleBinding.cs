@@ -18,7 +18,7 @@ namespace PortableCompiler
             DuplicateHandle = 36, GetExitCodeThread = 37, CloseHandle = 38,
             GetProcessWindowStation = 39, GetUserObjectInformation = 40,
             GetLongPathName = 41, SetClassLong = 42, GetDeviceCaps = 43,
-            GetDC = 44, ReleaseDC = 45, Count = ReleaseDC;
+            GetDC = 44, ReleaseDC = 45, InvalidateRect = 46, Count = InvalidateRect;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -46,7 +46,8 @@ namespace PortableCompiler
             member == GetUserObjectInformation ? "GetUserObjectInformationW" :
             member == GetLongPathName ? "GetLongPathNameW" :
             member == SetClassLong ? "SetClassLongW" : member == GetDeviceCaps ? "GetDeviceCaps" :
-            member == GetDC ? "GetDC" : member == ReleaseDC ? "ReleaseDC" : "BCryptGenRandom";
+            member == GetDC ? "GetDC" : member == ReleaseDC ? "ReleaseDC" :
+            member == InvalidateRect ? "InvalidateRect" : "BCryptGenRandom";
 
         private static string Library(int member) => member == LoadLibrary || member == GetFullPathName ||
             member == GetLongPathName ? "kernel32.dll" :
@@ -60,7 +61,7 @@ namespace PortableCompiler
             member == CallWindowProcedure || member == GetUserObjectInformation ? 5 :
             member == BCryptGenRandom || member == GetFullPathName || member == RedrawWindow ? 4 :
             member == LoadLibrary || member == GetClassInfo || member == GetLongPathName ||
-            member == SetClassLong || IsWindowLongSetter(member) ? 3 :
+            member == SetClassLong || member == InvalidateRect || IsWindowLongSetter(member) ? 3 :
             member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ||
             member == GetCurrentProcess || member == GetCurrentThread || member == GetCurrentThreadId ||
             member == GetProcessWindowStation ? 0 :
@@ -79,7 +80,8 @@ namespace PortableCompiler
 
         private static bool IsWindowLongSetter(int member) => member == SetWindowLong || member == SetWindowLongPtr;
 
-        internal static int FindImport(byte[] image, int[] heaps, int[] methods, int row, int implementation)
+        internal static int FindImport(byte[] image, int[] heaps, int[] methods, int row, int implementation,
+            BundleImages bundle = null, int owner = 0)
         {
             if (implementation != 0x80) return 0; // PreserveSig
             var counts = new int[45];
@@ -105,11 +107,39 @@ namespace PortableCompiler
                         return 0;
                     if ((member == DuplicateHandle || member == GetExitCodeThread) &&
                         !MatchesThreadOutputPointer(image, heaps, methods, row, member)) return 0;
-                    if (member >= GetDeviceCaps && !MatchesDisplaySignature(image, heaps, methods, row, member))
+                    if (member >= GetDeviceCaps && member <= ReleaseDC && !MatchesDisplaySignature(image, heaps, methods, row, member))
                         return 0;
+                    if (member == InvalidateRect && !MatchesInvalidateRect(bundle, image, heaps, methods, owner, row)) return 0;
                     return member;
                 }
             return 0;
+        }
+
+        private static bool MatchesInvalidateRect(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int owner, int row)
+        {
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4), 3, cursor);
+            if (bundle == null || end < 0 || ReadAbiWord(image, cursor, end, 0x08) < 0 ||
+                ReadAbiWord(image, cursor, end, 0x18) < 0 || !SignatureReader.TakeElement(image, cursor, end, 0x0f) ||
+                !SignatureReader.TakeElement(image, cursor, end, 0x11)) return false;
+            int pointee = ImageBytes.CompressedUnsigned(image, cursor[0], end, cursor);
+            if (pointee < 1 || ReadAbiWord(image, cursor, end, 0x08) < 0 || cursor[0] != end) return false;
+
+            // A native stack tag erases the distinction between RECT* and, for
+            // example, int*. Verify the resolved Win32 declaration and extent.
+            var identity = new int[2];
+            if (AssemblyBundle.ClassIdentity(bundle, image, methods, heaps, owner, pointee, identity) < 0) return false;
+            byte[] target = bundle.Get(identity[0]);
+            var layout = new int[4];
+            var targetHeaps = new int[8];
+            var names = new int[2];
+            if (CompressedTables.FindWithHeaps(target, layout, targetHeaps) < 0 ||
+                ObjectLayouts.TypeDefinitionNames(target, targetHeaps, layout, identity[1], names) < 0 ||
+                !ImageBytes.MatchesAscii(target, targetHeaps, (uint)names[0], "RECT") ||
+                !ImageBytes.MatchesAscii(target, targetHeaps, (uint)names[1], "Windows.Win32.Foundation"))
+                return false;
+            var size = new int[2];
+            return NativeValueLayouts.Measure(bundle, identity[0], identity[1], size) == 0 && size[0] == 16 && size[1] == 4;
         }
 
         private static bool IsWindowOwnerSignature(byte[] image, int[] heaps, int[] methods, int row)
@@ -258,6 +288,10 @@ namespace PortableCompiler
             if (member == GetWindowThreadProcessId)
                 return result == I32 && IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
                     types[offset + 2] == Native;
+            if (member == InvalidateRect)
+                return IsAbiShape(bundle, objects, result, I32, "BOOL") &&
+                    IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") && types[offset + 2] == Native &&
+                    IsAbiShape(bundle, objects, types[offset + 3], I32, "BOOL");
             if (member == RedrawWindow)
                 return IsAbiShape(bundle, objects, result, I32, "BOOL") &&
                     IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&

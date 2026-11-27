@@ -511,7 +511,7 @@ namespace PortableCompiler
                         sizes[current] = length - bodyOffsets[current];
                         continue;
                     }
-                    int import = Win32ModuleBinding.FindImport(image, heaps, layout, source, implementation);
+                    int import = Win32ModuleBinding.FindImport(image, heaps, layout, source, implementation, bundle, owner);
                     if (import != 0)
                     {
                         hostUse[0] = hostUse[0] | WasmImports.Win32NativeFeature(import);
@@ -3924,7 +3924,7 @@ namespace PortableCompiler
                 (!allowVirtual && (attributes & 0x40) != 0) || (implementation & 7) != 0)
                 return -2;
             bool debuggerQuery = imported && DebuggerNativeMetadata.IsAttachmentQuery(image, heaps, layout, row, implementation);
-            int nativeImport = imported && !debuggerQuery ? Win32ModuleBinding.FindImport(image, heaps, layout, row, implementation) : 0;
+            int nativeImport = imported && !debuggerQuery ? Win32ModuleBinding.FindImport(image, heaps, layout, row, implementation, bundle, assembly) : 0;
             int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
             if (owner < 0) return -1;
             bool isStatic = (attributes & 0x10) != 0;
