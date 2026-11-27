@@ -98,11 +98,29 @@ becomes the CLR's `TypeInitializationException`:
   initializer that reads a failing one fails with a `TypeInitializationException` whose inner
   exception is the first.
 
+**Fixed-tag exceptions** carry no object. The guard catches each one into its own block,
+which builds the matching CoreLib exception with its parameterless constructor and passes it as
+the inner exception. The default message comes from `SR` (decision 0081):
+
+| Tag | CoreLib exception |
+| --- | --- |
+| Overflow | `OverflowException` |
+| DivideByZero | `DivideByZeroException` |
+| IndexOutOfRange | `IndexOutOfRangeException` |
+| NullReference | `NullReferenceException` |
+| InvalidCast | `InvalidCastException` |
+| Argument | `ArgumentException` |
+| ArgumentNull | `ArgumentNullException` |
+
+The default messages equal the CLR's runtime messages for null dereference, divide-by-zero,
+overflow and index range. An `InvalidCastException` raised by the runtime names its types, so its
+message differs; reading messages needs the CoreLib accessors, which are a follow-up.
+
 These cases still trap as described above:
-- a fixed-tag exception such as divide-by-zero or a null dereference, which carries no object
-  (step 2 constructs the matching CoreLib exception)
-- a bundle without CoreLib's constructor
+- a tag whose CoreLib type cannot be bound
+- a bundle without CoreLib's constructors
 - a type name that is not ASCII
+- raw engine traps such as stack exhaustion
 
 
 

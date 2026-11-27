@@ -50,6 +50,22 @@ namespace PortableCompiler
             return 0;
         }
 
+        // The MethodDef row of `instance void .ctor()` on TypeDef row type, or 0.
+        internal static int FindDefaultConstructor(byte[] image, int[] heaps, int[] layout, int type)
+        {
+            var range = new int[2];
+            if (ObjectLayouts.MethodRange(image, heaps, layout, type, range) < 0) return 0;
+            for (int method = range[0]; method < range[1]; method++)
+            {
+                if (!MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, method, 3), ".ctor")) continue;
+                int blob = MethodDefinitions.ReadColumn(image, layout, method, 4);
+                if (blob <= 0 || blob >= heaps[1]) continue;
+                int at = heaps[0] + blob;
+                if (image[at] == 3 && image[at + 1] == 0x20 && image[at + 2] == 0 && image[at + 3] == 1) return method;
+            }
+            return 0;
+        }
+
         // Writes Type.FullName of TypeDef row typeRow (Namespace.Outer+Inner) as UTF-16 into
         // literals at start. Returns the code-unit count, or a negative status.
         internal static int WriteFullName(byte[] image, int[] heaps, int[] layout, int typeRow, byte[] literals, int start)

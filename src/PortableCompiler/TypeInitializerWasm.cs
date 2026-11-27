@@ -28,7 +28,19 @@ namespace PortableCompiler
         // describes it (indices below; null keeps the trap). Function and heap indices are final.
         internal const int FailureConstructor = 0, FailureClass = 1, FailureNameStart = 2, FailureNameLength = 3,
             FailureMessageStart = 4, FailureMessageLength = 5, FailureCache = 6, FailureExceptionClass = 7,
-            FailureInner = 8, FailureWidth = 9;
+            FailureInner = 8, FailureFixed = 9, FailureWidth = FailureFixed + 2 * FixedFailureCount;
+        // Step 2: fixed-tag exceptions carry no object. For each fixed tag (in this order) the
+        // descriptor holds the CoreLib exception's parameterless constructor (function index, or
+        // -1 when unbound) and its class, at FailureFixed + 2 * i and + 1.
+        internal const int FixedFailureCount = 7;
+        internal static int FixedFailureTag(int i) => i < 6 ? i : 7; // OverflowTag .. ArgumentTag, ArgumentNullTag
+
+        private static int BoundFixed(int[] failure)
+        {
+            int count = 0;
+            for (int i = 0; i < FixedFailureCount; i++) if (failure[FailureFixed + 2 * i] >= 0) count++;
+            return count;
+        }
 
         internal static int Begin(byte[] code, int used, int guard, int epoch, int active, int scratch, int[] failure = null)
         {
@@ -85,14 +97,28 @@ namespace PortableCompiler
             code[used++] = 0x02; code[used++] = 0x40; // block: managed failure lands here
             if (failure != null)
             {
-                code[used++] = 0x02; code[used++] = 0x6d; // block (result eqref): a managed object
+                // block $fallback (catch_all: an unbound tag still traps)
+                //  block $object (result eqref)
+                //   block $fixed[k-1] ... block $fixed[0]   one per bound fixed tag, innermost first
+                //    try_table (catch tag_i -> i) (catch $objectTag -> k) (catch_all -> k + 1)
+                int k = BoundFixed(failure);
+                code[used++] = 0x02; code[used++] = 0x6d;
+                for (int i = 0; i < k; i++) { code[used++] = 0x02; code[used++] = 0x40; }
                 code[used++] = 0x1f; code[used++] = 0x40; // try_table
-                code[used++] = 2;
+                used = WasmBinary.Unsigned(code, used, k + 2);
+                int label = 0;
+                for (int i = 0; i < FixedFailureCount; i++)
+                {
+                    if (failure[FailureFixed + 2 * i] < 0) continue;
+                    code[used++] = 0x00; // catch tag -> its block
+                    code[used++] = (byte)FixedFailureTag(i);
+                    used = WasmBinary.Unsigned(code, used, label++);
+                }
                 code[used++] = 0x00; // catch the object tag, carrying the exception object
                 code[used++] = ExceptionTagsWasm.ObjectTag;
-                code[used++] = 0;
-                code[used++] = 0x02; // catch_all: fixed tags, which carry no object
-                code[used++] = 1;
+                used = WasmBinary.Unsigned(code, used, k);
+                code[used++] = 0x02; // catch_all
+                used = WasmBinary.Unsigned(code, used, k + 1);
                 return used;
             }
             code[used++] = 0x1f; code[used++] = 0x40; // try_table
@@ -117,6 +143,27 @@ namespace PortableCompiler
             if (failure != null)
             {
                 code[used++] = 0x00; // the body never falls through (its dispatch loop only branches)
+                // Each bound fixed tag lands at the end of its block: construct the matching CoreLib
+                // exception with its parameterless constructor and deliver it to $object.
+                int k = BoundFixed(failure), index = 0;
+                for (int i = 0; i < FixedFailureCount; i++)
+                {
+                    int constructor = failure[FailureFixed + 2 * i];
+                    if (constructor < 0) continue;
+                    code[used++] = 0x0b; // end block $fixed[index]
+                    int heap = WasmBinary.HeapType(failure[FailureFixed + 2 * i + 1]);
+                    code[used++] = 0xfb; code[used++] = 1; // struct.new_default
+                    used = WasmBinary.Unsigned(code, used, heap);
+                    used = BranchWasm.Local(code, used, 0x22, failure[FailureInner]); // local.tee
+                    code[used++] = 0xfb; code[used++] = 0x17; // ref.cast (ref null class)
+                    used = WasmBinary.Signed(code, used, heap);
+                    code[used++] = 0x10;
+                    used = WasmBinary.Unsigned(code, used, constructor);
+                    used = BranchWasm.Local(code, used, 0x20, failure[FailureInner]);
+                    code[used++] = 0x0c; // br $object with the eqref
+                    used = WasmBinary.Unsigned(code, used, k - 1 - index);
+                    index++;
+                }
                 code[used++] = 0x0b; // end block (result eqref): the escaped managed object
                 used = BranchWasm.Local(code, used, 0x21, failure[FailureInner]);
                 // new TypeInitializationException(fullTypeName, message, (Exception)inner), recorded.

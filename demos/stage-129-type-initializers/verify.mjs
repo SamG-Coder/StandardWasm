@@ -55,10 +55,16 @@ async function runCases(compiler, images, cases) {
 
     // A trap from the compiler's failed-initializer path is an unreachable RuntimeError.
     // A raw engine trap (stack exhaustion) is any other non-managed error.
-    function outcome(call) {
+    // Issue #170: a failed initializer raises CoreLib's TypeInitializationException on the object
+    // tag; `thrown` keeps each payload so repeated triggers can be checked for the same object.
+    let thrown = [];
+    function outcome(call, tag) {
         try { return String(call()); }
         catch (error) {
-            if (error instanceof WebAssembly.Exception) return "managed exception";
+            if (error instanceof WebAssembly.Exception) {
+                if (tag && error.is(tag)) thrown.push(error.getArg(tag, 0));
+                return "managed exception";
+            }
             if (error instanceof WebAssembly.RuntimeError && /unreachable/i.test(error.message)) return "trap";
             return "raw trap";
         }
@@ -98,13 +104,17 @@ async function runCases(compiler, images, cases) {
         if (WebAssembly.Module.imports(module).length) throw Error(test.name + " has runtime imports");
 
         if (test.sequence) {
-            // Same instance throughout: a failed initializer must trap on every trigger,
-            // run once, and never expose partially initialized state.
-            const observed = test.sequence.map(([name]) => [name, outcome(() => instance.exports[name]())]);
+            // Same instance throughout: a failed initializer raises the same TypeInitializationException
+            // object on every trigger, runs once, and never exposes partially initialized state.
+            thrown = [];
+            const tag = instance.exports["\0object"];
+            const observed = test.sequence.map(([name]) => [name, outcome(() => instance.exports[name](), tag)]);
             const expected = test.sequence.map(([name, value]) =>
-                [name, value === "TypeInitializationException" ? "trap" : value]);
+                [name, value === "TypeInitializationException" ? "managed exception" : value]);
             if (JSON.stringify(observed) !== JSON.stringify(expected))
                 throw Error(test.name + " observed " + JSON.stringify(observed) + ", expected " + JSON.stringify(expected));
+            if (thrown.length > 1 && thrown.some(payload => payload !== thrown[0]) && test.name === "ReadFailing")
+                throw Error(test.name + " raised different exception objects on repeated triggers");
             results.push({ name: test.name, sequence: observed });
             continue;
         }

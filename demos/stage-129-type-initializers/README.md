@@ -29,8 +29,10 @@ The kernels cover:
 - an initializer throwing a managed exception, caught as CoreLib's `TypeInitializationException` on two triggers, and a nested type's failing initializer (#170)
 
 The failure cases run several exports on one instance. The CLR raises the same
-`TypeInitializationException` on each trigger. The compiled module traps on each trigger,
-runs the initializer once, and keeps an unrelated export working. The nested case
+`TypeInitializationException` on each trigger. The compiled module raises CoreLib's own
+`TypeInitializationException` (#170) on the object tag. That is the same object on every
+trigger, wrapping the CoreLib exception for the failure (here `DivideByZeroException`). It
+runs the initializer once and keeps an unrelated export working. The nested case
 (`OuterFailing` reading `Failing`) marks both types failed. `RawTrapRetired` exhausts the
 Wasm stack inside an initializer. The CLR would end the process, so it has no CLR value.
 It checks that the next host entry retires the interrupted initializer instead of treating

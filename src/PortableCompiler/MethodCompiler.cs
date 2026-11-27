@@ -511,7 +511,11 @@ namespace PortableCompiler
                         {
                             failure[TypeInitializerWasm.FailureCache]--; // stored as index + 1
                             failure[TypeInitializerWasm.FailureConstructor] += hostImports;
-                            exceptionTags |= ExceptionTypes.Object;
+                            for (int i = 0; i < TypeInitializerWasm.FixedFailureCount; i++)
+                                if (failure[TypeInitializerWasm.FailureFixed + 2 * i] >= 0)
+                                    failure[TypeInitializerWasm.FailureFixed + 2 * i] += hostImports;
+                            // Every tag the guard catches must be declared by the module.
+                            exceptionTags |= ExceptionTypes.Object | ExceptionTypes.Supported;
                             if (capacity > int.MaxValue - 192) return -3;
                             capacity += 192;
                         }
@@ -1664,7 +1668,37 @@ namespace PortableCompiler
             failure[TypeInitializerWasm.FailureMessageLength] = messageLength;
             failure[TypeInitializerWasm.FailureExceptionClass] = exceptionType;
             failure[TypeInitializerWasm.FailureCache] = cache + 1;
+            // Step 2: the CoreLib exception for each fixed tag, built with its parameterless
+            // constructor (default message from SR, decision 0081). Unbound ones keep the trap.
+            for (int i = 0; i < TypeInitializerWasm.FixedFailureCount; i++)
+            {
+                failure[TypeInitializerWasm.FailureFixed + 2 * i] = -1;
+                int type = ObjectLayouts.FindTypeDefinition(coreLib, coreHeaps, coreLayout, "System", FixedFailureTypeName(i));
+                int row = type == 0 ? 0 : InitializerFailures.FindDefaultConstructor(coreLib, coreHeaps, coreLayout, type);
+                if (row == 0) continue;
+                int linked = indices[bases[found[0]] + row] - 1;
+                if (linked < 0)
+                {
+                    functions = Register(bundle, coreLib, coreLayout, coreHeaps, found[0], row, 0, owners, rows, contexts,
+                        bases, indices, arities, offsets, signatures, objects, functions);
+                    if (functions < 0) return functions;
+                    linked = functions - 1;
+                }
+                failure[TypeInitializerWasm.FailureFixed + 2 * i] = linked;
+                failure[TypeInitializerWasm.FailureFixed + 2 * i + 1] = signatures[offsets[linked] + 1];
+            }
             return functions;
+        }
+
+        private static string FixedFailureTypeName(int i)
+        {
+            if (i == 0) return "OverflowException";
+            if (i == 1) return "DivideByZeroException";
+            if (i == 2) return "IndexOutOfRangeException";
+            if (i == 3) return "NullReferenceException";
+            if (i == 4) return "InvalidCastException";
+            if (i == 5) return "ArgumentException";
+            return "ArgumentNullException";
         }
 
         // Decision 0078: link each calli to the carrier for its StandAloneSig. Only the
