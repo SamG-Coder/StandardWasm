@@ -27,6 +27,30 @@ namespace PeLibrary
             return FindStaticData(image, heaps, methods, counts, first, field, byteCount, backingSize, alignment);
         }
 
+        internal static bool IsInitializeArrayDefinition(byte[] image, int[] heaps, int[] methods, int row)
+        {
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0 || row < 1 || row > counts[6] ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, methods, row, 3), "InitializeArray") ||
+                (MethodDefinitions.ReadColumn(image, methods, row, 2) & 0x2057) != 0x16 ||
+                !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, methods, counts))
+                return false;
+            int declaring = ObjectLayouts.Owner(image, heaps, methods, row, false);
+            if (declaring < 1 || !ObjectLayouts.NamedDefinition(image, heaps, methods, counts, first, declaring,
+                "System.Runtime.CompilerServices", "RuntimeHelpers")) return false;
+
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4), 2, cursor);
+            if (end < 0 || !SignatureReader.TakeElement(image, cursor, end, SignatureReader.Void)) return false;
+            int array = SignatureReader.ReadClass(image, cursor, end);
+            if (array < 1 || (array & 3) != 0 || !ObjectLayouts.NamedDefinition(image, heaps, methods, counts, first,
+                array >> 2, "System", "Array") || !SignatureReader.TakeElement(image, cursor, end, 0x11)) return false;
+            int handle = CompressedUnsigned(image, cursor[0], end, cursor);
+            return handle > 0 && (handle & 3) == 0 && cursor[0] == end &&
+                ObjectLayouts.NamedDefinition(image, heaps, methods, counts, first, handle >> 2, "System", "RuntimeFieldHandle");
+        }
+
         private static int FindStaticData(byte[] image, int[] heaps, int[] methods, int[] counts, int first, int field, int byteCount,
             int[] backingSize, int alignment)
         {

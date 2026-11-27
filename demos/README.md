@@ -301,6 +301,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [310 · Keyboard focus for a Win32 message queue](stage-310-window-focus/README.md) | `npm run demo -- stage-310-window-focus` | Compare active/focused HWND state, errors and ordered focus callbacks |
 | [312 · Native integer unary operations](stage-312-native-unary/README.md) | `npm run demo -- stage-312-native-unary` | Compare native complements, negation and tagged-word masks |
 | [315 · Windows thread message queue](stage-315-thread-message-queue/README.md) | `npm run demo -- stage-315-thread-message-queue` | Compare posted thread messages and the x86 MSG layout |
+| [316 · CoreLib array initializers](stage-316-corelib-array-initializers/README.md) | `npm run demo -- stage-316-corelib-array-initializers` | Compare original path-character arrays and ordinary C# literals |
 
 ## Adding a stage
 
