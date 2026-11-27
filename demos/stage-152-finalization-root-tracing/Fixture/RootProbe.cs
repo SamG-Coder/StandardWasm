@@ -75,6 +75,41 @@ namespace ManagedFinalizationExperiment
 
         private sealed class ProbeException : Exception { }
 
+        public static int ObserveInitializerEntry(int seed) =>
+            PreciseInitializer.Read(new Receiver { Value = seed });
+
+        public static int ObserveInitializerField(int seed)
+        {
+            FieldInitializer.Value = new Receiver { Value = seed };
+            int value = FieldInitializer.Value.Value;
+            FieldInitializer.Value = null;
+            return value;
+        }
+
+        public static int ObserveInitializerFailure(int seed)
+        {
+            var caller = new Receiver { Value = seed };
+            return FailingInitializer.Read(new Receiver { Value = seed + 1 }) + caller.Value;
+        }
+
+        private static class PreciseInitializer
+        {
+            static PreciseInitializer() { Notify(); }
+            internal static int Read(Receiver receiver) => receiver.Value;
+        }
+
+        private static class FieldInitializer
+        {
+            internal static Receiver Value = Initialize();
+            private static Receiver Initialize() { Notify(); return null; }
+        }
+
+        private static class FailingInitializer
+        {
+            static FailingInitializer() { Notify(); Raise(); }
+            internal static int Read(Receiver receiver) => receiver.Value;
+        }
+
         public static int ObserveAddressedFrame(int seed)
         {
             AddressedScope scope = default;

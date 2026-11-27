@@ -24,7 +24,9 @@ internal static class EmitRootProbe
         using var entries = new BinaryWriter(manifest);
         foreach (string name in new[] { nameof(RootProbe.ObserveFrames), nameof(RootProbe.ObserveConstructor), nameof(RootProbe.ConstructValue),
             nameof(RootProbe.ObserveAddressedFrame), nameof(RootProbe.ObserveReferenceCell), nameof(RootProbe.ThrowWithRoot),
-            nameof(RootProbe.BuildGraph), nameof(RootProbe.SetStaticRoot), nameof(RootProbe.MakePinOwner), nameof(RootProbe.ObservePinned), nameof(RootProbe.ObserveProtectedException) })
+            nameof(RootProbe.BuildGraph), nameof(RootProbe.SetStaticRoot), nameof(RootProbe.MakePinOwner), nameof(RootProbe.ObservePinned),
+            nameof(RootProbe.ObserveProtectedException), nameof(RootProbe.ObserveInitializerEntry), nameof(RootProbe.ObserveInitializerField),
+            nameof(RootProbe.ObserveInitializerFailure) })
             Export(typeof(RootProbe), name);
         Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.Allocate));
         Export(typeof(FinalizableAllocations), nameof(FinalizableAllocations.ValueOf));
@@ -83,6 +85,32 @@ internal static class EmitRootProbe
                     throw new Exception("Expected one callback from finally and one from the filtered catch.");
             }
             return types;
+        }
+        finally { Console.SetOut(original); }
+    }
+
+    internal static object ObserveInitializers()
+    {
+        using var lines = new StringWriter();
+        TextWriter original = Console.Out;
+        try
+        {
+            Console.SetOut(lines);
+            int entry = RootProbe.ObserveInitializerEntry(41);
+            int field = RootProbe.ObserveInitializerField(43);
+            lines.GetStringBuilder().Clear();
+            int failures = 0;
+            for (int i = 0; i < 2; i++)
+            {
+                try { RootProbe.ObserveInitializerFailure(47); }
+                catch (TypeInitializationException error) when (error.InnerException is NullReferenceException)
+                {
+                    failures++;
+                }
+            }
+            if (failures != 2 || lines.ToString() != Environment.NewLine)
+                throw new Exception("The CLR must cache the failure across two triggers.");
+            return new { entry, field, failures };
         }
         finally { Console.SetOut(original); }
     }

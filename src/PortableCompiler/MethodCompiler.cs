@@ -417,7 +417,6 @@ namespace PortableCompiler
                     if (rootProbe)
                     {
                         if (location.Length != 0) location[2] = -1;
-                        if (initializerPrologue >= 0) return -2;
                         frameRoots = RootStackWasm.MapFrame(records, frame, parameters + locals, catchRegion.Length != 0, parameters, filters);
                         if (frameRoots == null) return -2;
                     }
@@ -556,6 +555,8 @@ namespace PortableCompiler
                         }
                         int handlers = catchRegion.Length / ExceptionClauses.Width;
                         long extra = (long)body[1] * (96L + 20L * (parameters + locals + maximum + handlers));
+                        if (initializerPrologue >= 0) extra += 112L + 20L * parameters;
+                        if (initializerGuard >= 0) extra += 48;
                         if (extra > int.MaxValue - capacity) return -3;
                         capacity += (int)extra;
                     }

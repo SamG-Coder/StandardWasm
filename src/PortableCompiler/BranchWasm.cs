@@ -170,7 +170,6 @@ namespace PortableCompiler
             }
             if (tracksRoots)
             {
-                if (guard >= 0) return -2;
                 code[used++] = 1;
                 code[used++] = 0x7f;
             }
@@ -217,12 +216,10 @@ namespace PortableCompiler
             for (int local = arguments; local < inlineLocations.Length; local++)
                 if (inlineLocations[local] != 0)
                     used = InlineObjectStorageWasm.Allocate(code, used, inlineLocations[local], local, FieldCount(objects, frame[local]));
-            if (prologue >= 0)
-            {
-                code[used++] = 0x10; // call the initializer after the caller evaluated the arguments
-                used = WasmBinary.Unsigned(code, used, hostImports + prologue);
-            }
-            if (guard >= 0) used = TypeInitializerWasm.Begin(code, used, guard, epoch, activeInitializers, pcLocal);
+            if (prologue >= 0 && !tracksRoots)
+                used = TypeInitializerWasm.CallInitializer(code, used, hostImports + prologue);
+            if (guard >= 0) used = TypeInitializerWasm.Begin(code, used, guard, epoch, activeInitializers, pcLocal,
+                tracksRoots ? rootCount : -1);
             if (stackPointer >= 0)
             {
                 used = StackAllocationWasm.Begin(code, used, stackPointer, stackFrame);
@@ -235,6 +232,9 @@ namespace PortableCompiler
                 code[used++] = 0x1f; code[used++] = 0x40; code[used++] = 1;                  // try_table
                 code[used++] = 0x03; code[used++] = 0;                                         // catch_all_ref 0
             }
+            if (prologue >= 0 && tracksRoots)
+                used = RootStackWasm.CallInitializerWithRoots(code, used, rootCount, rootFrame, frameRoots,
+                    arguments, cellLocals, hostImports + prologue);
             code[used++] = 0x03;
             code[used++] = 0x40;
             if (catchRegion.Length != 0) used = ExceptionDispatchWasm.Begin(code, used);
@@ -254,10 +254,12 @@ namespace PortableCompiler
                 code[used++] = 0x40;
 
                 int tracked = 0;
-                bool publishesRoots = tracksRoots && (kind == Call || kind == NewObject || kind == ConstructValue || kind == ResourceLookup);
+                bool publishesRoots = tracksRoots && (kind == Call || kind == NewObject || kind == ConstructValue ||
+                    kind == ResourceLookup || TypeInitializerWasm.HasFieldTrigger(kind, operand, fieldInitializers));
                 if (publishesRoots)
                 {
-                    int first = kind == ResourceLookup ? depth : depth - arities[operand] + (kind == NewObject ? 1 : 0);
+                    int first = kind == Call || kind == NewObject || kind == ConstructValue
+                        ? depth - arities[operand] + (kind == NewObject ? 1 : 0) : depth;
                     int frameStart = pc * (arguments + locals);
                     for (int local = 0; local < arguments + locals; local++) tracked += frameRoots[frameStart + local];
                     if (exceptionLocals > 1) tracked += RootStackWasm.CountExceptionRoots(catchRegion, pc);
@@ -1417,7 +1419,7 @@ namespace PortableCompiler
                 objectBase, filters, tracksRoots ? rootCount : -1, rootFrame);
             code[used++] = 0x0b;
             code[used++] = 0;
-            if (guard >= 0) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers);
+            if (guard >= 0 && !tracksRoots) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers, -1);
             if (tracksRoots || stackPointer >= 0)
             {
                 code[used++] = 0x0b; // end try_table
@@ -1428,6 +1430,8 @@ namespace PortableCompiler
                 if (stackPointer >= 0) used = StackAllocationWasm.Release(code, used, stackPointer, stackLimit, stackFrame);
                 code[used++] = 0x0a; // throw_ref
             }
+            // Unwind the initializer frame before the guard turns the exception into a trap.
+            if (guard >= 0 && tracksRoots) used = TypeInitializerWasm.End(code, used, guard, epoch, activeInitializers, rootCount);
             code[used++] = 0x0b;
             return used;
         }

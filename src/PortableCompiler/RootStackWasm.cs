@@ -101,6 +101,37 @@ namespace PortableCompiler
             return used;
         }
 
+        // A precise type can run its initializer before the method's first IL instruction.
+        // Publish its live arguments while the initializer runs inside the cleanup region.
+        internal static int CallInitializerWithRoots(byte[] code, int used, int count, int frame,
+            byte[] frameRoots, int parameters, int[] cells, int function)
+        {
+            int slots = 0;
+            for (int parameter = 0; parameter < parameters; parameter++) slots += frameRoots[parameter];
+            if (slots == 0) return TypeInitializerWasm.CallInitializer(code, used, function);
+            used = Enter(code, used, count, frame, slots);
+            int root = 0;
+            for (int parameter = 0; parameter < parameters; parameter++)
+            {
+                if (frameRoots[parameter] == 0) continue;
+                int reference = cells == null || cells[parameter] == 0 ? parameter : cells[parameter];
+                used = Store(code, used, frame, root++, reference);
+            }
+            used = TypeInitializerWasm.CallInitializer(code, used, function);
+            return Leave(code, used, count, frame);
+        }
+
+        // Initializer failure currently traps, bypassing the cleanup in every caller.
+        internal static int ResetAfterInitializerFailure(byte[] code, int used, int count)
+        {
+            used = Const(code, used, 0);
+            code[used++] = 0xd0; code[used++] = 0x6d; // ref.null eq
+            used = Global(code, used, 0x23, count);
+            code[used++] = 0xfc; code[used++] = 17; code[used++] = Table; // table.fill
+            used = Const(code, used, 0);
+            return Global(code, used, 0x24, count);
+        }
+
         internal static int SaveBase(byte[] code, int used, int count, int frame)
         {
             used = Global(code, used, 0x23, count);

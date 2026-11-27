@@ -53,6 +53,7 @@ async function observeRoots(bytes) {
     const snapshots = [];
     const addressedSnapshots = [];
     let exceptionSnapshots = null;
+    let initializerSnapshots = null;
     let inspectAddress = false;
     let inspectCell = false;
     let pinnedOwner = null;
@@ -68,6 +69,14 @@ async function observeRoots(bytes) {
                 const { __root_probe_count: count, __root_probe_table: table } = instance.exports;
                 // Fixed-tag exceptions and normal finally entries have no managed payload.
                 const roots = Array.from({ length: count.value }, (_, index) => table.get(index)).filter(value => value !== null);
+                if (initializerSnapshots !== null) {
+                    const { __root_probe_mark: mark, __root_probe_contains: contains } = instance.exports;
+                    mark();
+                    if (roots.some(root => contains(root) !== 1))
+                        throw new Error("An initializer argument or operand was absent from the marked graph");
+                    initializerSnapshots.push(roots.length);
+                    return;
+                }
                 if (exceptionSnapshots !== null) {
                     instance.exports.__root_probe_mark();
                     if (roots.some(root => instance.exports.__root_probe_contains(root) !== 1))
@@ -101,6 +110,7 @@ async function observeRoots(bytes) {
         __root_probe_clear: clear, __root_probe_register: register, __root_probe_discover: discover,
         __root_probe_pop: pop, ObserveFrames, ObserveConstructor, ConstructValue, ObserveAddressedFrame, ObserveReferenceCell,
         ThrowWithRoot, BuildGraph, SetStaticRoot, ObserveProtectedException,
+        ObserveInitializerEntry, ObserveInitializerField, ObserveInitializerFailure,
         __root_probe_run_next: runNext, Allocate, ValueOf, Suppress, get_Finalized, get_Total, get_OverridesRan,
         TakeResurrected, MakePinOwner, ObservePinned } = instance.exports;
     function assertEmpty() {
@@ -165,6 +175,26 @@ async function observeRoots(bytes) {
         clear();
         return divisor === 0 ? "DivideByZeroException" : "ProbeException";
     });
+    initializerSnapshots = [];
+    const entry = ObserveInitializerEntry(41);
+    assertEmpty();
+    const field = ObserveInitializerField(43);
+    assertEmpty();
+    let failures = 0;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try { ObserveInitializerFailure(47); }
+        catch (error) {
+            if (!(error instanceof WebAssembly.RuntimeError)) throw error;
+            failures++;
+        }
+        assertEmpty();
+        if (mark() !== 0) throw new Error("A trapped initializer retained an abandoned frame root");
+        clear();
+    }
+    if (failures !== 2 || initializerSnapshots.join(",") !== "1,1,2")
+        throw new Error("Type initialization changed its live arguments, field operand, or failure caching");
+    initializerSnapshots = null;
+    const initializerResults = { entry, field, failures };
     let exception;
     try { ThrowWithRoot(11); }
     catch (error) { exception = error; }
@@ -284,7 +314,7 @@ async function observeRoots(bytes) {
         throw new Error("Suppression should consume one registration and leave no root afterward");
     const suppression = { nullException, registered, pending, duplicate, total: get_Total() - allocationFinalizers.total };
     return { values: [value, constructed, constructedValue, addressedValue, cellValue], snapshots, clearedOnReturn: true, clearedOnUnwind: true, graph, staticRoot: true,
-        discovered, allocationReceivers, allocationFinalizers, suppression, pin, protectedExceptions };
+        discovered, allocationReceivers, allocationFinalizers, suppression, pin, protectedExceptions, initializerResults };
 }
 
 const expectedRoots = { values: oracle.rootProbeResult,
@@ -293,7 +323,7 @@ const expectedRoots = { values: oracle.rootProbeResult,
         { count: 1, unique: 1 }, { count: 2, unique: 2 }, { count: 1, unique: 1 }, { count: 3, unique: 2 }, { count: 1, unique: 1 }],
     clearedOnReturn: true, clearedOnUnwind: true, graph: oracle.graph, staticRoot: true, discovered: [0, 1, 0, 1, 2],
     allocationReceivers: { count: oracle.allocationFinalizers.count, total: oracle.allocationFinalizers.total },
-    allocationFinalizers: oracle.allocationFinalizers, suppression: oracle.suppression, pin: oracle.pin, protectedExceptions: oracle.protectedExceptions };
+    allocationFinalizers: oracle.allocationFinalizers, suppression: oracle.suppression, pin: oracle.pin, protectedExceptions: oracle.protectedExceptions, initializerResults: oracle.initializerResults };
 const node = await probe(assets);
 assert.deepEqual(node, oracle.result);
 const nodeRoots = await observeRoots(assets.rootProbe);

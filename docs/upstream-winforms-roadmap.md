@@ -98,8 +98,11 @@ The verified resource prelude now publishes both the assembly descriptor
 and name across the host lookup. The probe also retains the original managed
 exception across calls in `finally` and supported type-filtered catch handlers.
 Compilation of the unchanged sample in probe mode gets past
-`ThemingScope.CreateActivationContext` and stops at
-`System.Windows.Forms.Application..cctor`. Browser startup remains unverified.
+`ThemingScope.CreateActivationContext` and `System.Windows.Forms.Application..cctor`.
+It stops at the native address of a local in `ThemingScope..ctor`.
+Node and Edge verify that static initialization preserves live managed arguments
+and field operands, and that a cached failure clears abandoned frame roots.
+Browser startup remains unverified.
 JavaScript cleanup notifications can release independent host resources, but
 notification timing and delivery alone cannot satisfy the managed queue and
 resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)

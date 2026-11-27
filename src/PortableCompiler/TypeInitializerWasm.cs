@@ -24,7 +24,7 @@ namespace PortableCompiler
 
         // Emitted before the body's dispatch loop. `scratch` is the pc local, which
         // is reset to the entry offset afterwards. Leaves `block; try_table` open.
-        internal static int Begin(byte[] code, int used, int guard, int epoch, int active, int scratch)
+        internal static int Begin(byte[] code, int used, int guard, int epoch, int active, int scratch, int rootCount)
         {
             used = Global(code, used, 0x23, guard);
             used = BranchWasm.Local(code, used, 0x21, scratch);
@@ -51,6 +51,7 @@ namespace PortableCompiler
             code[used++] = 0x0f; // running in this epoch: recursive trigger returns
             code[used++] = 0x0b;
             code[used++] = 0x0b;
+            if (rootCount >= 0) used = RootStackWasm.ResetAfterInitializerFailure(code, used, rootCount);
             code[used++] = 0x00; // failed, or interrupted by an earlier failure: trap
             code[used++] = 0x0b;
 
@@ -81,7 +82,7 @@ namespace PortableCompiler
         }
 
         // Closes Begin's try_table and block after the (unreachable) loop exit.
-        internal static int End(byte[] code, int used, int guard, int epoch, int active)
+        internal static int End(byte[] code, int used, int guard, int epoch, int active, int rootCount)
         {
             code[used++] = 0x0b; // end try_table
             code[used++] = 0x0b; // end block
@@ -94,6 +95,7 @@ namespace PortableCompiler
             // The trap unwinds every running initializer; the new epoch covers them.
             used = BranchWasm.Const(code, used, 0);
             used = Global(code, used, 0x24, active);
+            if (rootCount >= 0) used = RootStackWasm.ResetAfterInitializerFailure(code, used, rootCount);
             code[used++] = 0x00; // unreachable: no TypeInitializationException yet
             return used;
         }
@@ -144,12 +146,22 @@ namespace PortableCompiler
             return Global(code, used, 0x24, global);
         }
 
+        internal static int CallInitializer(byte[] code, int used, int function)
+        {
+            code[used++] = 0x10;
+            return WasmBinary.Unsigned(code, used, function);
+        }
+
+        internal static bool HasFieldTrigger(int kind, int global, int[] fieldInitializers) =>
+            (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField ||
+             kind == BranchIl.StaticFieldAddress || kind == BranchIl.LoadNativeStatic || kind == BranchIl.StoreNativeStatic) &&
+            global >= 0 && global < fieldInitializers.Length && fieldInitializers[global] != 0;
+
         // A static field access of a type with an initializer runs it first.
         internal static int Trigger(byte[] code, int used, int[] fieldInitializers, int global, int hostImports)
         {
             if (global >= fieldInitializers.Length || fieldInitializers[global] == 0) return used;
-            code[used++] = 0x10;
-            return WasmBinary.Unsigned(code, used, hostImports + fieldInitializers[global] - 1);
+            return CallInitializer(code, used, hostImports + fieldInitializers[global] - 1);
         }
 
         internal const int Capacity = 96, TriggerCapacity = 6;

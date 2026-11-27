@@ -103,6 +103,13 @@ filtered catch, and the managed payload is marked during both calls. Rethrow
 preserves the original object and clears its published root as the frame
 unwinds. The fixed-tag case keeps its tag and has no managed payload.
 
+The initializer fixture observes a managed argument to a method of a precise
+type and a managed operand to a static field store. Each reference is visible
+to the mark pass while the associated initializer is running. The failing
+initializer invokes its observer once, keeps the failure cached, and clears
+the abandoned roots from both caller frames. The CLR reports
+`TypeInitializationException`. The current Wasm initializer guard reports a trap.
+
 The pinning test observes a string whose only managed root is its active pin.
 The mark pass visits the owner in each pin registry pair. The paired native
 address is used for memory access. Both engines read the CLR's UTF-16 code
