@@ -371,6 +371,9 @@ namespace PortableCompiler
                     IsValueType(objects, receiver))) return -2;
                 return Push(stack, allocated, depth - 1, PeLibrary.RuntimeTypeMetadata.Type);
             }
+            if (kind == EnumHasFlag)
+                return depth >= 2 && Match(stack, depth, operand) && Match(stack, depth - 1, operand)
+                    ? Push(stack, allocated, depth - 2, I32) : -2;
             if (kind == EqualRuntimeTypes)
                 return Match(stack, depth, PeLibrary.RuntimeTypeMetadata.Type) &&
                     Match(stack, depth - 1, PeLibrary.RuntimeTypeMetadata.Type) ? Push(stack, allocated, depth - 2, I32) : -2;

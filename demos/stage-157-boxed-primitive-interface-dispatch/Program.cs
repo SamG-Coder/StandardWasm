@@ -34,7 +34,8 @@ internal static class Program
             TypeSimpleNames, NullTypeSimpleName, TypeNameAndDisplayName,
             WritableSpanString, ReadOnlySpanString, EmptySpanString, NativeSpanString,
             PrimitiveVectorTypeIdentity, PrimitiveVectorAliases, InitializedPrimitiveVectorIdentity,
-            ClosedValueIsNotNull, ClosedValueIsNull, ClosedReferenceNullCheck
+            ClosedValueIsNotNull, ClosedValueIsNull, ClosedReferenceNullCheck,
+            NarrowEnumFlags, WideEnumFlags, UnsetEnumFlags
         };
         var results = cases.Select(run => new {
             name = run.Method.Name, row = run.Method.MetadataToken & 0xffffff, expected = run(),
@@ -50,6 +51,27 @@ internal static class Program
             }, cases = results
         }));
     }
+
+    private enum NarrowFlag : sbyte { Low = 1, Other = 2, High = -128 }
+    private enum WideFlag : long { Low = 4, Other = 8, High = long.MinValue }
+
+    public static int NarrowEnumFlags() =>
+        TestNarrow(NarrowFlag.High | NarrowFlag.Low, NarrowFlag.High) &&
+        !TestNarrow(NarrowFlag.High, NarrowFlag.Other) && TestNarrow(NarrowFlag.High, 0) ? 101 : 0;
+
+    public static int WideEnumFlags() =>
+        TestWide(WideFlag.High | WideFlag.Low, WideFlag.High | WideFlag.Low) &&
+        !TestWide(WideFlag.High | WideFlag.Low, WideFlag.Other) && TestWide(WideFlag.High, 0) ? 103 : 0;
+
+    public static int UnsetEnumFlags() =>
+        TestNarrow(NarrowFlag.Low, NarrowFlag.Low | NarrowFlag.Other) ||
+        TestWide(WideFlag.Other, WideFlag.High) ? 0 : 107;
+
+    private static bool TestNarrow(NarrowFlag value, NarrowFlag mask) =>
+        ((Enum)(object)value).HasFlag((Enum)(object)mask);
+
+    private static bool TestWide(WideFlag value, WideFlag mask) =>
+        value.HasFlag(mask);
 
     public static int ClosedValueIsNotNull() => IsPresent(new NullProbeValue(7)) ? 81 : 0;
     public static int ClosedValueIsNull() => IsMissing(new NullProbeValue(0)) ? 0 : 83;

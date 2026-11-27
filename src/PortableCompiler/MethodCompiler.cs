@@ -648,6 +648,7 @@ namespace PortableCompiler
                         frame, records, objects, catchRegion);
                     RuntimeTypeBranches.FoldClosedTypeBranches(bundle, image, layout, heaps, owner, context,
                         methodArguments, objects, records, catchRegion, count);
+                    EnumFlagTests.Lower(bundle, image, layout, heaps, owner, objects, records, catchRegion);
                     ExactManagedReads.FoldExactManagedReads(bundle, image, layout, heaps, owner, context,
                         methodArguments, objects, frame, records, catchRegion);
                     byte[] frameRoots = null;
