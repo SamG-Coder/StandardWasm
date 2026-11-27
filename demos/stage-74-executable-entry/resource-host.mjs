@@ -199,7 +199,7 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     }
     let dynamicLibraries;
     const requestedLibrary = requestedWin32.has("loadLibraryExW") || requestedWin32.has("getProcAddress") ||
-        requestedWin32.has("callWindowProcW") || requestedWin32.has("registerClassW") ||
+        requestedWin32.has("callWindowProcW") || requestedWin32.has("registerClassW") || requestedWin32.has("createWindowExW") ||
         requestedWin32.has("setWindowLongW") || requestedWin32.has("setWindowLongPtrW") ||
         requestedWin32.has("getModuleHandleW") && typeof platform?.configureNativeLibraries === "function";
     if (wantsNativeIndirect || wantsNativeSymbol || requestedLibrary) {
@@ -223,7 +223,8 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     }
     if (requestedWin32.size) {
         const usesModules = requestedWin32.has("getModuleHandleW") || requestedWin32.has("createActCtxW");
-        imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : [], windows, errors, dynamicLibraries);
+        imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : [], windows, errors, dynamicLibraries,
+            platform?.windowCreationMetrics);
     }
     if (wantsCom) {
         const { imports: dispatch, registerInterface } = createComHost(memory);

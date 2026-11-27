@@ -1,12 +1,12 @@
 import { readPeResource } from "../stage-73-executable-intake/loader/pe.mjs";
 import { createActivationContexts } from "./activation-context.mjs";
 import { createDpiAwareness, dpiImportNames } from "./dpi-awareness.mjs";
-import { createWindowClassState, createWindowState, windowImportNames } from "./window-state.mjs";
+import { createWindowClassState, createWindowCreation, createWindowState, windowImportNames } from "./window-state.mjs";
 
 export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
     "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom",
-    "registerClassW", "getClassInfoW"
+    "registerClassW", "getClassInfoW", "createWindowExW"
 ]);
 export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, "callWindowProcW", "deactivateActCtx", "releaseActCtx",
@@ -46,7 +46,7 @@ export function createNativeSymbolLookup(memory, libraries, errors) {
 }
 
 export function createWin32Host(memory, executablePath, assets = [], windows = createWindowState(),
-    errors = { system: 0, pinvoke: 0 }, dynamicLibraries) {
+    errors = { system: 0, pinvoke: 0 }, dynamicLibraries, windowCreationMetrics) {
     const byPath = new Map();
     const byBaseName = new Map();
     const moduleImages = new Map();
@@ -70,12 +70,15 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
 
     const setError = value => { errors.system = value; };
     const isProcedure = token => dynamicLibraries?.hasTarget(token, windowProcedureSignature);
+    const classes = createWindowClassState(memory, isProcedure, setError);
+    const bindProcedure = token => isProcedure(token)
+        ? (handle, message, wparam, lparam) => dynamicLibraries.invoke(token, windowProcedureSignature, handle, message, wparam, lparam)
+        : undefined;
     const getWindowLong = (handle, index) => windows.getWindowLong(handle, index, setError);
     function setWindowLong(handle, index, token) {
         return windows.setWindowProcedure(handle, index, token, procedure => {
-            if (!isProcedure(procedure)) return undefined;
-            return (message, wparam, lparam) =>
-                dynamicLibraries.invoke(procedure, windowProcedureSignature, handle, message, wparam, lparam);
+            const dispatch = bindProcedure(procedure);
+            return dispatch && ((message, wparam, lparam) => dispatch(handle, message, wparam, lparam));
         }, setError);
     }
 
@@ -170,7 +173,9 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         getWindowLongPtrW: getWindowLong,
         setWindowLongW: setWindowLong,
         setWindowLongPtrW: setWindowLong,
-        ...createWindowClassState(memory, isProcedure, setError),
+        registerClassW: classes.registerClassW,
+        getClassInfoW: classes.getClassInfoW,
+        createWindowExW: createWindowCreation(memory, windows, classes, bindProcedure, setError, windowCreationMetrics),
         bCryptGenRandom,
         getLastSystemError: () => errors.system,
         setLastSystemError: value => { errors.system = value | 0; },
