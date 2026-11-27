@@ -228,6 +228,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [231 · Runtime type assignability](stage-231-type-assignability/README.md) | `npm run demo -- stage-231-type-assignability` | Compare runtime Type descriptors against a proven literal receiver |
 | [232 · Obsolete static fields](stage-232-obsolete-static-fields/README.md) | `npm run demo -- stage-232-obsolete-static-fields` | Verify deprecation metadata and ordinary static storage |
 | [234 · Runtime Type instance fields](stage-234-type-instance-fields/README.md) | `npm run demo -- stage-234-type-instance-fields` | Preserve canonical Type identity and ordinary struct value copies through readonly fields |
+| [235 · Closed generic protected virtual calls](stage-235-protected-virtual/README.md) | `npm run demo -- stage-235-protected-virtual` | Resolve protected declarations and reuse verified virtual dispatch |
 
 ## Adding a stage
 
