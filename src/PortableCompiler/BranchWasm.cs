@@ -374,10 +374,11 @@ namespace PortableCompiler
                     int receiver = records[slot + 3];
                     int closureType = operand;
                     int target = Spill(spills, maximum, receiver, top - 1);
-                    // CLR rejects binding an instance delegate to a null target.
-                    used = GuardNull(code, used, target, ExceptionTagsWasm.ArgumentTag);
+                    // CLR rejects binding an instance delegate to a null target. An open static
+                    // target (Stage 164) binds the null the IL pushed; the thunk ignores it.
+                    if (receiver != NullValue) used = GuardNull(code, used, target, ExceptionTagsWasm.ArgumentTag);
                     used = Local(code, used, 0x20, target);
-                    code[used++] = 0xd4;
+                    if (receiver != NullValue) code[used++] = 0xd4; // ref.as_non_null
                     int pointer = Spill(spills, maximum, MethodPointer, top);
                     int destination = Spill(spills, maximum, closureType, top - 1);
                     used = Local(code, used, 0x20, pointer);

@@ -33,9 +33,10 @@ internal static class FrameworkDelegateCases
         RejectFacade("event through Runtime.Extensions", "System.Runtime", "System.Runtime.Extensions");
         RejectFacade("Interlocked through Runtime", "System.Threading", "System.Runtime");
 
-        // A static method target needs a thunk that drops the null target. It stays diagnosed.
-        MethodInfo staticTarget = Method(nameof(Kernels.RejectStatic));
-        Reject(staticTarget, [0, Row(staticTarget), Offset(staticTarget, OpCodes.Ldftn)]);
+        // Stage 164 (decision 0088): an open static EventHandler target now binds a null target
+        // through a thunk that ignores it, so this former rejection is compared with the CLR.
+        // (The kernel keeps its Stage 119 name.)
+        Check(nameof(Kernels.RejectStatic), Kernels.RejectStatic);
 
         void Check(string name, Func<int, int> expectedResult)
         {

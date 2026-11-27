@@ -147,6 +147,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [154 · CoreLib resource strings](stage-154-corelib-resource-strings/README.md) | `npm run demo -- stage-154-corelib-resource-strings` | CoreLib `SR` resource strings folded at compile time, so default-message framework exceptions compile and match the x86 CLR |
 | [155 · Bound catch variables](stage-155-bound-catch-variables/README.md) | `npm run demo -- stage-155-bound-catch-variables` | `catch (X e)` handlers reading the caught exception, including runtime-raised CoreLib exceptions and rethrow identity, matched with the x86 CLR in Node and Edge |
 | [156 · Native imports](stage-156-native-imports/README.md) | `npm run demo -- stage-156-native-imports` | blittable `[DllImport]`s into kernel32 and ucrtbase, SetLastError and a missing entry point as typed Wasm imports, matched with the x86 CLR in Node and Edge |
+| [164 · Delegate representation](stage-164-delegate-representation/README.md) | `npm run demo -- stage-164-delegate-representation` | C# cached lambdas and delegates over static methods (`Func<int>`, a static `EventHandler`), matched with the x86 CLR in Node and Edge |
 
 ## Adding a stage
 
