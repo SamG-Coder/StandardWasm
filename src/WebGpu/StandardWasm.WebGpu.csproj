@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Generic WebGPU interface over webgpu.h (decision 0096). netstandard2.0 so the same DLL
+       runs on the CLR (wgpu-native or Dawn) and through StandardWasm in a browser. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>StandardWasm.WebGpu</RootNamespace>
+    <AssemblyName>StandardWasm.WebGpu</AssemblyName>
+  </PropertyGroup>
+</Project>
