@@ -472,7 +472,7 @@ namespace PortableCompiler
                     {
                         hostUse[0] = hostUse[0] | WasmImports.Win32NativeFeature(import);
                         if (Win32ModuleBinding.UsesLastError(import)) hostUse[0] = hostUse[0] | WasmImports.Win32Errors;
-                        if (moduleCode.Length - length < Win32ModuleWasm.BodyCapacity) return -3;
+                        if (moduleCode.Length - length < Win32ModuleWasm.BodyCapacity(import)) return -3;
                         bodyOffsets[current] = length;
                         int shape = offsets[current];
                         length = Win32ModuleWasm.WriteBody(moduleCode, length, signatures, shape, import,

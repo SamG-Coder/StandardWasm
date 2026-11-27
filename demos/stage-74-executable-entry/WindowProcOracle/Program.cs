@@ -28,8 +28,10 @@ try
         winForms = typeof(NativeWindow).Assembly.GetName().Version!.ToString(),
         fixtureAssembly = typeof(WindowProcBindingFixture).Assembly.Location,
         fixtureRow = typeof(WindowProcBindingFixture).GetMethod(nameof(WindowProcBindingFixture.Lookup))!.MetadataToken & 0x00ffffff,
+        dispatchRow = typeof(WindowProcBindingFixture).GetMethod(nameof(WindowProcBindingFixture.Dispatch))!.MetadataToken & 0x00ffffff,
         nominal,
         dispatch = WindowProcedureOracle.Observe(),
+        nominalDispatch = WindowProcedureOracle.Observe(nominal: true),
         lookup = new
         {
             sameModule = module == user32,

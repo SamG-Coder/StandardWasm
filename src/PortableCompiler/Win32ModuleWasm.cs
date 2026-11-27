@@ -6,7 +6,9 @@ namespace PortableCompiler
 {
     internal static class Win32ModuleWasm
     {
-        internal const int BodyCapacity = 64, DpiQueryBodyCapacity = 112;
+        internal const int DpiQueryBodyCapacity = 112;
+
+        internal static int BodyCapacity(int member) => member == Win32ModuleBinding.CallWindowProcedure ? 96 : 64;
 
         private static int ResultCount(int member) => member == Win32ModuleBinding.ReleaseContext ? 0 :
             member == Win32ModuleBinding.GetProcessAwareness ? 2 : 1;

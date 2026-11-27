@@ -7,7 +7,7 @@ internal static unsafe class WindowProcedureOracle
     private static nint expectedWindow;
     private static int[] observed;
 
-    internal static object Observe()
+    internal static object Observe(bool nominal = false)
     {
         var window = new NativeWindow();
         window.CreateHandle(new CreateParams { Caption = "StandardWasm procedure probe", Parent = (nint)(-3) });
@@ -15,12 +15,15 @@ internal static unsafe class WindowProcedureOracle
         {
             expectedWindow = window.Handle;
             delegate* unmanaged[Stdcall]<nint, uint, nuint, nint, nint> first = &First, second = &Second;
-            nint before = CallWindowProcW((nint)first, expectedWindow, 0x80000111, 0xfedcba98, unchecked((int)0x87654321));
+            nint before = Invoke((nint)first, 0x80000111, 0xfedcba98, unchecked((int)0x87654321));
             int[] firstArgs = observed;
-            nint after = CallWindowProcW((nint)second, expectedWindow, 0x7fff, 0x80000000, -1);
+            nint after = Invoke((nint)second, 0x7fff, 0x80000000, -1);
             return new { received = new[] { firstArgs, observed }, results = new[] { (int)before, (int)after } };
         }
         finally { window.DestroyHandle(); }
+        nint Invoke(nint procedure, uint message, nuint wparam, nint lparam) => nominal
+            ? WindowProcBindingFixture.Dispatch(procedure, expectedWindow, message, wparam, lparam)
+            : CallWindowProcW(procedure, expectedWindow, message, wparam, lparam);
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall) })]

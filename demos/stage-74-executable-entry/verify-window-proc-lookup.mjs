@@ -169,16 +169,20 @@ async function exercise(instantiate, createWindows, variants) {
         malformedError, preservedError, fresh, foreign, foreignError, noProvider, noProviderError, namesOnly };
 }
 
-async function exerciseCompiled(instantiate, compilerBytes, assemblyBytes, row) {
+async function exerciseCompiled(instantiate, compilerBytes, assemblyBytes, row, dispatchRow) {
     const { instance: { exports: tool } } = await WebAssembly.instantiate(compilerBytes);
     const image = tool.CreateBytes(assemblyBytes.byteLength);
     new Uint8Array(assemblyBytes).forEach((value, index) => tool.SetByte(image, index, value));
     const destination = tool.CreateBytes(65536);
     const diagnostic = tool.CreateDiagnostic();
-    const size = tool.CompileDetailed(image, row, destination, diagnostic);
-    if (size <= 0) throw Error("Window procedure fixture status " + size + " at " +
-        [0, 1, 2].map(index => tool.ReadDiagnostic(diagnostic, index)));
-    const module = new WebAssembly.Module(Uint8Array.from({ length: size }, (_, index) => tool.ReadByte(destination, index)));
+    function compile(entry) {
+        const size = tool.CompileDetailed(image, entry, destination, diagnostic);
+        if (size <= 0) throw Error("Window procedure fixture status " + size + " at " +
+            [0, 1, 2].map(index => tool.ReadDiagnostic(diagnostic, index)));
+        return new WebAssembly.Module(Uint8Array.from({ length: size }, (_, index) => tool.ReadByte(destination, index)));
+    }
+    const importNames = module => WebAssembly.Module.imports(module).map(({ module, name }) => module + "/" + name);
+    const module = compile(row);
     let library, token, memory;
     const { exports } = await instantiate(module, tool, [], {}, undefined, undefined, undefined, {
         configureNativeLibraries({ memory: guestMemory, registerLibrary, loadLibrary, getProcAddress }) {
@@ -195,8 +199,30 @@ async function exerciseCompiled(instantiate, compilerBytes, assemblyBytes, row) 
     const found = exports.run(library, address) === token;
     new Uint8Array(memory.buffer, address)[0] = 0x64;
     const missing = exports.run(library, address);
-    const imports = WebAssembly.Module.imports(module).map(({ module, name }) => module + "/" + name);
-    return { found, missing, imports };
+    const dispatcher = compile(dispatchRow);
+    const received = [];
+    const procedures = [];
+    const hwnd = 0x00abcdef;
+    const { exports: compiled } = await instantiate(dispatcher, tool, [], {}, undefined, undefined, undefined, {
+        configureNativeLibraries({ registerLibrary, loadLibrary, getProcAddress }) {
+            const callback = (label, result) => ({
+                signature: "stdcall:i32(p32,u32,u32,i32)",
+                invoke(window, message, wparam, lparam) {
+                    received.push([label, window === hwnd ? 1 : 0, message | 0, wparam | 0, lparam]);
+                    return result;
+                }
+            });
+            registerLibrary("user32", new Map([["First", callback(1, -315851420)], ["Second", callback(2, 1234567)]]));
+            const handle = loadLibrary("user32");
+            procedures.push(getProcAddress(handle, "First"), getProcAddress(handle, "Second"));
+        }
+    });
+    const results = [
+        compiled.run(procedures[0], hwnd, 0x80000111, 0xfedcba98, 0x87654321),
+        compiled.run(procedures[1], hwnd, 0x7fff, 0x80000000, -1)
+    ];
+    return { found, missing, imports: importNames(module),
+        dispatch: { received, results }, dispatchImports: importNames(dispatcher) };
 }
 
 const variants = { full: fixture(true), module: fixture(false), dispatch: fixture(false, true) };
@@ -210,10 +236,12 @@ assert.deepEqual(node, {
 
 const compiler = process.argv[2] ? readFileSync(process.argv[2]) : null;
 const fixtureAssembly = compiler ? readFileSync(oracle.fixtureAssembly) : null;
-const compiled = compiler ? await exerciseCompiled(instantiateManagedModule, compiler, fixtureAssembly, oracle.fixtureRow) : null;
+const compiled = compiler ? await exerciseCompiled(instantiateManagedModule, compiler, fixtureAssembly,
+    oracle.fixtureRow, oracle.dispatchRow) : null;
 if (compiled) assert.deepEqual(compiled, {
     found: oracle.nominal, missing: 0,
-    imports: ["standardwasm:resources/memory", "standardwasm:win32/getProcAddress"]
+    imports: ["standardwasm:resources/memory", "standardwasm:win32/getProcAddress"],
+    dispatch: oracle.nominalDispatch, dispatchImports: ["standardwasm:win32/callWindowProcW"]
 });
 
 const server = await serveLaunch(0, new Uint8Array());
@@ -225,23 +253,23 @@ try {
         await page.route(server.url + "/fixture", route => route.fulfill({ body: fixtureAssembly }));
     }
     await page.goto(server.url);
-    const { browser, edgeCompiled } = await page.evaluate(async ({ source, compiledSource, variants, row }) => {
+    const { browser, edgeCompiled } = await page.evaluate(async ({ source, compiledSource, variants, row, dispatchRow }) => {
         const { instantiateManagedModule } = await import("/launch/resource-host.mjs");
         const { createWindowState } = await import("/launch/window-state.mjs");
         const browser = await (0, eval)("(" + source + ")")(instantiateManagedModule, createWindowState, variants);
         const assets = compiledSource ? await Promise.all(["/compiler", "/fixture"]
             .map(async url => (await fetch(url)).arrayBuffer())) : null;
-        const edgeCompiled = assets ? await (0, eval)("(" + compiledSource + ")")(instantiateManagedModule, ...assets, row) : null;
+        const edgeCompiled = assets ? await (0, eval)("(" + compiledSource + ")")(instantiateManagedModule, ...assets, row, dispatchRow) : null;
         return { browser, edgeCompiled };
     }, { source: exercise.toString(), compiledSource: compiled ? exerciseCompiled.toString() : null,
-        variants, row: oracle.fixtureRow });
+        variants, row: oracle.fixtureRow, dispatchRow: oracle.dispatchRow });
     assert.deepEqual(browser, node);
     assert.deepEqual(edgeCompiled, compiled);
     writeFileSync(join(evidence, "results.json"), JSON.stringify({
         oracle, node, browser, compiled, nodeVersion: process.version, edgeVersion: edge.version()
     }, null, 2) + "\n");
     console.log("Node and Edge matched Windows x86 lookup and window-procedure dispatch through the browser registry.");
-    if (compiled) console.log("Compiled HMODULE/PCSTR/FARPROC lookup matched the Windows x86 result in both engines.");
+    if (compiled) console.log("Compiled nominal Win32 lookup and dispatch matched Windows x86 in both engines.");
 } finally {
     await edge.close();
     await server.close();

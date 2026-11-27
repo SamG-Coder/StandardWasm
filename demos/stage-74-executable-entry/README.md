@@ -287,4 +287,9 @@ The Windows x86 verifier calls two native procedures through
 the selected callbacks, their argument bits, and LRESULTs using the same
 production browser host. A call-only module uses the registry without a
 linear memory import. This test covers dispatch to registered procedures.
+
+With a compiler path, the fixture also compiles the Windows SDK dispatch
+signature, including its stdcall function pointer and nominal HWND, WPARAM,
+LPARAM and LRESULT values. The generated module imports only
+`standardwasm:win32/callWindowProcW` and matches the same x86 callbacks.
 [Win32 CallWindowProcW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-callwindowprocw)

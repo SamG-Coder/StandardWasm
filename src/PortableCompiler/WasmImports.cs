@@ -7,7 +7,7 @@ namespace PortableCompiler
         internal const int Console = 1, Resources = 2, Memory = 4, Win32Errors = 8;
         // A module with pointer-backed spans enables linear accesses in every
         // character-view consumer, including callees compiled before discovery.
-        internal const int NativeCharacterViews = 1 << 29;
+        internal const int NativeCharacterViews = 1 << 30;
         private const int FirstNativeFeature = 16;
         private const int NativeMemoryFeatures = ((1 << Win32ModuleBinding.ReleaseContext) - 1) * FirstNativeFeature |
             (FirstNativeFeature << (Win32ModuleBinding.BCryptGenRandom - 1)) |
