@@ -29,7 +29,7 @@ namespace DiagnosticLibrary
         public static int ViaDependency(int value) => DiagnosticDependency.Costs.Estimate(value) + 1;
         public static int ViaUnsupportedDependency(int value) => DiagnosticDependency.Costs.ConvertHours(value) + 1;
         public static int ViaBoxedDependency(int value) => DiagnosticDependency.Costs.BoxHours(value) + 1;
-        public static int ViaUnsupportedInstruction(int value) => DiagnosticDependency.Costs.UnsupportedSign(value);
+        public static int ViaUnsupportedInstruction(int value) => DiagnosticDependency.Costs.UnsupportedTypedReference(value);
         public static int LinkedRate(int value) => DiagnosticDependency.Costs.FlatRate(value) + 1;
 
         // Math.Sign is outside the exact intrinsic table (decision 0003), so this call stays an unsupported diagnostic.

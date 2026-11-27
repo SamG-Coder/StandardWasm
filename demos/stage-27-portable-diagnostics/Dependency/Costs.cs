@@ -7,7 +7,7 @@ namespace DiagnosticDependency
         public static int BoxHours(int hours) => ReadObject((HourValue)hours);
         private static int ReadObject(object hours) => (int)hours;
         public static int FlatRate(int hours) => unchecked(hours * 31);
-        public static int UnsupportedSign(int hours) => System.Math.Sign(hours);
+        public static int UnsupportedTypedReference(int hours) => __refvalue(__makeref(hours), int);
         private enum HourValue { }
     }
 }

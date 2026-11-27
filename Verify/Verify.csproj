@@ -133,6 +133,7 @@
     <ProjectReference Include="../demos/stage-100-explicit-scalar-layouts/ScalarOverlayDemo.csproj" />
     <ProjectReference Include="../demos/stage-99-named-value-arguments/NamedValueDemo.csproj" />
     <ProjectReference Include="../demos/stage-98-nonnullable-value-constraints/ValueConstraintDemo.csproj" />
+    <ProjectReference Include="../demos/stage-260-identical-interface-constraints/Fixture/InterfaceConstraints.csproj" />
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
     <ProjectReference Include="../demos/stage-78-strong-names/Alternate/Alternate.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../demos/stage-65-nominal-casts/NominalCasts.csproj" />

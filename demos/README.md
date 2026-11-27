@@ -249,10 +249,10 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [255 · Generic method constructor constraints](stage-255-method-default-constructors/README.md) | `npm run demo -- stage-255-method-default-constructors` | Validate real closed type constructors before specializing methods |
 | [256 · Nominal enum boxes](stage-256-nominal-enum-boxes/README.md) | `npm run demo -- stage-256-nominal-enum-boxes` | Preserve runtime identity and checked unboxing for original enum values |
 | [257 · 64-bit managed references](stage-257-wide-managed-byrefs/README.md) | `npm run demo -- stage-257-wide-managed-byrefs` | Compare aliased 64-bit locals and instance fields with the CLR |
+| [260 · Identical interface constraints](stage-260-identical-interface-constraints/README.md) | `npm run demo -- stage-260-identical-interface-constraints` | Accept an interface as its own exact nominal bound |
 
 ## Adding a stage
 
 Choose a stable stage number in the tracking issue. Add a stage-NN-name directory containing its project, C# sources, demo.json and README.md. Give each assembly a unique name because it identifies both the artifact and the test module. Copy an existing manifest and specify the assembly, export type, method, inputs and expected value. Library stages build for netstandard2.0 unless the manifest sets `targetFramework` (for example `net10.0`). Document the capability, command and expected result. Add the project reference to Verify/Verify.csproj and CLR comparison cases in Verify/Program.cs, then run the stage command and npm test. Update this index in the same PR. Keep generated files under ignored bin, obj and artifacts directories.
 
 Browser application stages can declare a runner in demo.json. Give them a documented verification command for the native and browser hosts.
-| [260 · Identical interface constraints](stage-260-identical-interface-constraints/README.md) | `npm run demo -- stage-260-identical-interface-constraints` | Accept an interface as its own exact nominal bound |

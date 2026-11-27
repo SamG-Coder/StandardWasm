@@ -45,7 +45,8 @@ namespace EnumFieldDemo
             return unchecked((long)frame.Long ^ ((long)frame.UnsignedLong >> 32));
         }
 
-        public static object RejectBox(int value) => unchecked((States)value);
+        public static int RoundTripBox(int value) => (int)(States)BoxState(value);
+        private static object BoxState(int value) => unchecked((States)value);
     }
 
     public static class Demo

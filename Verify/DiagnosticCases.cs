@@ -32,8 +32,8 @@ internal static class DiagnosticCases
         var linked = estimates.GetMethod(nameof(Estimates.ViaBoxedDependency))!;
         Succeed("linked boxed enum", bundle, Manifest(linked), Estimates.ViaBoxedDependency, bundled: true);
         var unsupportedEntry = estimates.GetMethod(nameof(Estimates.ViaUnsupportedInstruction))!;
-        var dependencyMethod = typeof(Costs).GetMethod(nameof(Costs.UnsupportedSign))!;
-        Reject("dependency opcode", bundle, Manifest(unsupportedEntry), -2, At(1, dependencyMethod, OpCodes.Call), bundled: true);
+        var dependencyMethod = typeof(Costs).GetMethod(nameof(Costs.UnsupportedTypedReference))!;
+        Reject("dependency opcode", bundle, Manifest(unsupportedEntry), -2, At(1, dependencyMethod, OpCodes.Mkrefany), bundled: true);
         Reject("missing dependency", BundleCases.Pack(image), Manifest(linked), -4,
             At(0, linked, OpCodes.Call), bundled: true);
         Reject("invalid dependency metadata", BundleCases.Pack(image, [1]), Manifest(linked), -1,
