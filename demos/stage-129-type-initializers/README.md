@@ -24,8 +24,9 @@ The kernels cover:
 - a field read and a static call into a bundled dependency's initializer
 - a static call into a closed beforefieldinit generic type, which reads no static field and so
   needs no initializer
+- a static call into a precise closed generic type, with initialization before the call
 - distinct `new object()` allocations, root-object identity through a static field, and a
-  failed nominal test against an unrelated class
+  failed nominal test against an unrelated class, plus `GetType` on a root object
 
 The failure cases run several exports on one instance. The CLR raises the same
 `TypeInitializationException` on each trigger. The compiled module traps on each trigger,
@@ -35,5 +36,5 @@ Wasm stack inside an initializer. The CLR would end the process, so it has no CL
 It checks that the next host entry retires the interrupted initializer instead of treating
 it as recursion.
 
-`GetHashCode`, `ToString`, `GetType` and `Equals` on a root object and a static call
-into a closed precise generic type must return the explicit -2 diagnostic at their instruction. The design is decision 0057.
+`GetHashCode`, `ToString` and `Equals` on a root object still report the
+explicit -2 diagnostic at their call instruction. The design is decision 0057.

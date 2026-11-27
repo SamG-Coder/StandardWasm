@@ -23,7 +23,8 @@ foreach (string name in new[]
 {
     "ReachedOnce", "CallAfterArgument", "StoreAfterRightHand", "BeforeFieldInitOnce", "ConstructorTriggers",
     "InheritedField", "Recursion", "CatchInsideInitializer", "BundledDependency", "RelaxedGenericCall",
-    "DistinctObjects", "StaticFieldAlias", "NotNominalClass", "Locked", "RuntimeTypeLock", "StaticAutoProperty", "LinkedRuntimeTypeArgument"
+    "DistinctObjects", "StaticFieldAlias", "NotNominalClass", "Locked", "RuntimeTypeLock", "StaticAutoProperty",
+    "LinkedRuntimeTypeArgument", "RootGetType", "PreciseGenericCall"
 })
 {
     var (kernels, context) = Load(name);
@@ -56,14 +57,14 @@ Failure("ReadOuterFailing", [("run", "ReadOuterFailing"), ("inner", "ReadFailing
     context.Unload();
 }
 
-// Object members on a root object and a precise generic initializer stay located diagnostics.
-foreach (string name in new[] { "RootHashCode", "RootToString", "RootGetType", "RootEquals", "PreciseGenericCall" })
+// Object members without a supported root layout still report the original call.
+foreach (string name in new[] { "RootHashCode", "RootToString", "RootEquals" })
 {
     var (kernels, context) = Load(name);
     MethodInfo method = kernels.GetMethod(name)!;
     string clr = ((int)method.Invoke(null, null)!).ToString();
     byte[] il = method.GetMethodBody()!.GetILAsByteArray()!;
-    int offset = IlOffset(il, name == "PreciseGenericCall" ? OpCodes.Call : OpCodes.Callvirt);
+    int offset = IlOffset(il, OpCodes.Callvirt);
     cases.Add(new { name, row = Row(method), images, clr, status = -2, diagnostic = new[] { 0, Row(method), offset } });
     context.Unload();
 }
