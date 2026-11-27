@@ -1144,6 +1144,21 @@ namespace PortableCompiler
                     used = LinearMemoryWasm.GuardNull(code, used, address);
                     used = NativeAggregates.Clear(code, used, nativePlans, records[slot + 3] - 1, address);
                 }
+                else if (kind == PinStaticBytes)
+                {
+                    int address = Spill(spills, maximum, spillFlags, Native, depth);
+                    int count = records[slot + 3];
+                    used = Const(code, used, count);
+                    used = Local(code, used, 0x21, address);
+                    if (count != 0)
+                    {
+                        used = StackAllocationWasm.Allocate(code, used, stackPointer, stackBase, stackLimit, address, address, pcLocal);
+                        used = Local(code, used, 0x20, address);
+                        used = Const(code, used, operand);
+                        used = Const(code, used, count);
+                        code[used++] = 0xfc; code[used++] = 8; code[used++] = 0; code[used++] = 0; // memory.init 0 0
+                    }
+                }
                 else if (kind == PinString)
                 {
                     // The String scratch bank supplies the Char[] and two i32 locals.

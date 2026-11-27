@@ -692,6 +692,8 @@ namespace PortableCompiler
                     if (status < 0) return status;
                     if (locals != 0 && !resourceOpen)
                     {
+                        PinnedByteSpans.Lower(bundle, image, heaps, layout, owner, context, methodArguments,
+                            objects, records, pinned, frame, parameters, locals, catchRegion, literals);
                         status = PinnedStrings.Lower(image, heaps, layout, records, pinned, parameters, locals, location);
                         if (status < 0) return status;
                     }
@@ -996,7 +998,7 @@ namespace PortableCompiler
                             records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
                             IsNativeInteger(states[pc * maximum + depths[pc] - 1 - (fieldStore ? 2 : 1)]);
                         if (nativeField) linearMemory = true;
-                        if ((kind == BranchIl.LocalAllocate || kind == BranchIl.PinString || kind == BranchIl.CallPinnedCharacterNative) && depths[pc] != 0)
+                        if ((kind == BranchIl.LocalAllocate || kind == BranchIl.PinString || kind == BranchIl.PinStaticBytes || kind == BranchIl.CallPinnedCharacterNative) && depths[pc] != 0)
                         {
                             // An initializer's guard and a shadow-stack frame both wrap the
                             // body; combining them is not supported yet.

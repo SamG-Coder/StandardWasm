@@ -16,9 +16,21 @@ namespace PortableCompiler
                 int length = records[slot + 2] * Width;
                 if (length >= records.Length || records[length] != Constant) continue;
                 int call = records[length + 2] * Width;
-                if (call >= records.Length || records[call] != MemberCall || records[call + 3] != 0x73 ||
+                if (call >= records.Length || records[call] != MemberCall ||
                     !SpanMetadata.IsBytePointerConstructor(bundle, image, layout, heaps, owner, records[call + 1],
                         context, methodArguments, objects)) continue;
+                int address = -1;
+                if (records[call + 3] == 0x28)
+                {
+                    for (int before = slot - Width; before >= 0; before -= Width)
+                    {
+                        if (records[before] == 0) continue;
+                        if (records[before] == FrameAddress && records[before + 2] * Width == slot) address = before;
+                        break;
+                    }
+                    if (address < 0 || ValueOperands.Entry(records, slot / Width, clauses)) continue;
+                }
+                else if (records[call + 3] != 0x73) continue;
                 if (ValueOperands.Entry(records, length / Width, clauses) || ValueOperands.Entry(records, call / Width, clauses))
                     continue;
 
@@ -37,11 +49,19 @@ namespace PortableCompiler
                 size[0] = offset + backing;
                 records[slot] = LoadStaticByteSpan;
                 records[slot + 1] = offset;
-                records[slot + 2] = records[call + 2];
+                records[slot + 2] = address < 0 ? records[call + 2] : call / Width;
                 records[slot + 3] = count;
                 records[slot + Width + 1] = backing; // Reserved operand record inside ldsflda.
                 records[length] = 0;
-                records[call] = 0;
+                if (address < 0) records[call] = 0;
+                else
+                {
+                    // An instance constructor initializes its original frame slot.
+                    records[address] = Nop;
+                    records[call] = Store;
+                    records[call + 1] = records[address + 1];
+                    records[call + 3] = 0;
+                }
             }
             return 0;
         }
