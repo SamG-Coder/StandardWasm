@@ -755,6 +755,11 @@ namespace PortableCompiler
                         location, catchRegion.Length != 0, filterEnds: filterEnds);
                     if (status < 0)
                         return status;
+                    if (contexts[current] == CoreVersionByref.ContextKey)
+                    {
+                        status = CoreVersionByref.Lower(bundle, image, layout, heaps, owner, source, records, natives, nativeBase, current);
+                        if (status < 0) return status;
+                    }
                     status = GcHandleBinding.RestrictPinned(image, layout, heaps, source, body, records, catchRegion);
                     if (status < 0) return status;
                     if (parameters == 2 && frame[0] == String && frame[1] == WritableCharacterSpan)
@@ -841,6 +846,8 @@ namespace PortableCompiler
                             methodArguments, objects, globals, records, catchRegion, frame, parameters);
                         scopedCalls = ScopedNativeReceivers.FindCalls(bundle, image, layout, heaps, owner, source,
                             context, methodArguments, objects, globals, records, catchRegion, frame, parameters);
+                        scopedCalls = CoreVersionByref.MarkCalls(bundle, image, layout, heaps, owner, count,
+                            objects, records, catchRegion, frame, parameters, scopedCalls);
                         NativeAggregateConstructors.Lower(bundle, image, layout, heaps, owner, source, context,
                             methodArguments, objects, globals, records, catchRegion, frame, scopedCalls);
                     }
@@ -2892,6 +2899,20 @@ namespace PortableCompiler
                 }
                 // Validate direct MethodDef operands before framework recognizers inspect their rows.
                 int target = records[slot + 1];
+                if (kind == BranchIl.CoreVersionOutCall)
+                {
+                    int version = Lookup(owners, rows, contexts, bases, indices, functions, owner, target, CoreVersionByref.ContextKey);
+                    if (version < 0)
+                    {
+                        version = functions;
+                        functions = Register(bundle, image, layout, heaps, owner, target, CoreVersionByref.ContextKey,
+                            owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions);
+                        if (functions < 0) return functions;
+                    }
+                    records[slot] = BranchIl.Call;
+                    records[slot + 1] = version;
+                    continue;
+                }
                 if ((kind == BranchIl.Call || kind == BranchIl.NewObject || kind == BranchIl.LoadFunction) &&
                     (target < 1 || target > bases[owner + 1] - bases[owner])) return -1;
                 if ((kind == BranchIl.NewObject && records[slot + 3] == 0 ||
@@ -4370,6 +4391,11 @@ namespace PortableCompiler
             else if (NativeReceiverCalls.IsNativeKey(context))
             {
                 if (!IsValueMethod(image, layout, heaps, row, signatures, offset, arity, objects)) return -2;
+                signatures[offset + 1] = Native;
+            }
+            else if (context == CoreVersionByref.ContextKey)
+            {
+                if (arity != 1 || signatures[offset] != I32 || !IsValueLocation(signatures[offset + 1])) return -2;
                 signatures[offset + 1] = Native;
             }
             owners[functions] = owner;

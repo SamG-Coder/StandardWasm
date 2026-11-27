@@ -7,6 +7,7 @@ export function serveLaunch(port, compiler) {
     return serveIntake(port, new Map([
         ["/StandardWasm.Compiler.wasm", ["application/wasm", compiler]],
         ["/scripts/native-imports.mjs", ["text/javascript", join(root, "scripts/native-imports.mjs")]],
+        ["/launch/windows-version.mjs", ["text/javascript", join(stage, "windows-version.mjs")]],
         ["/stage-73-executable-intake/loader/pe.mjs", ["text/javascript",
             join(root, "demos/stage-73-executable-intake/loader/pe.mjs")]],
         ...["launch", "launch-worker", "companions", "resource-host", "fatal-host", "com-host", "dynamic-library-host", "temp-path-host", "full-path-host", "long-path-host", "win32-path-input", "frameworks", "win32-host", "activation-context", "dpi-awareness", "display-context", "window-state", "window-rect", "window-messages", "thread-handle-host", "window-station-host"].map(name => [

@@ -2,6 +2,7 @@ import { comImportModule, isNativeImportModule, nativeImports, nativeIndirectImp
 import { createComHost, isComDispatchSignature } from "./com-host.mjs";
 import { createDynamicLibraryHost, createNativeIndirectDispatch, nativeIndirectSignature, scopedUtf16Signature } from "./dynamic-library-host.mjs";
 import { createNativeSymbolLookup, createWin32Host, win32ImportModule, win32ImportNames, win32MemoryImports } from "./win32-host.mjs";
+import { createWindowsVersionHost, windowsVersionModule } from "./windows-version.mjs";
 
 export const resourceImportModule = "standardwasm:resources";
 
@@ -116,6 +117,7 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     const requestedWin32 = new Set();
     let wantsMonitor = false;
     let wantsDebugger = false;
+    let wantsWindowsVersion = false;
     let wantsNative = false;
     const requestedCom = new Set();
     let wantsNativeSymbol = false;
@@ -151,6 +153,12 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
             requestedWin32.add(name);
             continue;
         }
+        if (owner === windowsVersionModule) {
+            if (kind !== "function" || name !== "rtlGetVersion" || wantsWindowsVersion)
+                throw Error("The generated module requests an invalid Windows version import.");
+            wantsWindowsVersion = true;
+            continue;
+        }
         if (owner === comImportModule) {
             if (kind !== "function" || !isComDispatchSignature(name) || requestedCom.has(name))
                 throw Error("The generated module requests an invalid COM dispatch import.");
@@ -180,6 +188,8 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     }
     if ([...requestedWin32].some(name => win32MemoryImports.has(name)) && !requestedResources.has("memory"))
         throw Error("The requested Win32 functions require the StandardWasm memory import.");
+    if (wantsWindowsVersion && !requestedResources.has("memory"))
+        throw Error("Windows version queries require the StandardWasm memory import.");
     if (requestedCom.size && !requestedResources.has("memory"))
         throw Error("COM dispatch requires the StandardWasm memory import.");
     const wantsNativeIndirect = nativeIndirectRequests.size !== 0;
@@ -246,6 +256,7 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         configureCom?.({ memory, registerInterface });
         imports[comImportModule] = dispatch;
     }
+    if (wantsWindowsVersion) imports[windowsVersionModule] = createWindowsVersionHost(memory, platform?.windowsVersion);
     if (wantsMonitor) imports[threadingModule] = createMonitorHost();
     if (wantsDebugger) {
         const debuggerHost = Object.hasOwn(runtimeImports, runtimeModule) ? runtimeImports[runtimeModule] : undefined;

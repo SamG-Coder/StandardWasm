@@ -9,10 +9,10 @@ namespace PortableCompiler
     {
         private const int KeyBase = ObjectLayouts.FirstClass + ObjectLayouts.MaxClasses;
 
-        internal static bool IsNativeKey(int key) => key >= KeyBase;
+        internal static bool IsNativeKey(int key) => key >= KeyBase && key != CoreVersionByref.ContextKey;
 
         internal static int DeclaringContext(int key) =>
-            IsNativeKey(key) ? key - KeyBase : key < 0 ? ~key : key;
+            key == CoreVersionByref.ContextKey ? 0 : IsNativeKey(key) ? key - KeyBase : key < 0 ? ~key : key;
 
         internal static bool UsesNativeReceiver(int key, int[] stack, int start) =>
             key < 0 && start >= 0 && IsNativeInteger(stack[start]);
