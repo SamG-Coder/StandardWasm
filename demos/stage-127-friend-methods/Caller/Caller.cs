@@ -15,6 +15,21 @@ namespace FriendFixture
         public static int PublicOnly(int input) => Dependency.Visible(input);
 
         public static int ProtectedOnly(int input) => new Derived().FromBase(input);
+
+        public static int ReadInternalField(int input) => new Box().Mutable + input;
+
+        public static int WriteInternalField(int input)
+        {
+            var box = new Box();
+            box.Mutable = input;
+            return box.Mutable + 1;
+        }
+
+        public static int WriteProtectedInternalStatic(int input)
+        {
+            Widener.Shared = input;
+            return Widener.Shared + 2;
+        }
     }
 
     public sealed class Derived : ProtectedBase

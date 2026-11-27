@@ -170,8 +170,10 @@ now has one managed location shared by direct access and byref callers.
 The native storage planner now ignores static fields when mapping the
 instance layout of the `USEROBJECTFLAGS` local. Initializing or resetting a
 native-backed local clears the same bytes its pointer aliases use. The
-replay next reports a diagnostic at `HWINSTA.Value` in
-`SystemInformation.get_UserInteractive` at `IL_002b`.
+replay binds the internal `HWINSTA.Value` field under its declaring
+assembly's existing friend grant. Field access uses the same verified
+assembly identity as method access. The next diagnostic is at the
+`GetWindowLongW` call in `PInvokeCore.GetWindowLong` at `IL_0015`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

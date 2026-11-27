@@ -78,9 +78,7 @@ namespace PortableCompiler
                 {
                     if (friend == FriendUnknown)
                     {
-                        var counts = new int[45];
-                        if (MetadataTableRows.ReadCounts(target, targetHeaps[4], targetHeaps[5], counts) < 0) return -1;
-                        friend = FriendAssemblies.Allows(target, targetHeaps, targetLayout, counts, caller, heaps, layout);
+                        friend = FriendAccess(target, targetHeaps, targetLayout, caller, heaps, layout);
                     }
                     if (friend < 0) return friend;
                     local = friend != 0;
@@ -195,6 +193,12 @@ namespace PortableCompiler
                 int access = flags & 7;
                 bool local = parent != 0 && matched == owner &&
                     (access == 3 || access == 5 || access == 1 && callerType == declaringType);
+                if (!local && matched >= 0 && matched != owner && (access == 3 || access == 5))
+                {
+                    int friend = FriendAccess(target, targetHeaps, targetLayout, caller, heaps, layout);
+                    if (friend < 0) return friend;
+                    local = friend != 0;
+                }
                 bool initializesReceiver = valueConstructorReceiver && type == context &&
                     matched == owner && declaringType == callerType;
                 if (((flags & 0x10) != 0) != staticField || (access != 6 && !local) ||
@@ -216,6 +220,14 @@ namespace PortableCompiler
             // The receiver layout and value type come from the same owning DLL.
             field[1] = FieldAccess.Encode(type, ObjectLayouts.FieldType(objects, type, row));
             return 0;
+        }
+
+        private static int FriendAccess(byte[] target, int[] targetHeaps, int[] targetLayout,
+            byte[] caller, int[] callerHeaps, int[] callerLayout)
+        {
+            var counts = new int[45];
+            if (MetadataTableRows.ReadCounts(target, targetHeaps[4], targetHeaps[5], counts) < 0) return -1;
+            return FriendAssemblies.Allows(target, targetHeaps, targetLayout, counts, caller, callerHeaps, callerLayout);
         }
 
         internal static int ClassIdentity(BundleImages bundle, byte[] image,
