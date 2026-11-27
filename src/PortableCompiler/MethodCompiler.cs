@@ -2228,7 +2228,8 @@ namespace PortableCompiler
                         int fieldOwner = FieldAccess.Owner(descriptor), fieldStorage = FieldAccess.Storage(descriptor);
                         if (initializesField && ObjectLayouts.IsValueType(objects, fieldOwner) &&
                             !ObjectLayouts.IsExplicitValue(objects, fieldOwner) &&
-                            (IsScalar(fieldStorage) || IsObjectReference(fieldStorage)) &&
+                            (IsScalar(fieldStorage) || IsObjectReference(fieldStorage) ||
+                                IsSpan(fieldStorage) && ObjectLayouts.IsByRefLikeValue(objects, fieldOwner)) &&
                             ValueOperands.CheckInitialization(bundle, image, layout, heaps, owner, objects, context,
                                 methodArguments, records[nextSlot + 1], fieldStorage) == 0)
                         {

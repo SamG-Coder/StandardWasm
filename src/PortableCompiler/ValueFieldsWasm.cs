@@ -102,8 +102,9 @@ namespace PortableCompiler
 
         private static int FieldDefault(byte[] code, int used, int storage)
         {
-            if (IsObjectReference(storage))
+            if (IsObjectReference(storage) || IsSpan(storage))
             {
+                // A null backing descriptor represents the default CLI span.
                 code[used++] = 0xd0; // ref.null none, valid for any managed field type.
                 code[used++] = StackSpillWasm.NullRef;
             }
