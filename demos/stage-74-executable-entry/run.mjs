@@ -10,6 +10,7 @@ import { openExecutable } from "../stage-73-executable-intake/loader/intake.mjs"
 import { serveLaunch } from "./launch-server.mjs";
 import { resolveFrameworks } from "./frameworks.mjs";
 import { runManagedEntry } from "./launch.mjs";
+import { verifyRetries } from "./verify-retry.mjs";
 
 const stage = "demos/stage-74-executable-entry";
 const compiler = process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts", "StandardWasm.Compiler.wasm");
@@ -93,7 +94,8 @@ async function verify() {
 
     // Issue #299 (Codex review of 4f86a51): supplied framework assets are the inventory. The same
     // desktop publish with its original Microsoft.WindowsDesktop.App DLLs must reach the compiler.
-    const runtime = win32DesktopRuntime(process.env.STANDARDWASM_DESKTOP_VERSION || "10.0.10");
+    const referenceReport = JSON.parse(readFileSync(join(desktop, "..", "windows.json"), "utf8"));
+    const runtime = win32DesktopRuntime(process.env.STANDARDWASM_DESKTOP_VERSION || referenceReport.runtime.split(" ").at(-1));
     const suppliedFramework = desktopFrameworkAssets(runtime);
     const nodeDesktopSupplied = await runManagedEntry(compilerBytes, {
         ...openExecutable(desktopFiles.map(path => ({ path, bytes: readFileSync(join(desktop, path)) })), desktopExe),
@@ -164,6 +166,7 @@ async function verify() {
         await page.locator("#framework").setInputFiles([]);
         assert.notEqual(edgeDesktopSupplied.state, "framework-missing");
         assert.deepEqual(edgeDesktopSupplied, nodeDesktopSupplied);
+        const workspaceRetries = await verifyRetries(page);
         assert.deepEqual(errors, []);
         writeFileSync(join(evidence, "results.json"), JSON.stringify({
             node: process.version, browser: browser.version(), clrExit: clr.status, nativeSingleExit: native.status,
@@ -176,7 +179,8 @@ async function verify() {
                 })),
                 node: nodeDesktopSupplied, edge: edgeDesktopSupplied
             },
-            disablePrerelease: { hostfxrExit: hostfxrPreview.status | 0, node: nodePreview.state }, hostfxrMatrix
+            disablePrerelease: { hostfxrExit: hostfxrPreview.status | 0, node: nodePreview.state },
+            hostfxrMatrix, workspaceRetries
         }, null, 2) + "\n");
         console.log("Node and Edge ran both original console publishes with Windows exit parity and reported the missing Microsoft.WindowsDesktop.App framework as hostfxr does; " +
             "with its desktop framework supplied the publish reached the compiler (" + nodeDesktopSupplied.state + "), and a Disable prerelease matched hostfxr's 0x80008096.");
@@ -191,8 +195,11 @@ function desktopFrameworkAssets({ desktop, shared }) {
     const asset = (directory, path) => ({ path, source: join(directory, path), bytes: readFileSync(join(directory, path)) });
     return [
         ...["System.Windows.Forms.dll", "System.Windows.Forms.Primitives.dll", "System.Private.Windows.Core.dll",
-            "System.Drawing.Common.dll"].map(path => asset(desktop, path)),
+            "System.Drawing.Common.dll", "System.Private.Windows.GdiPlus.dll"].map(path => asset(desktop, path)),
         ...["System.Private.CoreLib.dll", "System.Runtime.dll", "System.ComponentModel.Primitives.dll",
-            "Microsoft.Win32.Primitives.dll"].map(path => asset(shared, path))
+            "Microsoft.Win32.Primitives.dll", "System.Collections.dll", "System.Threading.dll",
+            "System.Drawing.Primitives.dll", "System.ComponentModel.dll", "System.ComponentModel.TypeConverter.dll",
+            "System.Collections.Concurrent.dll", "System.Collections.Specialized.dll", "System.ObjectModel.dll"]
+            .map(path => asset(shared, path))
     ];
 }
