@@ -12,7 +12,7 @@ namespace PortableCompiler
             IsWindowEnabled = 15, EnableWindow = 16, GetWindowLong = 17, GetWindowLongPtr = 18,
             BCryptGenRandom = 19, GetProcessAwareness = 20, LoadLibrary = 21, GetProcedure = 22,
             CallWindowProcedure = 23, RegisterClass = 24, GetClassInfo = 25,
-            SetWindowLong = 26, SetWindowLongPtr = 27, Count = SetWindowLongPtr;
+            SetWindowLong = 26, SetWindowLongPtr = 27, CreateWindow = 28, Count = CreateWindow;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -28,7 +28,8 @@ namespace PortableCompiler
             member == LoadLibrary ? "LoadLibraryExW" : member == GetProcedure ? "GetProcAddress" :
             member == CallWindowProcedure ? "CallWindowProcW" : member == RegisterClass ? "RegisterClassW" :
             member == GetClassInfo ? "GetClassInfoW" : member == SetWindowLong ? "SetWindowLongW" :
-            member == SetWindowLongPtr ? "SetWindowLongPtrW" : "BCryptGenRandom";
+            member == SetWindowLongPtr ? "SetWindowLongPtrW" :
+            member == CreateWindow ? "CreateWindowExW" : "BCryptGenRandom";
 
         private static string Library(int member) => member == LoadLibrary ? "kernel32.dll" :
             member <= ReleaseContext || member == GetProcedure ? "KERNEL32.dll" :
@@ -36,7 +37,7 @@ namespace PortableCompiler
             member == BCryptGenRandom ? "BCrypt.dll" : "USER32.dll";
 
         internal static int Arity(int member) =>
-            member == CallWindowProcedure ? 5 : member == BCryptGenRandom ? 4 :
+            member == CreateWindow ? 12 : member == CallWindowProcedure ? 5 : member == BCryptGenRandom ? 4 :
             member == LoadLibrary || member == GetClassInfo || IsWindowLongSetter(member) ? 3 :
             member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ? 0 :
             member == GetProcedure || member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts || member == EnableWindow ||
@@ -101,6 +102,8 @@ namespace PortableCompiler
                     IsAbiShape(bundle, objects, types[offset + 1], Native, "HINSTANCE") &&
                     IsAbiShape(bundle, objects, types[offset + 2], Native, "PCWSTR") &&
                     types[offset + 3] == Native;
+            if (member == CreateWindow)
+                return MatchesCreateWindowSignature(bundle, objects, types, offset);
             if (IsWindowLongSetter(member))
                 return IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
                     types[offset + 2] == I32 && types[offset + 3] == Native && result == Native;
@@ -127,6 +130,22 @@ namespace PortableCompiler
             if (member == CurrentContext) return input == Native;
             if (types[offset + 2] != Native) return false;
             return member == ActivateContext ? IsAbiShape(bundle, objects, input, Native, "HANDLE") : input == I32;
+        }
+
+        private static bool MatchesCreateWindowSignature(BundleImages bundle, int[] objects, int[] types, int offset)
+        {
+            // Styles are uint-backed SDK enums. The original managed wrapper still
+            // owns pinning and the transition from system to saved P/Invoke error.
+            return IsAbiShape(bundle, objects, types[offset], Native, "HWND") &&
+                types[offset + 1] == I32 &&
+                IsAbiShape(bundle, objects, types[offset + 2], Native, "PCWSTR") &&
+                IsAbiShape(bundle, objects, types[offset + 3], Native, "PCWSTR") &&
+                types[offset + 4] == I32 && types[offset + 5] == I32 && types[offset + 6] == I32 &&
+                types[offset + 7] == I32 && types[offset + 8] == I32 &&
+                IsAbiShape(bundle, objects, types[offset + 9], Native, "HWND") &&
+                IsAbiShape(bundle, objects, types[offset + 10], Native, "HMENU", "Windows.Win32.UI.WindowsAndMessaging") &&
+                IsAbiShape(bundle, objects, types[offset + 11], Native, "HINSTANCE") &&
+                types[offset + 12] == Native;
         }
 
         private static bool MatchesDpiSignature(BundleImages bundle, int[] objects, int member, int[] types, int offset, int arity)
