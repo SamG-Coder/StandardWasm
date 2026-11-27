@@ -9,14 +9,21 @@
 // EntryPointNotFoundException with the CLR's message, as the CLR does at a call whose entry
 // point is missing. A missing entry is therefore never a silent stub and never a raw trap.
 //
-// registry maps "<dll>!<entry>" (P/Invoke) or "internalcall!<Namespace.Type::Method>" to a
+// registry maps "<dll>!<entry>" (P/Invoke; dll lower-case without ".dll") or "internalcall!<Namespace.Type::Method>" to a
 // JavaScript function over Wasm values: i32 as Number, i64 as BigInt, f32/f64 as Number.
 
 const nativeModule = name => name.startsWith("native:") || name === "internalcall" || name === "standardwasm:native";
 
-// The key a registry uses for one import.
+// A DLL name as the Windows loader compares it: case-insensitive, with ".dll" optional.
+export function normalizeDll(dll) {
+    const lower = dll.toLowerCase();
+    return lower.endsWith(".dll") ? lower.slice(0, -4) : lower;
+}
+
+// The key a registry uses for one import. Entry point names stay case-sensitive, as
+// GetProcAddress compares them.
 export function nativeKey(module, name) {
-    return (module.startsWith("native:") ? module.slice("native:".length) : module) + "!" + name;
+    return (module.startsWith("native:") ? normalizeDll(module.slice("native:".length)) : module) + "!" + name;
 }
 
 // The native entries a compiled module requires, in table order: [{ module, name, key }].

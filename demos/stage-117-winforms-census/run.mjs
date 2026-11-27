@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { root, run } from "../../scripts/toolchain.mjs";
+import { normalizeDll, windowsScalars } from "../../scripts/native-imports.mjs";
 
 // Static WinForms blocker census. Host-side analysis only: it publishes the
 // unchanged Stage 72 reference app, walks its call graph against the installed
@@ -49,3 +50,8 @@ for (const name of ["WinFormsReference.Program::Main", "WinFormsReference.Refere
 assert.match(census.compiler.entry.site, /^\[[^,]+, MethodDef \d+, IL /);
 console.log(`Census: ${census.graph.reachedMethods} reached methods; entry stops at ${census.compiler.entry.site} ` +
     `(${census.compiler.entry.category}). Results in ${output}`);
+// Stage 156 (decision 0083): which reached DLL entry points the browser host registry implements.
+const registered = census.pinvoke.byDll.flatMap(dll => dll.reachedEntryPoints.map(entry => normalizeDll(dll.dll) + "!" + entry))
+    .filter(key => Object.hasOwn(windowsScalars, key));
+console.log(`Native registry: implements ${registered.length} of ${census.pinvoke.reachedDistinctEntryPoints} reached DLL entry points` +
+    (registered.length ? ` (${registered.join(", ")}).` : "."));
