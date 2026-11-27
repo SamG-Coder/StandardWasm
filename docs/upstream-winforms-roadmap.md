@@ -38,6 +38,27 @@ The first implementation issue should produce a machine-readable inventory from 
 
 The [Windows reference fixture](../demos/stage-72-winforms-windows-reference/README.md) captures the stock-control baseline and static dependency inventory. The [executable intake fixture](../demos/stage-73-executable-intake/README.md) recovers the original managed entry from a supported apphost publish or single-file bundle. The [entry execution fixture](../demos/stage-74-executable-entry/README.md) runs a parameterless console entry in Edge and matches Windows exit status for both publish formats. The [managed companions fixture](../demos/stage-95-managed-companions/README.md) reads the original publish manifest, compiles its managed companions, and reproduces exit code 61 in Windows, Node and Edge. It sends the original WinForms entry and installed framework assemblies through the same browser worker. WinForms stops at a compiler diagnostic before creating a window. The [blocker census](../demos/stage-117-winforms-census/README.md) walks the same entry's static call graph through `Application.Run` and records the portable compiler's verdict for every reached method. It ranks the remaining compiler features and the reached Win32 import surface.
 
+### Managed finalization
+
+Both unchanged WinForms launch forms currently reach CoreLib's `GC.SuppressFinalize`
+while the compiler resolves the startup closure. CoreLib validates the argument,
+checks the concrete runtime type for a finalizer, and delegates suppression to the
+collector. The reference framework includes finalizer declarations in
+`System.ComponentModel.Component`, WinForms and System.Drawing.Common. Inherited
+finalizers matter when the concrete type comes from an ordinary application DLL.
+See the [.NET 10 CoreLib implementation](https://github.com/dotnet/runtime/blob/v10.0.10/src/coreclr/System.Private.CoreLib/src/System/GC.CoreCLR.cs).
+
+Before claiming finalization support, compare an ordinary library on the CLR,
+Node and Edge. Cover the null argument exception, repeated suppression, two
+instances of the same type, inherited finalizers, re-registration and
+resurrection. A collector design needs to keep the finalizable object and its
+fields available to its managed finalizer after the last ordinary root is gone.
+Evaluate explicit managed root tracing and a finalization queue for that contract.
+JavaScript cleanup notifications can release independent host resources, but
+notification timing and delivery alone cannot satisfy the managed queue and
+resurrection tests. See the [ECMAScript memory management specification](https://tc39.es/ecma262/multipage/managing-memory.html#sec-finalization-registry-objects)
+and the [.NET Wasm GC design discussion](https://github.com/dotnet/runtime/issues/94420).
+
 ## Additional application hosts
 
 Share W1 assembly loading and the compiled entry-point path. Keep app-specific services behind host boundaries.
