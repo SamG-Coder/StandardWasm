@@ -18,6 +18,7 @@ namespace PortableCompiler
         internal const int EventHandlerLocation = 0x8c, Int16Location = 0x8d, NativeIntLocation = 0x8e, ReadOnlyCharacterLocation = 0x8f;
         internal const int ReadOnlyInt32Span = 0x90, Int64Location = 0x91;
         internal const int WritableByteSpan = 0x92, WritableByteLocation = 0x93, ReadOnlyInt16Span = 0x94;
+        internal const int Vector128Word = 0x95; // Nominal Vector128<UInt16>, Wasm v128.
         // Reference locations retain their nominal element type in the verifier,
         // even when their Wasm representation is the shared object cell.
         private const int ReferenceLocationBase = 32768;

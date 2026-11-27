@@ -628,7 +628,7 @@ namespace PortableCompiler
 
         internal static int ValueWidth(int type) =>
             type == Void ? 0 : IsScalar(type) || type == MethodPointer || type == ObjectReference || type == NullPointer ||
-                type == ConsoleStorage.Writer || RuntimeTypeMetadata.IsStorage(type) ? 1 :
+                type == ConsoleStorage.Writer || type == Vector128Word || RuntimeTypeMetadata.IsStorage(type) ? 1 :
                 1 + HeapTypeSize(HeapType(StackType(type)));
 
         internal static int ValueType(byte[] output, int cursor, int slot)
@@ -642,6 +642,8 @@ namespace PortableCompiler
                 output[cursor++] = 0x7e;
             else if (IsFloat(type))
                 output[cursor++] = type == F32 ? (byte)0x7d : (byte)0x7c;
+            else if (type == Vector128Word)
+                output[cursor++] = 0x7b;
             else if (type == ObjectReference || RuntimeTypeMetadata.IsStorage(type))
                 output[cursor++] = 0x6d; // eqref, the supertype of the managed class structs
             else

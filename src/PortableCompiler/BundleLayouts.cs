@@ -235,6 +235,7 @@ namespace PortableCompiler
             }
             if (SignatureTypes.IsSpan(storage))
                 return !staticField && ObjectLayouts.IsByRefLikeValue(objects, receiver) ? storage : -2;
+            if (storage == SignatureTypes.Vector128Word) return -2;
             return ObjectLayouts.IsByRefLikeValue(objects, storage) ? -2 : storage;
         }
 

@@ -78,7 +78,11 @@ namespace PeLibrary
 
         // Aggregate shapes fill the descriptor. An enum instead returns its
         // scalar storage tag and never reserves a GC aggregate.
-        internal static int ReadShape(byte[] image, int[] streams, int[] methods, int row, int[] shape, bool valueType = false)
+        internal static int ReadShape(byte[] image, int[] streams, int[] methods, int row, int[] shape, bool valueType = false) =>
+            ReadSizedShape(image, streams, methods, row, shape, valueType, 0);
+
+        // The caller must prove an exact sized representation before using this shape.
+        internal static int ReadSizedShape(byte[] image, int[] streams, int[] methods, int row, int[] shape, bool valueType, uint size)
         {
             var counts = new int[45];
             int start = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
@@ -160,7 +164,7 @@ namespace PeLibrary
                 if (layout != 0x10)
                 {
                     int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]),
-                        layout == 0x08 ? fields : 0, first, end);
+                        layout == 0x08 ? fields : 0, first, end, size);
                     if (supported < 0) return supported;
                 }
                 baseType = 0;
@@ -883,7 +887,7 @@ namespace PeLibrary
         }
 
         private static int DefaultPacking(byte[] image, int[] heaps, int[] methods, int[] counts,
-            int row, int typeIndex, int fields = 0, uint first = 0, uint end = 0)
+            int row, int typeIndex, int fields = 0, uint first = 0, uint end = 0, uint allowedSize = 0)
         {
             if (counts[15] == 0) return 0;
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 15);
@@ -896,6 +900,7 @@ namespace PeLibrary
                 if (U16(image, at) != 0) return -2;
                 uint size = U32(image, at + 2);
                 if (size == 0) continue;
+                if (fields != 0 && size == allowedSize) continue;
                 // A managed empty sequential value may declare one byte of
                 // nominal size. The value still has no managed fields.
                 if (size != 1 || fields == 0) return -2;

@@ -43,7 +43,7 @@ namespace PortableCompiler
             }
         }
 
-        private static bool IsVector128(byte[] image, int[] layout, int[] heaps, int coded)
+        internal static bool IsVector128(byte[] image, int[] layout, int[] heaps, int coded)
         {
             const string space = "System.Runtime.Intrinsics";
             const string name = "Vector128`1";

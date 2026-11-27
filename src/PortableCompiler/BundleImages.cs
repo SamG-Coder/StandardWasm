@@ -13,6 +13,7 @@ namespace PortableCompiler
         internal int LayoutDepth;
         internal readonly RuntimeTypeFields TypeFields = new RuntimeTypeFields();
         internal int ArrayCopyProfile; // Lazily bound to the linked CoreLib.
+        internal int Vector128Layout; // Lazily proved against the chosen CoreLib image.
         // Issue #299 (deferred missing assemblies): a reference-typed field whose class lives in
         // an assembly missing from the bundle is stored as an opaque object reference. The CLR
         // does not load that class for the layout, and the field can only ever hold null.

@@ -288,6 +288,12 @@ namespace PortableCompiler
                     ? Push(stack, allocated, depth - 1, extra == 0 ? ObjectReference : extra) : -2;
             if (kind == LoadStaticByteSpan) return Push(stack, allocated, depth, ReadOnlyByteSpan);
             if (kind == LoadStaticPrimitiveSpan) return Push(stack, allocated, depth, extra);
+            if (kind == Vector128WordCall)
+            {
+                if (!Match(stack, depth, I32)) return -2;
+                if (operand == Vector128Operations.Broadcast) return Push(stack, allocated, depth - 1, Vector128Word);
+                return Match(stack, depth - 1, Vector128Word) ? Push(stack, allocated, depth - 2, I32) : -2;
+            }
             if (kind == TakeStaticByteLocation)
                 return Match(stack, depth, ReadOnlyByteSpan) ? Push(stack, allocated, depth - 1, StaticByteLocation) : -2;
             if (kind == TakeCharacterSpanLocation)

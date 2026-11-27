@@ -121,7 +121,7 @@ namespace PortableCompiler
             {
                 int item = Read(bundle, image, layout, heaps, owner, next, end, context, objects, depth + 1, substitutions, methodArguments);
                 if (item < 0) return item;
-                if (IsSpan(item)) return -2; // Byref-like values cannot be array elements.
+                if (IsSpan(item) || item == Vector128Word) return -2;
                 return GenericScalar.IsScalar(item) ? GenericScalar.VectorKey(item) : ObjectLayouts.RegisterArray(objects, item);
             }
             if (element != 0x15) return -2;
@@ -134,6 +134,8 @@ namespace PortableCompiler
             if (status < 0) return status;
             if (head[1] == 0x11 && count == 1)
             {
+                if (arguments[0] == GenericScalar.Key(7) && VectorLaneCount.IsVector128(image, layout, heaps, head[0]))
+                    return Vector128Layouts.ProvesWordStorage(bundle) ? Vector128Word : -2;
                 int type = arguments[0] == ObjectLayouts.ObjectReference ? ObjectSpan :
                     arguments[0] == GenericScalar.Key(3) ? CharacterSpan :
                     arguments[0] == GenericScalar.Key(5) ? ReadOnlyByteSpan :

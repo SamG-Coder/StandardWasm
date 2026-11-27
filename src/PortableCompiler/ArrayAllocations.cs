@@ -19,6 +19,7 @@ namespace PortableCompiler
                 int coded = (int)((token & 0xffffff) << 2) | (table == 1 ? 1 : table == 2 ? 0 : 2);
                 int element = TokenIdentity(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);
                 if (element < 0) return element;
+                if (element == Vector128Word) return -2;
                 // Use the same representation as a closed T[] signature.
                 if (GenericScalar.IsScalar(element)) primitive = GenericScalar.Element(element);
                 else type = ObjectLayouts.RegisterArray(objects, element);

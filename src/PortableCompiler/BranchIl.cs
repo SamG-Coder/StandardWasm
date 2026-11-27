@@ -100,6 +100,7 @@ namespace PortableCompiler
         internal const int UpdateNestedConstructorField = 240; // [constructor this, scalar] -> []
         internal const int PinScopedValue = 241; // [traced value address] -> [] and store a borrowed native address
         internal const int CopyConstructionString = 245; // [fresh String, offset, source String] -> []
+        internal const int Vector128WordCall = 260;
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

@@ -327,14 +327,14 @@ namespace PortableCompiler
                     int type = signatures[offsets[index] + parameter];
                     if (IsArray(ExchangeLeaf(objects, type))) externalVectors = true;
                     if (externalVectors || CanExchangeClass(objects, type)) externalObjects = true;
-                    if (type == NullPointer || IsManagedLocation(type) || IsValueLocation(type) || IsSpan(type) || RuntimeTypeMetadata.IsStorage(type) || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
+                    if (type == NullPointer || type == Vector128Word || IsManagedLocation(type) || IsValueLocation(type) || IsSpan(type) || RuntimeTypeMetadata.IsStorage(type) || ObjectLayouts.IsInterface(objects, type) || ObjectLayouts.IsValueType(objects, type))
                         return -2;
                 }
                 int result = signatures[offsets[index]];
                 // A foreign Wasm caller can mutate an escaped class or array
                 // that still has an alias inside the linked application.
                 if (CanExchangeClass(objects, result)) externalObjects = true;
-                if (result == NullPointer || IsManagedLocation(result) || IsValueLocation(result) || IsSpan(result) ||
+                if (result == NullPointer || result == Vector128Word || IsManagedLocation(result) || IsValueLocation(result) || IsSpan(result) ||
                     RuntimeTypeMetadata.IsStorage(result) || ObjectLayouts.IsValueType(objects, result)) return -2;
                 exports[export] = index;
             }
@@ -1904,6 +1904,15 @@ namespace PortableCompiler
                 // Validate it before reflection recognizers read its metadata.
                 if (kind == BranchIl.Call && (records[slot + 1] < 1 || records[slot + 1] > methodCount))
                     return -1;
+                if ((kind == BranchIl.Call && records[slot + 3] == 0 ||
+                     kind == BranchIl.MemberCall && records[slot + 3] == 0x28) &&
+                    Vector128Operations.IsWordBroadcast(image, layout, heaps, records[slot + 1], kind == BranchIl.MemberCall))
+                {
+                    if (!Vector128Layouts.ProvesWordStorage(bundle)) return -2;
+                    records[slot] = BranchIl.Vector128WordCall;
+                    records[slot + 1] = Vector128Operations.Broadcast;
+                    continue;
+                }
                 if (kind == BranchIl.Call && ReadOnlyStringBorrow.IsOrdinalInput(image, layout, heaps, callerRow, records[slot + 1]))
                 {
                     records[slot] = BranchIl.TakeReadOnlyCharacterLocation;
@@ -2393,6 +2402,17 @@ namespace PortableCompiler
                     if (status < 0) return status;
                     if (!checkReceiver)
                     {
+                        if (Vector128Operations.IsWordExtraction(image, layout, heaps, spec, methodArguments))
+                        {
+                            int previous = RuntimeTypeRelations.Previous(records, slot, clauses);
+                            if (previous < 0 || records[previous] != BranchIl.Constant ||
+                                (uint)records[previous + 1] >= 8 ||
+                                !Vector128Layouts.ProvesWordStorage(bundle)) return -2;
+                            records[slot] = BranchIl.Vector128WordCall;
+                            records[slot + 1] = Vector128Operations.ExtractLane;
+                            records[slot + 3] = records[previous + 1];
+                            continue;
+                        }
                         if (arrayEnumerator && spec[MethodSpecifications.Arity] == 1 &&
                             SzArrayEnumeration.IsArrayCast(image, layout, heaps, counts, spec[MethodSpecifications.Target]))
                         {

@@ -7,7 +7,7 @@ namespace PortableCompiler
     internal static class BranchWasm
     {
         private const int LastScalarBank = PeLibrary.ConsoleStorage.Writer;
-        private const int LocationSpill = 1, SpanSpill = 2;
+        private const int LocationSpill = 1, SpanSpill = 2, SimdSpill = 4;
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
             byte[] outgoingNulls, int[] outgoingReferences, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection,
@@ -44,10 +44,11 @@ namespace PortableCompiler
             int spillFlags = 0;
             // Only verified stack types need banks. Unused view types must not
             // reduce the local budget of methods with many ordinary classes.
-            for (int i = 0; i < states.Length && spillFlags != (LocationSpill | SpanSpill); i++)
+            for (int i = 0; i < states.Length && spillFlags != (LocationSpill | SpanSpill | SimdSpill); i++)
             {
                 if (IsManagedLocation(states[i])) spillFlags |= LocationSpill;
                 if (IsSpan(states[i])) spillFlags |= SpanSpill;
+                if (states[i] == Vector128Word) spillFlags |= SimdSpill;
             }
             int classBase = LastScalarBank + ExtraSpillBanks(spillFlags);
             int spillKinds = classBase + classes;
@@ -110,7 +111,8 @@ namespace PortableCompiler
                     if (kind > classBase)
                         type = FirstClass + kind - classBase - 1;
                     else if (kind > LastScalarBank)
-                        type = kind == LastScalarBank + 1 && (spillFlags & LocationSpill) != 0 ? ObjectLocation : ObjectSpan;
+                        type = kind == classBase && (spillFlags & SimdSpill) != 0 ? Vector128Word :
+                            kind == LastScalarBank + 1 && (spillFlags & LocationSpill) != 0 ? ObjectLocation : ObjectSpan;
                     used = WasmBinary.ValueType(code, used, Representation(objects, type));
                 }
             }
@@ -479,6 +481,17 @@ namespace PortableCompiler
                     used = viewType == String ? StringWasm.BorrowCharacters(code, used, view) :
                         SpanWasm.TakeLocation(code, used, view, locationType);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, locationType, top));
+                }
+                else if (kind == Vector128WordCall)
+                {
+                    bool broadcast = operand == Vector128Operations.Broadcast;
+                    int argument = broadcast ? top : top - 1;
+                    int input = broadcast ? I32 : Vector128Word;
+                    int output = broadcast ? Vector128Word : I32;
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, input, argument));
+                    used = Vector128Wasm.Instruction(code, used, broadcast ? 0x10 : 0x19); // splat / extract_lane_u
+                    if (!broadcast) code[used++] = (byte)records[slot + 3];
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, output, argument));
                 }
                 else if (kind == OffsetStaticByteLocation || kind == OffsetCharacterLocation)
                 {
@@ -1732,7 +1745,9 @@ namespace PortableCompiler
                 }
                 else if (kind == ClearValue)
                 {
-                    if (frameCells[operand] < 0)
+                    if (frame[operand] == Vector128Word)
+                        used = Local(code, Vector128Wasm.Zero(code, used), 0x21, operand);
+                    else if (frameCells[operand] < 0)
                         used = NativeAggregates.Clear(code, used, nativePlans, -frameCells[operand], cellLocals[operand]);
                     else if (IsValueLocation(frameCells[operand]))
                         used = ManagedValueLocationWasm.ClearFrameCell(code, used, cellLocals[operand]);
@@ -2070,7 +2085,7 @@ namespace PortableCompiler
         internal static int Spill(int first, int maximum, int spillFlags, int type, int depth) =>
             type == NullValue ? first - 1 : first + SpillBank(type, spillFlags) * maximum + depth;
 
-        private static int ExtraSpillBanks(int flags) => (flags & LocationSpill) + (flags >> 1);
+        private static int ExtraSpillBanks(int flags) => (flags & LocationSpill) + ((flags & SpanSpill) >> 1) + ((flags & SimdSpill) >> 2);
         // stind.* matching a field's ldind.* opcode.
         private static int StoreFor(int load) =>
             load <= 0x47 ? 0x52 : load <= 0x49 ? 0x53 : load <= 0x4b ? 0x54 : load == 0x4c ? 0x55 :
@@ -2092,6 +2107,7 @@ namespace PortableCompiler
             // views keep the same reference in the shared location bank.
             IsManagedLocation(type) ? LastScalarBank :
             IsSpan(type) ? LastScalarBank + (flags & LocationSpill) :
+            type == Vector128Word ? LastScalarBank + ExtraSpillBanks(flags) - 1 :
             type >= FirstClass ? LastScalarBank + ExtraSpillBanks(flags) + type - FirstClass :
                 (type == NativeZero ? Native : type == NativeVector ? NativeZero : type) - 1;
 
