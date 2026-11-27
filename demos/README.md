@@ -257,6 +257,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [274 · Runtime assembly equality](stage-274-runtime-assembly-equality/README.md) | `npm run demo -- stage-274-runtime-assembly-equality` | Compare canonical runtime descriptors by reference identity |
 | [275 · Runtime assembly arrays](stage-275-runtime-assembly-arrays/README.md) | `npm run demo -- stage-275-runtime-assembly-arrays` | Resolve authentic assembly array signatures to the same element identity |
 | [278 · Writable byte spans](stage-278-writable-byte-spans/README.md) | `npm run demo -- stage-278-writable-byte-spans` | Compare ranged byte views and original array aliasing with Windows |
+| [281 · Closed reference boxes at interface calls](stage-281-reference-box-provenance/README.md) | `npm run demo -- stage-281-reference-box-provenance` | Preserve reference identity, null, and verified interface call arguments |
 
 ## Adding a stage
 

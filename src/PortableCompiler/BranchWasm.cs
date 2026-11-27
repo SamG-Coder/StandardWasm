@@ -751,7 +751,8 @@ namespace PortableCompiler
                 else if (kind == WidenReference)
                 {
                     used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
-                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, ObjectReference, top));
+                    int target = records[slot + 3];
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, target == 0 ? ObjectReference : target, top));
                 }
                 else if (kind == BoxAggregate || kind == BoxAggregateToInterface || kind == UnboxAggregate ||
                     kind == UnboxAggregateAddress || kind == TestAggregateBox)

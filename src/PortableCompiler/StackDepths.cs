@@ -264,7 +264,7 @@ namespace PortableCompiler
         {
             if (kind == WidenReference)
                 return depth > 0 && Assignable(stack[depth - 1], operand, objects)
-                    ? Push(stack, allocated, depth - 1, ObjectReference) : -2;
+                    ? Push(stack, allocated, depth - 1, extra == 0 ? ObjectReference : extra) : -2;
             if (kind == LoadStaticByteSpan) return Push(stack, allocated, depth, ReadOnlyByteSpan);
             if (kind == LoadStaticPrimitiveSpan) return Push(stack, allocated, depth, extra);
             if (kind == TakeStaticByteLocation)
