@@ -2855,7 +2855,7 @@ namespace PortableCompiler
                     }
                     if (delegateMember == 0 && stringMember == 0 && constructorType == Delegate && bundle.Length != 0)
                     {
-                        var symbol = new int[7];
+                        var symbol = new int[8];
                         bool baseCall = opcode == 0x28 && callerReceiver >= ObjectLayouts.FirstClass &&
                             ObjectLayouts.IsConstructor(image, heaps, layout, callerRow);
                         if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
@@ -2871,8 +2871,11 @@ namespace PortableCompiler
                             records[slot] = BranchIl.SuppressFinalizer;
                             continue;
                         }
+                        int primitiveReceiver = symbol[7];
+                        if (primitiveReceiver != 0 && PrimitiveReceivers.IsNominalContext(objects, context, targetOwner, symbol[6]))
+                            primitiveReceiver = 0;
                         if (address < 0) targetContext = ~targetContext;
-                        else if (opcode == 0x28 && !addressed && symbol[6] != 0)
+                        else if (opcode == 0x28 && !addressed && symbol[6] != 0 && primitiveReceiver == 0)
                         {
                             int receiver = targetContext != 0 ? targetContext : ObjectLayouts.Find(objects, targetOwner, symbol[6], new int[0]);
                             if (UsesLocationReceiver(objects, receiver)) targetContext = ~targetContext;
@@ -2897,12 +2900,13 @@ namespace PortableCompiler
                                 continue;
                             }
                             functions = Register(bundle, targetImage, targetLayout, targetHeaps, targetOwner, targetRow,
-                                targetContext, owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions, allowVirtual: virtualMethod);
+                                targetContext, owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions,
+                                allowVirtual: virtualMethod, receiverOverride: primitiveReceiver);
                             if (functions < 0) return functions;
                             linked = functions - 1;
                         }
-                        if (!IsSharedBundleSignature(signatures, offsets[linked], arities[linked]))
-                            return -2;
+                        if (!IsSharedBundleSignature(signatures, offsets[linked], arities[linked]) ||
+                            primitiveReceiver != 0 && signatures[offsets[linked] + 1] != primitiveReceiver) return -2;
                         if (address < 0)
                         {
                             if (!BindLocationCall(records, slot, linked, -address, arities, offsets, signatures)) return -2;
@@ -3086,28 +3090,34 @@ namespace PortableCompiler
                     continue;
                 }
                 int fieldReceiver = kind == BranchIl.Call ? records[slot + BranchIl.Width + 1] : 0;
-                int key = fieldReceiver < 0 ? -1 : 0;
+                int key = fieldReceiver < 0 ? -1 : 0, localPrimitiveReceiver = 0;
                 if (kind == BranchIl.Call && fieldReceiver == 0 && records[slot + 3] == 0 &&
                     (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) == 0 &&
                     !ObjectLayouts.IsConstructor(image, heaps, layout, target))
                 {
                     int declaring = ObjectLayouts.Owner(image, heaps, layout, target, false);
                     if (declaring < 1) return -1;
-                    int receiver = ObjectLayouts.Find(objects, owner, declaring, new int[0]);
-                    // A pointer can reach a value method before any managed
-                    // use registers the struct. Leave reference receiver
-                    // selection to MethodShape, including CoreLib's root.
-                    if (receiver == 0 && !virtualMethodLocal)
-                        receiver = BundleLayouts.RegisterValue(bundle, image, layout, heaps, owner, declaring, objects);
-                    // An unrewritten IL receiver of a value method is a byref.
-                    // Address scans that substituted a snapshot mark the call separately.
-                    if (UsesLocationReceiver(objects, receiver)) key = -1;
+                    if (!PrimitiveReceivers.IsNominalContext(objects, context, owner, declaring))
+                        localPrimitiveReceiver = PrimitiveReceivers.DirectInt32(image, layout, heaps, declaring, target);
+                    if (localPrimitiveReceiver == 0)
+                    {
+                        int receiver = ObjectLayouts.Find(objects, owner, declaring, new int[0]);
+                        // A pointer can reach a value method before any managed
+                        // use registers the struct. Leave reference receiver
+                        // selection to MethodShape, including CoreLib's root.
+                        if (receiver == 0 && !virtualMethodLocal)
+                            receiver = BundleLayouts.RegisterValue(bundle, image, layout, heaps, owner, declaring, objects);
+                        // An unrewritten IL receiver of a value method is a byref.
+                        // Address scans that substituted a snapshot mark the call separately.
+                        if (UsesLocationReceiver(objects, receiver)) key = -1;
+                    }
                 }
                 int index = Lookup(owners, rows, contexts, bases, indices, functions, owner, target, key);
                 if (index < 0)
                 {
                     functions = Register(bundle, image, layout, heaps, owner, target, key, owners, rows, contexts, bases, indices,
-                        arities, offsets, signatures, objects, functions, allowVirtual: virtualMethodLocal && kind == BranchIl.Call);
+                        arities, offsets, signatures, objects, functions, allowVirtual: virtualMethodLocal && kind == BranchIl.Call,
+                        receiverOverride: localPrimitiveReceiver);
                     if (functions < 0) return functions;
                     index = functions - 1;
                 }
@@ -3117,6 +3127,7 @@ namespace PortableCompiler
                     continue;
                 }
                 int signature = offsets[index];
+                if (localPrimitiveReceiver != 0 && signatures[signature + 1] != localPrimitiveReceiver) return -2;
                 bool hasReceiver = arities[index] > 0 && StackType(signatures[signature + 1]) >= ObjectLayouts.FirstClass;
                 bool localValue = kind != BranchIl.LoadFunction &&
                     IsValueConstructor(image, layout, heaps, target, signatures, signature, arities[index], objects);
