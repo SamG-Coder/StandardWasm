@@ -13,19 +13,22 @@ namespace PortableCompiler
 
         // result[0] = size, result[1] = alignment. Returns 0, or a negative diagnostic.
         internal static int Measure(BundleImages bundle, int owner, int type, int[] result, int depth = 0) =>
-            Measure(bundle, owner, type, result, depth, 0, null);
+            Measure(bundle, owner, type, result, depth, 0, null, false);
+
+        internal static int MeasureFrame(BundleImages bundle, int owner, int type, int[] result) =>
+            Measure(bundle, owner, type, result, 0, 0, null, true);
 
         // field[0] = byte offset, field[1] = ldind opcode for its element (0 for a nested struct).
-        internal static int Field(BundleImages bundle, int owner, int type, int row, int[] field)
+        internal static int Field(BundleImages bundle, int owner, int type, int row, int[] field, bool scopedFrame = false)
         {
             var measured = new int[2];
             field[0] = -1;
-            int status = Measure(bundle, owner, type, measured, 0, row, field);
+            int status = Measure(bundle, owner, type, measured, 0, row, field, scopedFrame);
             if (status < 0) return status;
             return field[0] < 0 ? -1 : 0;
         }
 
-        private static int Measure(BundleImages bundle, int owner, int type, int[] result, int depth, int target, int[] found)
+        private static int Measure(BundleImages bundle, int owner, int type, int[] result, int depth, int target, int[] found, bool scopedFrame)
         {
             if (depth > MaxDepth) return -2;
             byte[] image = bundle.Get(owner);
@@ -34,9 +37,10 @@ namespace PortableCompiler
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0 || type < 1 || type > counts[2]) return -1;
-            // [InlineArray(n)] repeats its single declared field n times (Stage 138); ref structs
-            // hold byrefs and stay diagnosed (decision 0071).
-            int inlineLength = ObjectLayouts.CheckValueAttributes(image, heaps, layout, type);
+            // Only the address-taking frame path can opt into a ref struct.
+            // Every field must still pass the native layout check below.
+            int inlineLength = ObjectLayouts.CheckValueAttributes(image, heaps, layout, type, scopedFrame);
+            if (scopedFrame && inlineLength == ValueTypeAttributes.ByRefLike) inlineLength = 0;
             if (inlineLength < 0) return inlineLength;
             // [StructLayout(Pack = n)] and Size change the CLR's byte layout (Codex review of
             // #294: Pack=1 {byte, int} is 5 on the x86 CLR). They stay diagnosed.

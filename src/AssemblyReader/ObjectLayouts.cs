@@ -820,7 +820,7 @@ namespace PeLibrary
 
         // Zero for an ordinary value type, the element count for a valid [InlineArray(n)],
         // and a diagnostic for other layout-changing attributes (IsByRefLike).
-        internal static int CheckValueAttributes(byte[] image, int[] streams, int[] methods, int row)
+        internal static int CheckValueAttributes(byte[] image, int[] streams, int[] methods, int row, bool allowByRefLike = false)
         {
             var counts = new int[45];
             int start = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
@@ -831,7 +831,7 @@ namespace PeLibrary
             int defs = refs + counts[1] * refWidth;
             int defWidth = 4 + 2 * strings + CodedWidth(counts[2], counts[1], counts[27]) +
                 IndexWidth(counts[4]) + IndexWidth(counts[6]);
-            return ValueTypeAttributes.ReadInlineArrayLength(image, streams, methods, counts, row, refs, refWidth, defs, defWidth);
+            return ValueTypeAttributes.ReadInlineArrayLength(image, streams, methods, counts, row, refs, refWidth, defs, defWidth, allowByRefLike);
         }
 
         // Zero when the type has no ClassLayout packing or size, otherwise -2. Byte-level

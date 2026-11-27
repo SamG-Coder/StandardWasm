@@ -108,7 +108,7 @@ namespace PortableCompiler
             else return -2;
 
             var native = new int[2];
-            return NativeValueLayouts.Field(bundle, owner, definition, field, native) == 0 && native[1] == 0x4d
+            return NativeValueLayouts.Field(bundle, owner, definition, field, native, scopedFrame: true) == 0 && native[1] == 0x4d
                 ? native[0] : -2;
         }
 

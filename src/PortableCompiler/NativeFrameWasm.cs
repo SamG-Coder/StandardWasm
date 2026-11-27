@@ -28,7 +28,9 @@ namespace PortableCompiler
                 if (type == Native || type == I32 && (element == 8 || element == 9)) cells[local] = Native;
                 else if (local >= parameters && ObjectLayouts.IsValueType(objects, type))
                 {
-                    int plan = NativeAggregates.Plan(bundle, objects, type, plans);
+                    int next = records[at + 2] * BranchIl.Width;
+                    bool scopedFrame = records[next] == BranchIl.NativeFieldPointer;
+                    int plan = NativeAggregates.Plan(bundle, objects, type, plans, scopedFrame: scopedFrame);
                     if (plan < 0) return At(location, at, plan);
                     if (NativeAggregates.Size(plans.Plans, plan) <= 0) return At(location, at, -2);
                     cells[local] = -plan;
@@ -48,9 +50,12 @@ namespace PortableCompiler
                         !ValueOperands.Entry(records, next / BranchIl.Width, clauses)) continue;
                     return At(location, at, -2);
                 }
+                int conversion = records[at + 2] * BranchIl.Width;
+                // A general conv.u may not expose the entire scoped frame value.
+                if (records[conversion] != BranchIl.NativeFieldPointer &&
+                    ObjectLayouts.IsByRefLikeValue(objects, frame[records[at + 1]])) return At(location, at, -2);
                 records[at] = BranchIl.LoadFrameLocation;
                 records[at + 3] = Native;
-                int conversion = records[at + 2] * BranchIl.Width;
                 if (records[conversion] == BranchIl.ConvertInteger) records[conversion] = BranchIl.Nop;
             }
             return 0;
