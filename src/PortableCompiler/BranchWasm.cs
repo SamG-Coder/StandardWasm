@@ -449,6 +449,16 @@ namespace PortableCompiler
                     used = StringWasm.FirstCodeUnit(code, used, reference);
                     used = Local(code, used, 0x21, spills + top);
                 }
+                else if (kind == AllocateString)
+                {
+                    used = StringWasm.AllocateForConstruction(code, used, Spill(spills, maximum, spillFlags, Native, top));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, String, top));
+                }
+                else if (kind == StringConstructionSpan)
+                {
+                    used = StringWasm.OpenConstructionSpan(code, used, Spill(spills, maximum, spillFlags, String, top - 1), spills + top);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, WritableCharacterSpan, top - 1));
+                }
                 else if (kind == StringRange)
                 {
                     int source = Spill(spills, maximum, spillFlags, String, top - 2);
@@ -1453,6 +1463,8 @@ namespace PortableCompiler
                         used = ExceptionDispatchWasm.ThrowObject(code, used, source);
                     }
                 }
+                else if (kind == ThrowFrameworkArgument)
+                    used = ExceptionTagsWasm.Throw(code, used, operand);
                 else if (kind == Rethrow)
                     used = ExceptionDispatchWasm.ReraiseCaught(code, used, pcLocal + 2 + operand, objectBase + 1 + operand);
                 else

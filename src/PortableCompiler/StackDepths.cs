@@ -68,6 +68,11 @@ namespace PortableCompiler
                         IsValueType(objects, thrown))) return -2;
                     continue; // throw has no normal successor and clears the evaluation stack.
                 }
+                if (kind == ThrowFrameworkArgument)
+                {
+                    if (!Match(stack, depth, I32)) return -1;
+                    continue;
+                }
                 if (kind == Rethrow || kind == EndFinally) continue; // Unwinding drops the evaluation stack.
 
                 bool fieldStore = kind == SetField || kind == UpdateConstructorField;
@@ -371,6 +376,11 @@ namespace PortableCompiler
                     ? Push(stack, allocated, depth - 2, String) : -1;
             if (kind == StringFromChars)
                 return Match(stack, depth, Chars) ? Push(stack, allocated, depth - 1, String) : -1;
+            if (kind == AllocateString)
+                return Match(stack, depth, Native) ? Push(stack, allocated, depth - 1, String) : -1;
+            if (kind == StringConstructionSpan)
+                return Match(stack, depth, I32) && Match(stack, depth - 1, String)
+                    ? Push(stack, allocated, depth - 2, WritableCharacterSpan) : -1;
             if (kind == StringRange)
                 return Match(stack, depth - 2, String) && Match(stack, depth - 1, I32) && Match(stack, depth, I32)
                     ? Push(stack, allocated, depth - 3, String) : -2;

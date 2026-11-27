@@ -69,6 +69,7 @@ Console.WriteLine(JsonSerializer.Serialize(new { executable, results, errors = n
     exactValueReads = new[] { int.MinValue, -5, 0, 5, int.MaxValue }.Select(ExactValueProbe.ExactValueRead).ToArray(),
     enumVectors = Enumerable.Range(0, 5).Select(EnumFieldDemo.Kernels.EnumVectors).ToArray(),
     characterCallbacks = new[] { -1, 0, 1, 2, 17 }.Select(SpanCallbackProbe.CheckCharacterCallback).ToArray(),
+    stringCreation = new[] { 0, 1, 2, 3, 4 }.Select(SpanCallbackProbe.CheckStringCreation).ToArray(),
     staticEventCallbacks = Enumerable.Range(0, 3).Select(SpanCallbackProbe.CheckStaticEventCallback).ToArray(),
     compiledTypeReturn = Enumerable.Range(0, 2).Select(TypeReturnProbe.CompareReturnedType).ToArray(),
     compiledRootDispatch = Enumerable.Range(0, 4).Select(RootDispatchProbe.CompareThroughRoot).ToArray(),

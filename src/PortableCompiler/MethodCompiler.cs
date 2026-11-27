@@ -427,6 +427,8 @@ namespace PortableCompiler
                         location, catchRegion.Length != 0, filterEnds: filterEnds);
                     if (status < 0)
                         return status;
+                    CoreStringCreation.Lower(bundle, image, layout, heaps, owner, source, methodArguments,
+                        frame, records, objects, catchRegion);
                     RuntimeTypeBranches.FoldClosedTypeBranches(bundle, image, layout, heaps, owner, context,
                         methodArguments, objects, records, catchRegion, count);
                     ExactManagedReads.FoldExactManagedReads(bundle, image, layout, heaps, owner, context,
@@ -786,6 +788,9 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.InvalidCast;
                             else if (kind == BranchIl.NativeCharacterSpan)
                                 tags = ExceptionTypes.ArgumentOutOfRange;
+                            else if (kind == BranchIl.ThrowFrameworkArgument)
+                                tags = operation == ExceptionTagsWasm.ArgumentNullTag
+                                    ? ExceptionTypes.ArgumentNull : ExceptionTypes.ArgumentOutOfRange;
                             else if (kind == BranchIl.SpanRead || kind == BranchIl.SpanAddress)
                                 tags = ExceptionTypes.IndexOutOfRange |
                                     ((hostFeatures & WasmImports.NativeCharacterViews) != 0 ? ExceptionTypes.NullReference : 0);

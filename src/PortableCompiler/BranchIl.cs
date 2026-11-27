@@ -68,6 +68,7 @@ namespace PortableCompiler
         // Console.ReadLine: [] -> [String or null at EOF].
         internal const int ConsoleReadLine = 146;
         internal const int StaticInt32 = 147;
+        internal const int AllocateString = 148, StringConstructionSpan = 149, ThrowFrameworkArgument = 150;
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.

@@ -186,6 +186,20 @@ namespace PortableCompiler
             return used;
         }
 
+        internal static int AllocateForConstruction(byte[] code, int used, int length)
+        {
+            used = Local(code, used, 0x20, length);
+            return Wrap(code, BranchWasm.Gc(code, used, 7, SignatureTypes.Chars));
+        }
+
+        internal static int OpenConstructionSpan(byte[] code, int used, int value, int length)
+        {
+            used = Unwrap(code, Local(code, used, 0x20, value));
+            used = Zero(code, used);
+            used = Local(code, used, 0x20, length);
+            return BranchWasm.Gc(code, used, 0, SignatureTypes.WritableCharacterSpan);
+        }
+
         internal static int CopyRange(byte[] code, int used, int source, int start, int length, int scratch)
         {
             // The caller checked the range. Initialize the new UTF-16 owner

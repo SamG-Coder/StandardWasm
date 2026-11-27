@@ -181,8 +181,11 @@ assembly for `AsyncOperationManager`. `ValueStringBuilder.Dispose` now
 clears its receiver through the caller's managed location. CoreLib's
 `Interop.GetRandomBytes` continues to run its original managed body and
 uses Web Crypto through the system-preferred `BCryptGenRandom` import.
-The replay next reports a diagnostic at `String.GetRawStringData` in
-CoreLib's `String.Create` at `IL_0028`.
+The compiler now supplies a writable span over the newly allocated string
+for the verified CoreLib `String.Create` body with native-integer callback
+state. The original branches and delegate invocation remain in the compiled
+body. The replay next reports a diagnostic at the first span address in
+CoreLib's `Path.JoinInternal` at `IL_0000`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

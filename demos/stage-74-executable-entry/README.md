@@ -105,6 +105,11 @@ compares static and instance `SpanAction<char, nint>` targets, in-place span
 writes, and a typed null-call exception. It also verifies the order and
 removal of static `EventHandler` callbacks.
 
+The `String.Create` fixture uses a native-integer callback state. It checks
+UTF-16 code units including embedded NULs, zero-length behavior, argument
+check order, and callback exceptions. Argument-check tags carry the exception
+type. Their payload does not expose `ParamName` or the localized message.
+
 The managed probe also checks pinned addresses of blittable static structs.
 A direct managed store and a pointer store use the same stable linear-memory
 storage, including after a static initializer and across separate exports.

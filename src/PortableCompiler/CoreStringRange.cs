@@ -76,7 +76,7 @@ namespace PortableCompiler
                 IsMethod(image, layout, heaps, counts, first, target >> 1, space, type, name, signature, true);
         }
 
-        private static bool IsMethod(byte[] image, int[] layout, int[] heaps, int[] counts, int first,
+        internal static bool IsMethod(byte[] image, int[] layout, int[] heaps, int[] counts, int first,
             int row, string space, string type, string name, byte[] signature, bool isStatic)
         {
             if (row < 1 || row > counts[6] ||

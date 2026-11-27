@@ -36,6 +36,31 @@ public static class SpanCallbackProbe
         }
     }
 
+    public static int CheckStringCreation(int scenario)
+    {
+        trace = 0;
+        int length = scenario == 0 || scenario == 3 ? 0 : scenario == 1 ? -1 : 3;
+        SpanAction<char, nint> action = scenario == 3 ? null : new SpanAction<char, nint>(FillString);
+        try
+        {
+            string text = string.Create(length, (nint)(scenario == 4 ? 0 : 0xd800), action);
+            if (text.Length == 0) return trace;
+            return trace + text[0] * 3 + text[1] * 5 + text[2] * 7;
+        }
+        catch (ArgumentNullException) { return trace - 100; }
+        catch (ArgumentOutOfRangeException) { return trace - 200; }
+        catch (NullReferenceException) { return trace - 300; }
+    }
+
+    private static void FillString(Span<char> text, nint state)
+    {
+        trace++;
+        if (state == 0) throw null;
+        text[0] = (char)state;
+        text[1] = '\0';
+        text[2] = '\udfff';
+    }
+
     private static void WriteStatic(Span<char> text, nint state)
     {
         text[0] = (char)state;
