@@ -66,6 +66,14 @@ and a local blittable handle. Windows, Node, and Edge agree on the activation
 lifecycle. Separate cases verify that writes through a pointer update the
 managed local, and writes to the local are visible through the same pointer.
 
+The window-state fixture compares `IsWindowEnabled` and `EnableWindow` with
+Windows for enabled, disabled, null, and destroyed handles. It checks five
+successive enable and disable requests, their previous-state return values,
+and the state visible during synchronous `WM_CANCELMODE` and `WM_ENABLE`
+notifications. The browser host keeps this state per application instance.
+[IsWindowEnabled](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-iswindowenabled)
+[EnableWindow](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enablewindow)
+
 The managed probe also checks pinned addresses of blittable static structs.
 A direct managed store and a pointer store use the same stable linear-memory
 storage, including after a static initializer and across separate exports.

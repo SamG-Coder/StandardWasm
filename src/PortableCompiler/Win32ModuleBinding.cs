@@ -9,7 +9,7 @@ namespace PortableCompiler
             ActivateContext = 4, DeactivateContext = 5, ReleaseContext = 6,
             IsValidDpiContext = 7, SetProcessDpiContext = 8, SetLegacyDpi = 9, SetProcessAwareness = 10,
             GetThreadDpiContext = 11, EqualDpiContexts = 12, GetDpiAwareness = 13, IsProcessDpiAware = 14,
-            Count = IsProcessDpiAware;
+            IsWindowEnabled = 15, EnableWindow = 16, Count = EnableWindow;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -18,14 +18,15 @@ namespace PortableCompiler
             member == SetProcessDpiContext ? "SetProcessDpiAwarenessContext" : member == SetLegacyDpi ? "SetProcessDPIAware" :
             member == SetProcessAwareness ? "SetProcessDpiAwareness" : member == GetThreadDpiContext ? "GetThreadDpiAwarenessContext" :
             member == EqualDpiContexts ? "AreDpiAwarenessContextsEqual" : member == GetDpiAwareness ? "GetAwarenessFromDpiAwarenessContext" :
-            "IsProcessDPIAware";
+            member == IsProcessDpiAware ? "IsProcessDPIAware" :
+            member == IsWindowEnabled ? "IsWindowEnabled" : "EnableWindow";
 
         private static string Library(int member) => member <= ReleaseContext ? "KERNEL32.dll" :
             member == SetProcessAwareness ? "api-ms-win-shcore-scaling-l1-1-1.dll" : "USER32.dll";
 
         internal static int Arity(int member) =>
             member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ? 0 :
-            member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts ? 2 : 1;
+            member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts || member == EnableWindow ? 2 : 1;
 
         internal static int FindImport(byte[] image, int[] heaps, int[] methods, int row, int implementation)
         {
@@ -42,6 +43,10 @@ namespace PortableCompiler
         {
             if (arity != Arity(member)) return false;
             int result = types[offset];
+            if (member == IsWindowEnabled || member == EnableWindow)
+                return IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
+                    IsAbiShape(bundle, objects, result, I32, "BOOL") &&
+                    (member == IsWindowEnabled || IsAbiShape(bundle, objects, types[offset + 2], I32, "BOOL"));
             if (member >= IsValidDpiContext) return MatchesDpiSignature(bundle, objects, member, types, offset, arity);
             int input = types[offset + 1];
             if (member == Module)

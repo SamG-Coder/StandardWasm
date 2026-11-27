@@ -69,14 +69,60 @@ Console.WriteLine(JsonSerializer.Serialize(new { executable, results, errors = n
     activationContext = ActivationContextOracle.Probe(moduleHandle), compiledActivation = ActivationContextOracle.ProbeFixture(), compiledLifecycle = ActivationContextProbe.Lifecycle(), compiledPointers = new[] { 0, -1, 123 }
         .SelectMany(value => new[] { ActivationContextProbe.PointerRoundTrip(value, 0), ActivationContextProbe.PointerRoundTrip(value, 1) }),
     nativeLocal = new[] { 0, -1, 123 }.Select(ActivationContextProbe.NativeLocalAlias),
-    nativeAggregate = new[] { 0, -1, 123 }.Select(ActivationContextProbe.NativeAggregateAlias) }));
+    nativeAggregate = new[] { 0, -1, 123 }.Select(ActivationContextProbe.NativeAggregateAlias),
+    windowEnabled = WindowEnabledOracle.Run() }));
 
 [DllImport("KERNEL32.dll", EntryPoint = "GetModuleHandleW", ExactSpelling = true,
     CharSet = CharSet.Unicode, SetLastError = true)]
 static extern nint Lookup(string? name);
 
-// The upstream file-backed ThemingScope passes the module and a numeric
-// manifest ID to the OS. Compare handle relationships instead of raw values.
+// Compare observable window state and the synchronous Win32 messages.
+static class WindowEnabledOracle
+{
+    internal static object Run()
+    {
+        const int disabled = 0x08000000;
+        var first = new Window();
+        var second = new Window();
+        try
+        {
+            first.CreateHandle(new System.Windows.Forms.CreateParams { ClassName = "STATIC", Width = 1, Height = 1 });
+            second.CreateHandle(new System.Windows.Forms.CreateParams { ClassName = "STATIC", Style = disabled, Width = 1, Height = 1 });
+            int enabled = WindowEnabledProbe.ReadWindowEnabled(first.Handle);
+            int disabledValue = WindowEnabledProbe.ReadWindowEnabled(second.Handle);
+            var transitions = new List<object>();
+            foreach (int request in new[] { 1, 0, 0, 1, 1 })
+            {
+                first.Messages.Clear();
+                int previous = WindowEnabledProbe.WriteWindowEnabled(first.Handle, request);
+                transitions.Add(new { previous, enabled = WindowEnabledProbe.ReadWindowEnabled(first.Handle), messages = first.Messages.ToArray() });
+            }
+            nint destroyed = first.Handle;
+            first.DestroyHandle();
+            int[] queries = [WindowEnabledProbe.ReadWindowEnabled(0), enabled, disabledValue, WindowEnabledProbe.ReadWindowEnabled(destroyed)];
+            return new { queries, transitions, invalid = WindowEnabledProbe.WriteWindowEnabled(destroyed, 1) };
+        }
+        finally
+        {
+            if (first.Handle != 0) first.DestroyHandle();
+            if (second.Handle != 0) second.DestroyHandle();
+        }
+    }
+
+    private sealed class Window : System.Windows.Forms.NativeWindow
+    {
+        internal readonly List<int[]> Messages = new();
+        protected override void WndProc(ref System.Windows.Forms.Message message)
+        {
+            if (message.Msg == 0x001f || message.Msg == 0x000a)
+                Messages.Add([message.Msg, (int)message.WParam, WindowEnabledProbe.ReadWindowEnabled(message.HWnd)]);
+            base.WndProc(ref message);
+        }
+    }
+}
+
+// The upstream file-backed ThemingScope passes a module and a numeric
+// manifest ID to Windows. Compare handle relationships instead of raw values.
 static class ActivationContextOracle
 {
     private const uint ModuleAndResource = 0x80 | 0x08;

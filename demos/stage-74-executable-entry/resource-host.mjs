@@ -104,7 +104,7 @@ const resourceImportKinds = new Map([
     ["memory", "memory"], ["reserveName", "function"], ["locate", "function"]
 ]);
 
-export function instantiateManagedModule(module, compiler, assets, runtimeImports = {}, executablePath) {
+export function instantiateManagedModule(module, compiler, assets, runtimeImports = {}, executablePath, windows) {
     const requestedResources = new Set();
     const requestedWin32 = new Set();
     let wantsMonitor = false;
@@ -149,7 +149,7 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     }
     if (requestedWin32.size) {
         const usesModules = requestedWin32.has("getModuleHandleW") || requestedWin32.has("createActCtxW");
-        imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : []);
+        imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : [], windows);
     }
     if (wantsMonitor) imports[threadingModule] = createMonitorHost();
     return WebAssembly.instantiate(module, imports);

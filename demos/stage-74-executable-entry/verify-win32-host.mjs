@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { basename, join } from "node:path";
 import { chromium } from "playwright-core";
 import { instantiateManagedModule } from "./resource-host.mjs";
+import { createWindowState } from "./window-state.mjs";
 
 const methods = [
     ["getModuleHandleW", 0], ["getLastSystemError", 1], ["setLastSystemError", 2],
@@ -132,7 +133,7 @@ async function exercise(instantiate, bytes, executable, framework) {
         embeddedFramework: [embedded, second.getLastSystemError()] };
 }
 
-async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framework, dpiScenarios, runtimeAssets) {
+async function exerciseCompiler(instantiate, makeWindows, compilerBytes, fixtureBytes, framework, dpiScenarios, runtimeAssets) {
     const { instance: { exports: compiler } } = await WebAssembly.instantiate(new Uint8Array(compilerBytes));
     function upload(bytes) {
         const result = compiler.CreateBytes(bytes.length);
@@ -198,6 +199,32 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
     const pointers = [0, -1, 123].flatMap(value => [exports.PointerRoundTrip(value, 0), exports.PointerRoundTrip(value, 1)]);
     const nativeLocal = [0, -1, 123].map(value => exports.NativeLocalAlias(value));
     const nativeAggregate = [0, -1, 123].map(value => exports.NativeAggregateAlias(value));
+
+    const windowModule = await compile(["ReadWindowEnabled", "WriteWindowEnabled"]);
+    const windowImports = WebAssembly.Module.imports(windowModule);
+    if (windowImports.length !== 2 || windowImports.some(entry => entry.module !== "standardwasm:win32") ||
+        !windowImports.some(entry => entry.name === "isWindowEnabled") || !windowImports.some(entry => entry.name === "enableWindow"))
+        throw Error("The window fixture must use only the expected Win32 imports.");
+    const windows = makeWindows();
+    let handle;
+    let query;
+    let messages;
+    handle = windows.register(0, (message, wParam) => messages.push([message, wParam, query(handle)]));
+    const disabled = windows.register(0x08000000);
+    const { exports: window } = await instantiate(windowModule, compiler, [], {}, undefined, windows);
+    query = window.ReadWindowEnabled;
+    const queries = [query(0), query(handle), query(disabled)];
+    const { exports: otherWindow } = await instantiate(windowModule, compiler, []);
+    if (otherWindow.ReadWindowEnabled(handle) !== 0) throw Error("Window handles leaked across instances.");
+    const transitions = [1, 0, 0, 1, 1].map(request => {
+        messages = [];
+        const previous = window.WriteWindowEnabled(handle, request);
+        return { previous, enabled: query(handle), messages };
+    });
+    if (!windows.unregister(handle)) throw Error("The window was not registered.");
+    queries.push(query(handle));
+    const windowEnabled = { queries, transitions, invalid: window.WriteWindowEnabled(handle, 1) };
+
     const staticPin = [exports.Sum(), exports.Alias(2), exports.Sum(), exports.Alias(9), exports.Sum()];
     const monitor = [0, 1, 2, 3].map(exports.LockRoundTrip).concat([0, 1, 2].map(exports.ReleaseDepth));
     const filter = [0, 1, 2, 3].map(exports.MatchPair);
@@ -239,7 +266,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
             steps: scenario.map(mode => [probe.DpiApply(mode), probe.Read(), probe.DpiCurrent(), probe.DpiIsAware()])
         });
     }
-    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringTrim, byteSpan, byteLocations, whitespace, dpi };
+    return { legacy, activation, lifecycle: exports.Lifecycle(), pointers, nativeLocal, nativeAggregate, windowEnabled, staticPin, monitor, filter, objectSpans, booleanLocations, genericLocations, finalWriter, genericValues, constrainedReferences, genericDescriptors, valueAliases, genericValueMethods, rootDispatch, typeReturn, stringField, stringTrim, byteSpan, byteLocations, whitespace, dpi };
 }
 
 function readOracle(...args) {
@@ -257,7 +284,7 @@ const runtimeAssets = runtime ? ["System.Private.CoreLib.dll", "System.Runtime.d
 const runtimePaths = runtimeAssets.map((_, index) => "/test-runtime-" + index);
 const expectedCompiler = {
     legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle,
-    pointers: oracle.compiledPointers, nativeLocal: oracle.nativeLocal, nativeAggregate: oracle.nativeAggregate, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor,
+    pointers: oracle.compiledPointers, nativeLocal: oracle.nativeLocal, nativeAggregate: oracle.nativeAggregate, windowEnabled: oracle.windowEnabled, staticPin: oracle.compiledStaticPin, monitor: oracle.compiledMonitor,
     filter: oracle.compiledFilter, objectSpans: oracle.compiledObjectSpans, booleanLocations: oracle.compiledBooleanLocations,
     genericLocations: oracle.compiledGenericLocations, finalWriter: oracle.compiledFinalWriter,
     genericValues: oracle.compiledGenericValues, constrainedReferences: oracle.compiledConstrainedReferences,
@@ -275,7 +302,7 @@ if (compilerPath) {
     compilerBytes = readFileSync(compilerPath);
     fixtureBytes = readFileSync(new URL("./Win32Fixture/bin/Release/net10.0/Win32Fixture.dll", import.meta.url));
     expectedCompiler.dpi = dpiScenarios.map(scenario => readOracle("dpi", ...scenario.map(String)));
-    assert.deepEqual(await exerciseCompiler(instantiateManagedModule, compilerBytes, fixtureBytes, framework, dpiScenarios, runtimeAssets), expectedCompiler);
+    assert.deepEqual(await exerciseCompiler(instantiateManagedModule, createWindowState, compilerBytes, fixtureBytes, framework, dpiScenarios, runtimeAssets), expectedCompiler);
 }
 const bytes = probeModule();
 const node = await exercise(instantiateManagedModule, bytes, oracle.executable, framework);
@@ -303,7 +330,7 @@ try {
         if (path === "/stage-73-executable-intake/loader/pe.mjs")
             return route.fulfill({ contentType: "text/javascript",
                 body: readFileSync(new URL("../stage-73-executable-intake/loader/pe.mjs", import.meta.url)) });
-        if (["/resource-host.mjs", "/win32-host.mjs", "/activation-context.mjs", "/dpi-awareness.mjs"].includes(path))
+        if (["/resource-host.mjs", "/win32-host.mjs", "/activation-context.mjs", "/dpi-awareness.mjs", "/window-state.mjs"].includes(path))
             return route.fulfill({ contentType: "text/javascript", body: readFileSync(new URL("." + path, import.meta.url)) });
         return route.abort();
     });
@@ -318,10 +345,11 @@ try {
     if (compilerBytes) {
         const compiled = await page.evaluate(async ({ source, compilerBytes, fixtureBytes, name, dpiScenarios, runtimePaths }) => {
             const { instantiateManagedModule } = await import("/resource-host.mjs");
+            const { createWindowState } = await import("/window-state.mjs");
             const bytes = await (await fetch("/test-framework")).arrayBuffer();
             const runtimeAssets = await Promise.all(runtimePaths.map(async path =>
                 new Uint8Array(await (await fetch(path)).arrayBuffer())));
-            return (0, eval)("(" + source + ")")(instantiateManagedModule, compilerBytes, fixtureBytes, { name, bytes },
+            return (0, eval)("(" + source + ")")(instantiateManagedModule, createWindowState, compilerBytes, fixtureBytes, { name, bytes },
                 dpiScenarios, runtimeAssets);
         }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes],
             name: framework.name, dpiScenarios, runtimePaths });
@@ -346,7 +374,8 @@ try {
         console.log("Monitor reentrancy, lockTaken, and three typed failure paths matched the CLR.");
         console.log("Pinned static aliases matched the CLR across managed stores and separate export calls.");
         console.log("Native word and blittable local aliases matched the CLR in Node and Edge.");
-    console.log("The Wasm compiler matched CLR module lookups, the activation-context lifecycle, and Marshal error exchange in Node and Edge.");
+        console.log("Window queries, five enable transitions, and synchronous message order matched Windows in Node and Edge.");
+        console.log("The Wasm compiler matched CLR module lookups, the activation-context lifecycle, and Marshal error exchange in Node and Edge.");
     }
     console.log("Node and Edge matched 6 CLR module lookups and both last-error slots. Memory growth and host isolation passed.");
     console.log("Node and Edge matched the WinForms manifest activation lifecycle and Windows error results.");

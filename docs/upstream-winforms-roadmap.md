@@ -102,8 +102,9 @@ Compilation of the unchanged sample in probe mode gets past
 `ThemingScope..ctor` now compiles its activation-context out parameters through
 stable native frame slots. The linker validates `Form`'s inherited
 `IHandle<HWND>` constraint and binds the original `PInvokeCore.GetWindowLong`
-call in `ThreadContext.RunMessageLoopInner`. Compilation then stops at its
-`PInvoke.IsWindowEnabled` call.
+call in `ThreadContext.RunMessageLoopInner`. The original window-state calls
+now bind to the browser host's per-instance HWND table. The unchanged bundle
+gets past both calls and stops at CoreLib's `System.IO.Path.GetTempPath`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

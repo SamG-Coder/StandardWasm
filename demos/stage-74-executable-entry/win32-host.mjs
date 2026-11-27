@@ -1,13 +1,14 @@
 import { readPeResource } from "../stage-73-executable-intake/loader/pe.mjs";
 import { createActivationContexts } from "./activation-context.mjs";
 import { createDpiAwareness, dpiImportNames } from "./dpi-awareness.mjs";
+import { createWindowState, windowImportNames } from "./window-state.mjs";
 
 export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
     "getModuleHandleW", "createActCtxW", "getCurrentActCtx", "activateActCtx"
 ]);
 export const win32ImportNames = new Set([
-    ...win32MemoryImports, ...dpiImportNames, "deactivateActCtx", "releaseActCtx",
+    ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, "deactivateActCtx", "releaseActCtx",
     "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError"
 ]);
 
@@ -17,7 +18,7 @@ const executableHandle = 1;
 const decoder = new TextDecoder("utf-16le", { ignoreBOM: true });
 const normalize = name => name.replaceAll("\\", "/").toLowerCase();
 
-export function createWin32Host(memory, executablePath, assets = []) {
+export function createWin32Host(memory, executablePath, assets = [], windows = createWindowState()) {
     const byPath = new Map();
     const byBaseName = new Map();
     const moduleImages = new Map();
@@ -78,6 +79,8 @@ export function createWin32Host(memory, executablePath, assets = []) {
         getModuleHandleW,
         ...createActivationContexts(memory, findManifest, value => { systemError = value; }),
         ...createDpiAwareness(value => { systemError = value; }),
+        isWindowEnabled: handle => windows.isWindowEnabled(handle),
+        enableWindow: (handle, enable) => windows.enableWindow(handle, enable),
         getLastSystemError: () => systemError,
         setLastSystemError: value => { systemError = value | 0; },
         getLastPInvokeError: () => pinvokeError,
