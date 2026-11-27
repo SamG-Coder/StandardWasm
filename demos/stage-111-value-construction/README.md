@@ -101,3 +101,7 @@ The mutable receiver fixture checks ordinary local and array-backed
 receivers, a by-value argument copy, an alias passed to the receiver's
 method, and a write observed after checked overflow. It also executes
 the original `Nullable<int>.HasValue` and `BitVector32` mask setter.
+The constrained interface fixture invokes implicit and explicit implementations
+of `IDisposable.Dispose` through a generic by-reference argument. It checks
+that mutations to a local struct and a closed generic struct in an array remain
+visible at their original locations.

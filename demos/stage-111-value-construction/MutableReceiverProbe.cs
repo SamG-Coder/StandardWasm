@@ -5,9 +5,11 @@ namespace ValueConstructionDemo
 {
     public static class MutableReceiverProbe
     {
-        private struct Counter
+        private struct Counter : IDisposable
         {
             public int Value;
+
+            public void Dispose() => Value = unchecked(Value + 3);
 
             public int Add(int delta)
             {
@@ -26,6 +28,27 @@ namespace ValueConstructionDemo
                 Value = value;
                 return checked(value - int.MinValue);
             }
+        }
+
+        private struct ExplicitCounter<T> : IDisposable
+        {
+            public T Value;
+
+            void IDisposable.Dispose() => Value = default(T);
+        }
+
+        private static void DisposeAtLocation<T>(ref T value) where T : struct, IDisposable => value.Dispose();
+
+        public static int CheckConstrainedInterface(int input)
+        {
+            var counter = new Counter { Value = input };
+            DisposeAtLocation(ref counter);
+
+            var counters = new ExplicitCounter<int>[1];
+            ref ExplicitCounter<int> alias = ref counters[0];
+            alias.Value = input;
+            DisposeAtLocation(ref counters[0]);
+            return unchecked(counter.Value + alias.Value);
         }
 
         private static int UpdateCopy(Counter counter) => counter.Add(7);

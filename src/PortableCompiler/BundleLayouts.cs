@@ -206,7 +206,7 @@ namespace PortableCompiler
             return ObjectLayouts.IsByRefLikeValue(objects, storage) ? -2 : storage;
         }
 
-        private static int RegisterInterfaces(BundleImages bundle, byte[] image,
+        internal static int RegisterInterfaces(BundleImages bundle, byte[] image,
             int[] layout, int[] heaps, int owner, int type, int[] objects)
         {
             var table = new int[3];
@@ -226,7 +226,8 @@ namespace PortableCompiler
                 if (target == -4 || target == -6 || closed && target == -2) continue;
                 if (target < 0) return target;
                 if (!ObjectLayouts.IsInterface(objects, target)) return -2;
-                if (!ObjectLayouts.AddInterface(objects, type, target)) return -3;
+                if (!ObjectLayouts.DeclaresInterface(objects, type, target) &&
+                    !ObjectLayouts.AddInterface(objects, type, target)) return -3;
             }
             return 0;
         }

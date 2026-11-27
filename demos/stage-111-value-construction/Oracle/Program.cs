@@ -37,6 +37,7 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     entryAliases = inputs.Select(EntryArrayProbe.UpdateEntryArray).ToArray(),
     interiorFields = inputs.Select(EntryArrayProbe.ClearInteriorFields).ToArray(),
     mutableReceivers = inputs.Select(MutableReceiverProbe.CheckMutableReceiver).ToArray(),
+    constrainedInterfaces = inputs.Select(MutableReceiverProbe.CheckConstrainedInterface).ToArray(),
     exceptionalMutation = inputs.Select(MutableReceiverProbe.CheckExceptionalMutation).ToArray(),
     closedReceivers = inputs.Select(MutableReceiverProbe.CheckClosedReceiver).ToArray(),
     frameworkReceivers = inputs.Select(MutableReceiverProbe.CheckFrameworkReceiver).ToArray(),
