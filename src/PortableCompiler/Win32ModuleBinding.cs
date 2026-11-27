@@ -13,7 +13,7 @@ namespace PortableCompiler
             BCryptGenRandom = 19, GetProcessAwareness = 20, LoadLibrary = 21, GetProcedure = 22,
             CallWindowProcedure = 23, RegisterClass = 24, GetClassInfo = 25,
             SetWindowLong = 26, SetWindowLongPtr = 27, CreateWindow = 28,
-            GetFullPathName = 29, Count = GetFullPathName;
+            GetFullPathName = 29, RedrawWindow = 30, Count = RedrawWindow;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -31,7 +31,7 @@ namespace PortableCompiler
             member == GetClassInfo ? "GetClassInfoW" : member == SetWindowLong ? "SetWindowLongW" :
             member == SetWindowLongPtr ? "SetWindowLongPtrW" :
             member == CreateWindow ? "CreateWindowExW" :
-            member == GetFullPathName ? "GetFullPathNameW" : "BCryptGenRandom";
+            member == GetFullPathName ? "GetFullPathNameW" : member == RedrawWindow ? "RedrawWindow" : "BCryptGenRandom";
 
         private static string Library(int member) => member == LoadLibrary || member == GetFullPathName ? "kernel32.dll" :
             member <= ReleaseContext || member == GetProcedure ? "KERNEL32.dll" :
@@ -40,7 +40,7 @@ namespace PortableCompiler
 
         internal static int Arity(int member) =>
             member == CreateWindow ? 12 : member == CallWindowProcedure ? 5 :
-            member == BCryptGenRandom || member == GetFullPathName ? 4 :
+            member == BCryptGenRandom || member == GetFullPathName || member == RedrawWindow ? 4 :
             member == LoadLibrary || member == GetClassInfo || IsWindowLongSetter(member) ? 3 :
             member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ? 0 :
             member == GetProcedure || member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts || member == EnableWindow ||
@@ -112,6 +112,12 @@ namespace PortableCompiler
             if (member == GetFullPathName)
                 return result == I32 && types[offset + 1] == Native && types[offset + 2] == I32 &&
                     types[offset + 3] == Native && types[offset + 4] == Native;
+            if (member == RedrawWindow)
+                return IsAbiShape(bundle, objects, result, I32, "BOOL") &&
+                    IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
+                    types[offset + 2] == Native &&
+                    IsAbiShape(bundle, objects, types[offset + 3], Native, "HRGN", "Windows.Win32.Graphics.Gdi") &&
+                    types[offset + 4] == I32;
             if (IsWindowLongSetter(member))
                 return IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
                     types[offset + 2] == I32 && types[offset + 3] == Native && result == Native;

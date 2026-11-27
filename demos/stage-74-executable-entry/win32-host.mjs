@@ -2,12 +2,12 @@ import { readPeResource } from "../stage-73-executable-intake/loader/pe.mjs";
 import { createActivationContexts } from "./activation-context.mjs";
 import { createDpiAwareness, dpiImportNames } from "./dpi-awareness.mjs";
 import { createFullPathHost } from "./full-path-host.mjs";
-import { createDefaultWindowProcedure, createWindowClassState, createWindowCreation, createWindowState, windowImportNames } from "./window-state.mjs";
+import { createDefaultWindowProcedure, createWindowClassState, createWindowCreation, createRedrawWindow, createWindowState, windowImportNames } from "./window-state.mjs";
 
 export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
     "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom",
-    "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW"
+    "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "redrawWindow"
 ]);
 export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, "callWindowProcW", "deactivateActCtx", "releaseActCtx",
@@ -184,6 +184,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         registerClassW: classes.registerClassW,
         getClassInfoW: classes.getClassInfoW,
         createWindowExW: createWindowCreation(memory, windows, classes, bindProcedure, setError, windowCreationMetrics),
+        redrawWindow: createRedrawWindow(memory, windows, setError),
         bCryptGenRandom,
         getLastSystemError: () => errors.system,
         setLastSystemError: value => { errors.system = value | 0; },

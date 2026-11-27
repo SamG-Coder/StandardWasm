@@ -195,6 +195,29 @@ const pageBytes = 65536;
 const createStructBytes = 48, minMaxInfoBytes = 40, rectBytes = 16;
 const maximumCaptionUnits = 32767;
 
+const visibleOrChildStyle = 0x50000000; // WS_VISIBLE | WS_CHILD
+const hiddenRedrawFlags = 0x0001 | 0x0004 | 0x0008 | 0x0080 | 0x0100 | 0x0200 | 0x0400;
+
+export function createRedrawWindow(memory, windows, setError) {
+    return function redrawWindow(hwnd, rectangle, region, flags) {
+        // A null HWND requests desktop-wide invalidation on Windows.
+        let error;
+        if (hwnd === 0) error = notSupported;
+        else if (!windows.hasWindow(hwnd)) error = invalidWindow;
+        else if (region !== 0 || (flags & ~hiddenRedrawFlags) !== 0 ||
+            (windows.getWindowLong(hwnd, -16, setError) & visibleOrChildStyle) !== 0)
+            error = notSupported;
+        else if (rectangle !== 0 && (rectangle >>> 0) > memory.buffer.byteLength - rectBytes)
+            error = noAccess;
+        else
+            // Windows leaves a hidden top-level window clean even for the
+            // synchronous timing flags. A successful raw call preserves last error.
+            return 1;
+        setError(error);
+        return 0;
+    };
+}
+
 export function createDefaultWindowProcedure(memory, windows) {
     return function defWindowProcW(hwnd, message, wparam, lparam) {
         if (message === 0) return 0; // WM_NULL

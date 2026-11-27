@@ -201,6 +201,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [198 · Virtual executable working directory](stage-198-virtual-executable-directory/README.md) | `npm run demo -- stage-198-virtual-executable-directory` | Launch an unchanged console publish through the real file intake and resolve paths within its virtual directory |
 | [200 · Runtime type namespaces](stage-200-type-namespace/README.md) | `npm run demo -- stage-200-type-namespace` | Read canonical metadata namespaces from ordinary, nested, generic, and array types |
 | [201 · Default window procedure](stage-201-default-window-procedure/README.md) | `npm run demo -- stage-201-default-window-procedure` | Resolve a resident User32 procedure and verify native hidden-popup defaults and captions |
+| [203 · Redraw requests for hidden windows](stage-203-hidden-window-redraw/README.md) | `npm run demo -- stage-203-hidden-window-redraw` | Compare compiled RedrawWindow calls, borrowed rectangles and last-error behavior against Windows |
 
 ## Adding a stage
 
