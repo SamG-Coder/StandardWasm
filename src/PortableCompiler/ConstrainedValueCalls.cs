@@ -23,6 +23,23 @@ namespace PortableCompiler
             if (type < 0) return type;
             if (!IsValueType(objects, type) || IsExplicitValue(objects, type)) return -2;
 
+            var declaration = new int[2];
+            int status = ResolveObjectDeclaration(bundle, image, layout, heaps, owner, methodToken,
+                context, methodArguments, objects, declaration);
+            if (status < 0) return status;
+            int declarationOwner = declaration[0], declarationRow = declaration[1];
+
+            int selected = VirtualSlots.SelectVirtualBody(bundle, objects, type, true, ObjectReference,
+                declarationOwner, declarationRow, target, exactValue: true);
+            if (selected < 0) return selected;
+            if (target[0] == declarationOwner && target[1] == declarationRow) return -2;
+            target[2] = HasArguments(objects, type) ? type : 0;
+            return type;
+        }
+
+        internal static int ResolveObjectDeclaration(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int methodToken, int context, int[] methodArguments, int[] objects, int[] declaration)
+        {
             int declarationOwner = owner, declarationRow = methodToken & 0xffffff;
             if (methodToken >> 24 == 0x0a)
             {
@@ -44,13 +61,9 @@ namespace PortableCompiler
             if (!IsCoreObjectType(image, heaps, layout, declaredType << 2) ||
                 (MethodDefinitions.ReadColumn(image, layout, declarationRow, 2) & 0x77) != 0x46)
                 return -2;
-
-            int selected = VirtualSlots.SelectVirtualBody(bundle, objects, type, true, ObjectReference,
-                declarationOwner, declarationRow, target, exactValue: true);
-            if (selected < 0) return selected;
-            if (target[0] == declarationOwner && target[1] == declarationRow) return -2;
-            target[2] = HasArguments(objects, type) ? type : 0;
-            return type;
+            declaration[0] = declarationOwner;
+            declaration[1] = declarationRow;
+            return 0;
         }
     }
 }

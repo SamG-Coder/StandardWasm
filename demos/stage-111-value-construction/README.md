@@ -53,3 +53,7 @@ checks the `IsValueType` branch on both a primitive and a reference type.
 The closed interface fixture checks implicit and explicit implementations,
 including different `int` and `uint` instantiations on one class, a closed
 generic implementer, polymorphic calls, and a typed null receiver failure.
+
+The primitive hash fixture invokes the original CoreLib `Int32` and `UInt32`
+`GetHashCode` overrides through constrained generic calls. It covers signed
+and unsigned values and reading the current `Int32` from an array reference.

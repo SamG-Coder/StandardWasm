@@ -1127,6 +1127,8 @@ namespace PortableCompiler
                     int local = records[slot + 1];
                     int type = frame[local];
                     int next = records[slot + 2] * BranchIl.Width;
+                    if (type == I32 && PrimitiveHashCalls.LowerFrame(bundle, image, layout, heaps, owner,
+                        context, methodArguments, objects, records, clauses, slot)) continue;
                     if (IsObjectReference(type) && !ObjectLayouts.IsValueType(objects, type))
                     {
                         int constrained = ConstrainedReferenceCalls.Lower(bundle, image, layout, heaps, owner, context,
@@ -1204,6 +1206,13 @@ namespace PortableCompiler
                 }
                 if (kind == BranchIl.ConstrainedInstance)
                 {
+                    if (PrimitiveHashCalls.Identify(bundle, image, layout, heaps, owner, context, methodArguments, objects, records, slot) == 8)
+                    {
+                        records[slot] = BranchIl.LoadManagedCell;
+                        records[slot + 1] = Ints;
+                        records[slot + 3] = Int32Location;
+                        continue;
+                    }
                     var overrideSymbol = new int[3];
                     int type = ConstrainedValueCalls.Resolve(bundle, image, layout, heaps, owner,
                         records[slot + 1], records[slot + 3], context, methodArguments, objects, overrideSymbol);

@@ -18,6 +18,7 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     debuggerStatus = DebuggerProbe.ReadManagedDebuggerStatus(),
     closedInterfaces = inputs.Select(ClosedInterfaceProbe.CheckClosedInterface).ToArray(),
     closedInterfaceNull = inputs.Select(ClosedInterfaceProbe.CheckClosedInterfaceNull).ToArray(),
+    primitiveHashes = inputs.Select(PrimitiveTypeProbe.CheckPrimitiveHash).ToArray(),
     primitiveDescriptors = inputs.Select(PrimitiveTypeProbe.CheckPrimitiveDescriptors).ToArray(),
     closedValueTypes = inputs.Select(PrimitiveTypeProbe.CheckClosedValueType).ToArray(),
     entryAliases = inputs.Select(EntryArrayProbe.UpdateEntryArray).ToArray(),

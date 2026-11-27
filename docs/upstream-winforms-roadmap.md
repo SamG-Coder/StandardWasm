@@ -131,8 +131,9 @@ replay decodes the generic `Entry` array element address in CoreLib's
 `Dictionary<TKey,TValue>.Remove`. Its primitive `TKey` now resolves to the
 canonical CoreLib type descriptor. The linker binds the comparer call through
 `IEqualityComparer<TKey>.GetHashCode` with the closed interface signature. The
-startup replay stops at the separate constrained `Object.GetHashCode` call on
-the primitive key.
+compiler also lowers the original primitive `GetHashCode` overrides when
+CoreLib's method body returns the receiver bits unchanged. The startup replay
+now stops at `EqualityComparer<TKey>.Equals` on the closed generic class.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

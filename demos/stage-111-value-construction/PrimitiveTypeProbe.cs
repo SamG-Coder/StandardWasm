@@ -22,5 +22,16 @@ namespace ValueConstructionDemo
 
         public static int CheckClosedValueType(int value) =>
             unchecked(ClassifyClosedType<int>(value) * 5 + ClassifyClosedType<string>(value));
+
+        private static int PrimitiveHash<T>(T value) => value.GetHashCode();
+        private static int PrimitiveHashReference<T>(ref T value) => value.GetHashCode();
+
+        public static int CheckPrimitiveHash(int value)
+        {
+            var cells = new int[1];
+            cells[0] = unchecked(value * 3 + 7);
+            return unchecked(PrimitiveHash(value) * 5 + PrimitiveHash((uint)value) * 11 +
+                PrimitiveHashReference(ref cells[0]));
+        }
     }
 }
