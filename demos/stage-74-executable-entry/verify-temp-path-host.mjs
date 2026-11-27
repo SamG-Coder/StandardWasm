@@ -49,7 +49,12 @@ function exercise(create, path, capacities) {
         catch (error) { return error instanceof TypeError; }
         return false;
     });
-    return { legacy, current, invalid, isolated, rejectedDirectories };
+    const scopedAddress = 4096;
+    const scoped = new Uint8Array(memory.buffer, scopedAddress, 16);
+    scoped.fill(0xab);
+    const blocked = getTempPath2W(9, scopedAddress, 8);
+    const bounds = [blocked, errors.system, scoped.every(byte => byte === 0xab)];
+    return { legacy, current, invalid, isolated, rejectedDirectories, bounds };
 }
 
 function exerciseRegistry(createRegistry, createTempPath, scalars, oracle) {
@@ -192,6 +197,8 @@ assert.deepEqual(node.current, oracle.current);
 assert.deepEqual(node.invalid, [0, 0, 0, 998, 321, 97]);
 assert.deepEqual(node.isolated, ["V:\\Scratch\\\0", 0, 987, 998, 321]);
 assert.deepEqual(node.rejectedDirectories, [true, true, true, true]);
+assert.deepEqual(node.bounds, [0, 998, true]);
+assert.deepEqual(nodeGrowth.bounds, node.bounds);
 
 const browser = await chromium.launch({ channel: "msedge" });
 try {

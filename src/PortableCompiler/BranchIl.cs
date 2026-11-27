@@ -82,7 +82,7 @@ namespace PortableCompiler
         internal const int EnumHasFlag = 169, TakeProjectedFieldAddress = 170, CallNativeIndirect = 171;
         internal const int NativeAddressView = 172, NullManagedLocation = 173, TestNullLocation = 174;
         internal const int BoxAggregate = 175, UnboxAggregate = 176, TestAggregateBox = 177, UnboxAggregateAddress = 178;
-        internal const int CallDynamicNative = 179;
+        internal const int CallDynamicNative = 179, CallPinnedCharacterNative = 180;
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

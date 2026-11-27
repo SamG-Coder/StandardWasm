@@ -1,18 +1,25 @@
 export const nativeIndirectSignature = "platform:u32(i32,p32)";
 
-let indirectDispatchType;
+export const scopedUtf16Signature = nativeIndirectSignature + ":scoped-utf16";
+const indirectDispatchTypes = new Map();
 
 // Re-export the callback as a Wasm function so the guest's import must match
 // (i32 token, i32 scalar, i32 pointer) -> i32 at link time.
-export function createNativeIndirectDispatch(invoke) {
-    indirectDispatchType ??= new WebAssembly.Module(Uint8Array.of(
-        0, 97, 115, 109, 1, 0, 0, 0,
-        1, 8, 1, 0x60, 3, 0x7f, 0x7f, 0x7f, 1, 0x7f,
-        2, 5, 1, 0, 0, 0, 0,
-        7, 8, 1, 4, 0x63, 0x61, 0x6c, 0x6c, 0, 0 // export "call"
-    ));
-    const dispatch = (token, input, pointer) => invoke(token, nativeIndirectSignature, input, pointer);
-    return new WebAssembly.Instance(indirectDispatchType, { "": { "": dispatch } }).exports.call;
+export function createNativeIndirectDispatch(invoke, scoped = false) {
+    let type = indirectDispatchTypes.get(scoped);
+    if (!type) {
+        const arity = scoped ? 4 : 3;
+        const parameters = Array(arity).fill(0x7f);
+        type = new WebAssembly.Module(Uint8Array.of(
+            0, 97, 115, 109, 1, 0, 0, 0,
+            1, 5 + arity, 1, 0x60, arity, ...parameters, 1, 0x7f,
+            2, 5, 1, 0, 0, 0, 0,
+            7, 8, 1, 4, 0x63, 0x61, 0x6c, 0x6c, 0, 0 // export "call"
+        ));
+        indirectDispatchTypes.set(scoped, type);
+    }
+    const dispatch = scoped ? invoke : (token, input, pointer) => invoke(token, nativeIndirectSignature, input, pointer);
+    return new WebAssembly.Instance(type, { "": { "": dispatch } }).exports.call;
 }
 
 const moduleNotFound = 126, entryPointNotFound = 127, invalidHandle = 6, invalidParameter = 87;
@@ -83,10 +90,12 @@ export function createDynamicLibraryHost(errors) {
         for (const [entry, method] of entries) {
             const signature = method?.signature;
             const invoke = method?.invoke;
+            const scopedUtf16 = method?.scopedUtf16;
             const shape = parseSignature(signature);
-            if (!validEntryName(entry) || typeof invoke !== "function" || !shape)
+            if (!validEntryName(entry) || typeof invoke !== "function" || !shape ||
+                (scopedUtf16 !== undefined && (signature !== nativeIndirectSignature || typeof scopedUtf16 !== "function")))
                 throw new TypeError("StandardWasm: invalid dynamic export registration");
-            exports.set(entry, { signature, invoke, shape, library: key, entry });
+            exports.set(entry, { signature, invoke, scopedUtf16, shape, library: key, entry });
         }
         libraries.set(key, { exports, handle: 0, references: 0, tokens: new Map() });
     }
@@ -135,7 +144,7 @@ export function createDynamicLibraryHost(errors) {
         return 1;
     }
 
-    function invoke(token, signature, ...args) {
+    function dispatch(token, signature, args, units) {
         const target = targets.get(token);
         if (!target) throw new Error("StandardWasm: unregistered dynamic export token");
         const label = target.library + "!" + target.entry;
@@ -145,11 +154,25 @@ export function createDynamicLibraryHost(errors) {
         const values = args.map((argument, index) => parameters[index](argument));
         if (values.includes(invalidValue))
             throw new TypeError("StandardWasm: invalid dynamic export argument for " + label);
-        const value = result(target.invoke(...values));
+        if (units !== undefined && typeof target.scopedUtf16 !== "function")
+            throw new TypeError("StandardWasm: dynamic export does not accept scoped UTF-16 for " + label);
+        const value = result(units === undefined ? target.invoke(...values) : target.scopedUtf16(...values, units));
         if (value === invalidValue)
             throw new TypeError("StandardWasm: invalid dynamic export result for " + label);
         return value;
     }
 
-    return { registerLibrary, loadLibrary, getModuleHandle, getProcAddress, freeLibrary, invoke };
+    function invoke(token, signature, ...args) {
+        return dispatch(token, signature, args, undefined);
+    }
+
+    // A scoped provider must finish synchronously, respect the available
+    // units, and neither retain the pointer nor re-enter managed code.
+    function invokeScoped(token, input, pointer, availableUnits) {
+        if (!Number.isInteger(availableUnits) || availableUnits < -1)
+            throw new TypeError("StandardWasm: invalid scoped UTF-16 extent");
+        return dispatch(token, nativeIndirectSignature, [input, pointer], availableUnits);
+    }
+
+    return { registerLibrary, loadLibrary, getModuleHandle, getProcAddress, freeLibrary, invoke, invokeScoped };
 }

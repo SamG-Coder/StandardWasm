@@ -11,14 +11,14 @@ export function createTempPathHost(memory, directory, errors) {
 
     const required = directory.length + 1;
 
-    function getTempPathW(capacity, pointer) {
+    function getTempPathW(capacity, pointer, availableUnits = -1) {
         const count = capacity >>> 0;
         const address = pointer >>> 0;
         if (count === 0) return required;
 
         const buffer = memory.buffer;
         const bytes = count * 2;
-        if (!address || bytes > buffer.byteLength - address) {
+        if (!address || bytes > buffer.byteLength - address || (availableUnits >= 0 && count > availableUnits)) {
             errors.system = noAccess;
             return 0;
         }
@@ -36,11 +36,11 @@ export function createTempPathHost(memory, directory, errors) {
 
     return {
         getTempPathW,
-        getTempPath2W(capacity, pointer) {
+        getTempPath2W(capacity, pointer, availableUnits) {
             // The current Windows export clears the thread's system error
             // for successful and short-buffer queries.
             errors.system = 0;
-            return getTempPathW(capacity, pointer);
+            return getTempPathW(capacity, pointer, availableUnits);
         }
     };
 }

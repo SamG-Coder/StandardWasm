@@ -18,7 +18,8 @@ namespace PortableCompiler
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
             int classes = frameShape[4];
-            bool stringScratch = frameShape[5] != 0;
+            bool stringScratch = (frameShape[5] & 1) != 0;
+            bool scopedPinScratch = (frameShape[5] & 2) != 0;
             bool eventScratch = frameShape[6] != 0;
             int exceptionLocals = frameShape[8], continuations = frameShape[9];
             int hostImports = frameShape[10];
@@ -58,20 +59,21 @@ namespace PortableCompiler
             }
             int spills = arguments + locals + (hasNull ? 1 : 0);
             int fixedLocals = spills + classes + (stringScratch ? 5 : 0) +
-                (eventScratch ? 6 : 0) + (resourceFunction >= 0 ? 7 : 0) + 1 + 2 * exceptionLocals + continuations +
+                (eventScratch ? 6 : 0) + (scopedPinScratch ? 8 : 0) + (resourceFunction >= 0 ? 7 : 0) + 1 + 2 * exceptionLocals + continuations +
                 (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0) + (staticRegion >= 0 ? 1 : 0) + cellCount + (tracksRoots ? 1 : 0) + (failure != null ? 1 : 0);
             if (fixedLocals > MaxLocals || maximum > (MaxLocals - fixedLocals) / spillKinds) return -2;
             int temporaries = spills + spillKinds * maximum;
             int scratch = temporaries + classes;
             int eventLocals = scratch + (stringScratch ? 5 : 0);
-            int resourceLocals = eventLocals + (eventScratch ? 6 : 0);
+            int scopedPinLocals = eventLocals + (eventScratch ? 6 : 0);
+            int resourceLocals = scopedPinLocals + (scopedPinScratch ? 8 : 0);
             int pcLocal = resourceLocals + (resourceFunction >= 0 ? 7 : 0);
             int continuationBase = pcLocal + 1 + exceptionLocals;
             // Thrown managed objects (decision 0054) mirror the exnref locals: a scratch
             // eqref followed by one saved object per clause.
             int objectBase = continuationBase + continuations;
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
-                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
+                (stringScratch ? 2 : 0) + (eventScratch ? 2 : 0) + (scopedPinScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
                 (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0) +
                 (staticRegion >= 0 ? 1 : 0) + cellCount + (tracksRoots ? 1 : 0) + (failure != null ? 1 : 0));
             // The saved shadow-stack pointer follows every other local.
@@ -124,6 +126,13 @@ namespace PortableCompiler
                 code[used++] = 0x7f;
                 code[used++] = 1; // unpublished output array
                 used = WasmBinary.ValueType(code, used, EventHandlerReference);
+            }
+            if (scopedPinScratch)
+            {
+                code[used++] = 1;
+                used = WasmBinary.ValueType(code, used, Chars);
+                code[used++] = 7; // array offset, extent, native address, and copy/stack scratch
+                code[used++] = 0x7f;
             }
             if (resourceFunction >= 0)
             {
@@ -270,7 +279,7 @@ namespace PortableCompiler
                 int tracked = 0;
                 bool publishesRoots = tracksRoots && (kind == Call || kind == NewObject || kind == ConstructValue ||
                     kind == ResourceLookup || kind == InvokeDelegate || kind == CallNativeIndirect ||
-                    kind == CallDynamicNative ||
+                    kind == CallDynamicNative || kind == CallPinnedCharacterNative ||
                     TypeInitializerWasm.HasFieldTrigger(kind, operand, fieldInitializers));
                 if (publishesRoots)
                 {
@@ -922,6 +931,17 @@ namespace PortableCompiler
                     if (type == CharacterLocation)
                         used = ManagedLocationWasm.TestCharacterAddress(code, used, address);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top));
+                }
+                else if (kind == CallPinnedCharacterNative)
+                {
+                    used = ScopedCharacterPinWasm.Call(code, used,
+                        Spill(spills, maximum, spillFlags, CharacterLocation, top - 1),
+                        Spill(spills, maximum, spillFlags, Native, top),
+                        Spill(spills, maximum, spillFlags, I32, top - 2),
+                        Spill(spills, maximum, spillFlags, I32, top - 2), operand,
+                        scopedPinLocals, scopedPinLocals + 1, scopedPinLocals + 2, scopedPinLocals + 3,
+                        scopedPinLocals + 4, scopedPinLocals + 5, scopedPinLocals + 6, scopedPinLocals + 7,
+                        stackPointer, stackBase, stackLimit);
                 }
                 else if (kind == CallDynamicNative)
                 {

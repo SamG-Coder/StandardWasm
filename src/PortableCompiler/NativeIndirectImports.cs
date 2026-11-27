@@ -20,6 +20,15 @@ namespace PortableCompiler
             return imports.Add(-2, 2, module, module.Length, entry, entry.Length, new byte[] { 0x7f, 0x7f, 0x7f }, 3, 0x7f);
         }
 
+        internal static int RegisterScopedUtf16(NativeImportTable imports)
+        {
+            int existing = imports.Find(-2, 3);
+            if (existing >= 0) return existing;
+            byte[] module = NativeImportTable.Ascii("standardwasm:native-indirect");
+            byte[] entry = NativeImportTable.Ascii("platform:u32(i32,p32):scoped-utf16");
+            return imports.Add(-2, 3, module, module.Length, entry, entry.Length, new byte[] { 0x7f, 0x7f, 0x7f, 0x7f }, 4, 0x7f);
+        }
+
         // A guest COM vtable slot names a host-issued token. The original
         // pointer load remains in the IL; the host validates the token and receiver.
         internal static int Register(NativeImportTable imports)

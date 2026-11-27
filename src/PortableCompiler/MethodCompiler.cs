@@ -722,6 +722,13 @@ namespace PortableCompiler
                             return functions;
                     }
 
+                    if (ScopedCharacterPins.Lower(records, frame, pinned, parameters, locals, catchRegion, frameCells, natives, nativeBase) &&
+                        frameRoots != null)
+                    {
+                        frameRoots = RootStackWasm.MapFrame(records, frame, parameters + locals, catchRegion.Length != 0, parameters, filters);
+                        if (frameRoots == null) return -2;
+                        NativeFrameWasm.ExcludeNativeRoots(frameRoots, frameCells);
+                    }
                     for (int local = 0; local < frameCells.Length; local++)
                         if (frameCells[local] != 0 && inlineLocations[local] != 0) return -2;
                     typeCalls.ApplyDescriptorSignatures(bases, indices, offsets, signatures);
@@ -986,7 +993,7 @@ namespace PortableCompiler
                             records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
                             IsNativeInteger(states[pc * maximum + depths[pc] - 1 - (fieldStore ? 2 : 1)]);
                         if (nativeField) linearMemory = true;
-                        if ((kind == BranchIl.LocalAllocate || kind == BranchIl.PinString) && depths[pc] != 0)
+                        if ((kind == BranchIl.LocalAllocate || kind == BranchIl.PinString || kind == BranchIl.CallPinnedCharacterNative) && depths[pc] != 0)
                         {
                             // An initializer's guard and a shadow-stack frame both wrap the
                             // body; combining them is not supported yet.
@@ -1009,7 +1016,8 @@ namespace PortableCompiler
                                     pinRegistry[0] = global + 1;
                                 }
                             }
-                            int allocationBytes = kind == BranchIl.PinString ? Utf16MemoryWasm.PinCapacity : StackAllocationWasm.Capacity;
+                            int allocationBytes = kind == BranchIl.PinString ? Utf16MemoryWasm.PinCapacity :
+                                kind == BranchIl.CallPinnedCharacterNative ? ScopedCharacterPinWasm.Capacity : StackAllocationWasm.Capacity;
                             if (capacity > int.MaxValue - allocationBytes) return -3;
                             capacity += allocationBytes;
                         }
@@ -1191,7 +1199,8 @@ namespace PortableCompiler
                         int kind = records[slot];
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
                             kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.StringFromSpan || kind == BranchIl.ConsoleWrite ||
-                            kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine) frameShape[5] = 1;
+                            kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine) frameShape[5] |= 1;
+                        if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
                             frameShape[6] = 1;

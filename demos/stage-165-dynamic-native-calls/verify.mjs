@@ -21,7 +21,7 @@ assert.ok(oracle.callOffset >= 0);
 const compiler = readFileSync(process.env.STANDARDWASM_COMPILER_PATH || join(root, "artifacts/StandardWasm.Compiler.wasm"));
 const assembly = readFileSync(oracle.assembly);
 
-async function exercise(compilerBytes, assemblyBytes, { row, unsupportedRow, pinnedEntryRow }, instantiate) {
+async function exercise(compilerBytes, assemblyBytes, { row, unsupportedRow, pinnedEntryRow, arrayRow, stackRow }, instantiate) {
     const { instance: { exports: tool } } = await WebAssembly.instantiate(compilerBytes);
     function upload(bytes) {
         const managed = tool.CreateBytes(bytes.length);
@@ -35,27 +35,40 @@ async function exercise(compilerBytes, assemblyBytes, { row, unsupportedRow, pin
     const location = [0, 1, 2].map(index => tool.ReadDiagnostic(diagnostic, index));
     const pinnedReject = tool.CompileDetailed(image, pinnedEntryRow, output, diagnostic);
     const pinnedLocation = [0, 1, 2].map(index => tool.ReadDiagnostic(diagnostic, index));
-    const length = tool.CompileDetailed(image, row, output, diagnostic);
+    const manifest = [];
+    for (const [method, name] of [[row, "run"], [arrayRow, "pinnedArray"], [stackRow, "pinnedStack"]]) {
+        const bytes = new TextEncoder().encode(name);
+        manifest.push(method & 255, method >>> 8 & 255, method >>> 16 & 255, 0, bytes.length, 0, 0, 0, ...bytes);
+    }
+    const length = tool.CompileModuleDetailed(image, upload(manifest), output, diagnostic);
     if (length <= 0) throw Error("Unexpected compile result " + length + " at " +
         [0, 1, 2].map(index => tool.ReadDiagnostic(diagnostic, index)));
     const bytes = Uint8Array.from({ length }, (_, i) => tool.ReadByte(output, i));
     const module = await WebAssembly.compile(bytes);
     const imports = WebAssembly.Module.imports(module).map(item => [item.module, item.name, item.kind]);
-    let buffer, write, other, handle, free;
+    let memory, write, other, handle, free;
+    const extents = [];
     const address = 128;
     const signature = "platform:u32(i32,p32)";
     const { exports } = await instantiate(module, tool, [], {}, undefined, undefined, undefined, {
-        configureNativeLibraries({ memory, registerLibrary, loadLibrary, getProcAddress, freeLibrary }) {
-            buffer = new DataView(memory.buffer);
+        configureNativeLibraries({ memory: guestMemory, registerLibrary, loadLibrary, getProcAddress, freeLibrary }) {
+            memory = guestMemory;
+            const buffer = new DataView(memory.buffer);
             buffer.setUint16(address, 0x03a9, true);
             buffer.setUint16(address + 2, 0xffee, true);
+            function writeUnit(input, pointer) {
+                if (pointer === 0) return 0xffffffff;
+                const view = new DataView(memory.buffer);
+                view.setUint16(pointer, view.getUint16(pointer, true) + input, true);
+                return (input + 0xf1234567) >>> 0;
+            }
             registerLibrary("fixture.dll", new Map([
-                ["Write", { signature, invoke(input, pointer) {
-                    if (pointer === 0) return 0xffffffff;
-                    buffer.setUint16(pointer, buffer.getUint16(pointer, true) + input, true);
-                    return (input + 0xf1234567) >>> 0;
+                ["Write", { signature, invoke: writeUnit, scopedUtf16(input, pointer, available) {
+                    if (available === 0) throw new RangeError("Missing UTF-16 code unit");
+                    extents.push(available);
+                    return writeUnit(input, pointer);
                 } }],
-                ["Other", { signature, invoke: (input, pointer) => (buffer.getUint16(pointer, true) - input) >>> 0 }]
+                ["Other", { signature, invoke: (input, pointer) => (new DataView(memory.buffer).getUint16(pointer, true) - input) >>> 0 }]
             ]));
             handle = loadLibrary("fixture.dll");
             write = getProcAddress(handle, "Write");
@@ -66,12 +79,19 @@ async function exercise(compilerBytes, assemblyBytes, { row, unsupportedRow, pin
     const first = exports.run(write, -7, address) >>> 0;
     const second = exports.run(other, 17, address) >>> 0;
     const nullPointer = exports.run(write, 5, 0) >>> 0;
+    const pinnedArray = exports.pinnedArray(write, 1) >>> 0;
+    const pinnedStack = exports.pinnedStack(write, 1) >>> 0;
+    let unconfiguredScopeRejected = false;
+    try { exports.pinnedArray(other, 1); }
+    catch (error) { unconfiguredScopeRejected = /does not accept scoped UTF-16/.test(error.message); }
+    const retry = exports.pinnedArray(write, 1) >>> 0;
+    const buffer = new DataView(memory.buffer);
     free(handle);
     let staleRejected = false;
     try { exports.run(write, -7, address); }
     catch (error) { staleRejected = /unregistered dynamic export token/.test(error.message); }
     return { first, second, nullPointer, units: [buffer.getUint16(address, true), buffer.getUint16(address + 2, true)],
-        staleRejected, reject, location, pinnedReject, pinnedLocation, imports };
+        pinnedArray, pinnedStack, extents, retry, unconfiguredScopeRejected, staleRejected, reject, location, pinnedReject, pinnedLocation, imports };
 }
 
 const nativeIndirect = "standardwasm:native-indirect";
@@ -165,14 +185,18 @@ async function exerciseResolver(instantiate, createTempPath, variants, signature
 }
 
 assert.equal(oracle.pinnedResult, 0xf1234568);
-const rows = { row: oracle.row, unsupportedRow: oracle.unsupportedRow, pinnedEntryRow: oracle.pinnedEntryRow };
+const rows = { row: oracle.row, unsupportedRow: oracle.unsupportedRow, pinnedEntryRow: oracle.pinnedEntryRow,
+    arrayRow: oracle.arrayRow, stackRow: oracle.stackRow };
 const result = await exercise(compiler, assembly, rows, instantiateManagedModule);
 assert.deepEqual(result, {
     first: oracle.first, second: oracle.second, nullPointer: oracle.nullPointer, units: oracle.units, staleRejected: true,
+    pinnedArray: oracle.pinnedArray, pinnedStack: oracle.pinnedStack, extents: [2, -1, 2],
+    retry: oracle.pinnedArray, unconfiguredScopeRejected: true,
     reject: -2, location: [0, oracle.unsupportedRow, oracle.callOffset],
     pinnedReject: -2, pinnedLocation: [0, oracle.pinnedRow, 1],
     imports: [["standardwasm:resources", "memory", "memory"],
-        ["standardwasm:native-indirect", "platform:u32(i32,p32)", "function"]]
+        ["standardwasm:native-indirect", "platform:u32(i32,p32)", "function"],
+        ["standardwasm:native-indirect", "platform:u32(i32,p32):scoped-utf16", "function"]]
 });
 
 const variants = {

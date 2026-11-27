@@ -40,6 +40,10 @@ internal static unsafe class Program
             pinnedRow = type.GetMethod("Pin", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
                 .MetadataToken & 0x00ffffff,
             pinnedResult,
+            arrayRow = type.GetMethod(nameof(Calls.PinnedArray))!.MetadataToken & 0x00ffffff,
+            stackRow = type.GetMethod(nameof(Calls.PinnedStack))!.MetadataToken & 0x00ffffff,
+            pinnedArray = Calls.PinnedArray((nint)write, 1),
+            pinnedStack = Calls.PinnedStack((nint)write, 1),
             callOffset = Array.IndexOf(unsupported.GetMethodBody()!.GetILAsByteArray()!, (byte)0x29),
             first, second, nullPointer, units = new[] { (int)data[0], (int)data[1] }
         }));
