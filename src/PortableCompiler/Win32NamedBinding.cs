@@ -3,9 +3,11 @@ using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
-    internal static class Win32MessageQueueBinding
+    // Named Win32 leaves share the native import table. They do not consume fixed feature bits.
+    internal static class Win32NamedBinding
     {
-        internal const int Post = Win32ModuleBinding.Count + 1, Peek = Post + 1;
+        internal const int Post = Win32ModuleBinding.Count + 1, Peek = Post + 1,
+            WindowRect = Peek + 1, ClientRect = WindowRect + 1;
         private const int ImportOwner = -4;
 
         internal static int Find(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int[] counts,
@@ -19,7 +21,9 @@ namespace PortableCompiler
                 !ImageBytes.MatchesAscii(image, heaps, library, "user32.dll")) return 0;
             uint entry = (uint)mapping[1];
             int member = ImageBytes.MatchesAscii(image, heaps, entry, "PostThreadMessageW") ? Post :
-                ImageBytes.MatchesAscii(image, heaps, entry, "PeekMessageW") ? Peek : 0;
+                ImageBytes.MatchesAscii(image, heaps, entry, "PeekMessageW") ? Peek :
+                ImageBytes.MatchesAscii(image, heaps, entry, "GetWindowRect") ? WindowRect :
+                ImageBytes.MatchesAscii(image, heaps, entry, "GetClientRect") ? ClientRect : 0;
             if (member == 0) return 0;
 
             var cursor = new int[1];
@@ -31,10 +35,15 @@ namespace PortableCompiler
                     Win32ModuleBinding.ReadAbiWord(image, cursor, end, 0x19) >= 0 &&
                     Win32ModuleBinding.ReadAbiWord(image, cursor, end, 0x18) >= 0 && cursor[0] == end ? Post : 0;
 
+            if (member != Peek && Win32ModuleBinding.ReadAbiWord(image, cursor, end, 0x18) < 0) return 0;
             if (!SignatureReader.TakeElement(image, cursor, end, 0x0f) ||
                 !SignatureReader.TakeElement(image, cursor, end, 0x11)) return 0;
             int pointee = ImageBytes.CompressedUnsigned(image, cursor[0], end, cursor);
-            return pointee > 0 && Win32ModuleBinding.ReadAbiWord(image, cursor, end, 0x18) >= 0 &&
+            if (pointee < 1) return 0;
+            if (member != Peek)
+                return cursor[0] == end && Win32ModuleBinding.MatchesRect(bundle, image, heaps, methods, owner, pointee)
+                    ? member : 0;
+            return Win32ModuleBinding.ReadAbiWord(image, cursor, end, 0x18) >= 0 &&
                 ReadUnsigned(image, cursor, end) && ReadUnsigned(image, cursor, end) &&
                 Win32ModuleBinding.ReadAbiWord(image, cursor, end, 0x09) >= 0 && cursor[0] == end &&
                 MatchesMessage(bundle, image, heaps, methods, owner, pointee) ? Peek : 0;
@@ -86,7 +95,8 @@ namespace PortableCompiler
             return true;
         }
 
-        internal static int Arity(int member) => member == Post ? 4 : 5;
+        internal static int Arity(int member) => member == Post ? 4 : member == Peek ? 5 : 2;
+        internal static bool NeedsMemory(int member) => member != Post;
 
         internal static bool MatchesSignature(BundleImages bundle, int[] objects, int member, int[] types, int offset)
         {
@@ -95,6 +105,9 @@ namespace PortableCompiler
                 return types[offset + 1] == I32 && types[offset + 2] == I32 &&
                     Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 3], Native, "WPARAM") &&
                     Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 4], Native, "LPARAM");
+            if (member != Peek)
+                return Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
+                    types[offset + 2] == Native;
             return types[offset + 1] == Native &&
                 Win32ModuleBinding.IsAbiShape(bundle, objects, types[offset + 2], Native, "HWND") &&
                 types[offset + 3] == I32 && types[offset + 4] == I32 && types[offset + 5] == I32;
@@ -113,7 +126,8 @@ namespace PortableCompiler
             int existing = imports.Find(ImportOwner, member);
             if (existing >= 0) return existing;
             byte[] module = NativeImportTable.Ascii("standardwasm:win32");
-            byte[] name = NativeImportTable.Ascii(member == Post ? "postThreadMessageW" : "peekMessageW");
+            byte[] name = NativeImportTable.Ascii(member == Post ? "postThreadMessageW" : member == Peek ? "peekMessageW" :
+                member == WindowRect ? "getWindowRect" : "getClientRect");
             var types = new byte[Arity(member)];
             for (int i = 0; i < types.Length; i++) types[i] = 0x7f;
             return imports.Add(ImportOwner, member, module, module.Length, name, name.Length, types, types.Length, 0x7f);

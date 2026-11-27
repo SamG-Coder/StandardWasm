@@ -342,9 +342,30 @@ const uahDestroyMessage = 0x0090; // Observed in the Windows x86 themed-window a
 const pageBytes = 65536;
 const createStructBytes = 48, minMaxInfoBytes = 40, rectBytes = 16;
 const maximumCaptionUnits = 32767;
+const emptyWindowEdges = Object.freeze([0, 0, 0, 0]);
 
 const visibleOrChildStyle = 0x50000000; // WS_VISIBLE | WS_CHILD
 const hiddenRedrawFlags = 0x0001 | 0x0004 | 0x0008 | 0x0080 | 0x0100 | 0x0200 | 0x0400;
+
+export function createWindowRectQueries(memory, windows, setError) {
+    function query(hwnd, pointer, client) {
+        if (!windows.hasWindow(hwnd)) { setError(invalidWindow); return 0; }
+        const geometry = windows.getWindowGeometry(hwnd);
+        if (!geometry) { setError(notSupported); return 0; }
+        const address = pointer >>> 0;
+        if (address === 0 || address > memory.buffer.byteLength - rectBytes) { setError(noAccess); return 0; }
+        if (client) {
+            const [left, top, right, bottom] = geometry.client;
+            writeInts(memory, address, [0, 0, Math.max(0, right - left), Math.max(0, bottom - top)]);
+        } else writeInts(memory, address, geometry.outer);
+        return 1;
+    }
+
+    return {
+        getWindowRect: (hwnd, pointer) => query(hwnd, pointer, false),
+        getClientRect: (hwnd, pointer) => query(hwnd, pointer, true)
+    };
+}
 
 export function createInvalidateRect(memory, windows, setError) {
     return function invalidateRect(hwnd, rectangle, _erase) {
@@ -543,6 +564,9 @@ export function createWindowCreation(memory, windows, classes, bindProcedure, se
                 view.setUint16(classCopy + 2 * windowClass.name.length, 0, true);
             }
             let outerWidth = width, outerHeight = height;
+            // Win32 publishes each side of the geometry before its next callback.
+            // Both are empty in WM_GETMINMAXINFO. The client is empty until WM_NCCALCSIZE returns.
+            windows.setWindowGeometry(handle, emptyWindowEdges, emptyWindowEdges);
             if (!popup) {
                 const metrics = trackDefaults ?? virtualWindowMetrics();
                 if (defaultPosition) x = y = defaultWindowOffset(width, height, metrics);
@@ -554,6 +578,8 @@ export function createWindowCreation(memory, windows, classes, bindProcedure, se
                 outerWidth = clampTrackSize(width, view.getInt32(track + 24, true), view.getInt32(track + 32, true));
                 outerHeight = clampTrackSize(height, view.getInt32(track + 28, true), view.getInt32(track + 36, true));
             }
+            const outer = [x, y, x + outerWidth, y + outerHeight];
+            windows.setWindowGeometry(handle, outer, emptyWindowEdges);
             const parameters = [param, instance, menu, actualParent, height, width, y, x, style, caption, classPointer,
                 framed ? liveExStyle : exStyle];
             writeInts(memory, frame, parameters);
@@ -562,7 +588,6 @@ export function createWindowCreation(memory, windows, classes, bindProcedure, se
                 return 0;
             }
             if (!windows.hasWindow(handle)) return 0;
-            const outer = [x, y, x + outerWidth, y + outerHeight];
             writeInts(memory, rect, outer);
             send(ncCalcSizeMessage, rect);
             if (!windows.hasWindow(handle)) return 0;

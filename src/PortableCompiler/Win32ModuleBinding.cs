@@ -62,7 +62,7 @@ namespace PortableCompiler
             member == BCryptGenRandom ? "BCrypt.dll" : "USER32.dll";
 
         internal static int Arity(int member) =>
-            member > Count ? Win32MessageQueueBinding.Arity(member) :
+            member > Count ? Win32NamedBinding.Arity(member) :
             IsWindowQueueHandle(member) ? (member == GetActiveWindow || member == GetFocus ? 0 : 1) :
             member == CreateWindow ? 12 : member == DuplicateHandle ? 7 :
             member == CallWindowProcedure || member == GetUserObjectInformation || member == AdjustWindowRectForDpi ? 5 :
@@ -95,8 +95,8 @@ namespace PortableCompiler
             if (implementation != 0x80) return 0; // PreserveSig
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return 0;
-            int queueMember = Win32MessageQueueBinding.Find(bundle, image, heaps, methods, counts, owner, row);
-            if (queueMember != 0) return queueMember;
+            int namedMember = Win32NamedBinding.Find(bundle, image, heaps, methods, counts, owner, row);
+            if (namedMember != 0) return namedMember;
             for (int member = 1; member <= Count; member++)
                 if (member != GetProcessAwareness && (UsesLastError(member) ? IsErrorCapturingWindowImport(image, heaps, methods, counts, row, member) :
                     NativeImports.Find(image, heaps, methods, counts, Library(member), EntryName(member), row,
@@ -176,12 +176,13 @@ namespace PortableCompiler
                 MatchesRect(bundle, image, heaps, methods, owner, pointee);
         }
 
-        private static bool MatchesRect(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int owner, int pointee)
+        internal static bool MatchesRect(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int owner, int pointee)
         {
             // A native stack tag erases the difference between RECT* and int*.
             // Validate the resolved Win32 declaration and its byte extent.
             var identity = new int[2];
-            if (AssemblyBundle.ClassIdentity(bundle, image, methods, heaps, owner, pointee, identity) < 0) return false;
+            if (bundle == null || AssemblyBundle.ClassIdentity(bundle, image, methods, heaps, owner, pointee, identity) < 0)
+                return false;
             byte[] target = bundle.Get(identity[0]);
             var layout = new int[4];
             var targetHeaps = new int[8];
@@ -192,7 +193,16 @@ namespace PortableCompiler
                 !ImageBytes.MatchesAscii(target, targetHeaps, (uint)names[1], "Windows.Win32.Foundation"))
                 return false;
             var size = new int[2];
-            return NativeValueLayouts.Measure(bundle, identity[0], identity[1], size) == 0 && size[0] == 16 && size[1] == 4;
+            if (NativeValueLayouts.Measure(bundle, identity[0], identity[1], size) != 0 || size[0] != 16 || size[1] != 4)
+                return false;
+            var shape = new int[6];
+            if (ObjectLayouts.ReadShape(target, targetHeaps, layout, identity[1], shape, true) != 0 || shape[2] != 4)
+                return false;
+            var field = new int[2];
+            for (int index = 0; index < 4; index++)
+                if (NativeValueLayouts.Field(bundle, identity[0], identity[1], shape[1] + index, field) != 0 ||
+                    field[0] != index * 4 || field[1] != 0x4a) return false; // four successive signed LONG fields
+            return true;
         }
 
         private static bool IsWindowOwnerSignature(byte[] image, int[] heaps, int[] methods, int row)
@@ -287,7 +297,7 @@ namespace PortableCompiler
                 return arity == 2 && IsAbiShape(bundle, objects, types[offset + 1], Native, "HANDLE") &&
                     types[offset + 2] == Int32Location && IsAbiShape(bundle, objects, result, I32, "HRESULT");
             if (arity != Arity(member)) return false;
-            if (member > Count) return Win32MessageQueueBinding.MatchesSignature(bundle, objects, member, types, offset);
+            if (member > Count) return Win32NamedBinding.MatchesSignature(bundle, objects, member, types, offset);
             if (IsWindowQueueHandle(member))
                 return IsAbiShape(bundle, objects, result, Native, "HWND") &&
                     (arity == 0 || IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND"));

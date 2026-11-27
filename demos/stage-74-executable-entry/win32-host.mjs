@@ -8,14 +8,15 @@ import { createAdjustWindowRectExForDpi } from "./window-rect.mjs";
 import { createThreadMessageQueue, createWindowMessageRegistration } from "./window-messages.mjs";
 import { createThreadHandleHost } from "./thread-handle-host.mjs";
 import { createWindowStationHost } from "./window-station-host.mjs";
-import { createDefaultWindowProcedure, createWindowClassState, createWindowCreation, createInvalidateRect, createRedrawWindow, createWindowState, windowImportNames } from "./window-state.mjs";
+import { createDefaultWindowProcedure, createWindowClassState, createWindowCreation, createInvalidateRect, createRedrawWindow,
+    createWindowRectQueries, createWindowState, windowImportNames } from "./window-state.mjs";
 
 export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
     "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom",
     "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "getLongPathNameW", "redrawWindow", "invalidateRect", "registerWindowMessageW",
     "adjustWindowRectExForDpi", "getWindowThreadProcessId", "duplicateHandle", "getExitCodeThread", "getUserObjectInformationW",
-    "peekMessageW"
+    "peekMessageW", "getWindowRect", "getClientRect"
 ]);
 export const win32ImportNames = new Set([
     ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, ...displayContextImportNames,
@@ -222,6 +223,7 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         registerClassW: classes.registerClassW,
         getClassInfoW: classes.getClassInfoW,
         createWindowExW: createWindowCreation(memory, windows, classes, bindProcedure, setError, windowCreationMetrics),
+        ...createWindowRectQueries(memory, windows, setError),
         redrawWindow: createRedrawWindow(memory, windows, setError),
         invalidateRect: createInvalidateRect(memory, windows, setError),
         adjustWindowRectExForDpi: createAdjustWindowRectExForDpi(memory, setError),

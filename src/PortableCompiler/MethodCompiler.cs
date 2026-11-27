@@ -520,12 +520,12 @@ namespace PortableCompiler
                     {
                         // New Win32 leaves use the typed import table so they do not consume fixed feature bits.
                         bool named = import > Win32ModuleBinding.Count;
-                        int slot = named ? nativeBase + Win32MessageQueueBinding.Register(natives, import) :
+                        int slot = named ? nativeBase + Win32NamedBinding.Register(natives, import) :
                             WasmImports.Win32NativeSlot(hostFeatures, import);
-                        bool capture = named ? Win32MessageQueueBinding.CapturesLastError(image, heaps, layout, source) :
+                        bool capture = named ? Win32NamedBinding.CapturesLastError(image, heaps, layout, source) :
                             Win32ModuleBinding.UsesLastError(import);
                         if (!named) hostUse[0] = hostUse[0] | WasmImports.Win32NativeFeature(import);
-                        if (import == Win32MessageQueueBinding.Peek) hostUse[0] = hostUse[0] | WasmImports.Memory;
+                        if (named && Win32NamedBinding.NeedsMemory(import)) hostUse[0] = hostUse[0] | WasmImports.Memory;
                         if (capture) hostUse[0] = hostUse[0] | WasmImports.Win32Errors;
                         if (moduleCode.Length - length < Win32ModuleWasm.BodyCapacity(import)) return -3;
                         bodyOffsets[current] = length;
