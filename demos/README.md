@@ -279,6 +279,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [281 · Closed reference boxes at interface calls](stage-281-reference-box-provenance/README.md) | `npm run demo -- stage-281-reference-box-provenance` | Preserve reference identity, null, and verified interface call arguments |
 | [282 · Readonly static value locations](stage-282-readonly-static-value-location/README.md) | `npm run demo -- stage-282-readonly-static-value-location` | Preserve initonly aggregate addresses and value snapshots across assemblies |
 | [283 · CoreLib ordinal string comparison](stage-283-string-ordinal-sequence/README.md) | `npm run demo -- stage-283-string-ordinal-sequence` | Compare original linked string inequality, UTF-16 data and ordinary null and length checks |
+| [284 · Exact readonly SZ-array interface assignment](stage-284-readonly-szarray-assignment/README.md) | `npm run demo -- stage-284-readonly-szarray-assignment` | Pass SZ arrays to their exact readonly list and collection interfaces |
 
 ## Adding a stage
 

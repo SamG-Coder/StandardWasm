@@ -12,9 +12,17 @@ namespace PortableCompiler
         internal static bool IsEnumerable(byte[] image, int[] layout, int[] heaps, int row) =>
             IsCoreType(image, layout, heaps, row, "System.Collections.Generic", "IEnumerable`1");
 
-        internal static bool IsList(byte[] image, int[] layout, int[] heaps, int row) =>
-            IsCoreType(image, layout, heaps, row, "System.Collections.Generic", "IList`1") ||
-            IsCoreType(image, layout, heaps, row, "System.Collections.Generic", "ICollection`1");
+        internal static bool IsList(byte[] image, int[] layout, int[] heaps, int row)
+        {
+            const string Collections = "System.Collections.Generic";
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            return first >= 0 && PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts) &&
+                (NamedDefinition(image, heaps, layout, counts, first, row, Collections, "IList`1") ||
+                 NamedDefinition(image, heaps, layout, counts, first, row, Collections, "ICollection`1") ||
+                 NamedDefinition(image, heaps, layout, counts, first, row, Collections, "IReadOnlyList`1") ||
+                 NamedDefinition(image, heaps, layout, counts, first, row, Collections, "IReadOnlyCollection`1"));
+        }
 
         private static bool IsCoreType(byte[] image, int[] layout, int[] heaps, int row, string space, string name)
         {

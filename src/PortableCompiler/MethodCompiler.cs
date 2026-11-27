@@ -3734,7 +3734,7 @@ namespace PortableCompiler
                 return SzArrayEnumeration.Bind(bundle, objects, actual, declared, owner, row,
                     owners, rows, contexts, bases, indices, arities, offsets, signatures, functions, instantiations);
             // The array is a valid interface argument even when this profile
-            // cannot yet bind a VM-supplied IList or ICollection method.
+            // cannot yet bind a VM-supplied mutable or readonly collection method.
             if (IsExactArrayList(objects, actual, declared)) return -2;
             var symbol = new int[3];
             int status = VirtualSlots.SelectVirtualBody(bundle, objects, actual, allocated, declared, owner, row, symbol);
