@@ -146,7 +146,7 @@ namespace PortableCompiler
 
         // The MemberRef signature uses the declaring Span<T> argument. Its
         // TypeSpec parent has already proved that this argument is char.
-        private static int OpenCharacterSpan(byte[] image, int[] layout, int[] heaps,
+        internal static int OpenCharacterSpan(byte[] image, int[] layout, int[] heaps,
             int at, int end, int[] next, bool writable)
         {
             if (end - at < 6 || image[at] != 0x15 || image[at + 1] != 0x11) return -2;

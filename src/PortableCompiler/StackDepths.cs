@@ -387,6 +387,10 @@ namespace PortableCompiler
             }
             if (kind == InvokeDelegate)
             {
+                if (operand == CharacterSpanCallback)
+                    return depth >= 3 && IsNativeInteger(stack[depth - 1]) &&
+                        Match(stack, depth - 1, WritableCharacterSpan) && Match(stack, depth - 2, CharacterSpanCallback)
+                        ? depth - 3 : -2;
                 if (operand == EventHandlerReference)
                     return Match(stack, depth, EventArgsReference) && depth >= 3 &&
                         Assignable(stack[depth - 2], ObjectReference, objects) && Match(stack, depth - 2, EventHandlerReference)

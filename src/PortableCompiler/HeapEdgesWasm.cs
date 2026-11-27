@@ -17,6 +17,7 @@ namespace PortableCompiler
             used = Wrapper(code, used, ValueLocation(FirstClass), read);
             used = Wrapper(code, used, ObjectLocation, read);
             used = Wrapper(code, used, ObjectSpan, read);
+            used = Wrapper(code, used, CharacterSpanCallback, read);
             for (int index = objects[0] - 1; index >= 0; index--)
             {
                 int type = FirstClass + index;

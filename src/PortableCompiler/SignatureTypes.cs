@@ -13,7 +13,7 @@ namespace PortableCompiler
         // the ordinary Object/reference conversion lattice.
         internal const int ObjectLocation = 0x80, ObjectSpan = 0x81, CharacterSpan = 0x82;
         internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84, BooleanLocation = 0x86, StringLocation = 0x87;
-        internal const int ReadOnlyByteSpan = 0x88, StaticByteLocation = 0x89;
+        internal const int ReadOnlyByteSpan = 0x88, StaticByteLocation = 0x89, CharacterSpanCallback = 0x8a;
         // Reference locations retain their nominal element type in the verifier,
         // even when their Wasm representation is the shared object cell.
         private const int ReferenceLocationBase = 32768;
@@ -67,7 +67,7 @@ namespace PortableCompiler
         // Widen classes, strings, and primitive GC vectors without allocating or losing identity.
         // Boxing and other CLR reference conversions use separate IL operations.
         internal static bool IsObjectReference(int type) =>
-            type == String || type == ObjectLayouts.DelegateReference || RuntimeTypeMetadata.IsReference(type) || IsArray(type) ||
+            type == String || type == CharacterSpanCallback || type == ObjectLayouts.DelegateReference || RuntimeTypeMetadata.IsReference(type) || IsArray(type) ||
             type >= ObjectLayouts.FirstClass && type < ObjectLayouts.FirstClass + ObjectLayouts.MaxClasses ||
             type >= ObjectLayouts.ObjectReference && type <= ObjectLayouts.EventHandlerReference;
 

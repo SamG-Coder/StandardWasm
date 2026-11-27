@@ -15,7 +15,8 @@ namespace PortableCompiler
         internal const int ValueLocationHeap = RootObjectHeap + 1;
         private const int ObjectLocationHeap = ValueLocationHeap + 1;
         private const int ReadOnlySpanHeap = ObjectLocationHeap + 1;
-        private const int FirstClassHeap = ReadOnlySpanHeap + 1;
+        internal const int CharacterSpanThunkType = ReadOnlySpanHeap + 1;
+        private const int FirstClassHeap = CharacterSpanThunkType + 1;
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
@@ -100,7 +101,7 @@ namespace PortableCompiler
             if (argumentArray != 0) typeEntries += EntryArgumentsWasm.FunctionCount;
             if (hasDescriptors) typeEntries++;
             int prefix = UnsignedSize(typeEntries) + 70 + ManagedValueLocationWasm.TypeBytes +
-                ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
+                ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + 7 + (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
             if (tagCount != 0) prefix += 3; // () -> () exception payload
             if (objectTag) prefix += ExceptionTagsWasm.ObjectTagTypeBytes; // (eqref) -> () managed object payload
@@ -319,6 +320,12 @@ namespace PortableCompiler
             cursor = ManagedValueLocationWasm.WriteType(output, cursor);
             cursor = ManagedLocationWasm.WriteType(output, cursor);
             cursor = SpanWasm.WriteType(output, cursor);
+            output[cursor++] = 0x60; // (target eqref, Span<char>, native int) -> void
+            output[cursor++] = 3;
+            output[cursor++] = 0x6d;
+            cursor = ValueType(output, cursor, WritableCharacterSpan);
+            output[cursor++] = 0x7f;
+            output[cursor++] = 0;
             if (recursive)
             {
                 output[cursor++] = 0x4e;
@@ -403,7 +410,12 @@ namespace PortableCompiler
             for (int i = 0; i < functions; i++)
                 cursor = Unsigned(output, cursor, i + typeOffset);
             for (int i = 0; i < thunks[0]; i++)
-                output[cursor++] = arities[thunks[i + 1]] == 3 ? (byte)EventThunkType : (byte)ScalarThunkType;
+            {
+                int target = thunks[i + 1];
+                int arity = arities[target], signature = offsets[target];
+                bool span = CharacterSpanCallbackMetadata.MatchesTarget(types, signature, arity, arity == 3);
+                output[cursor++] = span ? (byte)CharacterSpanThunkType : arity == 1 ? (byte)ScalarThunkType : (byte)EventThunkType;
+            }
             if (hasRemainder) cursor = Unsigned(output, cursor, typeOffset + functions);
             if (argumentArray != 0)
                 for (int i = 0; i < EntryArgumentsWasm.FunctionCount; i++)
@@ -529,12 +541,16 @@ namespace PortableCompiler
                 int arity = arities[function];
                 cursor = Unsigned(output, cursor, ThunkSize(receiver, hostImports + function, arity));
                 output[cursor++] = 0; // local declarations
-                output[cursor++] = 0x20;
-                output[cursor++] = 0;
-                output[cursor++] = 0xfb;
-                output[cursor++] = 22; // ref.cast to the target's concrete receiver
-                cursor = Signed(output, cursor, HeapType(receiver));
-                for (int argument = 1; argument < arity; argument++)
+                if (arity != 2)
+                {
+                    output[cursor++] = 0x20;
+                    output[cursor++] = 0;
+                    output[cursor++] = 0xfb;
+                    output[cursor++] = 22; // ref.cast to the target's concrete receiver
+                    cursor = Signed(output, cursor, HeapType(receiver));
+                }
+                // Static callbacks ignore the leading target parameter.
+                for (int argument = 1; argument < (arity == 2 ? 3 : arity); argument++)
                 {
                     output[cursor++] = 0x20;
                     output[cursor++] = (byte)argument;
@@ -588,7 +604,7 @@ namespace PortableCompiler
         }
 
         internal static int HeapType(int type) =>
-            IsValueLocation(type) ? ValueLocationHeap : type == Delegate ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
+            IsValueLocation(type) ? ValueLocationHeap : (type == Delegate || type == CharacterSpanCallback) ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
                 type == EventArgsReference ? EventArgsHeap :
                 type == EventHandlerReference || type == DelegateReference ? EventHandlerHeap :
                 type == Singles ? SingleArrayHeap : type == Doubles ? DoubleArrayHeap :
@@ -600,7 +616,7 @@ namespace PortableCompiler
         internal static int HeapTypeSize(int index) => UnsignedSize(index * 2);
 
         private static int ThunkSize(int receiver, int function, int arity) =>
-            7 + HeapTypeSize(HeapType(receiver)) + 2 * (arity - 1) + UnsignedSize(function);
+            (arity == 2 ? 7 : 7 + HeapTypeSize(HeapType(receiver)) + 2 * (arity - 1)) + UnsignedSize(function);
 
         private static int Reserve(int remaining, int size)
         {

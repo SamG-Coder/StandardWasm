@@ -82,7 +82,10 @@ a pointer-backed span over the shadow stack, a readonly view over the same
 memory, and typed exceptions for a negative length and invalid indices.
 The by-reference case mutates an integer field and replaces a span in the
 caller's scoped struct. The caller observes both updates while its earlier
-value copy still refers to the original array.
+value copy still refers to the original array. The delegate fixture then
+compares static and instance `SpanAction<char, nint>` targets, in-place span
+writes, and a typed null-call exception. It also verifies the order and
+removal of static `EventHandler` callbacks.
 
 The managed probe also checks pinned addresses of blittable static structs.
 A direct managed store and a pointer store use the same stable linear-memory

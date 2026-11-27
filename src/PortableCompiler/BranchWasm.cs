@@ -262,11 +262,12 @@ namespace PortableCompiler
 
                 int tracked = 0;
                 bool publishesRoots = tracksRoots && (kind == Call || kind == NewObject || kind == ConstructValue ||
-                    kind == ResourceLookup || TypeInitializerWasm.HasFieldTrigger(kind, operand, fieldInitializers));
+                    kind == ResourceLookup || kind == InvokeDelegate || TypeInitializerWasm.HasFieldTrigger(kind, operand, fieldInitializers));
                 if (publishesRoots)
                 {
                     int first = kind == Call || kind == NewObject || kind == ConstructValue
-                        ? depth - arities[operand] + (kind == NewObject ? 1 : 0) : depth;
+                        ? depth - arities[operand] + (kind == NewObject ? 1 : 0)
+                        : kind == InvokeDelegate ? depth - (operand == Delegate ? 1 : 3) : depth;
                     int frameStart = pc * (arguments + locals);
                     for (int local = 0; local < arguments + locals; local++) tracked += frameRoots[frameStart + local];
                     if (exceptionLocals > 1) tracked += RootStackWasm.CountExceptionRoots(catchRegion, pc);
@@ -505,10 +506,11 @@ namespace PortableCompiler
                     int receiver = records[slot + 3];
                     int closureType = operand;
                     int target = Spill(spills, maximum, spillFlags, receiver, top - 1);
-                    // CLR rejects binding an instance delegate to a null target.
-                    used = GuardNull(code, used, target, ExceptionTagsWasm.ArgumentTag);
+                    // A static callback carries a null target. An instance callback
+                    // uses the receiver validated by the delegate construction rule.
+                    if (receiver != NullValue) used = GuardNull(code, used, target, ExceptionTagsWasm.ArgumentTag);
                     used = Local(code, used, 0x20, target);
-                    code[used++] = 0xd4;
+                    if (receiver != NullValue) code[used++] = 0xd4; // ref.as_non_null
                     int pointer = Spill(spills, maximum, spillFlags, MethodPointer, top);
                     int destination = Spill(spills, maximum, spillFlags, closureType, top - 1);
                     used = Local(code, used, 0x20, pointer);
@@ -529,6 +531,13 @@ namespace PortableCompiler
                     used = kind == CombineHandler ? EventWasm.CombineLists(code, used, left, right, eventLocals) :
                         EventWasm.RemoveLast(code, used, left, right, eventLocals);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, EventHandlerReference, top - 1));
+                }
+                else if (kind == InvokeDelegate && operand == CharacterSpanCallback)
+                {
+                    used = InvokeCharacterSpanCallback(code, used,
+                        Spill(spills, maximum, spillFlags, CharacterSpanCallback, top - 2),
+                        Spill(spills, maximum, spillFlags, WritableCharacterSpan, top - 1),
+                        Spill(spills, maximum, spillFlags, Native, top));
                 }
                 else if (kind == InvokeDelegate && operand == EventHandlerReference)
                 {
@@ -1482,6 +1491,22 @@ namespace PortableCompiler
             return used;
         }
 
+        private static int InvokeCharacterSpanCallback(byte[] code, int used, int callback, int span, int state)
+        {
+            used = GuardNull(code, used, callback);
+            used = Local(code, used, 0x20, callback);
+            used = Gc(code, used, 2, CharacterSpanCallback);
+            code[used++] = 0; // target
+            used = Local(code, used, 0x20, span);
+            used = Local(code, used, 0x20, state);
+            used = Local(code, used, 0x20, callback);
+            used = Gc(code, used, 2, CharacterSpanCallback);
+            code[used++] = 1; // callable
+            used = CastThunk(code, used, WasmBinary.CharacterSpanThunkType);
+            code[used++] = 0x14; // call_ref
+            return WasmBinary.Unsigned(code, used, WasmBinary.CharacterSpanThunkType);
+        }
+
         internal static int GuardNull(byte[] code, int used, int reference, int tag = ExceptionTagsWasm.NullTag)
         {
             used = Local(code, used, 0x20, reference);
@@ -1574,6 +1599,7 @@ namespace PortableCompiler
             // A base Delegate slot currently accepts EventHandler lists only.
             // Both types have the same physical storage but distinct CLI stack identities.
             type == DelegateReference ? EventHandlerReference - 1 :
+            type == CharacterSpanCallback ? Delegate - 1 :
             IsManagedLocation(type) ? LastScalarBank :
             IsSpan(type) ? LastScalarBank + (flags & LocationSpill) :
             type >= FirstClass ? LastScalarBank + ExtraSpillBanks(flags) + type - FirstClass :

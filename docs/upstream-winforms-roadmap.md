@@ -109,8 +109,10 @@ The compiler resolves its `ValueStringBuilder` local, whose `Span<char>` field
 uses the existing owner-carrying Wasm representation. The pointer-based
 `Span<char>` constructor now produces a view over the Wasm shadow stack.
 The compiler passes the scoped `ValueStringBuilder` by reference to the
-original `Path.GetTempPath` helper. The latest replay stops at `ldftn` for the
-callback that CoreLib's `Path.GetRandomFileName` supplies to `String.Create`.
+original `Path.GetTempPath` helper. The callback in CoreLib's
+`Path.GetRandomFileName` now binds as `SpanAction<char, nint>`, and the
+`NativeWindow` type initializer constructs its static shutdown handler.
+The latest replay stops at the `AppDomain.ProcessExit` subscription.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

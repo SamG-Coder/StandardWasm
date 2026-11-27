@@ -1650,6 +1650,16 @@ namespace PortableCompiler
                         continue;
                     }
                     int constructorType = Delegate;
+                    int spanCallback = addressed ? 0 : CharacterSpanCallbackMetadata.Member(bundle, image, layout, heaps,
+                        owner, member, context, methodArguments, objects);
+                    if (spanCallback == CharacterSpanCallbackMetadata.Invoke && opcode == 0x6f)
+                    {
+                        records[slot] = BranchIl.InvokeDelegate;
+                        records[slot + 1] = CharacterSpanCallback;
+                        continue;
+                    }
+                    if (spanCallback == CharacterSpanCallbackMetadata.Construct && opcode == 0x73)
+                        constructorType = CharacterSpanCallback;
                     // Platform event members are bound by identity in every bundled assembly.
                     if (!addressed)
                     {
@@ -1892,20 +1902,27 @@ namespace PortableCompiler
                         records[slot + 1] = pointers.Slot(index);
                         continue;
                     }
-                    if (!hasReceiver ||
-                        (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) != 0)
-                        return -2;
+                    bool instance = (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) == 0;
                     int next = records[slot + 2] * BranchIl.Width;
                     if (next >= records.Length || records[next] != BranchIl.MemberCall || records[next + 3] != 0x73)
                         return -2;
-                    bool eventHandler = EventMetadata.Member(image, heaps, layout, records[next + 1]) == EventMetadata.ConstructHandler;
-                    if (eventHandler)
+                    bool spanCallback = CharacterSpanCallbackMetadata.Member(bundle, image, layout, heaps, owner,
+                        records[next + 1], context, methodArguments, objects) == CharacterSpanCallbackMetadata.Construct;
+                    if (spanCallback)
                     {
-                        if (arities[index] != 3 || signatures[signature] != Void ||
-                            signatures[signature + 2] != ObjectReference || signatures[signature + 3] != EventArgsReference)
+                        if (instance && !hasReceiver ||
+                            !CharacterSpanCallbackMetadata.MatchesTarget(signatures, signature, arities[index], instance))
                             return -2;
                     }
-                    else if (arities[index] != 1 || signatures[signature] != I32)
+                    else if (EventMetadata.Member(image, heaps, layout, records[next + 1]) == EventMetadata.ConstructHandler)
+                    {
+                        int first = signature + (instance ? 2 : 1);
+                        if (instance && !hasReceiver || arities[index] != (instance ? 3 : 2) ||
+                            signatures[signature] != Void || signatures[first] != ObjectReference ||
+                            signatures[first + 1] != EventArgsReference)
+                            return -2;
+                    }
+                    else if (!instance || !hasReceiver || arities[index] != 1 || signatures[signature] != I32)
                         return -2;
                     int thunk = 0;
                     while (thunk < thunks[0] && thunks[thunk + 1] != index) thunk++;
@@ -1915,7 +1932,7 @@ namespace PortableCompiler
                         thunks[0] = thunk + 1;
                     }
                     records[slot + 1] = thunk;
-                    records[slot + 3] = signatures[signature + 1];
+                    records[slot + 3] = instance ? signatures[signature + 1] : NullValue;
                     continue;
                 }
                 if (kind == BranchIl.NewObject)

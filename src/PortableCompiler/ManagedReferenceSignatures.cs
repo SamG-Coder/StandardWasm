@@ -130,6 +130,10 @@ namespace PortableCompiler
                 if (type == CharacterSpan && SpanMetadata.IsDefinition(image, layout, heaps, head[0], writable: true))
                     return WritableCharacterSpan;
             }
+            if (head[1] == 0x12 && count == 2 && arguments[0] == GenericScalar.Key(3) &&
+                arguments[1] == GenericScalar.Key(0x18) &&
+                SpanMetadata.IsPlatformType(image, layout, heaps, head[0], "System.Buffers", "SpanAction`2"))
+                return CharacterSpanCallback;
             return BundleLayouts.RegisterInstantiation(bundle, image, layout, heaps, owner, head[0], objects, arguments, head[1] == 0x11);
         }
 
