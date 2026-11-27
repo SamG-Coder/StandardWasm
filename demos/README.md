@@ -164,6 +164,8 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [158 · Managed interior field aliases](stage-158-managed-interior-field-aliases/README.md) | `npm run demo -- stage-158-managed-interior-field-aliases --no-rebuild` | Compare escaping field references, nested value replacement, and copy isolation across Windows CLR, Node, and Edge |
 | [159 · Routed COM calls](stage-159-routed-com-calls/README.md) | `npm run demo -- stage-159-routed-com-calls --no-rebuild` | Compare a pointer-based stdcall vtable call and its HRESULT on Windows, Node, and Edge |
 | [160 · Native receiver demand](stage-160-native-receiver-demand/README.md) | `npm run demo -- stage-160-native-receiver-demand --no-rebuild` | Verify native-only and mixed receiver bodies, including closed generic calls, on Windows, Node, and Edge |
+| [161 · Aggregate boxes](stage-161-aggregate-boxes/README.md) | `npm run demo -- stage-161-aggregate-boxes --no-rebuild` | Verify boxed struct identity, copies, type tests, and typed failures |
+| [162 · Closed reference casts](stage-162-closed-reference-casts/README.md) | `npm run demo -- stage-162-closed-reference-casts --no-rebuild` | Verify casts and type tests on constructed classes and interfaces |
 
 ## Adding a stage
 
