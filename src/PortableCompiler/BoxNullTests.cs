@@ -9,8 +9,18 @@ namespace PortableCompiler
         internal static bool TryFoldBoxNullTest(int[] records, int slot, int[] clauses)
         {
             int literal = records[slot + 2] * Width;
-            if (literal >= records.Length || records[literal] != NullLiteral ||
-                ValueOperands.Entry(records, literal / Width, clauses)) return false;
+            if (literal >= records.Length || ValueOperands.Entry(records, literal / Width, clauses)) return false;
+            if (records[literal] == Conditional)
+            {
+                int condition = records[literal + 3];
+                if (condition != 0 && condition != 0x45) return false;
+                // brtrue always takes the edge. brfalse always falls through.
+                records[slot] = Pop;
+                records[literal] = condition == 0 ? Branch : Nop;
+                records[literal + 3] = 0;
+                return true;
+            }
+            if (records[literal] != NullLiteral) return false;
             int compare = records[literal + 2] * Width;
             if (compare >= records.Length || records[compare] != Binary ||
                 ValueOperands.Entry(records, compare / Width, clauses)) return false;

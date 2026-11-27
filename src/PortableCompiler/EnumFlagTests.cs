@@ -23,6 +23,14 @@ namespace PortableCompiler
                 if (flag >= records.Length || (records[flag] != Load &&
                     records[flag] != Constant && records[flag] != WideConstant)) continue;
                 int flagBox = records[flag + 2] * Width;
+                bool widensConstant = records[flag] == Constant && flagBox < records.Length &&
+                    records[flagBox] == ConvertInteger && (records[flagBox + 1] == 0x6a || records[flagBox + 1] == 0x6e);
+                if (widensConstant)
+                {
+                    if (ValueOperands.Entry(records, flagBox / Width, clauses)) continue;
+                    // Roslyn loads small long-enum constants as i32 followed by conv.i8 or conv.u8.
+                    flagBox = records[flagBox + 2] * Width;
+                }
                 if (flagBox >= records.Length || records[flagBox] != BoxValue || records[flagBox + 1] != token) continue;
                 int flagCast = records[flagBox + 2] * Width;
                 int call = SkipEnumCast(image, layout, heaps, records, clauses, flagCast);
@@ -38,7 +46,7 @@ namespace PortableCompiler
                     valueType: true, enumIdentity: true);
                 if (!ObjectLayouts.IsEnumKey(type)) continue;
                 int storage = StackType(ObjectLayouts.SignatureStorage(objects, type));
-                if (storage != I32 && storage != I64) continue;
+                if (storage != I64 && (storage != I32 || widensConstant)) continue;
                 records[valueBox] = Nop;
                 records[flagBox] = Nop;
                 if (valueCast != flag) records[valueCast] = Nop;

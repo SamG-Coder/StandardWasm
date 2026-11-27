@@ -36,8 +36,8 @@ internal static class Program
             PackedByteEnumRva, PackedShortEnumRva, IntEnumRva, LongEnumRva,
             OriginalCoreLibPrimitiveAllocation,
             PrimitiveVectorTypeIdentity, PrimitiveVectorAliases, InitializedPrimitiveVectorIdentity,
-            ClosedValueIsNotNull, ClosedValueIsNull, ClosedReferenceNullCheck,
-            NarrowEnumFlags, WideEnumFlags, UnsetEnumFlags
+            ClosedValueIsNotNull, ClosedValueIsNull, ClosedReferenceNullCheck, ClosedBoxNullBranches,
+            NarrowEnumFlags, WideEnumFlags, UnsetEnumFlags, WideEnumSmallConstants
         };
         foreach (var run in cases)
         {
@@ -64,6 +64,7 @@ internal static class Program
 
     private enum NarrowFlag : sbyte { Low = 1, Other = 2, High = -128 }
     private enum WideFlag : long { Low = 4, Other = 8, High = long.MinValue }
+    private enum UnsignedWideFlag : ulong { Low = 4, Other = 8, High = 1UL << 63 }
 
     public static int NarrowEnumFlags() =>
         TestNarrow(NarrowFlag.High | NarrowFlag.Low, NarrowFlag.High) &&
@@ -77,6 +78,14 @@ internal static class Program
         TestNarrow(NarrowFlag.Low, NarrowFlag.Low | NarrowFlag.Other) ||
         TestWide(WideFlag.Other, WideFlag.High) ? 0 : 107;
 
+    public static int WideEnumSmallConstants()
+    {
+        WideFlag signed = WideFlag.High | WideFlag.Low;
+        UnsignedWideFlag unsigned = UnsignedWideFlag.High | UnsignedWideFlag.Low;
+        return signed.HasFlag(WideFlag.Low) && !signed.HasFlag(WideFlag.Other) &&
+            unsigned.HasFlag(UnsignedWideFlag.Low) && !unsigned.HasFlag(UnsignedWideFlag.Other) ? 109 : 0;
+    }
+
     private static bool TestNarrow(NarrowFlag value, NarrowFlag mask) =>
         ((Enum)(object)value).HasFlag((Enum)(object)mask);
 
@@ -87,6 +96,22 @@ internal static class Program
     public static int ClosedValueIsNull() => IsMissing(new NullProbeValue(0)) ? 0 : 83;
     public static int ClosedReferenceNullCheck() =>
         IsPresent("value") && IsMissing<string?>(null) ? 89 : 0;
+
+    public static int ClosedBoxNullBranches() =>
+        MissingBranch(new NullProbeValue(7)) * 1000 + PresentBranch(new NullProbeValue(0)) * 100 +
+        MissingBranch<string?>(null) + PresentBranch("value");
+
+    private static int MissingBranch<T>(T item)
+    {
+        if ((object?)item == null) return 11;
+        return 13;
+    }
+
+    private static int PresentBranch<T>(T item)
+    {
+        if ((object?)item != null) return 17;
+        return 19;
+    }
 
     private static bool IsPresent<T>(T item) => (object?)item != null;
     private static bool IsMissing<T>(T item) => (object?)item == null;

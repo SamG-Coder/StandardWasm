@@ -69,11 +69,13 @@ string. The cases check slicing, unpaired UTF-16 surrogates, supplementary
 characters, the default empty view and a stack-backed buffer.
 
 The generic null-test cases compare references and closed non-nullable
-values against the CLR. When the IL only tests nullness, the compiler
-evaluates the source value and folds away the non-nullable box.
+values against the CLR. The cases cover comparisons and conditional branches.
+When the IL only tests nullness, the compiler evaluates the source value and
+folds away the non-nullable box.
 
 The Enum.HasFlag cases compare signed byte and 64-bit enum masks,
-including high bits, a missing flag, and zero. The specialized call
+including high bits, a missing flag, zero, and small 64-bit constants.
+The specialized call
 consumes the verified same-type enum operands directly.
 
 Both `Int32` cases have CLR answers. The compiler now binds the original
