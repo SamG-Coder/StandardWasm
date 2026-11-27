@@ -2062,32 +2062,11 @@ namespace PortableCompiler
                 }
                 if (kind == BranchIl.SizeOf)
                 {
-                    uint token = unchecked((uint)records[slot + 1]);
-                    uint table = token >> 24;
-                    int row = (int)(token & 0xffffff);
-                    if (table == 0x1b)
-                    {
-                        // Decision 0078: sizeof a pointer or function-pointer TypeSpec is the
-                        // native size. Other TypeSpecs, including generic T, stay diagnosed.
-                        int spec = AssemblyReferences.TypeSpecBlob(image, heaps, layout, row);
-                        if (spec <= 0 || spec >= heaps[1]) return -2;
-                        var after = new int[1];
-                        int length = ImageBytes.CompressedUnsigned(image, heaps[0] + spec, heaps[0] + heaps[1], after);
-                        if (length < 1 || (image[after[0]] != 0x1b && image[after[0]] != 0x0f)) return -2;
-                        records[slot] = BranchIl.Constant;
-                        records[slot + 1] = 4;
-                        continue;
-                    }
-                    if (table != 1 && table != 2) return -2; // TypeSpec, including generic T
-                    var identity = new int[2];
-                    int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner,
-                        row << 2 | (table == 1 ? 1 : 0), identity);
-                    if (status < 0) return status;
-                    var measured = new int[2];
-                    status = NativeValueLayouts.Measure(bundle, identity[0], identity[1], measured);
-                    if (status < 0) return status;
+                    int size = ManagedSizeOf.Read(bundle, image, layout, heaps, owner,
+                        records[slot + 1], context, objects, methodArguments);
+                    if (size < 0) return size;
                     records[slot] = BranchIl.Constant;
-                    records[slot + 1] = measured[0];
+                    records[slot + 1] = size;
                     continue;
                 }
                 if (kind == BranchIl.LoadStaticField || kind == BranchIl.StoreStaticField || kind == BranchIl.StaticFieldAddress)

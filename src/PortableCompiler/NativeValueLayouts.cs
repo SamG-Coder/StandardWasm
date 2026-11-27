@@ -109,7 +109,7 @@ namespace PortableCompiler
                     if (fieldAlign > align) align = fieldAlign;
                     continue;
                 }
-                size = Primitive(element);
+                size = PrimitiveSize(element);
                 if (size < 0) return -2; // references and other non-blittable fields
                 offset = (offset + size - 1) / size * size;
                 if (row == target) { found[0] = offset; found[1] = LoadOpcode(element); }
@@ -130,7 +130,7 @@ namespace PortableCompiler
             element == 3 || element == 7 ? 0x49 : element == 8 ? 0x4a : element == 9 ? 0x4b :
             element == 0x0a || element == 0x0b ? 0x4c : element == 0x0c ? 0x4e : element == 0x0d ? 0x4f : 0x4d;
 
-        private static int Primitive(int element) =>
+        internal static int PrimitiveSize(int element) =>
             element == 2 || element == 4 || element == 5 ? 1 :           // bool, i1, u1
             element == 3 || element == 6 || element == 7 ? 2 :           // char, i2, u2
             element == 8 || element == 9 || element == 0x0c ? 4 :        // i4, u4, r4
