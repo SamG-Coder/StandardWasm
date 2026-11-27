@@ -216,11 +216,12 @@ namespace PortableCompiler
                 int function = thunks[i + 1];
                 bool open = ThunkOpen(thunks, i, arities[function]);
                 int receiver = open ? 0 : types[offsets[function] + 1];
-                int thunkSize = ThunkSize(receiver, hostImports + function, arities[function], open);
-                if (1 + thunkSize > output.Length - codeSize ||
+                bool general = GeneralDelegates.ThunkKey(thunks, i) != 0;
+                int thunkSize = ThunkSize(receiver, hostImports + function, arities[function], open, general, objects, types, offsets[function]);
+                if (UnsignedSize(thunkSize) + thunkSize > output.Length - codeSize ||
                     UnsignedSize(hostImports + functions + i) > output.Length - elementSize)
                     return -3;
-                codeSize += 1 + thunkSize;
+                codeSize += UnsignedSize(thunkSize) + thunkSize;
                 elementSize += UnsignedSize(hostImports + functions + i);
             }
             if (pointers.TargetCount != 0)
@@ -583,7 +584,9 @@ namespace PortableCompiler
                 int function = thunks[i + 1], arity = arities[function];
                 bool open = ThunkOpen(thunks, i, arity);
                 int receiver = open ? 0 : types[offsets[function] + 1];
-                cursor = Unsigned(output, cursor, ThunkSize(receiver, hostImports + function, arity, open));
+                bool general = GeneralDelegates.ThunkKey(thunks, i) != 0;
+                int shape = offsets[function];
+                cursor = Unsigned(output, cursor, ThunkSize(receiver, hostImports + function, arity, open, general, objects, types, shape));
                 output[cursor++] = 0; // local declarations
                 if (!open)
                 {
@@ -598,6 +601,8 @@ namespace PortableCompiler
                 {
                     output[cursor++] = 0x20;
                     output[cursor++] = (byte)argument;
+                    if (general)
+                        cursor = GeneralDelegates.WriteThunkCast(output, cursor, objects, types[shape + argument + (open ? 0 : 1)]);
                 }
                 output[cursor++] = 0x10;
                 cursor = Unsigned(output, cursor, hostImports + function);
@@ -673,9 +678,15 @@ namespace PortableCompiler
             return key != 0 ? key < 0 : IsStaticThunk(arity);
         }
 
-        private static int ThunkSize(int receiver, int function, int arity, bool open) =>
-            open ? 3 + 2 * arity + UnsignedSize(function) :
-            7 + HeapTypeSize(HeapType(receiver)) + 2 * (arity - 1) + UnsignedSize(function);
+        private static int ThunkSize(int receiver, int function, int arity, bool open, bool general, int[] objects, int[] types, int shape)
+        {
+            int size = open ? 3 + 2 * arity + UnsignedSize(function) :
+                7 + HeapTypeSize(HeapType(receiver)) + 2 * (arity - 1) + UnsignedSize(function);
+            if (general)
+                for (int argument = open ? 0 : 1; argument < arity; argument++)
+                    size += GeneralDelegates.ThunkCastBytes(objects, types[shape + 1 + argument]);
+            return size;
+        }
 
         private static int Reserve(int remaining, int size)
         {

@@ -114,6 +114,8 @@ namespace PortableCompiler
                 target == ObjectLayouts.ObjectReference && IsObjectReference(source) ||
                 target == ObjectLayouts.DelegateReference && source == ObjectLayouts.EventHandlerReference ||
                 target == ObjectLayouts.DelegateReference && DelegateShapes.IsKey(source) ||
+                DelegateShapes.IsKey(source) && DelegateShapes.IsKey(expected) &&
+                    DelegateVariance.Assignable(objects, source, expected) ||
                 ObjectLayouts.Inherits(objects, source, expected) || ObjectLayouts.Implements(objects, source, expected);
         }
 

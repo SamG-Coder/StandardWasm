@@ -249,6 +249,26 @@ namespace PortableCompiler
         internal static void SetThunkKey(int[] thunks, int thunk, int key, bool open) =>
             thunks[thunks.Length / 2 + thunk] = open ? -key : key;
 
+        // The thunk transport erases managed reference positions. The target
+        // adapter and Invoke helper recover ordinary ABI types at their own boundaries.
+        private static int ThunkStorage(int[] objects, int type) =>
+            IsReference(type) && !ObjectLayouts.IsValueType(objects, type) ? ObjectLayouts.ObjectReference : type;
+
+        internal static int ThunkCastBytes(int[] objects, int type)
+        {
+            int physical = ObjectLayouts.Representation(objects, type);
+            return ThunkStorage(objects, type) == physical ? 0 : 2 + WasmBinary.HeapTypeSize(WasmBinary.HeapType(physical));
+        }
+
+        internal static int WriteThunkCast(byte[] output, int cursor, int[] objects, int type)
+        {
+            int physical = ObjectLayouts.Representation(objects, type);
+            if (ThunkStorage(objects, type) == physical) return cursor;
+            output[cursor++] = 0xfb;
+            output[cursor++] = 0x17; // ref.cast null
+            return WasmBinary.Signed(output, cursor, WasmBinary.HeapType(physical));
+        }
+
         // The appended function types, one per delegate entry in ordinal order:
         // (eqref target, p1..pn) -> r.
         internal static int ThunkTypeBytes(int[] objects)
@@ -260,12 +280,9 @@ namespace PortableCompiler
                 int key = DelegateShapes.KeyAt(ordinal);
                 int count = DelegateShapes.InvokeParameterCount(objects, key), result = DelegateShapes.InvokeResult(objects, key);
                 size += 1 + WasmBinary.UnsignedSize(count + 1) + 1 + 1;
-                // The thunk is an ordinary function type: the same Representation as WasmBinary's
-                // function signatures, so a target's own type and its thunk agree.
                 for (int i = 0; i < count; i++)
-                    size += WasmBinary.ValueType(scratch, 0,
-                        ObjectLayouts.Representation(objects, DelegateShapes.InvokeParameter(objects, key, i)));
-                size += result == Void ? 0 : WasmBinary.ValueType(scratch, 0, ObjectLayouts.Representation(objects, result));
+                    size += WasmBinary.ValueType(scratch, 0, ThunkStorage(objects, DelegateShapes.InvokeParameter(objects, key, i)));
+                size += result == Void ? 0 : WasmBinary.ValueType(scratch, 0, ThunkStorage(objects, result));
             }
             return size;
         }
@@ -280,13 +297,12 @@ namespace PortableCompiler
                 cursor = WasmBinary.Unsigned(output, cursor, count + 1);
                 output[cursor++] = 0x6d; // eqref target
                 for (int i = 0; i < count; i++)
-                    cursor = WasmBinary.ValueType(output, cursor,
-                        ObjectLayouts.Representation(objects, DelegateShapes.InvokeParameter(objects, key, i)));
+                    cursor = WasmBinary.ValueType(output, cursor, ThunkStorage(objects, DelegateShapes.InvokeParameter(objects, key, i)));
                 if (result == Void) output[cursor++] = 0;
                 else
                 {
                     output[cursor++] = 1;
-                    cursor = WasmBinary.ValueType(output, cursor, ObjectLayouts.Representation(objects, result));
+                    cursor = WasmBinary.ValueType(output, cursor, ThunkStorage(objects, result));
                 }
             }
             return cursor;
@@ -310,7 +326,7 @@ namespace PortableCompiler
         {
             int count = DelegateShapes.InvokeParameterCount(objects, key);
             int result = DelegateShapes.InvokeResult(objects, key);
-            if (code.Length - used < 96 + 2 * count) return -3;
+            if (code.Length - used < 96 + 2 * count + ThunkCastBytes(objects, result)) return -3;
             int index = 1 + count, length = 2 + count, entry = 3 + count, last = 4 + count;
             code[used++] = (byte)(result == Void ? 2 : 3); // local groups
             code[used++] = 2; code[used++] = 0x7f; // index, length
@@ -318,7 +334,7 @@ namespace PortableCompiler
             if (result != Void)
             {
                 code[used++] = 1;
-                used = WasmBinary.ValueType(code, used, result);
+                used = WasmBinary.ValueType(code, used, ThunkStorage(objects, result));
             }
             used = BranchWasm.Local(code, used, 0x20, 0);
             code[used++] = 0xfb; code[used++] = 15; // array.len
@@ -350,7 +366,11 @@ namespace PortableCompiler
             code[used++] = 0x0c; code[used++] = 0; // br loop
             code[used++] = 0x0b;
             code[used++] = 0x0b;
-            if (result != Void) used = BranchWasm.Local(code, used, 0x20, last);
+            if (result != Void)
+            {
+                used = BranchWasm.Local(code, used, 0x20, last);
+                used = WriteThunkCast(code, used, objects, result);
+            }
             code[used++] = 0x0b;
             return used;
         }

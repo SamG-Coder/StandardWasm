@@ -3126,9 +3126,12 @@ namespace PortableCompiler
                     else if (instance && !hasReceiver || arities[index] != (instance ? 1 : 0) || signatures[signature] != I32)
                         return -2;
                     int thunk = 0;
-                    while (thunk < thunks[0] && thunks[thunk + 1] != index) thunk++;
+                    int thunkKey = general ? (instance ? generalKey[0] : -generalKey[0]) : 0;
+                    while (thunk < thunks[0] && (thunks[thunk + 1] != index || GeneralDelegates.ThunkKey(thunks, thunk) != thunkKey))
+                        thunk++;
                     if (thunk == thunks[0])
                     {
+                        if (thunk + 1 >= thunks.Length / 2) return -3;
                         thunks[thunk + 1] = index;
                         thunks[0] = thunk + 1;
                         GeneralDelegates.SetThunkKey(thunks, thunk, general ? generalKey[0] : 0, !instance);
