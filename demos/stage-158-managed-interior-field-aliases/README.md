@@ -19,3 +19,5 @@ and integer payload exercises a value layout shaped like a location.
 
 The expected results in fixture order are `5923`, `10503`, `1220`, `10308`,
 `44246`, `11134`, and `47`.
+
+See [decision 0085](../../docs/decisions/0085-managed-interior-field-aliases.md).
