@@ -100,21 +100,21 @@ becomes the CLR's `TypeInitializationException`:
 
 **Fixed-tag exceptions** carry no object. The guard catches each one into its own block,
 which builds the matching CoreLib exception with its parameterless constructor and passes it as
-the inner exception. The default message comes from `SR` (decision 0081):
+the inner exception. The default message comes from `SR` (decision 0081). This is exact only
+where the CLR raises the exception with that same default message:
 
-| Tag | CoreLib exception |
-| --- | --- |
-| Overflow | `OverflowException` |
-| DivideByZero | `DivideByZeroException` |
-| IndexOutOfRange | `IndexOutOfRangeException` |
-| NullReference | `NullReferenceException` |
-| InvalidCast | `InvalidCastException` |
-| Argument | `ArgumentException` |
-| ArgumentNull | `ArgumentNullException` |
+| Tag | CoreLib exception | Wrapped |
+| --- | --- | --- |
+| Overflow | `OverflowException` | yes |
+| DivideByZero | `DivideByZeroException` | yes |
+| IndexOutOfRange | `IndexOutOfRangeException` | yes |
+| NullReference | `NullReferenceException` | yes |
+| InvalidCast | `InvalidCastException` | no: the CLR's message names both types |
+| Argument | `ArgumentException` | no: the CLR's message names the parameter |
+| ArgumentNull | `ArgumentNullException` | no: the CLR's message names the parameter |
 
-The default messages equal the CLR's runtime messages for null dereference, divide-by-zero,
-overflow and index range. An `InvalidCastException` raised by the runtime names its types, so its
-message differs; reading messages needs the CoreLib accessors, which are a follow-up.
+A tag marked "no" keeps the trap rather than build an object whose `Message` would differ.
+It can be wrapped once the raising site supplies the exact message.
 
 These cases still trap as described above:
 - a tag whose CoreLib type cannot be bound

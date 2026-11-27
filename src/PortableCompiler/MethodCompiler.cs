@@ -1673,6 +1673,10 @@ namespace PortableCompiler
             for (int i = 0; i < TypeInitializerWasm.FixedFailureCount; i++)
             {
                 failure[TypeInitializerWasm.FailureFixed + 2 * i] = -1;
+                // Only where the CLR's runtime-raised exception carries that same default message.
+                // A failed cast names its types and the argument checks name their parameter, so
+                // those tags keep the explicit trap rather than an object with a different Message.
+                if (!TypeInitializerWasm.DefaultMessageMatches(i)) continue;
                 int type = ObjectLayouts.FindTypeDefinition(coreLib, coreHeaps, coreLayout, "System", FixedFailureTypeName(i));
                 int row = type == 0 ? 0 : InitializerFailures.FindDefaultConstructor(coreLib, coreHeaps, coreLayout, type);
                 if (row == 0) continue;

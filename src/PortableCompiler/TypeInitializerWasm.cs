@@ -35,6 +35,10 @@ namespace PortableCompiler
         internal const int FixedFailureCount = 7;
         internal static int FixedFailureTag(int i) => i < 6 ? i : 7; // OverflowTag .. ArgumentTag, ArgumentNullTag
 
+        // Overflow, DivideByZero, IndexOutOfRange and NullReference: the CLR raises these with the
+        // parameterless constructor's message. InvalidCast and the argument tags carry details.
+        internal static bool DefaultMessageMatches(int i) => i < 4;
+
         private static int BoundFixed(int[] failure)
         {
             int count = 0;
