@@ -1209,6 +1209,14 @@ namespace PortableCompiler
                     records[slot + 3] = records[pointer + 3];
                     continue;
                 }
+                // Issue #304: ldstr "key"; call SR.GetResourceString(string) in CoreLib folds to the
+                // neutral resource string, so SR properties compile without ResourceManager.
+                if (kind == BranchIl.Call && records[slot + 3] == 0)
+                {
+                    int folded = ResourceStringFolding.FoldResourceCall(image, heaps, layout, records, slot, literals, literalSize);
+                    if (folded < 0) return folded;
+                    if (folded > 0) continue;
+                }
                 if (kind != BranchIl.Call && kind != BranchIl.NewObject && kind != BranchIl.LoadFunction)
                     continue;
                 int target = records[slot + 1];

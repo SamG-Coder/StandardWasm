@@ -20,6 +20,7 @@ The kernels cover:
 - a null variable of the exception class type (NullReferenceException on the CLR)
 - one `catch (Exception)` handler first receiving a divide-by-zero and then an object, rethrowing both
 - same-named exception classes in two assemblies staying distinct
+- framework exceptions built with their parameterless constructors, whose default messages come from CoreLib `SR` resources folded at compile time (#304)
 
 `Filtered` uses an exception filter and must return the explicit -2 diagnostic at its handler offset.
 `Uncaught` must reach the host on the exported object tag. The design is decision 0054.

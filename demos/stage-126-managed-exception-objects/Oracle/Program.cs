@@ -18,7 +18,7 @@ var cases = new List<object>();
 foreach (string name in new[]
 {
     "TypedCatch", "DerivedBeforeBase", "BaseCatchesDerived", "MismatchReachesOuter", "CatchException",
-    "RethrowKeepsType", "FinallyOrder", "NullVariableThrow", "RepeatedHandlerVisit", "SameNameStaysDistinct"
+    "RethrowKeepsType", "FinallyOrder", "NullVariableThrow", "RepeatedHandlerVisit", "SameNameStaysDistinct", "DefaultMessageExceptions"
 })
 {
     MethodInfo method = kernels.GetMethod(name)!;
