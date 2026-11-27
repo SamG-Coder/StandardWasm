@@ -4,7 +4,7 @@ using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
-    // Address-taken native words and blittable locals have one slot for the whole frame.
+    // Address-taken words and blittable locals have one slot for the whole frame.
     // The CLI local and every unmanaged pointer to it must observe the same bytes.
     internal static class NativeFrameWasm
     {
@@ -15,14 +15,17 @@ namespace PortableCompiler
         internal static bool IsCell(int storage) => storage == Native || storage < 0;
 
         internal static int BindAddresses(BundleImages bundle, int[] objects, NativeAggregatePlans plans,
-            int[] records, int[] clauses, int[] frame, int parameters, int[] cells, int[] location)
+            int[] records, int[] clauses, int[] frame, int parameters, byte[] localElements, int[] cells, int[] location)
         {
             for (int at = 0; at < records.Length; at += BranchIl.Width)
             {
                 if (records[at] != BranchIl.FrameAddress || !ConvertsToPointer(records, at, clauses)) continue;
                 int local = records[at + 1], type = frame[local];
                 if (cells[local] != 0) continue;
-                if (type == Native) cells[local] = Native;
+                int element = local >= parameters ? localElements[local - parameters] : 0;
+                // Native and explicit int32/uint32 use the same four-byte cell.
+                // An I32 evaluation value alone could also come from a Boolean.
+                if (type == Native || type == I32 && (element == 8 || element == 9)) cells[local] = Native;
                 else if (local >= parameters && ObjectLayouts.IsValueType(objects, type))
                 {
                     int plan = NativeAggregates.Plan(bundle, objects, type, plans);

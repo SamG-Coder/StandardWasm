@@ -359,7 +359,7 @@ namespace PortableCompiler
             var receiverDemand = new ReceiverBodyDemand(functionCapacity);
             // Reuse local pin metadata across methods. Signature decoding resets each slot.
             var pinned = new int[frame.Length];
-            var booleanLocals = new byte[frame.Length];
+            var localElements = new byte[frame.Length];
             var initializerSlot = new int[1];
             int exceptionTags = tracksFinalizers ? ExceptionTypes.ArgumentNull : 0;
             var noCatch = new int[0];
@@ -629,7 +629,7 @@ namespace PortableCompiler
                     int localBlob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, body[3]);
                     if (localBlob < 0)
                         return -1;
-                    locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context, methodArguments, pinned, filters, booleanLocals);
+                    locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context, methodArguments, pinned, filters, localElements);
                     if (locals < 0)
                         return locals;
                     // CorILMethod_InitLocals (body[4]) is deliberately not required. Without it
@@ -716,7 +716,7 @@ namespace PortableCompiler
                     var inlineLocations = new int[parameters + locals];
                     var frameCells = new int[parameters + locals];
                     status = NativeFrameWasm.BindAddresses(bundle, objects, nativePlans, records, catchRegion,
-                        frame, parameters, frameCells, location);
+                        frame, parameters, localElements, frameCells, location);
                     if (status < 0) return status;
                     if (frameRoots != null) NativeFrameWasm.ExcludeNativeRoots(frameRoots, frameCells);
                     if (stub < 0 && nativeKind == NativeThunks.None)
@@ -725,7 +725,7 @@ namespace PortableCompiler
                             parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                             bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
                             initializers, reflection, typeCalls, instantiations, methodArguments, inlineLocations, frameCells, parameters, signatures[signature],
-                            nativePlans, addressedFields, booleanLocals, pointers, finalizers, tracksFinalizers);
+                            nativePlans, addressedFields, localElements, pointers, finalizers, tracksFinalizers);
                         if (functions == Reemit)
                         {
                             // Allocation can precede the first reachable suppression call.
@@ -1462,7 +1462,7 @@ namespace PortableCompiler
             TypeInitializerPlan initializers, RuntimeReflectionPlan reflection, RuntimeTypeCalls typeCalls,
             MethodInstantiations instantiations, int[] methodArguments,
             int[] inlineLocations, int[] frameCells, int parameterCount, int result, NativeAggregatePlans nativePlans,
-            AddressedFields addressedFields, byte[] booleanLocals,
+            AddressedFields addressedFields, byte[] localElements,
             FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
@@ -1703,7 +1703,7 @@ namespace PortableCompiler
                     // same cell as stloc. Neither the address nor an alias escapes.
                     if (type == Character && local >= parameterCount &&
                         FoldCharacterLocalStore(records, clauses, slot, next, local, frame)) continue;
-                    bool booleanSlot = type == I32 && local >= parameterCount && booleanLocals[local - parameterCount] != 0;
+                    bool booleanSlot = type == I32 && local >= parameterCount && localElements[local - parameterCount] == SignatureReader.Boolean;
                     if (booleanSlot && next < records.Length &&
                         (records[next] == BranchIl.MemberCall && records[next + 3] == 0x28 ||
                             records[next] == BranchIl.Call && records[next + 3] == 0) &&

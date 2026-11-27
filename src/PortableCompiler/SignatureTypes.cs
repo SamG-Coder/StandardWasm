@@ -167,7 +167,7 @@ namespace PortableCompiler
         // write only their slots. Stack values normalize CLI small integers to i32.
         // context is the closed declaring layout that supplies VAR arguments,
         // or zero when the declaring type is not generic.
-        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context, int[] methodArguments = null, int[] pinned = null, int[] filters = null, byte[] booleanLocals = null)
+        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context, int[] methodArguments = null, int[] pinned = null, int[] filters = null, byte[] localElements = null)
         {
             if (index <= 0 || index >= heap[1])
                 return -2;
@@ -205,7 +205,9 @@ namespace PortableCompiler
                 if (filterLocal == 2 && element != 2) return -2;
                 if (filterLocal == 1 && element != 0x12) return -2;
                 if (locals && pinned != null) pinned[i] = 0;
-                if (locals && booleanLocals != null) booleanLocals[i] = element == 2 ? (byte)1 : (byte)0;
+                // Evaluation-stack tags can merge distinct local widths. Preserve
+                // the declared element for planners that need physical storage.
+                if (locals && localElements != null) localElements[i] = (byte)element;
                 int target = offset + i + (i == 0 ? 0 : implicitSlots);
                 if (element == PinnedLocals.Pinned)
                 {
