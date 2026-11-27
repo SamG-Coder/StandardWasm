@@ -39,5 +39,24 @@ namespace CoreLibMonitors
         {
             return AppContext.GetData("StandardWasm.Stage180.Unset") == null ? 499 : 0;
         }
+
+        public static int SharedLockTaken()
+        {
+            object gate = new object();
+            Initialize(out bool entered);
+            try
+            {
+                Monitor.Enter(gate, ref entered);
+                return Read(ref entered) ? 577 : 0;
+            }
+            finally
+            {
+                if (entered) Monitor.Exit(gate);
+            }
+        }
+
+        private static void Initialize(out bool entered) => entered = false;
+
+        private static bool Read(ref bool entered) => entered;
     }
 }

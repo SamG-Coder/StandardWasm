@@ -5,7 +5,8 @@ using System.Text.Json;
 using CoreLibMonitors;
 
 if (IntPtr.Size != 4) throw new InvalidOperationException("Expected the x86 CLR.");
-Func<int>[] methods = [Probe.Nested, Probe.AlreadyTrue, Probe.NullGate, Probe.OriginalSetting];
+Func<int>[] methods = [Probe.Nested, Probe.AlreadyTrue, Probe.NullGate, Probe.OriginalSetting,
+    Probe.SharedLockTaken];
 string runtime = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
 File.WriteAllText(args[0], JsonSerializer.Serialize(new
 {

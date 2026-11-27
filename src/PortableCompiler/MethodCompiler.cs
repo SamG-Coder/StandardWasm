@@ -1653,18 +1653,22 @@ namespace PortableCompiler
                         records[next + 1] = local;
                         continue;
                     }
-                    if (type == I32 && local >= parameterCount && frameCells[local] == 0 &&
-                        OnlyMonitorAddresses(image, heaps, layout, records, slot, local, clauses))
+                    bool booleanSlot = type == I32 && local >= parameterCount && booleanLocals[local - parameterCount] != 0;
+                    if (booleanSlot && next < records.Length &&
+                        (records[next] == BranchIl.MemberCall && records[next + 3] == 0x28 ||
+                            records[next] == BranchIl.Call && records[next + 3] == 0) &&
+                        !ValueOperands.Entry(records, next / BranchIl.Width, clauses) &&
+                        MonitorMetadata.Identify(image, heaps, layout, records[next + 1],
+                            records[next] == BranchIl.MemberCall) == MonitorMetadata.EnterTaken)
                     {
-                        // The byref is consumed by the next instruction. Set the
-                        // original frame slot only after the monitor was acquired.
+                        // The call consumes this address. Emission updates the
+                        // same Boolean cell if another managed use takes its address.
                         records[slot] = BranchIl.Nop;
                         records[next] = BranchIl.Monitor;
                         records[next + 1] = local + 1;
                         hostUse[0] = hostUse[0] | WasmImports.Monitor;
                         continue;
                     }
-                    bool booleanSlot = type == I32 && local >= parameterCount && booleanLocals[local - parameterCount] != 0;
                     int referenceLocation = LocationFromIdentity(objects, type);
                     if (type == I32 || type == Native || IsReferenceLocation(referenceLocation))
                     {
@@ -2801,26 +2805,6 @@ namespace PortableCompiler
                 case Doubles: return load ? 0x99 : 0xa1;
                 default: return 0;
             }
-        }
-
-        private static bool OnlyMonitorAddresses(byte[] image, int[] heaps, int[] layout,
-            int[] records, int start, int local, int[] clauses)
-        {
-            // The monitor writes the scalar local after acquisition. Any other
-            // address consumer can require that local to live in a managed cell.
-            for (int slot = start; slot < records.Length; slot += BranchIl.Width)
-            {
-                if (records[slot] != BranchIl.FrameAddress || records[slot + 1] != local) continue;
-                int next = records[slot + 2] * BranchIl.Width;
-                if (next >= records.Length || ValueOperands.Entry(records, next / BranchIl.Width, clauses))
-                    return false;
-                bool member = records[next] == BranchIl.MemberCall && records[next + 3] == 0x28;
-                bool direct = records[next] == BranchIl.Call && records[next + 3] == 0;
-                if ((!member && !direct) ||
-                    MonitorMetadata.Identify(image, heaps, layout, records[next + 1], member) != MonitorMetadata.EnterTaken)
-                    return false;
-            }
-            return true;
         }
 
         private static bool UsesLocationReceiver(int[] objects, int receiver) =>
