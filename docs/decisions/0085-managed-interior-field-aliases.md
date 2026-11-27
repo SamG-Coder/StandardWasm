@@ -31,10 +31,14 @@ root cell. Untouched fields keep their current contents and previously copied
 snapshots remain independent. Modules emit the shared projection access helpers
 only for location kinds used by reachable code.
 
-The finalizer shadow tracer follows the existing first-field edges of the two
-location representations. Retaining the containing array or object when a
-bare slot cell is the only live root is a separate baseline gap. CLR and Wasm
-have been observed to differ on a finalizable sibling in that situation.
+The finalizer shadow tracer follows the first-field edges of the two location
+representations to the current snapshot. In modules that emit shadow root
+tracing, a slot cell carries an additional immutable edge to its containing
+array or object. Replacing the snapshot keeps that edge intact. Frame and
+projection cells keep no second owner because their existing payload edge
+already leads to the appropriate storage. Stage 152 checks that a finalizable
+object in the container survives a live direct or projected alias and becomes
+eligible after the borrowing method returns.
 
 ## Verification
 
