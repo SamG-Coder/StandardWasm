@@ -68,9 +68,14 @@ invocation lists. That lifts the type-identity and multicast limits below.
   composition is unchanged.
 - **Self-referential signatures.** A delegate whose Invoke takes or returns its own type re-enters
   registration. The layout depth bound turns that into -2.
+- **Referenced assemblies (Stage 220).** A MemberRef `.ctor` or `Invoke` whose parent TypeRef
+  resolves to a delegate TypeDef in another bundle assembly takes that TypeDef's key. Keys are
+  bundle-wide, so they belong to the shared cross-assembly ABI (`IsSharedBundleType`). Value-type
+  parameters and results are storable and pass as in an ordinary call, and thunk types use
+  `ObjectLayouts.Representation` like every function signature. Interface types are separate work.
 - **Not yet:** generic delegate TypeDefs, `ldvirtftn` targets, closed static targets, delegate
-  equality, `Target`/`Method`, `BeginInvoke`/`EndInvoke` and delegates in a referenced assembly.
-  The last of these is reached through a MemberRef whose parent is a TypeRef. All are diagnosed.
+  equality, `Target`/`Method`, `BeginInvoke`/`EndInvoke` and interface-typed parameters. All are
+  diagnosed.
 
 ## Verification
 

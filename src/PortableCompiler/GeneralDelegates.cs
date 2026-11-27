@@ -122,8 +122,8 @@ namespace PortableCompiler
                 storage == Delegate)
                 return storage;
             if (storage >= ObjectLayouts.FirstClass && storage < ObjectLayouts.FirstClass + ObjectLayouts.MaxClasses &&
-                !ObjectLayouts.IsValueType(objects, storage) && !ObjectLayouts.IsInterface(objects, storage))
-                return storage;
+                !ObjectLayouts.IsInterface(objects, storage)) // interfaces: Codex's separate fixture
+                return storage; // Stage 220: value types pass as in an ordinary call (e.g. HWND, BOOL)
             return 0;
         }
 
@@ -259,9 +259,12 @@ namespace PortableCompiler
                 int key = DelegateShapes.KeyAt(ordinal);
                 int count = DelegateShapes.InvokeParameterCount(objects, key), result = DelegateShapes.InvokeResult(objects, key);
                 size += 1 + WasmBinary.UnsignedSize(count + 1) + 1 + 1;
+                // The thunk is an ordinary function type: the same Representation as WasmBinary's
+                // function signatures, so a target's own type and its thunk agree.
                 for (int i = 0; i < count; i++)
-                    size += WasmBinary.ValueType(scratch, 0, DelegateShapes.InvokeParameter(objects, key, i));
-                size += result == Void ? 0 : WasmBinary.ValueType(scratch, 0, result);
+                    size += WasmBinary.ValueType(scratch, 0,
+                        ObjectLayouts.Representation(objects, DelegateShapes.InvokeParameter(objects, key, i)));
+                size += result == Void ? 0 : WasmBinary.ValueType(scratch, 0, ObjectLayouts.Representation(objects, result));
             }
             return size;
         }
@@ -276,12 +279,13 @@ namespace PortableCompiler
                 cursor = WasmBinary.Unsigned(output, cursor, count + 1);
                 output[cursor++] = 0x6d; // eqref target
                 for (int i = 0; i < count; i++)
-                    cursor = WasmBinary.ValueType(output, cursor, DelegateShapes.InvokeParameter(objects, key, i));
+                    cursor = WasmBinary.ValueType(output, cursor,
+                        ObjectLayouts.Representation(objects, DelegateShapes.InvokeParameter(objects, key, i)));
                 if (result == Void) output[cursor++] = 0;
                 else
                 {
                     output[cursor++] = 1;
-                    cursor = WasmBinary.ValueType(output, cursor, result);
+                    cursor = WasmBinary.ValueType(output, cursor, ObjectLayouts.Representation(objects, result));
                 }
             }
             return cursor;

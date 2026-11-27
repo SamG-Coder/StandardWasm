@@ -3606,6 +3606,8 @@ namespace PortableCompiler
             // The platform event types share a compiler-owned ABI across assemblies.
             // A Delegate slot currently holds only supported EventHandler values.
             type == EventArgsReference || type == EventHandlerReference || type == DelegateReference ||
+            // Stage 220: delegate keys live in the bundle-wide registry, so every assembly agrees.
+            DelegateShapes.IsKey(type) ||
             (type >= ObjectLayouts.FirstClass && type - ObjectLayouts.FirstClass < ObjectLayouts.MaxClasses);
 
         private static bool IsSharedBundleSignature(int[] types, int offset, int arity)
