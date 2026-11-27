@@ -35,7 +35,7 @@ These members are recognized only when the parent TypeRef is `System.Console` or
 
 The handle type exists only on the evaluation stack. A `TextWriter` local, field, parameter or array still goes through the ordinary class linker, which has no TextWriter layout and rejects it. A non-virtual `call` to a write method would bypass the console's synchronized writer, so it is rejected too.
 
-Any other member of Console or TextWriter fails with status -2. `CompileDetailed` reports the assembly, the MethodDef row and the IL offset. Examples are `Console.WriteLine`, `Console.ReadLine`, `TextWriter.Flush` and `Write(char)`. Interactive stdin is out of scope.
+Any other member of Console or TextWriter fails with status -2. `CompileDetailed` reports the assembly, the MethodDef row and the IL offset. Examples are `Console.WriteLine`, `Console.Read`, `TextWriter.Flush` and `Write(char)`. `Console.ReadLine` and interactive stdin were added by decision 0079 (Stage 151).
 
 ## Arguments
 
