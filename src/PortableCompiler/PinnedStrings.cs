@@ -48,6 +48,8 @@ namespace PortableCompiler
             {
                 int slot = pc * BranchIl.Width, kind = records[slot], next = records[slot + 2];
                 if (next <= pc) return -1;
+                if (character && IsLocal(records, slot, BranchIl.Store, pinned, arguments, locals, PinnedLocals.Character))
+                    records[slot + 3] = PinnedLocals.Character;
                 if (text && kind == BranchIl.ConvertInteger && records[slot + 1] == 0xe0 && previous >= 0 &&
                     IsLocal(records, previous, BranchIl.Load, pinned, arguments, locals, PinnedLocals.Text))
                 {

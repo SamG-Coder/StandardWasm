@@ -527,7 +527,16 @@ namespace PortableCompiler
                 return Push(stack, allocated, depth, kind == WideConstant ? I64 : I32);
             if (kind == SingleConstant || kind == DoubleConstant)
                 return Push(stack, allocated, depth, kind == SingleConstant ? F32 : F64);
-            if (kind == Store) return depth > 0 && Assignable(stack[depth - 1], frame[operand], objects) ? depth - 1 : -1;
+            if (kind == Store)
+            {
+                if (depth == 0) return -1;
+                int source = stack[depth - 1];
+                // A pinned char& local can already hold an address produced by
+                // a string copy. A general managed UTF-16 alias still needs
+                // pinning semantics before it can be exposed to memory 0.
+                if (extra == PinnedLocals.Character && source == CharacterLocation) return -2;
+                return Assignable(source, frame[operand], objects) ? depth - 1 : -1;
+            }
             if (kind == CheckedConversion)
             {
                 if (depth < 1 || !IsScalar(stack[depth - 1])) return -1;

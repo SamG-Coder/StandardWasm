@@ -167,6 +167,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [161 · Aggregate boxes](stage-161-aggregate-boxes/README.md) | `npm run demo -- stage-161-aggregate-boxes --no-rebuild` | Verify boxed struct identity, copies, type tests, and typed failures |
 | [162 · Closed reference casts](stage-162-closed-reference-casts/README.md) | `npm run demo -- stage-162-closed-reference-casts --no-rebuild` | Verify casts and type tests on constructed classes and interfaces |
 | [163 · Class Int32 field aliases and exchange](stage-163-class-int32-exchange/README.md) | `npm run demo -- stage-163-class-int32-exchange` | Compare interior aliases and signed Int32 exchange across class, array, local, static and struct fields |
+| [165 · Dynamic native calls](stage-165-dynamic-native-calls/README.md) | `npm run demo -- stage-165-dynamic-native-calls` | Compare typed calls through resolved export tokens, UTF-16 writes and diagnostics in Node and Edge |
 
 ## Adding a stage
 
