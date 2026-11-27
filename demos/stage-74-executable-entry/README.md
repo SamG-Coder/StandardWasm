@@ -98,6 +98,8 @@ The CLR, Node, and Edge compare the alias, the length of a default span, and
 UTF-16 values at the wraparound boundary. The same compiled module exercises
 a pointer-backed span over the shadow stack, a readonly view over the same
 memory, and typed exceptions for a negative length and invalid indices.
+The slice cases compare both managed slice overloads, shared backing storage,
+UTF-16 offsets for pointer-backed slices, the empty span, and typed range failures.
 The by-reference case mutates an integer field and replaces a span in the
 caller's scoped struct. The caller observes both updates while its earlier
 value copy still refers to the original array. A separate case resets a

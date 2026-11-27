@@ -97,6 +97,42 @@ public static class ScopedSpanProbe
 
     private static int ReadLast(ReadOnlySpan<char> view) => view[^1];
 
+    public static unsafe int CheckSpanSlices(int scenario)
+    {
+        if (scenario == 5)
+        {
+            ReadOnlySpan<char> empty = default;
+            ReadOnlySpan<char> slice = empty.Slice(0, 0);
+            return slice.Length;
+        }
+        if (scenario == 6)
+        {
+            char* memory = stackalloc char[3];
+            memory[0] = 'a';
+            memory[1] = 'b';
+            memory[2] = 'c';
+            ReadOnlySpan<char> view = new Span<char>(memory, 3);
+            ReadOnlySpan<char> tail = view.Slice(1);
+            ReadOnlySpan<char> last = tail.Slice(1, 1);
+            return tail[0] * 100 + last[0];
+        }
+
+        var owner = new char[3];
+        owner[1] = 'b';
+        var span = new Span<char>(owner);
+        int start = scenario == 1 ? -1 : scenario == 2 ? 4 : scenario == 7 ? 3 : 1;
+        int length = scenario == 3 ? 3 : scenario == 4 ? -1 : scenario == 7 ? 0 : 2;
+        try
+        {
+            Span<char> slice = span.Slice(start, length);
+            Span<char> tail = span.Slice(start);
+            if (length == 0) return slice.Length + tail.Length;
+            slice[0] = 'x';
+            return tail[0] * 100 + owner[1] + slice.Length;
+        }
+        catch (ArgumentOutOfRangeException) { return -103; }
+    }
+
     public static unsafe int CheckStackBackedSpan(int scenario)
     {
         char* storage = stackalloc char[3];

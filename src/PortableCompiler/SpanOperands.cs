@@ -36,6 +36,21 @@ namespace PortableCompiler
             {
                 call = Next(records, call, clauses);
                 if (call < 0) return 0;
+                // Plain loads cannot replace the original span before the call,
+                // so a descriptor snapshot is equivalent to the receiver byref.
+                bool explicitLength = records[call] == Load || records[call] == Constant;
+                int slice = explicitLength ? Next(records, call, clauses) : call;
+                int arity = explicitLength ? 2 : 1;
+                if (slice >= 0 && IsDirectMemberCall(records, slice) &&
+                    SpanMetadata.IsSlice(bundle, image, layout, heaps, owner, records[slice + 1],
+                        context, methodArguments, spanType, objects, arity))
+                {
+                    records[address] = field ? GetField : Load;
+                    records[slice] = SpanSlice;
+                    records[slice + 1] = arity;
+                    records[slice + 3] = spanType;
+                    return 1;
+                }
             }
             if (!IsDirectMemberCall(records, call)) return 0;
             if (!field && indexed && lengthCall < 0 && spanType == SignatureTypes.WritableCharacterSpan &&

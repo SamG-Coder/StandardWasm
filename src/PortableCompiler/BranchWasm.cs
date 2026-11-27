@@ -1071,6 +1071,15 @@ namespace PortableCompiler
                     }
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, CharacterLocation, top - 1));
                 }
+                else if (kind == SpanSlice)
+                {
+                    int type = records[slot + 3];
+                    int view = Spill(spills, maximum, spillFlags, type, top - operand);
+                    int start = Spill(spills, maximum, spillFlags, I32, top - operand + 1);
+                    int length = operand == 2 ? Spill(spills, maximum, spillFlags, I32, top) : -1;
+                    used = SpanWasm.Slice(code, used, type, view, start, length, frameShape[25] != 0);
+                    used = Local(code, used, 0x21, view);
+                }
                 else if (kind == SpanRead)
                 {
                     int type = records[slot + 3];

@@ -188,6 +188,32 @@ namespace PortableCompiler
                 reference[AssemblyReferences.GenericParent], objects, context, methodArguments) == ReadOnlyByteSpan;
         }
 
+        internal static bool IsSlice(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int member, int context, int[] methodArguments, int spanType, int[] objects, int arity)
+        {
+            var reference = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadMember(image, heaps, layout, member, reference, allowClosedParent: true) < 0 ||
+                !MatchesAscii(image, heaps, (uint)reference[4], "Slice")) return false;
+            int parent = reference[AssemblyReferences.GenericParent];
+            if (parent == 0 || ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps,
+                owner, parent, objects, context, methodArguments) != spanType) return false;
+            int blob = reference[5];
+            if (blob < 1 || blob >= heaps[1]) return false;
+            var next = new int[1];
+            int limit = heaps[0] + heaps[1];
+            int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
+            int at = next[0];
+            if (size < 8 || size > limit - at || image[at] != 0x20 || image[at + 1] != arity ||
+                image[at + 2] != 0x15 || image[at + 3] != 0x11) return false;
+            int end = at + size;
+            int result = CompressedUnsigned(image, at + 4, end, next);
+            at = next[0];
+            if (result < 1 || end - at != 3 + arity ||
+                !IsDefinition(image, layout, heaps, result, spanType == WritableCharacterSpan) ||
+                image[at] != 1 || image[at + 1] != 0x13 || image[at + 2] != 0) return false;
+            return image[at + 3] == 8 && (arity == 1 || image[at + 4] == 8);
+        }
+
         internal static int Accessor(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int member, int context, int[] methodArguments, int spanType, int[] objects)
         {

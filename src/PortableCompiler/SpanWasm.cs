@@ -110,6 +110,58 @@ namespace PortableCompiler
             return used;
         }
 
+        internal static int Slice(byte[] code, int used, int type, int view, int start, int length, bool nativeCharacters)
+        {
+            used = Local(code, used, 0x20, start);
+            used = Length(code, used, view);
+            code[used++] = 0x4b; // start > length, unsigned also rejects negative offsets
+            used = ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.ArgumentOutOfRangeTag);
+            if (length >= 0)
+            {
+                used = Local(code, used, 0x20, length);
+                used = Remaining(code, used, view, start);
+                code[used++] = 0x4b; // Check against the remainder without adding two user values.
+                used = ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.ArgumentOutOfRangeTag);
+            }
+
+            used = Local(code, used, 0x20, view);
+            code[used++] = 0xd1; // A valid slice of the default span is still default.
+            code[used++] = 0x04;
+            used = WasmBinary.ValueType(code, used, type);
+            used = Local(code, used, 0x20, view);
+            code[used++] = 0x05;
+            used = LoadField(code, used, view, 0);
+            used = LoadField(code, used, view, 1);
+            if (nativeCharacters && (type == CharacterSpan || type == WritableCharacterSpan))
+            {
+                // Null owner on a non-default character descriptor denotes a
+                // byte address. Managed owners use element offsets.
+                used = LoadField(code, used, view, 0);
+                code[used++] = 0xd1;
+                code[used++] = 0x04; code[used++] = 0x7f;
+                used = Local(code, used, 0x20, start);
+                used = Const(code, used, 1);
+                code[used++] = 0x74; // i32.shl
+                code[used++] = 0x05;
+                used = Local(code, used, 0x20, start);
+                code[used++] = 0x0b;
+            }
+            else used = Local(code, used, 0x20, start);
+            code[used++] = 0x6a;
+            used = length < 0 ? Remaining(code, used, view, start) : Local(code, used, 0x20, length);
+            used = Gc(code, used, 0, type);
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        private static int Remaining(byte[] code, int used, int view, int start)
+        {
+            used = Length(code, used, view);
+            used = Local(code, used, 0x20, start);
+            code[used++] = 0x6b;
+            return used;
+        }
+
         internal static int Read(byte[] code, int used, int vector, int view, int index)
         {
             used = Address(code, used, vector, view, index);

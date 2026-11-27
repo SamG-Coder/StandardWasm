@@ -911,7 +911,7 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.InvalidCast | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.CastClass)
                                 tags = ExceptionTypes.InvalidCast;
-                            else if (kind == BranchIl.NativeCharacterSpan)
+                            else if (kind == BranchIl.NativeCharacterSpan || kind == BranchIl.SpanSlice)
                                 tags = ExceptionTypes.ArgumentOutOfRange;
                             else if (kind == BranchIl.ThrowFrameworkArgument)
                                 tags = operation == ExceptionTagsWasm.ArgumentNullTag

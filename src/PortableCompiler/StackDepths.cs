@@ -283,6 +283,10 @@ namespace PortableCompiler
                     ? Push(stack, allocated, depth - 2, CharacterLocation) : -2;
             if (kind == SpanLength)
                 return Match(stack, depth, extra) ? Push(stack, allocated, depth - 1, I32) : -2;
+            if (kind == SpanSlice)
+                return Match(stack, depth - operand, extra) && Match(stack, depth, I32) &&
+                    (operand == 1 || Match(stack, depth - 1, I32))
+                    ? Push(stack, allocated, depth - operand - 1, extra) : -2;
             if (kind == SpanRead)
                 return Match(stack, depth - 1, extra) && Match(stack, depth, I32)
                     ? Push(stack, allocated, depth - 2, extra == ObjectSpan ? ObjectReference : I32) : -2;
