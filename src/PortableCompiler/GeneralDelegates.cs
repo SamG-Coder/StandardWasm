@@ -46,9 +46,11 @@ namespace PortableCompiler
             }
             int parameterCount = kind == DelegateShapes.PlatformFunc ? count - 1 : count;
             int result = kind == DelegateShapes.PlatformFunc ? parameters[count - 1] : Void;
-            // Func<int> keeps the scalar Delegate closure of decision 0088.
-            if (kind == DelegateShapes.PlatformFunc && count == 1 && result == I32) return 0;
-            return DelegateShapes.Register(objects, kind, -1, count, result, parameters, parameterCount);
+            // Func<int> keeps the scalar Delegate closure of decision 0088: exactly System.Int32 (a raw
+            // I32 argument carries no nominal element and stays there too). Func<uint> is general.
+            if (kind == DelegateShapes.PlatformFunc && count == 1 &&
+                (arguments[0] == GenericScalar.Key(8) || arguments[0] == I32)) return 0;
+            return DelegateShapes.Register(objects, kind, -1, count, result, parameters, parameterCount, arguments, count);
         }
 
         internal const int DefinedDelegate = 3;
@@ -88,7 +90,7 @@ namespace PortableCompiler
             }
             int result = types[0] == Void ? Void : CliStorage(objects, types[0]);
             if (types[0] != Void && result == 0) return 0;
-            return DelegateShapes.Register(objects, DefinedDelegate, assembly, row, result, parameters, count);
+            return DelegateShapes.Register(objects, DefinedDelegate, assembly, row, result, parameters, count, parameters, 0);
         }
 
         // Construct or Invoke for a MethodDef of a delegate TypeDef with a key (DefinedStorage); key[0]

@@ -19,8 +19,12 @@ or ordinary classes. Their runtime-provided `.ctor` and `Invoke` have no IL, so 
   and result storage. Entries live in the layout registry's auxiliary area, linked from
   `ObjectLayouts.DelegateHead`.
   - **Platform delegates.** ``System.Func`1..`5`` and ``System.Action`1..`4`` instantiations, keyed
-    by kind and argument storages. The same instantiation from any assembly is one entry.
-    ``Func`1<int32>`` keeps decision 0088's `Delegate` storage.
+    by kind and **nominal** type arguments. The same instantiation from any assembly is one entry.
+    The Wasm storage of each argument gives the Invoke shape and is stored beside the identity.
+    `Action<int>` and `Action<uint>` share a shape but are distinct keys, so a closed generic over
+    them (`Slot<Action<int>>`) keeps its own type identity and static fields (Codex review of
+    f6e0ba1). Only exactly ``Func`1<System.Int32>`` keeps decision 0088's `Delegate` storage;
+    `Func<uint>` is general.
   - **Delegate TypeDefs.** A non-generic class extending the platform `System.MulticastDelegate`,
     keyed by assembly and row. Its Invoke MethodDef gives the signature. `BundleLayouts.RegisterType`
     asks `GeneralDelegates.DefinedStorage` before registering a class layout.
@@ -67,5 +71,5 @@ or ordinary classes. Their runtime-provided `.ctor` and `Invoke` have no IL, so 
 ## Verification
 
 `npm run demo -- stage-204-general-delegates` runs the fixture on the x86 CLR 10.0.10 and compares
-Node and Edge with it. The fixture has 17 value kernels and 5 `Reject*` kernels that must be
+Node and Edge with it. The fixture has 20 value kernels and 5 `Reject*` kernels that must be
 diagnosed.

@@ -8,34 +8,42 @@ namespace PeLibrary
     //
     // Entries live in the layout registry's auxiliary area (growing inward from the end, like enum
     // identities), linked from ObjectLayouts.DelegateHead:
-    //   [next, ordinal, kind, assembly, row, result, helper, count, parameter storages...]
+    //   [next, ordinal, kind, assembly, row, result, helper, count, nominal count,
+    //    parameter storages..., nominal arguments...]
     // helper is the invoke helper's function index + 1 for the current pass, or 0.
     // A platform delegate (System.Func`n, System.Action`n) is identified by kind, arity and its
-    // argument storages, so the same instantiation from any assembly is one entry.
+    // nominal generic arguments, so the same instantiation from any assembly is one entry. Nominal,
+    // not storage: Action<int> and Action<uint> share an Invoke shape but are distinct types, and a
+    // closed generic over them (Slot<Action<int>>) must not alias (Codex review of f6e0ba1). A
+    // delegate TypeDef is identified by assembly and row and has no nominal arguments.
     internal static class DelegateShapes
     {
         internal const int KeyBase = 0x300, MaxDelegates = 256;
         internal const int PlatformFunc = 1, PlatformAction = 2;
-        private const int Next = 0, Ordinal = 1, Kind = 2, Assembly = 3, Row = 4, Result = 5, Helper = 6, Count = 7, Parameters = 8;
+        private const int Next = 0, Ordinal = 1, Kind = 2, Assembly = 3, Row = 4, Result = 5, Helper = 6, Count = 7, NominalCount = 8, Parameters = 9;
 
         internal static bool IsKey(int type) => type >= KeyBase && type < KeyBase + MaxDelegates;
 
-        // The storage key for (kind, assembly, row, result, parameters[0..count)), registering it on first
-        // use. -3 when the registry is full, -2 past MaxDelegates.
-        internal static int Register(int[] registry, int kind, int assembly, int row, int result, int[] parameters, int count)
+        // The storage key for the delegate type (kind, assembly, row, nominal[0..nominalCount)), whose
+        // Invoke shape is (parameters[0..count)) -> result, registering it on first use. The identity
+        // determines the shape, so only the identity is compared. -3 when the registry is full, -2 past
+        // MaxDelegates.
+        internal static int Register(int[] registry, int kind, int assembly, int row, int result, int[] parameters, int count,
+            int[] nominal, int nominalCount)
         {
             int ordinals = 0;
             for (int entry = registry[ObjectLayouts.DelegateHead]; entry != 0; entry = registry[entry + Next])
             {
                 ordinals++;
                 if (registry[entry + Kind] != kind || registry[entry + Assembly] != assembly || registry[entry + Row] != row ||
-                    registry[entry + Result] != result || registry[entry + Count] != count) continue;
+                    registry[entry + NominalCount] != nominalCount) continue;
+                int first = entry + Parameters + registry[entry + Count];
                 bool same = true;
-                for (int i = 0; i < count && same; i++) same = registry[entry + Parameters + i] == parameters[i];
+                for (int i = 0; i < nominalCount && same; i++) same = registry[first + i] == nominal[i];
                 if (same) return KeyBase + registry[entry + Ordinal];
             }
             if (ordinals >= MaxDelegates) return -2;
-            int size = Parameters + count;
+            int size = Parameters + count + nominalCount;
             int start = registry.Length - registry[2] - size;
             if (start < ObjectLayouts.FieldMapStart + registry[1]) return -3;
             registry[start + Next] = registry[ObjectLayouts.DelegateHead];
@@ -46,7 +54,9 @@ namespace PeLibrary
             registry[start + Result] = result;
             registry[start + Helper] = 0;
             registry[start + Count] = count;
+            registry[start + NominalCount] = nominalCount;
             for (int i = 0; i < count; i++) registry[start + Parameters + i] = parameters[i];
+            for (int i = 0; i < nominalCount; i++) registry[start + Parameters + count + i] = nominal[i];
             registry[ObjectLayouts.DelegateHead] = start;
             registry[2] = registry[2] + size;
             return KeyBase + ordinals;

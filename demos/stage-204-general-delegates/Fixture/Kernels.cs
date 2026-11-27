@@ -10,6 +10,7 @@ namespace GeneralDelegateFixture
     public delegate void Sink(string s);
     public delegate Scale Factory(int factor);
     public delegate int Chain(Chain next, int x);
+    public sealed class Slot<T> { public static int Value; }
     public sealed class Holder { public Func<int, int> Map; }
     public static class Kernels
     {
@@ -46,6 +47,16 @@ namespace GeneralDelegateFixture
         public static int RejectIsType() { object o = (Combine)Mix; return o is Sink ? 1 : 2; }
         public static int RejectFuncCast() { object o = (Func<int, int>)Twice; return ((Func<int, int>)o)(21); }
         public static int WideTypeIndices() => WideDelegates.Run();
+        static int Distinct<T, U>() => typeof(T) == typeof(U) ? 1 : 2;
+        // Action<int> and Action<uint> share an Invoke shape but are different types.
+        public static int NominalTypeArguments() => Distinct<Slot<Action<int>>, Slot<Action<uint>>>();
+        public static int NominalStaticFields()
+        {
+            Slot<Action<int>>.Value = 37;
+            Slot<Action<uint>>.Value = 41;
+            return Slot<Action<int>>.Value;
+        }
+        public static int UnsignedFunc() { Func<uint> f = () => 7u; return (int)f() + (int)f(); }
         public static int DoubleResult() { Func<double, double> f = d => d * 1.5; return (int)(f(10.0) * 10); }
     }
 }
