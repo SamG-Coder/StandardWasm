@@ -76,11 +76,12 @@ namespace PortableCompiler
             var names = new int[2];
             if (ObjectLayouts.TypeDefinitionNames(image, heaps, layout, typeRow, names) < 0) return -1;
             int used = start;
-            if (names[1] != 0 && image[heaps[2] + names[1]] != 0)
+            if (names[1] != 0)
             {
-                used = Copy(image, heaps, (uint)names[1], literals, used);
-                if (used < 0) return used;
-                used = Put(literals, used, '.');
+                // Copy validates the heap index; a valid empty namespace writes nothing and gets no dot.
+                int named = Copy(image, heaps, (uint)names[1], literals, used);
+                if (named < 0) return named;
+                if (named != used) used = Put(literals, named, '.');
                 if (used < 0) return used;
             }
             used = Copy(image, heaps, (uint)names[0], literals, used);
