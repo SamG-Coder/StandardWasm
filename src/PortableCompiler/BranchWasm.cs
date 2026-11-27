@@ -1191,6 +1191,17 @@ namespace PortableCompiler
                     used = Local(code, used, 0x20, operand);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, records[slot + 3], depth));
                 }
+                else if (kind == NativeFrameFieldAddress)
+                {
+                    used = Local(code, used, 0x20, cellLocals[operand]);
+                    int offset = records[slot + 3];
+                    if (offset != 0)
+                    {
+                        used = Const(code, used, offset);
+                        code[used++] = 0x6a; // i32.add
+                    }
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, Native, depth));
+                }
                 else if (kind == LoadFrameLocation)
                 {
                     int type = records[slot + 3];

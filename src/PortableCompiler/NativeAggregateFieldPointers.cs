@@ -90,7 +90,14 @@ namespace PortableCompiler
                 !IsNativeWordCall(image, layout, heaps, counts, U32(image, start + 7), true) ||
                 !IsNativeWordCall(image, layout, heaps, counts, U32(image, start + 12), false)) return -2;
 
-            uint token = U32(image, start + 2);
+            return NativeWordOffset(bundle, image, layout, heaps, owner, context, type, objects, globals,
+                U32(image, start + 2), write: false);
+        }
+
+        internal static int NativeWordOffset(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int context, int type, int[] objects, int[] globals, uint token, bool write)
+        {
+            int definition = ObjectLayouts.TypeDef(objects, type);
             int field = (int)(token & 0xffffff);
             if (token >> 24 == 4)
             {
@@ -100,8 +107,8 @@ namespace PortableCompiler
             else if (token >> 24 == 0x0a)
             {
                 var linked = new int[4];
-                if (AssemblyBundle.ResolveField(bundle, image, layout, heaps, owner, field, false, false,
-                    objects, globals, linked, context, definition) < 0 ||
+                if (AssemblyBundle.ResolveField(bundle, image, layout, heaps, owner, field, write, false,
+                    objects, globals, linked, context, definition, constructorFieldWrite: write) < 0 ||
                     FieldAccess.Owner(linked[1]) != type || FieldAccess.Storage(linked[1]) != Native) return -2;
                 field = linked[2];
             }
