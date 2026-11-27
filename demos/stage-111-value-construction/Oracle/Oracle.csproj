@@ -4,5 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-  <ItemGroup><ProjectReference Include="../ValueConstructionDemo.csproj" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ValueConstructionDemo.csproj" />
+    <ProjectReference Include="../Containment/ReferenceContainmentDemo.csproj" />
+  </ItemGroup>
 </Project>

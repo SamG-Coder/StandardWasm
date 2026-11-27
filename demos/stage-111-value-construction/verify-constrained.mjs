@@ -24,20 +24,21 @@ const fixturePath = join(stage, "bin/Release/netstandard2.0");
 const images = [join(fixturePath, "ValueConstructionDemo.dll"), join(fixturePath, "ValueConstructionDependency.dll"),
     ...["netstandard.dll", "System.Runtime.dll", "System.Private.CoreLib.dll"].map(file => join(runtime.directory, file))]
     .map(file => readFileSync(file));
-const bundle = Buffer.concat(images.flatMap(image => {
+const containment = readFileSync(join(stage, "Containment/bin/Release/netstandard2.1/ReferenceContainmentDemo.dll"));
+const pack = parts => Buffer.concat(parts.flatMap(image => {
     const length = Buffer.alloc(4);
     length.writeUInt32LE(image.length);
     return [length, image];
 }));
 
-async function verify(compiler, fixture, packed, inputs) {
+async function verify(compiler, fixture, packed, containment, containmentPacked, inputs) {
     const { instance: { exports: tool } } = await WebAssembly.instantiate(compiler);
     function upload(bytes) {
         const result = tool.CreateBytes(bytes.length);
         for (let i = 0; i < bytes.length; i++) tool.SetByte(result, i, bytes[i]);
         return result;
     }
-    const image = upload(fixture), bundle = upload(packed);
+    let image = upload(fixture), bundle = upload(packed);
     function compileEntry(name) {
         const row = tool.FindRow(image, upload(new TextEncoder().encode(name)));
         if (row <= 0) throw Error("Missing fixture " + name);
@@ -59,7 +60,7 @@ async function verify(compiler, fixture, packed, inputs) {
     }
     const debuggerImports = { "standardwasm:runtime": { isDebuggerAttached: () => 0 } };
     const [debuggerStatus] = await runEntry("ReadManagedDebuggerStatus", debuggerImports, [undefined]);
-    return { values: await runEntry("InvokeValueOverride"), typeBranches: await runEntry("CheckTypeBranches"), debuggerStatus,
+    const results = { values: await runEntry("InvokeValueOverride"), typeBranches: await runEntry("CheckTypeBranches"), debuggerStatus,
         closedClasses: await runEntry("CheckClosedClassSlots"), closedClassNull: await runEntry("CheckClosedClassNull"),
         closedInterfaces: await runEntry("CheckClosedInterface"), closedInterfaceNull: await runEntry("CheckClosedInterfaceNull"),
         primitiveHashes: await runEntry("CheckPrimitiveHash"),
@@ -68,9 +69,14 @@ async function verify(compiler, fixture, packed, inputs) {
         entryAliases: await runEntry("UpdateEntryArray"), entryFailures: await runEntry("CheckEntryArrayFailure"),
         bucketAliases: await runEntry("ReadManagedBuckets"), bucketFailures: await runEntry("CheckBucketFailure"),
         bucketExportRejection: compileEntry("RejectExportedBucket"), rejection: compileEntry("RejectInheritedValueHash") };
+    image = upload(containment);
+    bundle = upload(containmentPacked);
+    results.referenceContainment = await runEntry("CheckReferenceContainment");
+    return results;
 }
 
-const assets = { "/compiler": readFileSync(compiler), "/fixture": images[0], "/bundle": bundle };
+const assets = { "/compiler": readFileSync(compiler), "/fixture": images[0], "/bundle": pack(images),
+    "/containment": containment, "/containment-bundle": pack([containment, ...images.slice(2)]) };
 const expected = {
     values: oracle.values,
     typeBranches: oracle.typeBranches,
@@ -82,6 +88,7 @@ const expected = {
     primitiveHashes: oracle.primitiveHashes,
     primitiveDescriptors: oracle.primitiveDescriptors,
     closedValueTypes: oracle.closedValueTypes,
+    referenceContainment: oracle.referenceContainment,
     entryAliases: oracle.entryAliases,
     entryFailures: oracle.entryFailures,
     bucketAliases: oracle.bucketAliases,

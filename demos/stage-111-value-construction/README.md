@@ -61,3 +61,9 @@ and unsigned values and reading the current `Int32` from an array reference.
 The closed class fixture dispatches through two generic instantiations and
 selects ordinary overrides and hidden slots. It also checks a virtual body
 reached through an interface and a typed null-receiver exception.
+
+The .NET Standard 2.1 companion exercises
+`RuntimeHelpers.IsReferenceOrContainsReferences<T>()` in direct returns and
+inside generic branches. It checks primitive and enum types, arrays and
+strings, static reference fields, and nested generic value types with and
+without instance references.

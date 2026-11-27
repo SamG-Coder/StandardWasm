@@ -23,6 +23,7 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new
     primitiveHashes = inputs.Select(PrimitiveTypeProbe.CheckPrimitiveHash).ToArray(),
     primitiveDescriptors = inputs.Select(PrimitiveTypeProbe.CheckPrimitiveDescriptors).ToArray(),
     closedValueTypes = inputs.Select(PrimitiveTypeProbe.CheckClosedValueType).ToArray(),
+    referenceContainment = inputs.Select(ReferenceContainmentProbe.CheckReferenceContainment).ToArray(),
     entryAliases = inputs.Select(EntryArrayProbe.UpdateEntryArray).ToArray(),
     entryFailures = inputs.Select(EntryArrayProbe.CheckEntryArrayFailure).ToArray(),
     bucketAliases = inputs.Select(BucketProbe.ReadManagedBuckets).ToArray(),

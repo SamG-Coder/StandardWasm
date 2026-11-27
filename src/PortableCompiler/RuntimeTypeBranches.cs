@@ -11,6 +11,7 @@ namespace PortableCompiler
         internal static void FoldClosedTypeBranches(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
             int context, int[] methodArguments, int[] objects, int[] records, int[] clauses, int methodCount)
         {
+            FoldReferenceContainment(bundle, image, layout, heaps, owner, context, methodArguments, objects, records, clauses);
             if ((methodArguments == null && context == 0) || clauses.Length != 0) return;
             bool changed = false;
             var left = new int[2];
@@ -60,6 +61,50 @@ namespace PortableCompiler
                 changed = true;
             }
             if (changed) RemoveUnreachable(records);
+        }
+
+        private static void FoldReferenceContainment(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
+            int owner, int context, int[] methodArguments, int[] objects, int[] records, int[] clauses)
+        {
+            int[] counts = null, spec = null, arguments = null;
+            bool prune = false;
+            for (int slot = 0; slot < records.Length; slot += Width)
+            {
+                if (records[slot] != MethodSpecCall || (records[slot + 3] & MethodSpecCallvirt) != 0) continue;
+                if (counts == null)
+                {
+                    counts = new int[45];
+                    if (PeLibrary.MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return;
+                    spec = new int[MethodSpecifications.Width];
+                    arguments = new int[1];
+                }
+                if (MethodSpecifications.Read(image, heaps, layout, counts, records[slot + 1], spec) < 0 ||
+                    !ReferenceContainment.IsIntrinsic(image, layout, heaps, counts, spec) ||
+                    MethodInstantiations.ReadArguments(bundle, image, layout, heaps, owner, context,
+                        objects, methodArguments, spec, arguments) < 0) continue;
+
+                int result = ReferenceContainment.Check(objects, arguments[0]);
+                if (result < 0) continue;
+                int branch = Next(records, slot);
+                // Exception handlers enter from metadata, outside the normal-flow reachability walk.
+                if (clauses.Length == 0 && branch < records.Length && records[branch] == Conditional &&
+                    (records[branch + 3] == 0x45 || records[branch + 3] == 0) &&
+                    !ValueOperands.Entry(records, branch / Width, clauses))
+                {
+                    bool taken = records[branch + 3] == 0x45 ? result == 0 : result != 0;
+                    records[slot] = Nop;
+                    records[branch] = taken ? Branch : Nop;
+                    records[branch + 3] = 0;
+                    prune = true;
+                }
+                else
+                {
+                    records[slot] = Constant;
+                    records[slot + 1] = result;
+                    records[slot + 3] = 0;
+                }
+            }
+            if (prune) RemoveUnreachable(records);
         }
 
         private static int Next(int[] records, int slot) => records[slot + 2] * Width;
