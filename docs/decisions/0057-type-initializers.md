@@ -19,7 +19,7 @@ through its guard, an i32 global with four states:
 | not started | 0 | marks it running and runs the body |
 | running | `(epoch << 2) \| 1` | returns at once if `epoch` is current (recursion); otherwise traps |
 | completed | 2 | returns at once |
-| failed | 3 | traps |
+| failed | 3 | rethrows a cached managed exception when available, otherwise traps |
 
 The managed program has one thread (decision 0026). A trigger reached while
 the same initializer is running is therefore recursion on that thread, and the
@@ -51,15 +51,12 @@ it must observe its callees' failures.
 initializer in the same module (ECMA-335 II.16.1.2). Every other write stays
 rejected.
 
-## Failure
+## Failure fallback
 
-The CLR wraps an escaping exception in `TypeInitializationException`. It
-makes one attempt and raises the same exception object, with the same inner
-exception, on every later trigger. The compiler cannot construct that
-exception yet. The constructor needs CoreLib's resource formatting (#170,
-#174), and fixed-tag exceptions carry no inner object. So a failure must stop
-execution, never reach managed code unwrapped, and never expose a partly
-initialized type:
+The CLR wraps an escaping exception in `TypeInitializationException` and
+rethrows that instance on later triggers. When the compiler cannot construct
+the wrapper or an engine trap interrupts initialization, the guard prevents
+later triggers from exposing a partly initialized type:
 
 - The body runs inside `try_table (catch_all)`. A managed exception that
   escapes, on a fixed tag or the object tag, marks the guard failed. It then
@@ -73,9 +70,6 @@ initialized type:
   nonzero, the wrapper advances the epoch and clears the count. Internal calls
   use the original bodies, so recursion within one invocation keeps its epoch.
   This assumes the host never re-enters an export while an initializer runs.
-- The trap is an explicit runtime diagnostic. A CLR program that catches the
-  `TypeInitializationException` and continues does something this compiler
-  cannot yet reproduce. #170 stays open for that gap.
 
 ## Typed failure (#170)
 
@@ -97,6 +91,9 @@ becomes the CLR's `TypeInitializationException`:
 - **Caching.** The object goes in a per-initializer global (owner 0, a reserved negative row).
   The guard is marked failed and the object is thrown on the object tag. Every later trigger
   rethrows the **same** object, as the CLR does.
+  Each closed generic type gets its own guard and cache. Its displayed name comes from the
+  definition without constructed type arguments. Reachability tracing keeps the cached
+  exception and its referenced objects alive after the caller's frame unwinds.
 - **No epoch advance.** A managed exception unwinds frame by frame, so each enclosing
   initializer's guard catches and wraps it in turn, and the epoch does not advance. An
   initializer that reads a failing one fails with a `TypeInitializationException` whose inner
@@ -123,21 +120,18 @@ It can be wrapped once the raising site supplies the exact message.
 These cases still trap as described above:
 - a tag whose CoreLib type cannot be bound
 - a bundle without CoreLib's constructors
-- a type name that is not ASCII
 - raw engine traps such as stack exhaustion
 
 
 
 `newobj System.Object::.ctor` allocates the reserved zero-field struct in the
 native-vector recursive group (`RootObjectHeap`). Each allocation has its own
-reference identity, and no class's nominal test accepts it. Object members
-called on it (`GetHashCode`, `ToString`, `GetType`, `Equals`) and `lock`
-(`Monitor.Enter`) stay located diagnostics.
+reference identity, and no class's nominal test accepts it. Calls to
+`GetHashCode`, `ToString`, and `Equals` stay located diagnostics.
 
 ## Still diagnosed
 
-- generic types with an initializer, which need per-instantiation guards
 - instance methods of precise value types, which also trigger
 - `RuntimeHelpers.RunClassConstructor`
 - module initializers beyond the empty and trivial-call forms
-- static field addresses (`ldsflda`)
+- static field addresses (`ldsflda`) on closed generic types

@@ -32,6 +32,19 @@ namespace PeLibrary
             return reference > 3 && (reference & 3) != 3 ? reference : -1;
         }
 
+        internal static bool HasDefinitionReference(byte[] image, int[] heaps, int[] methods, int definition)
+        {
+            var table = new int[3];
+            int count = ReadTable(image, heaps, methods, table);
+            if (count < 0) return true; // Unknown implementers keep the conservative diagnostic.
+            uint start = (uint)(table[0] + table[1]);
+            int width = table[2] - table[1];
+            for (int row = 0; row < count; row++)
+                if (ReadIndex(image, start + (uint)(row * table[2]), width) == (definition << 2))
+                    return true;
+            return false;
+        }
+
         private static int ReadIndex(byte[] image, uint offset, int width) =>
             width == 2 ? (int)U16(image, offset) : unchecked((int)U32(image, offset));
     }

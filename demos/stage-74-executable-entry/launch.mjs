@@ -3,13 +3,14 @@ import { frameworkInventory, frameworkMissingExitCode, frameworkMissingMessage, 
 import { instantiateManagedModule } from "./resource-host.mjs";
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
+const defaultFileSystem = Object.freeze({ currentDirectory: "C:\\StandardWasm\\App" });
 
 function readManifest(asset) {
     if (!asset) throw Error("Provide the original .NET deployment manifests.");
     return JSON.parse(decoder.decode(asset.bytes));
 }
 
-export async function runManagedEntry(compilerBytes, selection) {
+export async function runManagedEntry(compilerBytes, selection, platform) {
     const config = readManifest(selection.config);
     const deps = readManifest(selection.deps);
     const target = config.runtimeOptions?.tfm;
@@ -73,7 +74,15 @@ export async function runManagedEntry(compilerBytes, selection) {
 
     const code = Uint8Array.from({ length }, (_, i) => compiler.ReadByte(output, i));
     const module = await WebAssembly.compile(code);
-    const { exports } = await instantiateManagedModule(module, compiler, [selection.entry, ...companions]);
+    // File input exposes no Windows host path. Each launched program gets a
+    // virtual working directory unless its platform supplies another one.
+    const includedFrameworks = config.runtimeOptions?.includedFrameworks;
+    const isDesktop = framework => framework?.name === "Microsoft.WindowsDesktop.App";
+    const win32Desktop = frameworks.frameworks.some(isDesktop) ||
+        (Array.isArray(includedFrameworks) && includedFrameworks.some(isDesktop));
+    const services = { win32FileSystem: defaultFileSystem, win32Desktop, ...platform };
+    const { exports } = await instantiateManagedModule(module, compiler, [selection.entry, ...companions],
+        {}, selection.executablePath, undefined, undefined, services);
     if (typeof exports.run !== "function" || exports.run.length !== 0)
         throw Error("This entry host supports a parameterless managed entry point.");
     const exitCode = exports.run();

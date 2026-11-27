@@ -83,7 +83,7 @@ namespace FieldlessSequentialValue
 
         private static void WriteByReference(ref Carrier value) => value.Value = 42;
 
-        public static int RejectEscapingAddress()
+        public static int WriteThroughBorrow()
         {
             var target = default(Carrier);
             WriteByReference(ref target);

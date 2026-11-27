@@ -27,7 +27,12 @@ name. Signed grants also match the full public key. The check is evaluated once 
 Unchanged:
 
 - Private and FamANDAssem (`private protected`) are rejected.
-- Family-only (`protected`) is admitted only through the existing base-call rule.
+- Direct cross-assembly calls can bind protected methods through inheritance.
+  The caller must derive from the declaring class. Stack analysis requires the
+  receiver to be assignable to the caller's derived type. A direct `call` keeps
+  base dispatch, and `callvirt` to a nonvirtual method checks for null after
+  evaluating the arguments. Protected virtual dispatch still requires separate
+  support. Base constructors retain their existing rule.
 - Signature, static-ness, constructor, virtual and ambiguity checks still apply.
 - A refused call keeps the existing -6 diagnostic at its call, with the output buffer untouched.
 

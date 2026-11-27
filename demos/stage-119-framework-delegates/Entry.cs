@@ -86,14 +86,17 @@ namespace FrameworkDelegateDemo
             return unchecked((removed == null ? 100 : 200) + (kept == null ? 10 : 20) + value);
         }
 
-        public static int RejectStatic(int value)
+        private static int total;
+
+        public static int StaticTarget(int value)
         {
-            EventHandler handler = Ignore;
+            total = value;
+            EventHandler handler = new EventHandler(RecordStatic);
             handler(null, EventArgs.Empty);
-            return value;
+            return total;
         }
 
-        private static void Ignore(object sender, EventArgs e) { }
+        private static void RecordStatic(object sender, EventArgs e) => total = unchecked(total * 3 + 7);
     }
 
     public static class Demo

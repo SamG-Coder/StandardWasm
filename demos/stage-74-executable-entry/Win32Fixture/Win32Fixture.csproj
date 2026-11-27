@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../stage-92-nominal-enums/EnumVectors.cs" Link="EnumVectors.cs" />
+    <Compile Include="../../stage-111-value-construction/DebuggerProbe.cs" Link="DebuggerProbe.cs" />
+  </ItemGroup>
+</Project>

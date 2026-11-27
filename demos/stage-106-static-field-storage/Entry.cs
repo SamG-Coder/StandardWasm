@@ -7,6 +7,9 @@ namespace StaticStorageDemo
     {
         public static int Counter;
 
+        [ThreadStatic]
+        private static object threadKey;
+
         public static int Defaults() =>
             Counter == 0 && Storage.Counter == 0 && Storage.Narrow == 0 && Storage.Wide == 0 &&
             Storage.Single == 0f && Storage.Double == 0d && Storage.Key == null && Storage.Token == null ? 1 : -1;
@@ -43,8 +46,47 @@ namespace StaticStorageDemo
             return first == second ? Counter : -1;
         }
 
+        public static int ReadAnnotatedKey() => AnnotatedKeys.Read();
+
         public static int RejectInitialized() => Initialized.Counter;
-        public static int RejectThreadStatic() => Storage.ThreadCounter;
+        public static int ThreadState(int delta)
+        {
+            int firstAccess = threadKey == null ? 1000 : 0;
+            if (threadKey == null) threadKey = new object();
+            Storage.ThreadCounter = unchecked(Storage.ThreadCounter + delta);
+            return unchecked(firstAccess + Storage.ThreadCounter);
+        }
+
+        public static int ReadCompilerGenerated() => AttributedStorage.Counter;
+        public static int ReadUnsupportedAttribute() => AttributedStorage.UnsupportedCounter;
+    }
+
+    internal static class AttributedStorage
+    {
+        [System.Runtime.CompilerServices.CompilerGenerated]
+        internal static int Counter = 0;
+
+        [UnmappedField]
+        internal static int UnsupportedCounter = 0;
+    }
+
+    [System.AttributeUsage(System.AttributeTargets.Field)]
+    internal sealed class UnmappedFieldAttribute : System.Attribute
+    {
+    }
+
+    public static class AnnotatedKeys
+    {
+#nullable enable annotations
+        private static readonly object? Key = new object();
+#nullable disable annotations
+        private static readonly object Other = new object();
+
+        public static int Read()
+        {
+            var first = Key;
+            return first != null && first == Key && first != Other ? 1 : 0;
+        }
     }
 
     public static class Demo

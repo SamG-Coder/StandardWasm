@@ -1,0 +1,64 @@
+import { once } from "node:events";
+import { existsSync, readFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { chromium } from "playwright-core";
+
+export async function verifyBrowserSuite(demos, oracle) {
+    const blobs = Array.isArray(oracle) ? [] : oracle.blobs;
+    const browserOracle = JSON.stringify(Array.isArray(oracle) ? oracle
+        : { cases: oracle.cases, blobLengths: blobs.map(blob => blob.length) });
+    // Browser traffic stays on loopback. Large shared blobs exceed the
+    // DevTools pipe's message limit when fulfilled through Playwright routes.
+    const assets = new Map([
+        ["/", ["text/html", "<!doctype html><title>StandardWasm verification</title>"]],
+        ["/oracle.json", ["application/json", browserOracle]],
+        ["/blobs.bin", ["application/octet-stream", Buffer.concat(blobs.map(blob => Buffer.from(blob)))]],
+        ...["oracle", "bootstrap", "invoke", "verify"].map(name =>
+            ["/" + name + ".mjs", ["text/javascript", readFileSync(new URL(name + ".mjs", import.meta.url))]]),
+        ...demos.map(demo => ["/" + demo.assembly, ["application/wasm", readFileSync(demo.wasm)]])
+    ]);
+    const server = createServer((request, response) => {
+        const asset = assets.get(request.url);
+        if (!asset) {
+            response.writeHead(404);
+            response.end();
+            return;
+        }
+        const [contentType, body] = asset;
+        response.writeHead(200, { "Content-Type": contentType, "Content-Length": Buffer.byteLength(body) });
+        response.end(body);
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    try {
+        const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
+        const browser = await chromium.launch({
+            executablePath: process.env.BROWSER_PATH || (existsSync(edge) ? edge : undefined)
+        });
+        try {
+            const page = await browser.newPage();
+            await page.goto("http://127.0.0.1:" + server.address().port + "/");
+            const result = await page.evaluate(async () => {
+                const { oracleCases } = await import("/oracle.mjs");
+                const oracle = await (await fetch("/oracle.json")).json();
+                if (!Array.isArray(oracle)) {
+                    const bytes = new Uint8Array(await (await fetch("/blobs.bin")).arrayBuffer());
+                    let offset = 0;
+                    oracle.blobs = oracle.blobLengths.map(length => {
+                        // Keep a view over the shared buffer for each distinct payload.
+                        const blob = bytes.subarray(offset, offset + length);
+                        offset += length;
+                        return blob;
+                    });
+                }
+                const { verify } = await import("/verify.mjs");
+                return verify(async name => (await fetch("/" + name)).arrayBuffer(), oracleCases(oracle));
+            });
+            return { result, version: browser.version() };
+        } finally {
+            await browser.close();
+        }
+    } finally {
+        await new Promise(resolve => server.close(resolve));
+    }
+}

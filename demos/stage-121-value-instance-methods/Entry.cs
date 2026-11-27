@@ -68,14 +68,14 @@ namespace ValueMethodDemo
             return counter.Value;
         }
 
-        public static int RejectReset(int value)
+        public static int ResetReceiver(int value)
         {
             var counter = new Counter(value);
             counter.Reset();
             return counter.Value;
         }
 
-        public static int RejectReplace(int value)
+        public static int ReplaceReceiver(int value)
         {
             var counter = new Counter(1);
             counter.Replace(value);

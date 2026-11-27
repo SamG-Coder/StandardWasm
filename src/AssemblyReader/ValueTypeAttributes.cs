@@ -4,10 +4,12 @@ namespace PeLibrary
 {
     internal static class ValueTypeAttributes
     {
-        // Ordinary values return zero. Layout-changing attributes must either
-        // supply a valid element count or stop aggregate registration.
+        internal const int ByRefLike = -10;
+
+        // Ordinary values return zero. Callers opting into scoped layouts receive
+        // a distinct marker and must enforce the managed storage restrictions.
         internal static int ReadInlineArrayLength(byte[] image, int[] heaps, int[] methods, int[] counts, int typeRow,
-            int refs, int refWidth, int defs, int defWidth)
+            int refs, int refWidth, int defs, int defWidth, bool allowByRefLike = false)
         {
             if (counts[12] == 0) return 0;
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 12);
@@ -18,12 +20,13 @@ namespace PeLibrary
             int constructorWidth = width - parentWidth - blobs;
             int parent = typeRow << 5 | 3; // HasCustomAttribute.TypeDef.
             int inlineLength = 0;
+            bool byRefLike = false;
             for (int index = 0; index < counts[12]; index++)
             {
                 uint at = (uint)(table + index * width);
-                if (Index(image, at, parentWidth) != parent) continue;
-                int constructor = Index(image, at + (uint)parentWidth, constructorWidth);
-                int type = AttributeType(image, heaps, methods, counts, constructor);
+                if (AttributeConstructors.ReadRowIndex(image, at, parentWidth) != parent) continue;
+                int constructor = AttributeConstructors.ReadRowIndex(image, at + (uint)parentWidth, constructorWidth);
+                int type = AttributeConstructors.ReadType(image, heaps, methods, counts, constructor);
                 if (type < 0) return type;
                 if (type == 0) continue;
 
@@ -32,36 +35,23 @@ namespace PeLibrary
                 int rowWidth = tag == 1 ? refWidth : defWidth;
                 int nameColumn = tag == 1 ? refWidth - 2 * strings : 4;
                 uint nameAt = (uint)(start + (row - 1) * rowWidth + nameColumn);
-                int name = Index(image, nameAt, strings);
-                int space = Index(image, nameAt + (uint)strings, strings);
+                int name = AttributeConstructors.ReadRowIndex(image, nameAt, strings);
+                int space = AttributeConstructors.ReadRowIndex(image, nameAt + (uint)strings, strings);
                 int shape = ShapeAttribute(image, heaps, name, space);
                 if (shape == 0) continue;
-                if (shape == 1) return -2; // Ref-like values need lifetime analysis.
+                if (shape == 1)
+                {
+                    if (!allowByRefLike || inlineLength != 0) return -2;
+                    byRefLike = true;
+                    continue;
+                }
+                if (byRefLike) return -2;
                 if (inlineLength != 0) return -1;
-                int payload = Index(image, at + (uint)(parentWidth + constructorWidth), blobs);
+                int payload = AttributeConstructors.ReadRowIndex(image, at + (uint)(parentWidth + constructorWidth), blobs);
                 inlineLength = ReadInlineLength(image, heaps, methods, counts, constructor, type, payload);
                 if (inlineLength < 0) return inlineLength;
             }
-            return inlineLength;
-        }
-
-        private static int AttributeType(byte[] image, int[] heaps, int[] methods, int[] counts, int constructor)
-        {
-            int row = constructor >> 3, kind = constructor & 7;
-            if (kind == 2)
-            {
-                int owner = ObjectLayouts.Owner(image, heaps, methods, row, false);
-                return owner < 1 ? -1 : owner << 3;
-            }
-            if (kind != 3 || row < 1 || row > counts[10]) return -1;
-            int table = MetadataTableRows.TableStart(heaps, methods, counts, 10);
-            if (table < 0) return -1;
-            int width = StandaloneSignatures.Width(counts, 10, methods[2], methods[3]);
-            int parent = Index(image, (uint)(table + (row - 1) * width), width - methods[2] - methods[3]);
-            int tag = parent & 7;
-            if (tag > 1) return 0;
-            int typeRow = parent >> 3;
-            return typeRow > 0 && typeRow <= counts[tag == 1 ? 1 : 2] ? parent : -1;
+            return byRefLike ? ByRefLike : inlineLength;
         }
 
         private static int ShapeAttribute(byte[] image, int[] heaps, int name, int space)
@@ -118,8 +108,5 @@ namespace PeLibrary
             int length = unchecked((int)U32(image, at + 2));
             return length > 0 ? length : -1;
         }
-
-        private static int Index(byte[] image, uint at, int width) =>
-            width == 2 ? (int)U16(image, at) : unchecked((int)U32(image, at));
     }
 }

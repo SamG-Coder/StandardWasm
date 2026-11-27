@@ -1,3 +1,4 @@
+using System.Reflection.Emit;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
@@ -40,7 +41,9 @@ internal static class TypedArrayCases
         int start = section.PointerToRawData + rva - section.VirtualAddress;
         int header = (image[start + 1] >> 4) * 4;
         byte[] il = pe.GetMethodBody(rva).GetILBytes()!;
-        int allocate = Array.IndexOf(il, (byte)0x8d);
+        // Decode instructions to find the newarr opcode. A raw byte search can hit 0x8d inside
+        // another instruction's token, which shifts whenever the library gains a method.
+        int allocate = IlOffsets.Find(il, OpCodes.Newarr);
         if (header < 12 || allocate < 0)
             throw new InvalidOperationException("Route did not use the expected fat body and inline int[] allocation");
         byte[] wrongLocal = (byte[])image.Clone();

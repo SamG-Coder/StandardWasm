@@ -10,5 +10,12 @@ DLL share a slot identified by the assembly and FieldDef. The fixture covers
 zero and null defaults, state across calls, narrow integer storage, scalar
 widths, managed object identity and isolation of distinct declaring fields.
 
-Attributed statics, static fields of generic declaring
-types, value aggregates, and static addresses still require runtime support.
+Field-level nullable annotations leave static storage and initializer semantics intact.
+The fixture checks the annotation is present and compares the identity of repeated loads.
+Each module instance executes one managed thread and owns that thread's
+`ThreadStatic` slots. The fixture compares two CLR threads with fresh Wasm
+instances and checks that a slot keeps its value across calls in one instance.
+Managed threads sharing an assembly context need a separate storage model.
+
+Other attributed statics, static fields of generic declaring types and static
+addresses still require runtime support.

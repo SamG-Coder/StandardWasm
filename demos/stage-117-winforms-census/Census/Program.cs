@@ -64,21 +64,25 @@ foreach (LoadedAssembly assembly in set.All.ToArray())
 }
 
 // --- Compiler verdicts ---------------------------------------------------
-// The pack is the Stage 95 framework selection plus every assembly that owns
-// reached code. An assembly whose module initializer the compiler rejects
-// would fail every compile at [module, 0, -1]; it is removed and recorded.
-string[] stage95 =
+// Include the browser launch framework selection, reached method owners, and
+// facades used during resolution. The original TypeRefs still name the
+// forwarding assemblies, even when all reached methods belong to CoreLib.
+// A rejected module initializer is removed and recorded.
+string[] launchFramework =
 [
     "System.Windows.Forms", "System.Windows.Forms.Primitives", "System.Private.Windows.Core", "System.Drawing.Common",
     "System.Private.Windows.GdiPlus", "System.Private.CoreLib", "System.Runtime", "System.ComponentModel.Primitives",
     "System.Collections", "System.Threading", "System.Drawing.Primitives", "System.ComponentModel",
     "System.ComponentModel.TypeConverter", "System.Collections.Concurrent", "System.Collections.Specialized", "System.ObjectModel",
+    "System.Threading.Thread",
 ];
 var pack = new List<LoadedAssembly> { app };
-foreach (string name in stage95)
+foreach (string name in launchFramework)
     if (set.ByName(name) is { } loaded && !pack.Contains(loaded)) pack.Add(loaded);
 foreach (int owner in graph.Reached.Keys.Select(m => m.Assembly).Distinct().OrderBy(i => set.All[i].Name, StringComparer.Ordinal))
     if (!pack.Contains(set.All[owner])) pack.Add(set.All[owner]);
+foreach (LoadedAssembly facade in set.ForwardingAssemblies.OrderBy(a => a.Name, StringComparer.Ordinal))
+    if (!pack.Contains(facade)) pack.Add(facade);
 var excluded = new List<object>();
 CompilerVerdicts verdicts = new(set, pack);
 Verdict entryVerdict = verdicts.Compile(entry);
@@ -369,6 +373,14 @@ var report = new
         reachedMethods = graph.Reached.Count,
         withIlBody = graph.Bodies.Count,
         instantiatedTypes = graph.Instantiated.Count,
+        finalizableTypes = graph.Finalizers.Select(pair => new
+        {
+            assembly = set.All[pair.Key.Assembly].Name,
+            type = set.Type(pair.Key).FullName,
+            id = Id(pair.Value),
+            implementation = set.Display(pair.Value),
+            inherited = set.TypeOf(pair.Value).Id != pair.Key,
+        }).OrderBy(item => item.assembly, StringComparer.Ordinal).ThenBy(item => item.type, StringComparer.Ordinal).ToList(),
         initializedTypes = graph.InitializedTypes.Count,
         virtualSlots = graph.VirtualSlots.Count,
         unresolvedReferences = graph.UnresolvedCount,

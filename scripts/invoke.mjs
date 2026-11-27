@@ -12,7 +12,9 @@ const managedTags = [
     ["\0nullReference", "System.NullReferenceException"],
     ["\0invalidCast", "System.InvalidCastException"],
     ["\0argument", "System.ArgumentException"],
-    ["\0argumentNull", "System.ArgumentNullException"]
+    ["\0argumentNull", "System.ArgumentNullException"],
+    ["\0argumentOutOfRange", "System.ArgumentOutOfRangeException"],
+    ["\0synchronizationLock", "System.Threading.SynchronizationLockException"]
 ];
 
 export function managedExceptionType(exports, error) {
@@ -26,7 +28,7 @@ export function managedExceptionType(exports, error) {
 
 export function invoke(exports, method, inputs) {
     const args = inputs.map(input => {
-        if (!Array.isArray(input?.bytes)) return decode(input);
+        if (!Array.isArray(input?.bytes) && !(input?.bytes instanceof Uint8Array)) return decode(input);
         // Typed Wasm GC arrays are opaque to JavaScript. Populate the array with fixture exports.
         const buffer = exports.CreateBytes(input.bytes.length);
         for (const [index, value] of input.bytes.entries()) exports.SetByte(buffer, index, value);

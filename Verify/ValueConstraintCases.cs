@@ -39,7 +39,7 @@ internal static class ValueConstraintCases
         if (Kernels.RejectStandaloneConstructor(null) != 1 || Kernels.RejectNominal(null) != 1)
             throw new InvalidOperationException("CLR did not accept the valid constraint declarations.");
         Reject(bundle, nameof(Kernels.RejectStandaloneConstructor), "standalone constructor constraint");
-        Reject(bundle, nameof(Kernels.RejectNominal), "arbitrary nominal constraint");
+        Reject(bundle, nameof(Kernels.RejectNominal), "nominal class constraint");
 
         void Reject(byte[] bytes, string name, string label)
         {

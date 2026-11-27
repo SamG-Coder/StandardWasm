@@ -21,12 +21,14 @@ namespace ValueConstraintDemo
             scalar.Value = value + 1;
 
             Payload<int> saved = frame.Aggregate.Value;
-            return !frame.Scalar.Present ? -2 : unchecked(frame.Scalar.Value + scalar.Value + saved.Value);
+            NominalCell<NominalValue> nominal = default;
+            nominal.Value = saved.Value;
+            return !frame.Scalar.Present ? -2 : unchecked(frame.Scalar.Value + scalar.Value + nominal.Value);
         }
 
         public static int ReadConstraint(ConstrainedReference<int> value) => value == null ? 1 : -1;
         public static int RejectStandaloneConstructor(ConstructorOnly<int> value) => value == null ? 1 : -1;
-        public static int RejectNominal(NominalConstraint<Disposable> value) => value == null ? 1 : -1;
+        public static int RejectNominal(NominalConstraint<NominalDerived> value) => value == null ? 1 : -1;
     }
 
     public static class Demo

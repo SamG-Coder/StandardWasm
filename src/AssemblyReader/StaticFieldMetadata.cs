@@ -11,23 +11,74 @@ namespace PeLibrary
             if ((flags & Static) == 0 || (flags & (Literal | HasRva | HasMarshal | HasDefault)) != 0 ||
                 (write && (flags & InitOnly) != 0)) return -2;
 
-            // Field attributes can change storage lifetime, including ThreadStatic.
-            // Defer attributed statics until the runtime can distinguish their storage.
+            // Nullable annotations and compiler-generated backing-field markers
+            // do not affect field storage. The current runtime executes
+            // one managed thread per instance, so its private globals are also that
+            // thread's static slots. A shared runtime would need separate TLS storage.
             var counts = new int[45];
-            if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0) return -1;
             if (counts[12] == 0) return 0;
             int table = MetadataTableRows.TableStart(heaps, layout, counts, 12);
             if (table < 0) return -1;
             int parentWidth = StandaloneSignatures.HasCustomAttribute(counts);
             int width = StandaloneSignatures.Width(counts, 12, layout[2], layout[3]);
+            int constructorWidth = width - parentWidth - layout[3];
             int parent = row << 5 | 1; // HasCustomAttribute.FieldDef.
             for (int i = 0; i < counts[12]; i++)
             {
                 uint at = (uint)(table + i * width);
-                int candidate = parentWidth == 2 ? (int)U16(image, at) : unchecked((int)U32(image, at));
-                if (candidate == parent) return -2;
+                int candidate = AttributeConstructors.ReadRowIndex(image, at, parentWidth);
+                if (candidate != parent) continue;
+                uint constructorAt = at + (uint)parentWidth;
+                int constructor = AttributeConstructors.ReadRowIndex(image, constructorAt, constructorWidth);
+                int type = AttributeConstructors.ReadType(image, heaps, layout, counts, constructor);
+                if (type < 0) return type;
+                if (!IsSupportedAttribute(image, heaps, layout, counts, first, type) &&
+                    !IsNativeZeroIntrinsic(image, heaps, layout, counts, first, row, flags, type)) return -2;
             }
             return 0;
+        }
+
+        private static bool IsNativeZeroIntrinsic(byte[] image, int[] heaps, int[] layout, int[] counts, int first,
+            int row, int flags, int attribute)
+        {
+            if ((flags & 0x20) == 0 || attribute == 0 || (attribute & 7) != 0 ||
+                !ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, attribute >> 3,
+                    "System.Runtime.CompilerServices", "IntrinsicAttribute")) return false;
+            int owner = ObjectLayouts.Owner(image, heaps, layout, row, true);
+            if (!NativeStorage.IsIntegerElement(ArrayTypeRefs.PrimitiveElement(image, heaps, layout, owner << 2)))
+                return false;
+            int table = AssemblyReferences.FieldTable(image, heaps, layout);
+            if (table < 0) return false;
+            var field = new int[3];
+            AssemblyReferences.ReadField(image, layout, table, row, field);
+            // CoreLib's IntPtr.Zero and UIntPtr.Zero use the ordinary static slot.
+            return MatchesAscii(image, heaps, (uint)field[1], "Zero");
+        }
+
+        private static bool IsSupportedAttribute(byte[] image, int[] heaps, int[] layout, int[] counts, int first, int type)
+        {
+            if (type == 0) return false;
+            int row = type >> 3;
+            if ((type & 7) == 0)
+                return ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row,
+                    "System.Runtime.CompilerServices", "NullableAttribute") ||
+                    (ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row, "System", "ThreadStaticAttribute") ||
+                     ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, row,
+                        "System.Runtime.CompilerServices", "CompilerGeneratedAttribute")) &&
+                    PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts);
+
+            var reference = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadType(image, heaps, layout, row, reference) < 0 ||
+                reference[AssemblyReferences.Depth] != 0) return false;
+            uint name = (uint)reference[2], space = (uint)reference[3];
+            bool compilerServices = MatchesAscii(image, heaps, space, "System.Runtime.CompilerServices");
+            if (compilerServices && MatchesAscii(image, heaps, name, "NullableAttribute")) return true;
+            return (compilerServices && MatchesAscii(image, heaps, name, "CompilerGeneratedAttribute") ||
+                    MatchesAscii(image, heaps, space, "System") && MatchesAscii(image, heaps, name, "ThreadStaticAttribute")) &&
+                PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, layout, counts,
+                    reference[AssemblyReferences.AssemblyRow], includeRuntimeExtensions: false);
         }
     }
 }

@@ -1,3 +1,8 @@
+import { comImportModule, isNativeImportModule, nativeImports, nativeIndirectImportModule, windowsScalars } from "../../scripts/native-imports.mjs";
+import { comDispatchSignature, createComHost } from "./com-host.mjs";
+import { createDynamicLibraryHost, createNativeIndirectDispatch, nativeIndirectSignature, scopedUtf16Signature } from "./dynamic-library-host.mjs";
+import { createNativeSymbolLookup, createWin32Host, win32ImportModule, win32ImportNames, win32MemoryImports } from "./win32-host.mjs";
+
 export const resourceImportModule = "standardwasm:resources";
 
 const pageSize = 65536;
@@ -80,17 +85,80 @@ export function createResourceHost(compiler, images) {
     return { memory, imports: { [resourceImportModule]: { memory, reserveName, locate } } };
 }
 
+const threadingModule = "standardwasm:threading";
+const runtimeModule = "standardwasm:runtime";
+
+export function createMonitorHost() {
+    // Compiled managed execution is synchronous on one Wasm agent. Identity
+    // stays in the GC, and unused monitor keys can be collected.
+    const depth = new WeakMap();
+    return {
+        changeMonitorDepth(target, delta) {
+            const current = depth.get(target) ?? 0;
+            if (delta === -1 && current === 0) return 0;
+            const next = current + delta;
+            if (next === 0) depth.delete(target);
+            else depth.set(target, next);
+            return 1;
+        }
+    };
+}
+
 const resourceImportKinds = new Map([
     ["memory", "memory"], ["reserveName", "function"], ["locate", "function"]
 ]);
 
-export function instantiateManagedModule(module, compiler, assets, runtimeImports = {}) {
+export function instantiateManagedModule(module, compiler, assets, runtimeImports = {}, executablePath, windows, configureCom, platform = {}) {
     const requestedResources = new Set();
+    const requestedWin32 = new Set();
+    let wantsMonitor = false;
+    let wantsDebugger = false;
+    let wantsNative = false;
+    let wantsCom = false;
+    let wantsNativeSymbol = false;
+    const nativeIndirectRequests = new Set();
     for (const { module: owner, name, kind } of WebAssembly.Module.imports(module)) {
         if (owner === resourceImportModule) {
             if (resourceImportKinds.get(name) !== kind || requestedResources.has(name))
                 throw Error("The generated module requests an invalid resource import.");
             requestedResources.add(name);
+            continue;
+        }
+        if (owner === threadingModule) {
+            if (kind !== "function" || name !== "changeMonitorDepth" || wantsMonitor)
+                throw Error("The generated module requests an invalid monitor import.");
+            wantsMonitor = true;
+            continue;
+        }
+        if (owner === runtimeModule) {
+            if (kind !== "function" || name !== "isDebuggerAttached" || wantsDebugger)
+                throw Error("The generated module requests an invalid managed runtime import.");
+            wantsDebugger = true;
+            continue;
+        }
+        if (owner === win32ImportModule) {
+            if (kind !== "function" || !win32ImportNames.has(name) || requestedWin32.has(name))
+                throw Error("The generated module requests an invalid Win32 import.");
+            requestedWin32.add(name);
+            continue;
+        }
+        if (owner === comImportModule) {
+            if (kind !== "function" || name !== comDispatchSignature || wantsCom)
+                throw Error("The generated module requests an invalid COM dispatch import.");
+            wantsCom = true;
+            continue;
+        }
+        if (owner === nativeIndirectImportModule) {
+            if (kind !== "function" || (name !== nativeIndirectSignature && name !== scopedUtf16Signature) ||
+                nativeIndirectRequests.has(name))
+                throw Error("The generated module requests an invalid native indirect import.");
+            nativeIndirectRequests.add(name);
+            continue;
+        }
+        if (isNativeImportModule(owner)) {
+            wantsNative = true;
+            if (owner === "native:QCall" && name === "NativeLibrary_GetSymbol" && kind === "function")
+                wantsNativeSymbol = true;
             continue;
         }
         const group = Object.hasOwn(runtimeImports, owner) ? runtimeImports[owner] : undefined;
@@ -101,17 +169,79 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         if (!group || kind !== "function" || !callable)
             throw Error("The generated module requests an unsupported runtime import.");
     }
-    if (!requestedResources.size) return WebAssembly.instantiate(module, runtimeImports);
-    // Native pointers and stackalloc need memory even without resource lookup.
+    if ([...requestedWin32].some(name => win32MemoryImports.has(name)) && !requestedResources.has("memory"))
+        throw Error("The requested Win32 functions require the StandardWasm memory import.");
+    if (wantsCom && !requestedResources.has("memory"))
+        throw Error("COM dispatch requires the StandardWasm memory import.");
+    const wantsNativeIndirect = nativeIndirectRequests.size !== 0;
+    if (wantsNativeSymbol && !requestedResources.has("memory"))
+        throw Error("Native symbol lookup requires the StandardWasm memory import.");
+    if (wantsNativeIndirect && !requestedResources.has("memory"))
+        throw Error("Native indirect dispatch requires the StandardWasm memory import.");
+    if (wantsNativeIndirect && typeof platform?.configureNativeLibraries !== "function")
+        throw Error("Native indirect dispatch requires an explicit browser library provider.");
+
+    let memory;
+    // The platform families run on the same emulated CLR thread. Keep the
+    // system and saved error slots shared within one instance and isolated across instances.
+    const errors = { system: 0, pinvoke: 0 };
+    let imports = { ...runtimeImports };
     if (requestedResources.size === 1 && requestedResources.has("memory")) {
-        const memory = new WebAssembly.Memory({ initial: 1 });
-        return WebAssembly.instantiate(module, { ...runtimeImports, [resourceImportModule]: { memory } });
+        memory = createMemory();
+        imports[resourceImportModule] = { memory };
+    } else if (requestedResources.size) {
+        if (requestedResources.size !== resourceImportKinds.size || typeof compiler.FindEmbeddedResource !== "function")
+            throw Error("The generated module requires the complete StandardWasm resource contract.");
+        // The bundle owner indices use this same image order, starting at zero.
+        const resource = createResourceHost(compiler, assets.map(asset => asset.bytes));
+        memory = resource.memory;
+        imports = { ...imports, ...resource.imports };
     }
-    if (requestedResources.size === 1 && requestedResources.has("memory"))
-        return WebAssembly.instantiate(module, { ...runtimeImports, [resourceImportModule]: { memory: createMemory() } });
-    if (requestedResources.size !== resourceImportKinds.size || typeof compiler.FindEmbeddedResource !== "function")
-        throw Error("The generated module requires the complete StandardWasm resource contract.");
-    // The bundle owner indices use this same image order, starting at zero.
-    const resource = createResourceHost(compiler, assets.map(asset => asset.bytes));
-    return WebAssembly.instantiate(module, { ...runtimeImports, ...resource.imports });
+    let dynamicLibraries;
+    const requestedLibrary = requestedWin32.has("loadLibraryExW") || requestedWin32.has("getProcAddress") ||
+        requestedWin32.has("callWindowProcW") || requestedWin32.has("registerClassW") || requestedWin32.has("createWindowExW") ||
+        requestedWin32.has("setWindowLongW") || requestedWin32.has("setWindowLongPtrW") ||
+        requestedWin32.has("getModuleHandleW") &&
+        (platform?.win32Desktop === true || typeof platform?.configureNativeLibraries === "function");
+    if (wantsNativeIndirect || wantsNativeSymbol || requestedLibrary) {
+        dynamicLibraries = createDynamicLibraryHost(errors);
+        const { invoke, invokeScoped, hasTarget, ...registry } = dynamicLibraries;
+        platform?.configureNativeLibraries?.({ memory, errors, ...registry });
+        if (wantsNativeIndirect) {
+            const dispatch = {};
+            if (nativeIndirectRequests.has(nativeIndirectSignature))
+                dispatch[nativeIndirectSignature] = createNativeIndirectDispatch(invoke);
+            if (nativeIndirectRequests.has(scopedUtf16Signature))
+                dispatch[scopedUtf16Signature] = createNativeIndirectDispatch(invokeScoped, true);
+            imports[nativeIndirectImportModule] = dispatch;
+        }
+    }
+    if (wantsNative) {
+        const registry = wantsNativeSymbol ? { ...windowsScalars,
+            "qcall!NativeLibrary_GetSymbol": createNativeSymbolLookup(memory, dynamicLibraries, errors)
+        } : windowsScalars;
+        Object.assign(imports, nativeImports(module, registry, errors));
+    }
+    if (requestedWin32.size) {
+        const usesModules = requestedWin32.has("getModuleHandleW") || requestedWin32.has("createActCtxW");
+        const filesystem = requestedWin32.has("getFullPathNameW") ? platform?.win32FileSystem : undefined;
+        imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : [], windows, errors, dynamicLibraries,
+            platform?.windowCreationMetrics, filesystem, platform?.win32Desktop === true);
+    }
+    if (wantsCom) {
+        const { imports: dispatch, registerInterface } = createComHost(memory);
+        // The platform host is the sole registrar. Managed imports only
+        // receive the dispatch entry point.
+        configureCom?.({ registerInterface });
+        imports[comImportModule] = dispatch;
+    }
+    if (wantsMonitor) imports[threadingModule] = createMonitorHost();
+    if (wantsDebugger) {
+        const debuggerHost = Object.hasOwn(runtimeImports, runtimeModule) ? runtimeImports[runtimeModule] : undefined;
+        // A host without a managed debugger reports the ordinary detached state.
+        imports[runtimeModule] = {
+            isDebuggerAttached: () => typeof debuggerHost?.isDebuggerAttached === "function" && debuggerHost.isDebuggerAttached() ? 1 : 0
+        };
+    }
+    return WebAssembly.instantiate(module, imports);
 }

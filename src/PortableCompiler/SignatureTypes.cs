@@ -9,7 +9,55 @@ namespace PortableCompiler
             MethodPointer = 5, String = 6, Chars = ArrayTypeRefs.Packed16, I64 = WideStorage.Scalar, Longs = WideStorage.Array,
             F32 = FloatStorage.Single, F64 = FloatStorage.Double, Singles = ArrayTypeRefs.Singles, Doubles = ArrayTypeRefs.Doubles, Native = NativeStorage.Scalar,
             NativeVector = NativeStorage.Vector;
+        // A location is a traced alias with invariant element type, outside
+        // the ordinary Object/reference conversion lattice.
+        internal const int ObjectLocation = 0x80, ObjectSpan = 0x81, CharacterSpan = 0x82;
+        internal const int CharacterLocation = 0x83, WritableCharacterSpan = 0x84, BooleanLocation = 0x86, StringLocation = 0x87;
+        internal const int ReadOnlyByteSpan = 0x88, StaticByteLocation = 0x89, CharacterSpanCallback = 0x8a, Int32Location = 0x8b;
+        internal const int EventHandlerLocation = 0x8c, Int16Location = 0x8d, NativeIntLocation = 0x8e, ReadOnlyCharacterLocation = 0x8f;
+        // Reference locations retain their nominal element type in the verifier,
+        // even when their Wasm representation is the shared object cell.
+        private const int ReferenceLocationBase = 32768;
+        internal static bool IsManagedLocation(int type) =>
+            IsReferenceLocation(type) || IsPacked16ReadLocation(type) || type == BooleanLocation ||
+            type == StaticByteLocation || type == Int32Location || type == NativeIntLocation;
+
+        internal static bool IsPacked16Location(int type) => type == CharacterLocation || type == Int16Location;
+
+        // A readonly span anchor uses the same Wasm carrier, with a distinct
+        // verifier type so it cannot become a writable managed argument.
+        internal static bool IsPacked16ReadLocation(int type) =>
+            IsPacked16Location(type) || type == ReadOnlyCharacterLocation;
+
+        internal static bool IsReferenceLocation(int type) =>
+            type == ObjectLocation || type == StringLocation || type == EventHandlerLocation ||
+            type >= ReferenceLocationBase + ObjectLayouts.FirstClass &&
+            type < ReferenceLocationBase + ObjectLayouts.FirstClass + ObjectLayouts.MaxClasses;
+
+        internal static int LocationFromIdentity(int[] objects, int type) =>
+            type == ObjectLayouts.ObjectReference ? ObjectLocation : type == String ? StringLocation :
+            type == ObjectLayouts.EventHandlerReference ? EventHandlerLocation :
+            type == GenericScalar.Key(3) ? CharacterLocation : type == GenericScalar.Key(2) ? BooleanLocation :
+            type == GenericScalar.Key(6) ? Int16Location :
+            type == GenericScalar.Key(0x18) ? NativeIntLocation :
+            type == GenericScalar.Key(5) ? StaticByteLocation : type == GenericScalar.Key(8) ? Int32Location :
+            ObjectLayouts.IsValueType(objects, type) ? ValueLocation(type) :
+            type >= ObjectLayouts.FirstClass && type - ObjectLayouts.FirstClass < objects[0] ? ReferenceLocationBase + type : 0;
+        internal static int CellValue(int location) =>
+            IsValueLocation(location) ? LocatedValue(location) :
+            location == BooleanLocation || location == Int32Location ? I32 : location == NativeIntLocation ? Native : location == StringLocation ? String :
+            location == ObjectLocation ? ObjectLayouts.ObjectReference :
+            location == EventHandlerLocation ? ObjectLayouts.EventHandlerReference : location - ReferenceLocationBase;
+
+        internal static bool IsSpan(int type) => type == ObjectSpan || type == CharacterSpan || type == WritableCharacterSpan || type == ReadOnlyByteSpan;
         internal const byte NullPointer = PointerStorage.NullPointer, NativeZero = PointerStorage.NativeZero;
+        // Keep the located CLI type in the verifier even though all cells share a Wasm heap.
+        private const int ValueLocationBase = 65536;
+        // This address only names argument zero in the enclosing value constructor.
+        internal const int ConstructorAddress = ValueLocationBase - 1;
+        internal static int ValueLocation(int type) => ValueLocationBase + type;
+        internal static bool IsValueLocation(int type) => type >= ValueLocationBase;
+        internal static int LocatedValue(int type) => type - ValueLocationBase;
 
         // Signature and frame tags keep the CLI storage width. Narrow types
         // are distinct from evaluation-stack types.
@@ -29,17 +77,18 @@ namespace PortableCompiler
         internal static byte IntegerConversionType(int opcode) =>
             opcode == 0x6a || opcode == 0x6e ? I64 : opcode == 0xd3 || opcode == 0xe0 ? Native : I32;
 
-        // Widen classes and primitive GC vectors without allocating or losing identity.
+        // Widen classes, strings, and primitive GC vectors without allocating or losing identity.
         // Boxing and other CLR reference conversions use separate IL operations.
         internal static bool IsObjectReference(int type) =>
-            RuntimeTypeMetadata.IsReference(type) || IsArray(type) || type >= ObjectLayouts.FirstClass ||
+            type == String || type == CharacterSpanCallback || type == ObjectLayouts.DelegateReference || RuntimeTypeMetadata.IsReference(type) || IsArray(type) ||
+            type >= ObjectLayouts.FirstClass && type < ObjectLayouts.FirstClass + ObjectLayouts.MaxClasses ||
             type >= ObjectLayouts.ObjectReference && type <= ObjectLayouts.EventHandlerReference;
 
         // Zero denotes the CLI null literal in a live stack slot and void in a method signature.
         internal const byte NullValue = 0;
 
         internal static bool IsReference(int type) =>
-            type == String || type == Delegate || IsObjectReference(type);
+            type == Delegate || IsObjectReference(type);
 
         internal static bool ReferenceComparison(int left, int right, int[] objects) =>
             (left == NullValue && (right == NullValue || IsReference(right))) ||
@@ -51,10 +100,14 @@ namespace PortableCompiler
         {
             int expected = StackType(target);
             if (source == expected) return true;
+            if (source == CharacterLocation && expected == ReadOnlyCharacterLocation) return true;
+            if (IsManagedLocation(source) || IsManagedLocation(expected)) return false;
+            if (source >= ConstructorAddress || expected >= ConstructorAddress) return false;
             if (ObjectLayouts.IsValueType(objects, source) || ObjectLayouts.IsValueType(objects, expected)) return false;
             return source == NullValue && IsReference(expected) ||
                 source == NativeZero && (target == Native || target == NullPointer) ||
                 target == ObjectLayouts.ObjectReference && IsObjectReference(source) ||
+                target == ObjectLayouts.DelegateReference && source == ObjectLayouts.EventHandlerReference ||
                 ObjectLayouts.Inherits(objects, source, expected) || ObjectLayouts.Implements(objects, source, expected);
         }
 
@@ -99,12 +152,20 @@ namespace PortableCompiler
             return opcode == 0xa0 ? Singles : Doubles;
         }
 
+        internal static byte EnumArrayStorage(int[] objects, int array)
+        {
+            if (!ObjectLayouts.IsEnumArray(objects, array)) return 0;
+            int element = ObjectLayouts.ArrayElement(objects, array);
+            if (element == Signed8 || element == Unsigned8) return Bytes;
+            if (element == Signed16 || element == Unsigned16) return Chars;
+            return element == I64 ? Longs : Ints;
+        }
+
         // Destination for a method is [result, parameters...]. Local signatures
         // write only their slots. Stack values normalize CLI small integers to i32.
         // context is the closed declaring layout that supplies VAR arguments,
         // or zero when the declaring type is not generic.
-        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context,
-            int[] pinned = null)
+        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context, int[] methodArguments = null, int[] pinned = null, int[] filters = null, byte[] booleanLocals = null)
         {
             if (index <= 0 || index >= heap[1])
                 return -2;
@@ -113,10 +174,19 @@ namespace PortableCompiler
             var next = new int[1];
             int size = CompressedUnsigned(image, heap[0] + index, limit, next);
             int cursor = next[0];
-            if (size < 2 || size > limit - cursor || image[cursor] != (locals ? 7 : receiver == 0 ? 0 : 0x20))
+            int callingConvention = locals ? 7 : receiver == 0 ? 0 : 0x20;
+            if (!locals && methodArguments != null) callingConvention |= 0x10;
+            if (size < 2 || size > limit - cursor || image[cursor] != callingConvention)
                 return -2;
             int end = cursor + size;
-            int count = CompressedUnsigned(image, cursor + 1, end, next);
+            cursor++;
+            if (!locals && methodArguments != null)
+            {
+                int arity = CompressedUnsigned(image, cursor, end, next);
+                if (arity < 1 || arity != methodArguments.Length) return -2;
+                cursor = next[0];
+            }
+            int count = CompressedUnsigned(image, cursor, end, next);
             cursor = next[0];
             if (count < 0 || count > end - cursor)
                 return -2;
@@ -129,6 +199,11 @@ namespace PortableCompiler
                 if (cursor >= end)
                     return -2;
                 int element = image[cursor++];
+                int filterLocal = locals && filters != null ? ExceptionFilters.LocalKind(filters, i) : 0;
+                if (filterLocal == 2 && element != 2) return -2;
+                if (filterLocal == 1 && element != 0x12) return -2;
+                if (locals && pinned != null) pinned[i] = 0;
+                if (locals && booleanLocals != null) booleanLocals[i] = element == 2 ? (byte)1 : (byte)0;
                 int target = offset + i + (i == 0 ? 0 : implicitSlots);
                 if (element == PinnedLocals.Pinned)
                 {
@@ -136,6 +211,16 @@ namespace PortableCompiler
                     // A pinned string stays a String reference (Wasm GC never moves it); a
                     // pinned char& holds the native address of the frame's UTF-16 copy.
                     int kind = locals && pinned != null && cursor < end ? PinnedLocals.Kind(image, cursor, end) : 0;
+                    if (kind == 0 && locals && pinned != null && end - cursor > 2 &&
+                        image[cursor] == 0x10 && image[cursor + 1] == 0x11)
+                    {
+                        // A blittable pinned byref can hold a stable native address.
+                        int storage = PointerSignatures.ReadStorage(bundle, image, methods, heap, assembly, cursor + 1, end, next);
+                        if (storage != Native) return storage < 0 ? storage : -2;
+                        cursor = next[0];
+                        types[target] = Native;
+                        continue;
+                    }
                     if (kind == 0) return -2;
                     pinned[i] = kind;
                     cursor += kind == PinnedLocals.Text ? 1 : 2;
@@ -154,8 +239,8 @@ namespace PortableCompiler
                     types[target] = Native;
                 else if (element == PointerStorage.Element)
                 {
-                    int storage = PointerSignatures.ReadStorage(bundle, image, methods, heap,
-                        assembly, cursor, end, next);
+                    int storage = PointerSignatures.ReadClosedStorage(bundle, image, methods, heap,
+                        assembly, cursor, end, next, objects, context, methodArguments);
                     if (storage < 0) return storage;
                     cursor = next[0];
                     types[target] = storage;
@@ -175,6 +260,17 @@ namespace PortableCompiler
                     types[target] = String;
                 else if (element == 0x1c)
                     types[target] = ObjectLayouts.ObjectReference;
+                else if (element == 0x10)
+                {
+                    next[0] = cursor;
+                    int location = ManagedReferenceSignatures.ReadLocation(bundle, image, methods, heap,
+                        assembly, next, end, context, objects, methodArguments);
+                    if (location < 0) return location;
+                    // Internal calls return the tracked location itself. The
+                    // compiler entry-point check still rejects host byref exports.
+                    cursor = next[0];
+                    types[target] = location;
+                }
                 else if (element == 0x1d && cursor < end)
                 {
                     int storage = ArrayTypeRefs.Storage(image[cursor]);
@@ -182,7 +278,7 @@ namespace PortableCompiler
                     {
                         next[0] = cursor - 1;
                         storage = ManagedReferenceSignatures.ReadStorage(bundle, image, methods, heap,
-                            assembly, next, end, context, objects);
+                            assembly, next, end, context, objects, methodArguments);
                         if (storage < 0) return storage;
                         cursor = next[0];
                     }
@@ -202,23 +298,22 @@ namespace PortableCompiler
                     {
                         next[0] = cursor - 1;
                         int type = ManagedReferenceSignatures.ReadStorage(bundle, image, methods, heap,
-                            assembly, next, end, context, objects);
+                            assembly, next, end, context, objects, methodArguments);
                         if (type < 0) return type;
                         cursor = next[0];
                         types[target] = type;
                     }
                 }
-                else if (element == 0x13)
+                else if (element == 0x13 || element == 0x1e)
                 {
-                    // A class type parameter takes the storage of the closed
-                    // argument. int and uint share i32 storage here; their
-                    // signed and unsigned semantics stay in the caller's IL.
-                    int number = CompressedUnsigned(image, cursor, end, next);
-                    if (number < 0) return -2;
+                    // VAR and MVAR select distinct argument vectors. Convert
+                    // the CLI type identity to its Wasm slot only after lookup.
+                    next[0] = cursor - 1;
+                    int storage = ManagedReferenceSignatures.ReadStorage(bundle, image, methods, heap,
+                        assembly, next, end, context, objects, methodArguments);
+                    if (storage < 0) return storage;
                     cursor = next[0];
-                    int argument = ObjectLayouts.Argument(objects, context, number);
-                    if (argument < 0) return argument;
-                    types[target] = ObjectLayouts.SignatureStorage(objects, argument);
+                    types[target] = storage;
                 }
                 else if (element == 0x12 || element == 0x11)
                 {
@@ -226,6 +321,13 @@ namespace PortableCompiler
                     if (coded <= 0) return -2;
                     cursor = next[0];
                     bool valueType = element == 0x11;
+                    if (filterLocal == 1)
+                    {
+                        if ((coded & 3) != 1 || !ExceptionFilters.IsExceptionGuard(image, methods, heap, 0x01000000 | (coded >> 2)))
+                            return -2;
+                        types[target] = ObjectLayouts.ObjectReference; // Elided filter scratch.
+                        continue;
+                    }
                     int type = RuntimeTypeMetadata.Storage(image, heap, methods, coded, valueType);
                     // Keep the upstream System.Type layout when this bundle supplies it.
                     // The opaque descriptor is the fallback for libraries without that definition.

@@ -137,14 +137,18 @@ if (verify) {
             const tree = BuildTree();
             const first = Create(7);
             const second = Create(100);
-            let nullTraps = false;
+            const nullReference = instance.exports["\0nullReference"];
+            let nullRejected = false;
             try { Dispatch(null, tree); }
-            catch (error) { nullTraps = error instanceof WebAssembly.RuntimeError; }
+            catch (error) {
+                nullRejected = error instanceof WebAssembly.Exception &&
+                    nullReference instanceof WebAssembly.Tag && error.is(nullReference);
+            }
             const click = Bind(first);
             return { first: Dispatch(click, tree), second: Read(second),
-                imports: WebAssembly.Module.imports(module).length, nullTraps };
+                imports: WebAssembly.Module.imports(module).length, nullRejected };
         });
-        assert.deepEqual(instances, { first: 8, second: 100, imports: 0, nullTraps: true });
+        assert.deepEqual(instances, { first: 8, second: 100, imports: 0, nullRejected: true });
         const resized = [];
         async function recordResize() {
             const client = await page.locator("#surface").evaluate(canvas => [canvas.width, canvas.height]);

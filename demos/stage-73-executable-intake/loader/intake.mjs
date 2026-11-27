@@ -52,7 +52,7 @@ export function openExecutable(files, selected) {
     const entryToken = entry && readPe(entry.bytes)?.entryToken;
     if (!entryToken) throw Error("No managed MethodDef entry point was found.");
     return {
-        packageType, entry, entryToken, assets,
+        packageType, entry, entryToken, assets, executablePath: launch.path,
         deps: assets.get(pathKey(deps)),
         config: assets.get(pathKey(config))
     };

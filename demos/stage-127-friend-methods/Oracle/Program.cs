@@ -5,7 +5,7 @@ using System.Text.Json;
 
 // Stage 127 (decision 0055). The CLR runs each caller against the provider under test
 // and enforces InternalsVisibleTo itself: a granted pair returns values, a denied pair
-// throws MethodAccessException. The runner must reproduce both outcomes.
+// throws MethodAccessException or FieldAccessException.
 string evidence = args[0], stage = Path.GetFullPath(args[1]);
 string Bin(string kind, string variant, string name) =>
     Path.Combine(stage, kind, variant, "bin", "Release", "netstandard2.0", name + ".dll");
@@ -31,7 +31,8 @@ void Pair(string label, string callerVariant, string providerVariant)
     var context = new AssemblyLoadContext(label, isCollectible: true);
     context.Resolving += (_, name) => name.Name == "FriendProvider" ? context.LoadFromAssemblyPath(provider) : null;
     Type type = context.LoadFromAssemblyPath(caller).GetType("FriendFixture.Caller", throwOnError: true)!;
-    foreach (string name in new[] { "Run", "ComputeOnly", "PublicOnly" })
+    foreach (string name in new[] { "Run", "ComputeOnly", "PublicOnly", "ProtectedOnly",
+        "ReadInternalField", "WriteInternalField", "WriteProtectedInternalStatic" })
     {
         MethodInfo method = type.GetMethod(name)!;
         int row = method.MetadataToken & 0xffffff;
@@ -40,7 +41,7 @@ void Pair(string label, string callerVariant, string providerVariant)
         foreach (int input in inputs)
         {
             try { values.Add(((int)method.Invoke(null, [input])!).ToString()); }
-            catch (TargetInvocationException error) when (error.InnerException is MethodAccessException)
+            catch (TargetInvocationException error) when (error.InnerException is MethodAccessException or FieldAccessException)
             {
                 denied = error.InnerException.GetType().FullName;
                 break;
@@ -48,9 +49,16 @@ void Pair(string label, string callerVariant, string providerVariant)
         }
         if (denied != null)
         {
-            // The first call in the body names the friend member the CLR refused.
-            int call = IlOffset(method.GetMethodBody()!.GetILAsByteArray()!, OpCodes.Call);
-            cases.Add(new { label, name, row, images, clr = denied, status = -6, diagnostic = new[] { 0, row, call } });
+            OpCode access = name switch
+            {
+                "ReadInternalField" => OpCodes.Ldfld,
+                "WriteInternalField" => OpCodes.Stfld,
+                "WriteProtectedInternalStatic" => OpCodes.Stsfld,
+                _ => OpCodes.Call
+            };
+            int offset = IlOffset(method.GetMethodBody()!.GetILAsByteArray()!, access);
+            int status = denied == typeof(FieldAccessException).FullName ? -2 : -6;
+            cases.Add(new { label, name, row, images, clr = denied, status, diagnostic = new[] { 0, row, offset } });
         }
         else cases.Add(new { label, name, row, images, inputs, clr = values });
     }
@@ -79,5 +87,5 @@ static int IlOffset(byte[] il, OpCode target)
             _ => 4
         };
     }
-    throw new InvalidOperationException("No call instruction found.");
+    throw new InvalidOperationException($"No {target.Name} instruction found.");
 }

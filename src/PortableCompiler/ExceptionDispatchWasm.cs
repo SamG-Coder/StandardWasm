@@ -48,28 +48,30 @@ namespace PortableCompiler
         // constructor as a module function index (or -1) and its class. Those are the tags the
         // CLR raises with the default message, so a bound handler observes the same object state.
         internal const int FixedObjectCount = 4;
-        // Where MethodCompiler passes them in the frame shape, after the initializer failure descriptor.
-        internal const int FrameSlot = 23 + TypeInitializerWasm.FailureWidth, FrameWidth = 2 * FixedObjectCount;
+        // Where MethodCompiler passes them in the frame shape, after the console input function.
+        internal const int FrameSlot = 27, FrameWidth = 2 * FixedObjectCount;
 
         internal static int End(byte[] code, int used, int pc, int[] region, bool saveHandlers, int objects,
-            int spills, int maximum, int[] fixedObjects)
+            int spills, int maximum, int spillFlags, int[] fixedObjects, int[] filters, int rootCount, int rootFrame)
         {
             code[used++] = 0x0b; // try_table
             code[used++] = 0;    // only the catch edges may reach the destinations
             for (int tag = 0; tag < ExceptionTagsWasm.Count; tag++)
             {
                 code[used++] = 0x0b; // tag destination
+                if (rootCount >= 0) used = RootStackWasm.Leave(code, used, rootCount, rootFrame);
                 // Remaining fixed blocks plus the object block lie between here and the pc loop.
                 int loop = ExceptionTagsWasm.Count - tag;
                 used = Dispatch(code, used, pc, region, ExceptionTagsWasm.FixedTag(tag), loop, saveHandlers, objects,
-                    spills, maximum, fixedObjects);
+                    spills, maximum, spillFlags, fixedObjects);
             }
             code[used++] = 0x0b; // object destination: [eqref]
-            return DispatchObject(code, used, pc, region, saveHandlers, objects, spills, maximum);
+            if (rootCount >= 0) used = RootStackWasm.Leave(code, used, rootCount, rootFrame);
+            return DispatchObject(code, used, pc, region, saveHandlers, objects, spills, maximum, spillFlags, filters);
         }
 
         private static int Dispatch(byte[] code, int used, int pc, int[] clauses, int tag, int loop, bool saveHandlers, int objects,
-            int spills, int maximum, int[] fixedObjects)
+            int spills, int maximum, int spillFlags, int[] fixedObjects)
         {
             int captured = pc + 1;
             used = Local(code, used, 0x21, captured);
@@ -84,7 +86,8 @@ namespace PortableCompiler
                 code[used++] = 0x40;
                 if (ExceptionClauses.IsBound(clauses, clause))
                 {
-                    used = BindFixed(code, used, pc, clauses, clause, tag, loop, saveHandlers, objects, spills, maximum, fixedObjects);
+                    used = BindFixed(code, used, pc, clauses, clause, tag, loop, saveHandlers, objects, spills, maximum,
+                        spillFlags, fixedObjects);
                     code[used++] = 0x0b;
                     continue;
                 }
@@ -107,7 +110,7 @@ namespace PortableCompiler
         // then enter the handler exactly as for a thrown object. From here on it is that object: a
         // rethrow raises it on the object tag, so an outer handler sees the same reference.
         private static int BindFixed(byte[] code, int used, int pc, int[] clauses, int clause, int tag, int loop,
-            bool saveHandlers, int objects, int spills, int maximum, int[] fixedObjects)
+            bool saveHandlers, int objects, int spills, int maximum, int spillFlags, int[] fixedObjects)
         {
             if (tag >= FixedObjectCount || fixedObjects[2 * tag] < 0)
             {
@@ -134,12 +137,13 @@ namespace PortableCompiler
                 code[used++] = ExceptionReference;
                 used = Local(code, used, 0x21, pc + 2 + index);
             }
-            used = StoreCaught(code, used, clauses, clause, objects, spills, maximum);
+            used = StoreCaught(code, used, clauses, clause, objects, spills, maximum, spillFlags);
             return Resume(code, used, pc, clauses, clause, loop);
         }
 
         // [] -> []: the handler's entry stack slot (depth 0, the caught class) takes the scratch object.
-        private static int StoreCaught(byte[] code, int used, int[] clauses, int clause, int objects, int spills, int maximum)
+        private static int StoreCaught(byte[] code, int used, int[] clauses, int clause, int objects, int spills, int maximum,
+            int spillFlags)
         {
             int caught = ManagedExceptionClauses.CaughtClass(clauses[clause + ExceptionClauses.Mask]);
             used = Local(code, used, 0x20, objects);
@@ -148,31 +152,37 @@ namespace PortableCompiler
                 code[used++] = 0xfb; code[used++] = 0x17; // ref.cast (ref null class): already tested or built
                 used = WasmBinary.Signed(code, used, WasmBinary.HeapType(caught));
             }
-            return Local(code, used, 0x21, Spill(spills, maximum, caught, 0));
+            return Local(code, used, 0x21, Spill(spills, maximum, spillFlags, caught, 0));
         }
 
         private static int DispatchObject(byte[] code, int used, int pc, int[] clauses, bool saveHandlers, int objects,
-            int spills, int maximum)
+            int spills, int maximum, int spillFlags, int[] filters)
         {
             used = Local(code, used, 0x21, objects);
             for (int clause = 0; clause < clauses.Length; clause += ExceptionClauses.Width)
             {
                 bool cleanup = ExceptionClauses.IsFinally(clauses, clause);
                 int mask = clauses[clause + ExceptionClauses.Mask];
-                if (!cleanup && !ManagedExceptionClauses.CatchesObjects(mask)) continue;
+                int filter = filters.Length == 0 ? 0 : filters[clause / ExceptionClauses.Width * ExceptionFilters.Width];
+                bool firstObject = ManagedExceptionClauses.CatchesObjects(mask);
+                bool secondObject = ManagedExceptionClauses.CatchesObjects(filter);
+                if (!cleanup && !firstObject && !secondObject) continue;
                 used = InRange(code, used, pc, clauses, clause);
                 code[used++] = 0x04; // if
                 code[used++] = 0x40;
-                int caught = cleanup ? PeLibrary.ObjectLayouts.ObjectReference : ManagedExceptionClauses.CaughtClass(mask);
-                bool tested = caught != PeLibrary.ObjectLayouts.ObjectReference;
+                int caught = cleanup ? PeLibrary.ObjectLayouts.ObjectReference : ManagedExceptionClauses.CaughtClass(firstObject ? mask : filter);
+                int other = firstObject && secondObject ? ManagedExceptionClauses.CaughtClass(filter) : 0;
+                bool tested = caught != PeLibrary.ObjectLayouts.ObjectReference && other != PeLibrary.ObjectLayouts.ObjectReference;
                 if (tested)
                 {
                     // Nominal match: Wasm GC subtyping mirrors the bundle's class hierarchy, so
                     // a derived exception matches its base and same-named classes stay distinct.
-                    used = Local(code, used, 0x20, objects);
-                    code[used++] = 0xfb;
-                    code[used++] = 20; // ref.test (ref T): a thrown object is never null
-                    used = WasmBinary.Signed(code, used, WasmBinary.HeapType(caught));
+                    used = IsInstance(code, used, objects, caught);
+                    if (other != 0 && other != caught)
+                    {
+                        used = IsInstance(code, used, objects, other);
+                        code[used++] = 0x72; // i32.or
+                    }
                     code[used++] = 0x04; // if
                     code[used++] = 0x40;
                 }
@@ -187,13 +197,21 @@ namespace PortableCompiler
                     used = Local(code, used, 0x21, pc + 2 + index);
                 }
                 if (ExceptionClauses.IsBound(clauses, clause))
-                    used = StoreCaught(code, used, clauses, clause, objects, spills, maximum);
+                    used = StoreCaught(code, used, clauses, clause, objects, spills, maximum, spillFlags);
                 // The pc loop lies beyond the clause ifs only: every destination block has closed.
                 used = Resume(code, used, pc, clauses, clause, tested ? 1 : 0);
                 if (tested) code[used++] = 0x0b;
                 code[used++] = 0x0b;
             }
             return ThrowObject(code, used, objects);
+        }
+
+        private static int IsInstance(byte[] code, int used, int objects, int type)
+        {
+            used = Local(code, used, 0x20, objects);
+            code[used++] = 0xfb;
+            code[used++] = 20; // ref.test (ref T)
+            return WasmBinary.Signed(code, used, WasmBinary.HeapType(type));
         }
 
         private static int InRange(byte[] code, int used, int pc, int[] clauses, int clause)

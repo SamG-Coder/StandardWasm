@@ -29,6 +29,7 @@ internal sealed class CallGraph
     private readonly Queue<MethodId> _work = new();
     public readonly Dictionary<MethodId, Reason> Reached = new();
     public readonly HashSet<TypeId> Instantiated = new();
+    public readonly Dictionary<TypeId, MethodId> Finalizers = new();
     public readonly HashSet<MethodId> VirtualSlots = new();
     public readonly HashSet<TypeId> InitializedTypes = new();
     public readonly HashSet<int> InitializedModules = new();
@@ -38,11 +39,16 @@ internal sealed class CallGraph
     // Slots whose declaring type is an ancestor: indexed by declaring type so a
     // newly instantiated type only checks slots it can actually implement.
     private readonly Dictionary<TypeId, List<MethodId>> _slotsByOwner = new();
+    private readonly Dictionary<TypeId, (MethodId? Body, bool NamedSlotIsFinalizer)> _finalizerSlots = new();
+    private MethodId? _objectFinalizer;
 
     public CallGraph(AssemblySet set) => _set = set;
 
     public void Run(MethodId entry)
     {
+        if (_set.ByName("System.Private.CoreLib") is { } coreLibrary &&
+            _set.FindType(coreLibrary, "System", "Object") is { } objectType)
+            _objectFinalizer = _set.FindMethod(objectType, "Finalize", "0|Void()");
         Add(entry, new Reason("entry", null, -1));
         while (_work.Count > 0) Visit(_work.Dequeue());
     }
@@ -77,15 +83,39 @@ internal sealed class CallGraph
         foreach (TypeId ancestor in info.Ancestors)
             if (_slotsByOwner.TryGetValue(ancestor, out List<MethodId>? slots))
                 foreach (MethodId slot in slots.ToArray()) Dispatch(type, slot, from);
-        // The finalizer thread calls Object.Finalize overrides.
-        for (TypeId? current = type; current is not null; current = _set.Type(current.Value).BaseType)
-            foreach (MethodId method in _set.Type(current.Value).Methods)
-                if (_set.MethodName(method) == "Finalize" && _set.Definition(method).GetParameters().Count == 0 &&
-                    (_set.Definition(method).Attributes & MethodAttributes.Virtual) != 0 && _set.Type(current.Value).FullName != "System.Object")
-                {
-                    Add(method, new Reason("finalizer", from, -1));
-                    return;
-                }
+        if (!info.IsInterface && !info.IsValueType && ResolveFinalizerSlot(type).Body is { } body && body != _objectFinalizer)
+        {
+            Finalizers.Add(type, body);
+            Add(body, new Reason("finalizer", from, -1));
+        }
+    }
+
+    private (MethodId? Body, bool NamedSlotIsFinalizer) ResolveFinalizerSlot(TypeId type)
+    {
+        if (_objectFinalizer is not { } slot) return default;
+        if (_finalizerSlots.TryGetValue(type, out var inherited)) return inherited;
+        if (type == _set.TypeOf(slot).Id) return (slot, true);
+        TypeFacts info = _set.Type(type);
+        if (info.BaseType is not { } parent) return default;
+        inherited = ResolveFinalizerSlot(parent);
+        if (inherited.Body is null) return default;
+
+        var result = inherited;
+        foreach (MethodId method in info.Methods)
+        {
+            MethodAttributes attributes = _set.Definition(method).Attributes;
+            if ((attributes & MethodAttributes.Virtual) == 0 || _set.MethodName(method) != "Finalize" ||
+                _set.MethodSignature(method) != _set.MethodSignature(slot)) continue;
+            // A new slot hides the name for later implicit overrides without changing Object's slot.
+            if ((attributes & MethodAttributes.NewSlot) != 0) result.NamedSlotIsFinalizer = false;
+            else if (inherited.NamedSlotIsFinalizer) result.Body = method;
+        }
+        foreach ((EntityHandle declaration, MethodId body) in info.MethodImpls)
+        {
+            MethodId? declared = _set.ResolveMethod(_set.All[type.Assembly], declaration, out _);
+            if (declared == slot || declared == inherited.Body) result.Body = body;
+        }
+        return _finalizerSlots[type] = result;
     }
 
     private void AddSlot(MethodId slot, MethodId from, int offset)

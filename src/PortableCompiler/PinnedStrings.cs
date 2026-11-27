@@ -9,12 +9,13 @@ namespace PortableCompiler
         // pinned string: the netstandard form, ldloc; conv.u; ... + OffsetToStringData.
         internal const int Text = 1;
         // pinned char&: the form that calls string.GetPinnableReference().
-        internal const int Character = 2;
+        internal const int Character = 2, Byte = 3;
 
         internal static int Kind(byte[] image, int cursor, int end)
         {
             if (image[cursor] == 0x0e) return Text;
             if (end - cursor >= 2 && image[cursor] == 0x10 && image[cursor + 1] == 0x03) return Character;
+            if (end - cursor >= 2 && image[cursor] == 0x10 && image[cursor + 1] == 5) return Byte;
             return 0;
         }
     }
@@ -48,6 +49,8 @@ namespace PortableCompiler
             {
                 int slot = pc * BranchIl.Width, kind = records[slot], next = records[slot + 2];
                 if (next <= pc) return -1;
+                if (character && IsLocal(records, slot, BranchIl.Store, pinned, arguments, locals, PinnedLocals.Character))
+                    records[slot + 3] = PinnedLocals.Character;
                 if (text && kind == BranchIl.ConvertInteger && records[slot + 1] == 0xe0 && previous >= 0 &&
                     IsLocal(records, previous, BranchIl.Load, pinned, arguments, locals, PinnedLocals.Text))
                 {
@@ -72,6 +75,15 @@ namespace PortableCompiler
                         records[slot + 1] = 0;
                         records[slot + 3] = 1; // the CLR dereferences a null receiver
                     }
+                }
+                else if (character && kind == BranchIl.Call && records[slot + 3] == 0 && next < length &&
+                    IsLocal(records, next * BranchIl.Width, BranchIl.Store, pinned, arguments, locals, PinnedLocals.Character) &&
+                    ResourceNativeMetadata.IsTrustedUtf16PinnableReference(image, heaps, layout, records[slot + 1]))
+                {
+                    // The static CoreLib marshaller passes null as a null char pointer.
+                    records[slot] = BranchIl.PinString;
+                    records[slot + 1] = 0;
+                    records[slot + 3] = 0;
                 }
                 previous = slot;
                 pc = next;

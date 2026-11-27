@@ -31,6 +31,9 @@ Run("ReadNullLiteral", Pattern(0), []);
 Run("WriteNullLiteral", Pattern(0), []);
 Run("InitializeChecks", Pattern(0), [Pointer(4)]);
 Run("WritePastCapacity", Pattern(0), [Pointer(100)]);
+Run("RoundTripPointerAccessor", Pattern(7), [Pointer(32), Int(-5)]);
+Run("ReadNullablePointerAccessor", Pattern(0), [Pointer(32), Int(0)]);
+Run("ReadNullablePointerAccessor", Pattern(0), [Pointer(32), Int(1)]);
 
 File.WriteAllText(Path.Combine(evidence, "oracle.json"), JsonSerializer.Serialize(new
 {

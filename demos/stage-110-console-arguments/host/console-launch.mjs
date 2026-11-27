@@ -72,7 +72,8 @@ export async function runConsoleEntry(compilerBytes, selection) {
     const module = await WebAssembly.compile(code);
     const imports = WebAssembly.Module.imports(module);
     const host = createConsoleHost(selection.console);
-    const { exports } = await instantiateManagedModule(module, compiler, [selection.entry, ...companions], host.imports);
+    const { exports } = await instantiateManagedModule(module, compiler, [selection.entry, ...companions],
+        host.imports, selection.executablePath);
     if (typeof exports.run !== "function" || exports.run.length > 1)
         throw Error("This entry host supports Main() and Main(string[]).");
     const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", code));

@@ -131,9 +131,10 @@ namespace PrimitiveArrays
         public static double ReadDouble(int length, int index) => (new double[length])[index];
         public static int ReadChar(int length, int index) => (new char[length])[index];
         public static int LengthOfShorts(int length) => new short[length].Length;
+        public static int IncrementElement(int index) => CompoundElement.Increment(index);
     }
 
-    // Negative fixture: compound assignment to an element compiles to ldelema and must be diagnosed.
+    // Compound assignment takes the element's managed address with ldelema.
     public static class CompoundElement
     {
         public static int Increment(int index)

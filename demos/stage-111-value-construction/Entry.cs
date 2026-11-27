@@ -50,8 +50,64 @@ namespace ValueConstructionDemo
         private void Assign(int value) => Value = value;
     }
 
+    internal sealed class LayoutState
+    {
+        public int Trace;
+    }
+
+    internal readonly ref struct LayoutScope
+    {
+        private readonly LayoutState state;
+        private readonly nuint cookie;
+
+        internal LayoutScope(LayoutState state, nuint cookie)
+        {
+            this.state = state;
+            this.cookie = cookie;
+        }
+
+        public void Dispose()
+        {
+            if (cookie != 0) state.Trace = unchecked(state.Trace + 7);
+        }
+    }
+
+    public struct CounterOverride
+    {
+        public int Value;
+
+        public override int GetHashCode()
+        {
+            Value = unchecked(Value + 3);
+            return unchecked(Value * 7);
+        }
+    }
+
+    public struct InheritedHash
+    {
+        public int Value;
+    }
+
     public static class Kernels
     {
+        public static int DisposeScoped(int value)
+        {
+            var state = new LayoutState();
+            var scope = new LayoutScope(state, unchecked((nuint)value));
+            try
+            {
+                using (scope)
+                {
+                    state.Trace = checked(value + 1);
+                }
+            }
+            catch (OverflowException)
+            {
+                return state.Trace + 100;
+            }
+            return state.Trace;
+        }
+
         public static int Run(int value) =>
             unchecked(Defaults(value) + Fields(value) * 3 + Copies(value) * 5 + Chained(value) * 7);
 
@@ -118,7 +174,35 @@ namespace ValueConstructionDemo
             return pair.First;
         }
 
-        public static int RejectBorrow(int value)
+        public static int InvokeValueOverride(int value)
+        {
+            CounterOverride counter = default;
+            counter.Value = value;
+            CounterOverride copy = counter;
+            int hash = ConstrainedHash(ref counter);
+            return unchecked(hash + counter.Value * 11 + copy.Value * 13);
+        }
+
+        public static int RejectInheritedValueHash(int value)
+        {
+            InheritedHash counter = default;
+            counter.Value = value;
+            return ConstrainedHash(ref counter);
+        }
+
+        private static int ConstrainedHash<T>(ref T value) where T : struct => value.GetHashCode();
+
+        public static int CheckTypeBranches(int value) =>
+            unchecked(CloseTypeBranch<CounterOverride>(value) + CloseTypeBranch<Pair>(value));
+
+        private static int CloseTypeBranch<T>(int value) where T : struct
+        {
+            if (typeof(T) == typeof(CounterOverride)) return unchecked(value * 7 + 5);
+            if (typeof(T) != typeof(InheritedHash)) return unchecked(value * 11 - 3);
+            return typeof(T).GetFields().Length;
+        }
+
+        public static int BorrowExtent(int value)
         {
             var extent = new Extent(value, 1);
             Borrow.Touch(ref extent, 3);

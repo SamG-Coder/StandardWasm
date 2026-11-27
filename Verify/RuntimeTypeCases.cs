@@ -17,13 +17,17 @@ internal static class RuntimeTypeCases
         int[] location = CompilerExports.CreateDiagnostic();
 
         Check(nameof(Kernels.Local), Kernels.Local);
+        Check(nameof(Kernels.RuntimeClass), Kernels.RuntimeClass, [-1, 0, 1, 2]);
+        Check(nameof(Kernels.ReadonlyTypeField), Kernels.ReadonlyTypeField, [0, 1]);
         Check(nameof(Kernels.Linked), Kernels.Linked);
         Check(nameof(Kernels.DefaultHandle), Kernels.DefaultHandle);
         Check(nameof(Kernels.WithoutInitializer), Kernels.WithoutInitializer);
         Check(nameof(Kernels.CompareHostObject), value => Kernels.CompareHostObject(value), [0, 1, 2]);
 
+        Check(nameof(Kernels.LocalConstructedType), Kernels.LocalConstructedType, [0, 1]);
         if (Kernels.ConstructedType() != 1) throw new InvalidOperationException("CLR constructed type fixture changed.");
-        Reject(nameof(Kernels.ConstructedType), bundle, encoded, OpCodes.Ldtoken, -2);
+        // This constructed type needs the framework assembly absent from the bundle.
+        Reject(nameof(Kernels.ConstructedType), bundle, encoded, OpCodes.Ldtoken, -4);
         byte[] missing = BundleCases.Pack(image);
         Reject(nameof(Kernels.RequiresPeer), missing, Encode(missing), OpCodes.Ldtoken, -4);
         if (Kernels.RequiresTypeTest() != 1) throw new InvalidOperationException("CLR type-test fixture changed.");

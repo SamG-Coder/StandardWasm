@@ -4,10 +4,10 @@ namespace PeLibrary
 {
     internal static class AssemblyReferences
     {
-        internal const int SymbolWidth = 13;
+        internal const int SymbolWidth = 14;
         internal const int FullKey = 6, KeyStart = 7, KeyLength = 8;
         internal const int Leaf = 9;
-        internal const int Depth = 10, AssemblyRow = 11, GenericParent = 12;
+        internal const int Depth = 10, AssemblyRow = 11, GenericParent = 12, ParentType = 13;
 
         // Version byte offset, assembly/type/namespace/member string indexes,
         // signature blob index, then key kind and its validated byte range.
@@ -25,7 +25,7 @@ namespace PeLibrary
             return (int)Index(image, (uint)(table + (row - 1) * memberWidth), parentWidth);
         }
 
-        internal static int ReadMember(byte[] image, int[] streams, int[] methods, int row, int[] reference, bool allowClosedParent = false)
+        internal static int ReadMember(byte[] image, int[] streams, int[] methods, int row, int[] reference, bool allowClosedParent = false, bool allowLocalParent = false)
         {
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
@@ -44,12 +44,21 @@ namespace PeLibrary
                 int blob = TypeSpecBlob(image, streams, methods, counts, (int)(parent >> 3));
                 if (blob < 0) return blob;
                 reference[GenericParent] = blob;
+                reference[ParentType] = (int)(parent >> 3) << 2 | 2;
+            }
+            else if ((parent & 7) == 0 && allowLocalParent)
+            {
+                int type = (int)(parent >> 3);
+                if (type < 1 || type > counts[2]) return -1;
+                reference[ParentType] = type << 2;
             }
             else
             {
                 if ((parent & 7) != 1) return -2;
-                int status = ReadTypeReference(image, streams, methods, counts, first, (int)(parent >> 3), reference);
+                int type = (int)(parent >> 3);
+                int status = ReadTypeReference(image, streams, methods, counts, first, type, reference);
                 if (status < 0) return status;
+                reference[ParentType] = type << 2 | 1;
             }
             reference[4] = (int)Index(image, member + (uint)parentWidth, strings);
             reference[5] = (int)Index(image, member + (uint)(parentWidth + strings), blobs);

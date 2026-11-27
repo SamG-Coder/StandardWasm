@@ -23,7 +23,18 @@ internal static class StaticStorageCases
         Check(nameof(Kernels.WithEventArgs), [9], Kernels.WithEventArgs(9), []);
         // Stage 129 (decision 0057): the field read runs the declaring type's initializer.
         Check(nameof(Kernels.RejectInitialized), [], Kernels.RejectInitialized(), []);
-        Reject(nameof(Kernels.RejectThreadStatic), Kernels.RejectThreadStatic(), 0);
+        FieldInfo key = typeof(AnnotatedKeys).GetField("Key", BindingFlags.NonPublic | BindingFlags.Static)!;
+        if (!key.GetCustomAttributesData().Any(attribute =>
+            attribute.AttributeType.FullName == "System.Runtime.CompilerServices.NullableAttribute"))
+            throw new InvalidOperationException("The static key fixture must carry a field-level nullable annotation.");
+        Check(nameof(Kernels.ReadAnnotatedKey), [], Kernels.ReadAnnotatedKey(), []);
+        int[] firstThread = RunThreadState(5, -2);
+        int[] secondThread = RunThreadState(-7);
+        Check(nameof(Kernels.ThreadState), [5], firstThread[0], []);
+        Check(nameof(Kernels.ThreadState), [-2], firstThread[1], [[5]]);
+        Check(nameof(Kernels.ThreadState), [-7], secondThread[0], []);
+        Check(nameof(Kernels.ReadCompilerGenerated), [], Kernels.ReadCompilerGenerated(), []);
+        Reject(nameof(Kernels.ReadUnsupportedAttribute), Kernels.ReadUnsupportedAttribute(), 0);
 
         void Check(string name, int[] arguments, int expected, int[][] priorArguments)
         {
@@ -59,6 +70,19 @@ internal static class StaticStorageCases
                 expected = status
             });
         }
+    }
+
+    private static int[] RunThreadState(params int[] deltas)
+    {
+        var values = new int[deltas.Length];
+        var thread = new System.Threading.Thread(() =>
+        {
+            for (int index = 0; index < deltas.Length; index++)
+                values[index] = Kernels.ThreadState(deltas[index]);
+        });
+        thread.Start();
+        thread.Join();
+        return values;
     }
 
     private static MethodInfo Method(string name) => typeof(Kernels).GetMethod(name)!;

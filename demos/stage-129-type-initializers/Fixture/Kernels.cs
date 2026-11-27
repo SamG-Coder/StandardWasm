@@ -268,10 +268,21 @@ namespace TypeInitializerFixture
         // A closed beforefieldinit generic static call that reads no static field.
         public static int RelaxedGenericCall() => RelaxedBox<int>.Id(4);
 
-        // A closed precise generic static call stays a located diagnostic.
+        // A precise closed generic type initializes before its static call.
         public static int PreciseGenericCall() => PreciseBox<int>.Id(4);
 
         public static int ReadFailing() => Failing.Value;
+
+        private static class GenericFailure<T>
+        {
+            internal static readonly int Value;
+
+            static GenericFailure() => throw new InvalidOperationException();
+        }
+
+        public static int ReadIntFailure() => GenericFailure<int>.Value;
+
+        public static int ReadStringFailure() => GenericFailure<string>.Value;
 
         public static int ReadOuterFailing() => OuterFailing.Value;
 
@@ -320,7 +331,7 @@ namespace TypeInitializerFixture
             catch (TypeInitializationException) { return 3; }
         }
 
-        // Object members on a root object and Monitor stay explicit diagnostics.
+        // Root hash codes still require an object-identity implementation.
         public static int RootHashCode() => Fresh().GetHashCode() == 0 ? 0 : 1;
 
         public static int RootToString() => Fresh().ToString().Length;
@@ -332,6 +343,46 @@ namespace TypeInitializerFixture
         public static int Locked()
         {
             lock (gate) { return 1; }
+        }
+
+        private static bool GeneratedFlag { get; set; }
+
+        public static int StaticAutoProperty()
+        {
+            bool before = GeneratedFlag;
+            GeneratedFlag = true;
+            int result = GeneratedFlag && !before ? 1 : 0;
+            GeneratedFlag = false;
+            return result;
+        }
+
+        public static int LinkedRuntimeTypeArgument() => ReceiveRuntimeType(typeof(Kernels)) * 10 + ReceiveRuntimeType(null);
+
+        private static int ReceiveRuntimeType(Type source) => new RuntimeTypeConsumer(source).Result;
+
+        private sealed class RuntimeTypeConsumer
+        {
+            internal readonly int Result;
+
+            internal RuntimeTypeConsumer(Type source)
+            {
+                Result = source == typeof(Kernels) ? 2 : source == null ? 3 : 4;
+            }
+        }
+
+        public static int RuntimeTypeLock()
+        {
+            Type target = typeof(Kernels);
+            bool taken = false;
+            try
+            {
+                System.Threading.Monitor.Enter(target, ref taken);
+                return taken && target == typeof(Kernels) ? 1 : 0;
+            }
+            finally
+            {
+                if (taken) System.Threading.Monitor.Exit(target);
+            }
         }
     }
 }

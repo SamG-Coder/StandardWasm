@@ -8,7 +8,7 @@ namespace PortableCompiler
     {
         internal static int Analyze(int[] records, int[] depths, int[] states, int maximum,
             int[] frame, int result, int[] signatures, int[] offsets, int[] arities, int[] location, int[] catchRegion,
-            byte[] outgoingNulls, int[] objects, int[] virtualTypes, byte[] allocatedStates)
+            byte[] outgoingNulls, int[] objects, int[] virtualTypes, byte[] allocatedStates, int[] descriptorMismatch, int[] contexts)
         {
             if (depths.Length == 0)
                 return -1;
@@ -61,6 +61,7 @@ namespace PortableCompiler
                 }
                 if (kind == Return)
                 {
+                    if (depth == 1 && stack[0] == ReadOnlyCharacterLocation) return -2;
                     if (result == Void ? depth != 0 : depth != 1 || !Assignable(stack[0], result, objects))
                         return -1;
                     continue;
@@ -77,13 +78,28 @@ namespace PortableCompiler
                         IsValueType(objects, thrown))) return -2;
                     continue; // throw has no normal successor and clears the evaluation stack.
                 }
+                if (kind == ThrowFrameworkArgument)
+                {
+                    if (!Match(stack, depth, I32)) return -1;
+                    continue;
+                }
                 if (kind == Rethrow || kind == EndFinally) continue; // Unwinding drops the evaluation stack.
 
+                bool fieldStore = kind == SetField || kind == UpdateConstructorField;
                 int next;
                 if (kind == Leave)
                 {
                     if (catchRegion.Length == 0) return -2;
                     next = 0; // leave clears the CIL evaluation stack.
+                }
+                else if (kind == StaticReference)
+                {
+                    int type = records[slot + Width + 1], action = records[slot + 3];
+                    if (action == StaticReferenceWasm.Write)
+                        next = depth > 0 && Assignable(stack[depth - 1], type, objects) ? depth - 1 : -2;
+                    else
+                        next = Push(stack, allocated, depth,
+                            action == StaticReferenceWasm.Address ? LocationFromIdentity(objects, type) : type);
                 }
                 else if (kind == ExchangeHandlerField)
                 {
@@ -93,15 +109,19 @@ namespace PortableCompiler
                         return -1;
                     next = Push(stack, allocated, depth - 1, EventHandlerReference);
                 }
-                else if ((kind == GetField || kind == SetField || kind == FieldAddress) &&
+                else if ((kind == GetField || fieldStore || kind == FieldAddress || kind == TakeProjectedFieldAddress) &&
                     records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
-                    depth >= (kind == SetField ? 2 : 1) && IsNativeInteger(stack[depth - (kind == SetField ? 2 : 1)]))
+                    depth >= (fieldStore ? 2 : 1) && IsNativeInteger(stack[depth - (fieldStore ? 2 : 1)]))
                 {
                     // Stage 143 (decision 0071): p->F through an S* address in memory 0.
                     int storage = FieldAccess.Storage(records[slot + 3]);
-                    if (kind == GetField) next = Push(stack, allocated, depth - 1, StackType(storage));
-                    else if (kind == FieldAddress) next = Push(stack, allocated, depth - 1, Native);
-                    else next = Assignable(stack[depth - 1], storage, objects) ? depth - 2 : -2;
+                    // A proven native layout exposes pointer fields as real
+                    // addresses, including a void** vtable field.
+                    bool pointerField = records[slot + 2 * BranchIl.Width + 3] == 0x4d;
+                    if (kind == GetField) next = Push(stack, allocated, depth - 1, pointerField ? Native : StackType(storage));
+                    else if (kind == FieldAddress || kind == TakeProjectedFieldAddress) next = Push(stack, allocated, depth - 1, Native);
+                    else next = Assignable(stack[depth - 1], storage, objects) || pointerField && IsNativeInteger(stack[depth - 1])
+                        ? depth - 2 : -2;
                 }
                 else if (kind == VirtualCall)
                 {
@@ -111,20 +131,74 @@ namespace PortableCompiler
                     // compiler descriptor cannot be sent to an upstream body.
                     if (next < 0 && depth >= arity && PeLibrary.RuntimeTypeMetadata.IsReference(stack[depth - arity]))
                         return -2;
+                    if (next < 0 && depth >= arity)
+                    {
+                        for (int argument = 1; argument < arity; argument++)
+                        {
+                            if (stack[depth - arity + argument] != PeLibrary.RuntimeTypeMetadata.Type ||
+                                virtualTypes[operand + 1 + argument] < FirstClass) continue;
+                            descriptorMismatch[1] = argument;
+                            descriptorMismatch[3] = slot + 1;
+                            break;
+                        }
+                    }
                 }
                 else if (kind == ReadReflection)
                 {
+                    bool typeText = PeLibrary.ReflectionMembers.IsTypeText(operand);
                     int receiver = operand == PeLibrary.ReflectionMembers.TypeModule ||
-                        operand == PeLibrary.ReflectionMembers.TypeAssembly ? PeLibrary.RuntimeTypeMetadata.Type : PeLibrary.RuntimeTypeMetadata.Module;
+                        operand == PeLibrary.ReflectionMembers.TypeAssembly ||
+                        typeText ? PeLibrary.RuntimeTypeMetadata.Type : PeLibrary.RuntimeTypeMetadata.Module;
                     int resultType = operand == PeLibrary.ReflectionMembers.TypeModule ? PeLibrary.RuntimeTypeMetadata.Module :
-                        operand == PeLibrary.ReflectionMembers.ModuleName ? String : PeLibrary.RuntimeTypeMetadata.Assembly;
+                        operand == PeLibrary.ReflectionMembers.ModuleName ||
+                        typeText ? String : PeLibrary.RuntimeTypeMetadata.Assembly;
                     if (depth == 0 || !Assignable(stack[depth - 1], receiver, objects)) return -2;
                     next = Push(stack, allocated, depth - 1, resultType);
+                }
+                else if (kind == Call && records[slot + 3] == 0 &&
+                    NativeReceiverCalls.UsesNativeReceiver(contexts[operand], stack, depth - arities[operand]))
+                {
+                    // Check the unchanged call shape. Binding uses the original
+                    // receiver stored in states to select a native body.
+                    stack[depth - arities[operand]] = signatures[offsets[operand] + 1];
+                    next = CallShape(stack, allocated, depth, signatures, offsets[operand], arities[operand], 0, objects);
                 }
                 else next = Transition(stack, allocated, depth, kind, operand, records[slot + 3], frame,
                     signatures, offsets, arities, objects);
                 if (next < 0)
+                {
+                    if (kind == EqualRuntimeTypes && depth >= 2)
+                    {
+                        for (int index = depth - 1; index >= depth - 2; index--)
+                        {
+                            if (stack[index] < FirstClass) continue;
+                            int source = RuntimeTypeReturnDemand.Find(records, pc, index, depths, arities, frame,
+                                catchRegion, stack[index], signatures, offsets);
+                            if (source < 0) continue;
+                            descriptorMismatch[2] = source + 1;
+                            break;
+                        }
+                    }
+                    if (kind == Call || kind == NewObject)
+                    {
+                        int first = kind == NewObject ? 1 : 0;
+                        int count = arities[operand], start = depth - count;
+                        if (start + first >= 0)
+                        {
+                            for (int i = first; i < count; i++)
+                            {
+                                int expected = signatures[offsets[operand] + 1 + i];
+                                if (stack[start + i] == PeLibrary.RuntimeTypeMetadata.Type && expected >= FirstClass)
+                                {
+                                    descriptorMismatch[0] = operand + 1;
+                                    descriptorMismatch[1] = i;
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     return next;
+                }
                 if (outgoingNulls.Length != 0)
                     for (int i = 0; i < next; i++)
                         outgoingNulls[pc * maximum + i] = stack[i] == NullValue ? (byte)1 :
@@ -158,7 +232,11 @@ namespace PortableCompiler
             int start = depth - arity + constructed;
             if (start < 0) return -1;
             for (int i = constructed; i < arity; i++)
-                if (!Assignable(stack[start + i - constructed], types[offset + 1 + i], objects)) return -1;
+            {
+                int argument = stack[start + i - constructed];
+                if (!Assignable(argument, types[offset + 1 + i], objects))
+                    return argument == ReadOnlyCharacterLocation ? -2 : -1;
+            }
             int result = types[offset + constructed];
             bool freshClass = constructed != 0 && result >= FirstClass && !IsValueType(objects, result);
             return result == Void ? start : Push(stack, allocated, start, StackType(result), freshClass);
@@ -167,18 +245,54 @@ namespace PortableCompiler
         private static int Transition(int[] stack, byte[] allocated, int depth, int kind, int operand, int extra, int[] frame,
             int[] signatures, int[] offsets, int[] arities, int[] objects)
         {
-            if (kind == LoadString) return Push(stack, allocated, depth, String);
+            if (kind == WidenReference)
+                return depth > 0 && Assignable(stack[depth - 1], operand, objects)
+                    ? Push(stack, allocated, depth - 1, ObjectReference) : -2;
+            if (kind == LoadStaticByteSpan) return Push(stack, allocated, depth, ReadOnlyByteSpan);
+            if (kind == TakeStaticByteLocation)
+                return Match(stack, depth, ReadOnlyByteSpan) ? Push(stack, allocated, depth - 1, StaticByteLocation) : -2;
+            if (kind == TakeCharacterSpanLocation)
+                return Match(stack, depth, WritableCharacterSpan) ? Push(stack, allocated, depth - 1, CharacterLocation) : -2;
+            if (kind == TakeReadOnlyCharacterLocation)
+                return Match(stack, depth, CharacterSpan) ? Push(stack, allocated, depth - 1, ReadOnlyCharacterLocation) : -2;
+            if (kind == OffsetStaticByteLocation || kind == OffsetCharacterLocation)
+            {
+                int location = kind == OffsetCharacterLocation ? CharacterLocation : StaticByteLocation;
+                return depth >= 2 && Match(stack, depth - 1, location) && IsNativeInteger(stack[depth - 1]) ? depth - 1 : -2;
+            }
+            if (kind == ReadStaticUInt16)
+                return Match(stack, depth, StaticByteLocation) ? Push(stack, allocated, depth - 1, I32) : -2;
+            if (kind == LoadString || kind == LoadNativeMessage) return Push(stack, allocated, depth, String);
             if (kind == LoadTypeToken) return Push(stack, allocated, depth, PeLibrary.RuntimeTypeMetadata.Handle);
             // Only an unmanaged pointer (a native int, decision 0060) addresses memory 0.
             // A proven null (NativeZero) spills as Native and raises NullReferenceException
             // at run time, as on the CLR. A managed byref stays a diagnostic.
-            if (kind == LoadObject)
-                return depth >= 1 && IsNativeInteger(stack[depth - 1]) ? Push(stack, allocated, depth - 1, operand) : -2;
-            if (kind == StoreObject)
-                return depth >= 2 && IsNativeInteger(stack[depth - 2]) &&
-                    (stack[depth - 1] == operand || stack[depth - 1] == NullValue) ? depth - 2 : -2;
-            if (kind == InitializeNative)
-                return depth >= 1 && IsNativeInteger(stack[depth - 1]) ? depth - 1 : -2;
+            if (kind == Monitor)
+                return depth > 0 && Assignable(stack[depth - 1], ObjectReference, objects) ? depth - 1 : -2;
+            if (kind == Win32Error)
+                return PeLibrary.MarshalErrorMetadata.IsSetter(operand)
+                    ? Match(stack, depth, I32) ? depth - 1 : -1
+                    : Push(stack, allocated, depth, I32);
+            if (kind == LoadManagedCell)
+                return Match(stack, depth, extra) ? Push(stack, allocated, depth - 1, CellValue(extra)) : -2;
+            if (kind == StoreManagedCell)
+                return depth >= 2 && Match(stack, depth - 1, extra) &&
+                    Assignable(stack[depth - 1], CellValue(extra), objects) ? depth - 2 : -2;
+            if (kind == ClearManagedCell)
+                return Match(stack, depth, extra) ? depth - 1 : -2;
+            if (kind == LoadObject || kind == StoreObject || kind == InitializeNative)
+            {
+                bool store = kind == StoreObject;
+                int address = depth - (store ? 2 : 1);
+                if (address < 0) return -2;
+                bool managed = stack[address] == ValueLocation(operand);
+                if (!managed && (extra <= 0 || !IsNativeInteger(stack[address]))) return -2;
+                if (kind == LoadObject) return Push(stack, allocated, address, operand);
+                if (store && stack[depth - 1] != operand && (managed || stack[depth - 1] != NullValue)) return -2;
+                return address;
+            }
+            if (kind == NativePointerConstructor)
+                return depth > 0 && IsNativeInteger(stack[depth - 1]) ? depth : -2;
             if (kind == PinString)
                 return Match(stack, depth, String) ? Push(stack, allocated, depth - 1, Native) : -2;
             if (kind == LocalAllocate)
@@ -188,16 +302,111 @@ namespace PortableCompiler
                 if (depth < 1 || (!IsNativeInteger(stack[depth - 1]) && stack[depth - 1] != I32)) return -2;
                 return Push(stack, allocated, depth - 1, Native);
             }
+            if (kind == LoadFrameLocation) return Push(stack, allocated, depth, extra);
+            if (kind == LoadSingleFrameSpan) return Push(stack, allocated, depth, extra);
+            if (kind == LoadInlineStorage)
+                return Push(stack, allocated, depth, extra);
+            if (kind == NewObjectSpan)
+                return depth >= 2 && stack[depth - 2] == operand && stack[depth - 1] == I32
+                    ? Push(stack, allocated, depth - 2, ObjectSpan) : -2;
+            if (kind == StringAsSpan)
+            {
+                if (!Match(stack, depth - operand, String)) return -2;
+                for (int argument = 0; argument < operand; argument++)
+                    if (!Match(stack, depth - argument, I32)) return -2;
+                return Push(stack, allocated, depth - operand - 1, CharacterSpan);
+            }
+            if (kind == CharacterArrayAsSpan || kind == ByteArrayAsSpan)
+            {
+                bool bytes = kind == ByteArrayAsSpan;
+                if (!Match(stack, depth, bytes ? Bytes : Chars)) return -2;
+                return extra == 0 ? Push(stack, allocated, depth - 1, bytes ? ReadOnlyByteSpan : WritableCharacterSpan) : depth - 1;
+            }
+            if (kind == NativeCharacterSpan)
+                return depth >= 2 && IsNativeInteger(stack[depth - 2]) && stack[depth - 1] == I32
+                    ? extra == 0 ? Push(stack, allocated, depth - 2, WritableCharacterSpan) : depth - 2 : -2;
+            if (kind == SpanAsReadOnly)
+                return Match(stack, depth, WritableCharacterSpan) ? Push(stack, allocated, depth - 1, CharacterSpan) : -2;
+            if (kind == SpanAddress)
+                return Match(stack, depth - 1, WritableCharacterSpan) && Match(stack, depth, I32)
+                    ? Push(stack, allocated, depth - 2, CharacterLocation) : -2;
+            if (kind == SpanLength || kind == SpanIsEmpty)
+                return Match(stack, depth, extra) ? Push(stack, allocated, depth - 1, I32) : -2;
+            if (kind == ArrayClear)
+            {
+                int start = depth - operand;
+                if (start < 0 || operand == 3 && (!Match(stack, depth - 1, I32) || !Match(stack, depth, I32))) return -1;
+                return ArrayClearWasm.IsVector(objects, stack[start]) ? start : -2;
+            }
+            if (kind == ArrayCopy)
+            {
+                int start = depth - operand;
+                if (start < 0 || !Match(stack, depth, I32)) return -1;
+                if (operand == 5 && (stack[start + 1] != I32 || stack[start + 3] != I32)) return -1;
+                int vector = ArrayCopyWasm.Vector(objects, stack[start], stack[start + (operand == 3 ? 1 : 2)]);
+                return vector == 0 ? -2 : start;
+            }
+            if (kind == SpanSlice)
+                return Match(stack, depth - operand, extra) && Match(stack, depth, I32) &&
+                    (operand == 1 || Match(stack, depth - 1, I32))
+                    ? Push(stack, allocated, depth - operand - 1, extra) : -2;
+            if (kind == SpanRead)
+                return Match(stack, depth - 1, extra) && Match(stack, depth, I32)
+                    ? Push(stack, allocated, depth - 2, extra == ObjectSpan ? ObjectReference : I32) : -2;
+            if (kind == ObjectElementAddress)
+            {
+                if (depth < 2 || !ArrayIndex(stack, depth)) return -1;
+                int array = stack[depth - 2];
+                if (array != operand && array != NullValue) return -2;
+                int location = extra >= FirstClass ? ValueLocation(extra) : operand == Ints ? Int32Location : ObjectLocation;
+                return Push(stack, allocated, depth - 2, location);
+            }
+            if (kind == LoadObjectIndirect)
+            {
+                if (depth < 1 || !IsReferenceLocation(stack[depth - 1])) return -2;
+                return Push(stack, allocated, depth - 1, CellValue(stack[depth - 1]));
+            }
+            if (kind == StoreObjectIndirect)
+            {
+                if (depth < 2) return -2;
+                int type = stack[depth - 2];
+                return IsReferenceLocation(type) && Assignable(stack[depth - 1], CellValue(type), objects) ? depth - 2 : -2;
+            }
             if (kind == LoadIndirect)
             {
-                if (depth < 1 || !IsNativeInteger(stack[depth - 1])) return -2;
+                if (depth < 1) return -2;
+                int address = stack[depth - 1];
+                if (!IsNativeInteger(address) && (address != CharacterLocation && address != ReadOnlyCharacterLocation || operand != 0x49) &&
+                    (address != Int16Location || operand != 0x48) &&
+                    (address != BooleanLocation && address != StaticByteLocation || operand != 0x47) &&
+                    (address != Int32Location || operand != 0x4a && operand != 0x4b) &&
+                    (address != NativeIntLocation || operand != 0x4d)) return -2;
                 return Push(stack, allocated, depth - 1, IndirectType(operand));
             }
             if (kind == StoreIndirect)
             {
-                if (depth < 2 || !IsNativeInteger(stack[depth - 2]) || !IndirectValue(operand, stack[depth - 1])) return -2;
+                if (depth < 2 || !IndirectValue(operand, stack[depth - 1])) return -2;
+                int address = stack[depth - 2];
+                if (!IsNativeInteger(address) && (!IsPacked16Location(address) || operand != 0x53) &&
+                    (address != BooleanLocation || operand != 0x52) && (address != Int32Location || operand != 0x54) &&
+                    (address != NativeIntLocation || operand != 0xdf)) return -2;
                 return depth - 2;
             }
+            if (kind == GetObjectType)
+            {
+                if (depth == 0) return -1;
+                int receiver = stack[depth - 1];
+                if (receiver != NullValue && receiver != ObjectReference && receiver != String && !IsArray(receiver) &&
+                    (receiver < FirstClass || receiver >= ConstructorAddress ||
+                    IsValueType(objects, receiver))) return -2;
+                return Push(stack, allocated, depth - 1, PeLibrary.RuntimeTypeMetadata.Type);
+            }
+            if (kind == EnumHasFlag)
+                return depth >= 2 && Match(stack, depth, operand) && Match(stack, depth - 1, operand)
+                    ? Push(stack, allocated, depth - 2, I32) : -2;
+            if (kind == EqualRuntimeTypes)
+                return Match(stack, depth, PeLibrary.RuntimeTypeMetadata.Type) &&
+                    Match(stack, depth - 1, PeLibrary.RuntimeTypeMetadata.Type) ? Push(stack, allocated, depth - 2, I32) : -2;
             if (kind == TypeFromHandle)
                 return depth > 0 && stack[depth - 1] == PeLibrary.RuntimeTypeMetadata.Handle
                     ? Push(stack, allocated, depth - 1, PeLibrary.RuntimeTypeMetadata.Type) : -1;
@@ -219,12 +428,39 @@ namespace PortableCompiler
             if (kind == ClearValue || kind == ResourceLookup) return depth;
             if (kind == NullLiteral) return Push(stack, allocated, depth, NullValue);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, allocated, depth, EventArgsReference);
-            if (kind == NewRootObject) return Push(stack, allocated, depth, ObjectReference);
+            if (kind == NewRootObject) return Push(stack, allocated, depth, ObjectReference, true);
             if (kind == CombineHandler || kind == RemoveHandler)
-                return Match(stack, depth, EventHandlerReference) && Match(stack, depth - 1, EventHandlerReference)
-                    ? depth - 1 : -1;
-            // The supported delegate operations already proved the result's concrete type.
-            if (kind == CastHandler) return Match(stack, depth, EventHandlerReference) ? depth : -1;
+                return depth >= 2 && Assignable(stack[depth - 1], DelegateReference, objects) &&
+                    Assignable(stack[depth - 2], DelegateReference, objects)
+                    ? Push(stack, allocated, depth - 2, EventHandlerReference) : -2;
+            if (kind == CastHandler)
+            {
+                if (depth == 0 || !Assignable(stack[depth - 1], DelegateReference, objects)) return -2;
+                // The CLR types differ, but every supported Delegate uses the EventHandler heap.
+                if (stack[depth - 1] != NullValue) stack[depth - 1] = EventHandlerReference;
+                return depth;
+            }
+            if (kind == BoxAggregate || kind == UnboxAggregate || kind == UnboxAggregateAddress || kind == TestAggregateBox)
+            {
+                if (depth == 0) return -2;
+                int source = stack[depth - 1];
+                if (kind == BoxAggregate)
+                    return source == operand ? Push(stack, allocated, depth - 1, ObjectReference) : -2;
+                if (source != NullValue && (!IsObjectReference(source) || IsValueType(objects, source))) return -2;
+                int result = kind == UnboxAggregateAddress ? ValueLocation(operand) :
+                    kind == UnboxAggregate ? operand : ObjectReference;
+                return Push(stack, allocated, depth - 1, result);
+            }
+            if (kind == BoxValue || kind == UnboxValue || kind == TestBox)
+            {
+                if (depth < 1) return -1;
+                int source = stack[depth - 1], storage = PrimitiveBoxing.Storage(operand);
+                if (kind == BoxValue)
+                    return Assignable(source, storage, objects)
+                        ? Push(stack, allocated, depth - 1, ObjectReference) : -1;
+                if (source != NullValue && !IsReference(source) || IsValueType(objects, source)) return -1;
+                return Push(stack, allocated, depth - 1, kind == UnboxValue ? StackType(storage) : ObjectReference);
+            }
             if (kind == CastClass || kind == TestClass)
             {
                 if (depth < 1 || IsValueType(objects, stack[depth - 1]) ||
@@ -237,16 +473,68 @@ namespace PortableCompiler
             if (kind == JoinStrings)
                 return Match(stack, depth, String) && Match(stack, depth - 1, String)
                     ? Push(stack, allocated, depth - 2, String) : -1;
+            if (kind == PinStaticBytes) return Push(stack, allocated, depth, Native);
+            if (kind == CopyCharacterSpan)
+                return Match(stack, depth, WritableCharacterSpan) && Match(stack, depth - 1, extra) ? depth - 2 : -2;
+            if (kind == FindCharacterInSpan)
+                return Match(stack, depth - operand + 1, CharacterSpan) && Match(stack, depth, I32) &&
+                    (operand == 2 || operand == 3 && Match(stack, depth - 1, I32))
+                    ? Push(stack, allocated, depth - operand, I32) : -2;
+            if (kind == EqualCharacterSpans)
+                return Match(stack, depth, extra) && Match(stack, depth - 1, extra)
+                    ? Push(stack, allocated, depth - 2, I32) : -2;
             if (kind == StringFromChars)
                 return Match(stack, depth, Chars) ? Push(stack, allocated, depth - 1, String) : -1;
-            if (kind == StringLength)
+            if (kind == StringFromSpan)
+                return Match(stack, depth, extra) ? Push(stack, allocated, depth - 1, String) : -1;
+            if (kind == AllocateString)
+                return Match(stack, depth, Native) ? Push(stack, allocated, depth - 1, String) : -1;
+            if (kind == StringConstructionSpan)
+                return Match(stack, depth, I32) && Match(stack, depth - 1, String)
+                    ? Push(stack, allocated, depth - 2, WritableCharacterSpan) : -1;
+            if (kind == StringRange)
+                return Match(stack, depth - 2, String) && Match(stack, depth - 1, I32) && Match(stack, depth, I32)
+                    ? Push(stack, allocated, depth - 3, String) : -2;
+            if (kind == StringLength || kind == StringFirstCodeUnit)
                 return Match(stack, depth, String) ? Push(stack, allocated, depth - 1, I32) : -1;
-            if (kind == StringCharacter)
+            if (kind == StringCharacter || kind == StringContainsCodeUnit)
                 return Match(stack, depth, I32) && Match(stack, depth - 1, String)
                     ? Push(stack, allocated, depth - 2, I32) : -1;
             if (kind == LoadFunction) return Push(stack, allocated, depth, MethodPointer);
             // Decision 0078: a function pointer is a native int; calli takes it last.
             if (kind == FunctionAddress) return Push(stack, allocated, depth, Native);
+            // Unsafe.AsPointer preserves an address that already lives in memory 0.
+            // A managed heap location requires separate pinning support.
+            if (kind == NativeAddressView)
+                return depth > 0 && IsNativeInteger(stack[depth - 1]) ? depth : -2;
+            if (kind == ReinterpretPacked16Location)
+            {
+                // Unsafe.As<char, char> preserves the address and its readonly provenance.
+                if (operand == CharacterLocation && extra == CharacterLocation &&
+                    Match(stack, depth, ReadOnlyCharacterLocation)) return depth;
+                return Match(stack, depth, operand) ? Push(stack, allocated, depth - 1, extra) : -2;
+            }
+            if (kind == NullManagedLocation) return Push(stack, allocated, depth, extra);
+            if (kind == TestNullLocation)
+            {
+                if (depth == 0) return -2;
+                int address = stack[depth - 1];
+                return IsNativeInteger(address) || extra != 0 && address == extra ||
+                    address == ReadOnlyCharacterLocation && extra == CharacterLocation
+                    ? Push(stack, allocated, depth - 1, I32) : -2;
+            }
+            if (kind == CallDynamicNative || kind == CallPinnedCharacterNative)
+            {
+                if (depth < 3 || !IsNativeInteger(stack[depth - 1]) || stack[depth - 3] != I32) return -2;
+                if (kind == CallPinnedCharacterNative ? stack[depth - 2] != CharacterLocation :
+                    !IsNativeInteger(stack[depth - 2])) return -2;
+                return Push(stack, allocated, depth - 3, I32);
+            }
+            if (kind == CallNativeIndirect)
+            {
+                if (depth < 2 || !IsNativeInteger(stack[depth - 1]) || !IsNativeInteger(stack[depth - 2])) return -2;
+                return Push(stack, allocated, depth - 2, extra);
+            }
             if (kind == CallIndirect)
             {
                 int arity = arities[operand], shape = offsets[operand];
@@ -264,6 +552,10 @@ namespace PortableCompiler
             }
             if (kind == InvokeDelegate)
             {
+                if (operand == CharacterSpanCallback)
+                    return depth >= 3 && IsNativeInteger(stack[depth - 1]) &&
+                        Match(stack, depth - 1, WritableCharacterSpan) && Match(stack, depth - 2, CharacterSpanCallback)
+                        ? depth - 3 : -2;
                 if (operand == EventHandlerReference)
                     return Match(stack, depth, EventArgsReference) && depth >= 3 &&
                         Assignable(stack[depth - 2], ObjectReference, objects) && Match(stack, depth - 2, EventHandlerReference)
@@ -276,7 +568,16 @@ namespace PortableCompiler
                 return Push(stack, allocated, depth, kind == WideConstant ? I64 : I32);
             if (kind == SingleConstant || kind == DoubleConstant)
                 return Push(stack, allocated, depth, kind == SingleConstant ? F32 : F64);
-            if (kind == Store) return depth > 0 && Assignable(stack[depth - 1], frame[operand], objects) ? depth - 1 : -1;
+            if (kind == Store)
+            {
+                if (depth == 0) return -1;
+                int source = stack[depth - 1];
+                // A pinned char& local can already hold an address produced by
+                // a string copy. A general managed UTF-16 alias still needs
+                // pinning semantics before it can be exposed to memory 0.
+                if (source == ReadOnlyCharacterLocation || extra == PinnedLocals.Character && source == CharacterLocation) return -2;
+                return Assignable(source, frame[operand], objects) ? depth - 1 : -1;
+            }
             if (kind == CheckedConversion)
             {
                 if (depth < 1 || !IsScalar(stack[depth - 1])) return -1;
@@ -330,7 +631,7 @@ namespace PortableCompiler
                 if (depth < needed) return -1;
                 int type = stack[depth - needed];
                 int top = stack[depth - 1];
-                if (IsValueType(objects, type) || IsValueType(objects, top)) return -2;
+                if (IsValueType(objects, type) || IsValueType(objects, top) || IsValueLocation(type) || IsValueLocation(top)) return -2;
                 if (type == NullPointer || top == NullPointer)
                 {
                     if (needed == 1) return depth - 1;
@@ -388,7 +689,13 @@ namespace PortableCompiler
                 return Push(stack, allocated, depth - arity, type);
             }
             if (kind == Call || kind == NewObject)
-                return CallShape(stack, allocated, depth, signatures, offsets[operand], arities[operand], kind == NewObject ? 1 : 0, objects);
+            {
+                int count = arities[operand];
+                int protectedReceiver = kind == Call ? extra >> 1 : 0;
+                if (protectedReceiver != 0 && (depth < count ||
+                    !Assignable(stack[depth - count], protectedReceiver, objects))) return -2;
+                return CallShape(stack, allocated, depth, signatures, offsets[operand], count, kind == NewObject ? 1 : 0, objects);
+            }
             if (kind == ConstructValue)
             {
                 // The receiver entry is the addressed location's value, pushed by
@@ -403,20 +710,68 @@ namespace PortableCompiler
                         return -1;
                 return start;
             }
+            if (kind == SuppressFinalizer)
+                return depth != 0 && Assignable(stack[depth - 1], ObjectReference, objects) ? depth - 1 : -2;
             if (kind == BaseCtor)
                 return depth > 0 && stack[depth - 1] >= FirstClass && !IsInterface(objects, stack[depth - 1]) &&
                     !IsValueType(objects, stack[depth - 1]) ? depth - 1 : -1;
-            if (kind == LoadStaticField) return Push(stack, allocated, depth, StackType(extra));
-            if (kind == StoreStaticField)
+            if (kind == StaticFieldAddress) return Push(stack, allocated, depth, Native);
+            if (kind == StaticInt32)
+                return extra == StaticInt32Wasm.Write ? Match(stack, depth, I32) ? depth - 1 : -1 :
+                    Push(stack, allocated, depth, extra == StaticInt32Wasm.Address ? Int32Location : I32);
+            if (kind == LoadStaticField || kind == LoadNativeStatic) return Push(stack, allocated, depth, StackType(extra));
+            if (kind == StoreStaticField || kind == StoreNativeStatic)
                 return depth > 0 && Assignable(stack[depth - 1], extra, objects) ? depth - 1 : -1;
-            if (kind == GetField)
+            if (kind == TakeProjectedFieldAddress)
+            {
+                int owner = FieldAccess.Owner(extra);
+                bool valid = IsValueType(objects, owner) ? Match(stack, depth, ValueLocation(owner)) :
+                    depth > 0 && Assignable(stack[depth - 1], owner, objects);
+                return valid ? Push(stack, allocated, depth - 1,
+                    ValueFieldProjections.DecodeLocation(objects, FieldAccess.Storage(extra))) : -2;
+            }
+            if (kind == TakeValueFieldAddress)
             {
                 if (depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(extra), objects)) return -1;
+                return Push(stack, allocated, depth - 1, ValueLocation(FieldAccess.Storage(extra)));
+            }
+            if (kind == TakeReferenceFieldAddress)
+            {
+                if (depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(extra), objects)) return -1;
+                return Push(stack, allocated, depth - 1, LocationFromIdentity(objects, FieldAccess.Storage(extra)));
+            }
+            if (kind == LoadConstructorAddress)
+                return Push(stack, allocated, depth, ConstructorAddress);
+            if (kind == GetField || kind == GetReferenceField)
+            {
+                if (depth == 0) return -1;
+                int receiver = stack[depth - 1];
+                if (receiver == ConstructorAddress) receiver = frame[0];
+                if (IsValueLocation(receiver) && !IsExplicitValue(objects, LocatedValue(receiver)))
+                    receiver = LocatedValue(receiver);
+                if (!Assignable(receiver, FieldAccess.Owner(extra), objects)) return -1;
                 return Push(stack, allocated, depth - 1, StackType(FieldAccess.Storage(extra)));
             }
-            if (kind == SetField)
-                return depth >= 2 && Assignable(stack[depth - 2], FieldAccess.Owner(extra), objects) &&
-                    Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 2 : -1;
+            if (kind == ClearInteriorField)
+            {
+                int owner = FieldAccess.Owner(extra);
+                return depth != 0 && (stack[depth - 1] == ValueLocation(owner) ||
+                    stack[depth - 1] == ConstructorAddress && frame[0] == owner) ? depth - 1 : -2;
+            }
+            if (kind == SetField || kind == SetReferenceField)
+            {
+                if (depth < 2 || !Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects)) return -1;
+                int owner = FieldAccess.Owner(extra), receiver = stack[depth - 2];
+                // Aggregate stores replace the snapshot at an actual managed
+                // location. A value on the stack is only a copy.
+                bool valid = IsValueType(objects, owner)
+                    ? !IsExplicitValue(objects, owner) && receiver == ValueLocation(owner)
+                    : Assignable(receiver, owner, objects);
+                return valid ? depth - 2 : -1;
+            }
+            if (kind == UpdateConstructorField)
+                return depth >= 2 && stack[depth - 2] == ConstructorAddress &&
+                    frame[0] == FieldAccess.Owner(extra) && Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 2 : -2;
             if (kind == UpdateValue)
                 return depth > 0 && Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 1 : -1;
             if (kind == NewArray || kind == InitializedArray)
@@ -432,31 +787,38 @@ namespace PortableCompiler
             }
             else if (kind == ArrayGet)
             {
+                if (extra != 0)
+                    return depth >= 2 && ArrayIndex(stack, depth) && Match(stack, depth - 1, operand)
+                        ? Push(stack, allocated, depth - 2, extra) : -1;
                 if (operand == 0x9a)
                 {
                     if (depth < 2 || !ArrayIndex(stack, depth)) return -1;
-                    int element = ArrayElement(objects, stack[depth - 2]);
-                    if (element == 0 || IsValueType(objects, element)) return -2;
+                    int arrayType = stack[depth - 2], element = ArrayElement(objects, arrayType);
+                    if (element == 0 || IsValueType(objects, element) || IsEnumArray(objects, arrayType)) return -2;
                     return Push(stack, allocated, depth - 2, element);
                 }
                 byte array = ArrayLoadType(operand);
-                if (!ArrayIndex(stack, depth) || !Match(stack, depth - 1, array)) return -1;
+                if (depth < 2 || !ArrayIndex(stack, depth) ||
+                    (!Match(stack, depth - 1, array) && EnumArrayStorage(objects, stack[depth - 2]) != array)) return -1;
                 stack[depth - 2] = ArrayValueType(array);
                 return depth - 1;
             }
             else if (kind == ArraySet)
             {
+                if (extra != 0)
+                    return depth >= 3 && ArrayIndex(stack, depth - 1) && Match(stack, depth - 2, operand) &&
+                        Assignable(stack[depth - 1], extra, objects) ? depth - 3 : -1;
                 if (operand == 0xa2)
                 {
                     if (depth < 3 || !ArrayIndex(stack, depth - 1)) return -1;
-                    int element = ArrayElement(objects, stack[depth - 3]);
-                    if (element == 0 || IsValueType(objects, element)) return -2;
+                    int arrayType = stack[depth - 3], element = ArrayElement(objects, arrayType);
+                    if (element == 0 || IsValueType(objects, element) || IsEnumArray(objects, arrayType)) return -2;
                     return Assignable(stack[depth - 1], element, objects) ? depth - 3 : -1;
                 }
                 byte array = ArrayStoreType(operand);
-                if (depth == 0 || !Assignable(stack[depth - 1], ArrayValueType(array), objects) ||
+                if (depth < 3 || !Assignable(stack[depth - 1], ArrayValueType(array), objects) ||
                     !ArrayIndex(stack, depth - 1) ||
-                    !Match(stack, depth - 2, array))
+                    (!Match(stack, depth - 2, array) && EnumArrayStorage(objects, stack[depth - 3]) != array))
                     return -1;
                 return depth - 3;
             }

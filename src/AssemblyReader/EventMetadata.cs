@@ -5,16 +5,31 @@ namespace PeLibrary
     internal static class EventMetadata
     {
         internal const int Empty = 1, Construct = 2, ConstructHandler = 3, InvokeHandler = 4, CombineHandler = 5, RemoveHandler = 6;
-        private const int DelegateType = 256, InterlockedType = 257; // Signature matching only.
+        private const int DelegateType = ObjectLayouts.DelegateReference, InterlockedType = 257;
         private const int ExchangeMember = 7;
 
         internal static int Reference(byte[] image, int[] heaps, int[] methods, int coded)
         {
-            if ((coded & 3) != 1) return 0;
+            int kind = coded & 3;
+            if (kind > 1) return 0;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
-            int type = first < 0 ? 0 : ReadType(image, heaps, methods, counts, first, coded >> 2);
-            return type >= DelegateType ? 0 : type;
+            if (first < 0) return 0;
+            if (kind == 0)
+            {
+                // A caller's platform TypeRef and the defining CoreLib TypeDef
+                // share the same compiler-owned representation.
+                if (!PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, methods, counts)) return 0;
+                int row = coded >> 2;
+                if (ObjectLayouts.NamedDefinition(image, heaps, methods, counts, first, row, "System", "EventHandler"))
+                    return ObjectLayouts.EventHandlerReference;
+                if (ObjectLayouts.NamedDefinition(image, heaps, methods, counts, first, row, "System", "EventArgs"))
+                    return ObjectLayouts.EventArgsReference;
+                return ObjectLayouts.NamedDefinition(image, heaps, methods, counts, first, row, "System", "Delegate")
+                    ? DelegateType : 0;
+            }
+            int type = ReadType(image, heaps, methods, counts, first, coded >> 2);
+            return type == InterlockedType ? 0 : type;
         }
 
         internal static bool IsHandlerExchange(byte[] image, int[] heaps, int[] methods, int row)

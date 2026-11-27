@@ -23,9 +23,7 @@ internal static class InterfaceReferenceCases
         Check(nameof(Kernels.Widen), values, arguments => Kernels.Widen(arguments[0]));
         Check(nameof(Kernels.RejectDispatch), [[]], _ => Kernels.RejectDispatch());
         Reject(bundle, nameof(Kernels.Dispatch), nameof(Kernels.Dispatch), -1, -2);
-        if (Kernels.RejectCast(5) != 0) throw new InvalidOperationException("The CLR accepted an unrelated type.");
-        Reject(bundle, nameof(Kernels.RejectCast), nameof(Kernels.RejectCast),
-            Opcode(nameof(Kernels.RejectCast), OpCodes.Isinst), -2);
+        Check(nameof(Kernels.RejectCast), values, arguments => Kernels.RejectCast(arguments[0]));
 
         if (Kernels.Store(5).Stored is not Derived { Value: 5 })
             throw new InvalidOperationException("The CLR did not store the implementing object.");

@@ -35,6 +35,8 @@ internal static class ArrayCases
 
         foreach (int limit in new[] { -5, 0, 1, 2, 3, 10, 100, 1000, 30000 })
             Record("CountPrimes", [limit], () => Buffers.CountPrimes(limit));
+        foreach (int index in new[] { -1, 0, 3, 4 })
+            Record("IncrementElement", [index], () => Buffers.IncrementElement(index));
         foreach (var (length, index) in new[] { (1, 0), (10, 9), (2000, 1999), (0, 0), (5, 5), (5, -1), (-1, 0) })
         {
             Record("PrefixCube", [length, index], () => Buffers.PrefixCube(length, index));

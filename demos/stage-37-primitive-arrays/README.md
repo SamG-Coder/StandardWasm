@@ -14,7 +14,7 @@ Buffers.cs is ordinary array code over every primitive element width: a `bool[]`
 
 Packed stores keep the low bits, as a CLR store into a narrow cell does. Small scalar locals, parameters and returns normalize like `byte` already did: `sbyte`/`short` sign-extend, and `ushort`/`char` mask to 16 bits. `conv.i1`, `conv.i2` and `conv.u2` truncate. From floating point they saturate to int32 first and then keep the low bits, which matches .NET 10 (`(short)1e10 == -1`).
 
-`npm test` compares every export with the same DLL on the CLR: empty, negative and huge lengths, out-of-range indexes (traps vs. IndexOutOfRangeException and OverflowException), wraparound values, NaN/∞ conversions, and 300 seeded random values. It also checks the JS host boundary directly: `ShortParameter(40000)` is -25536, which the CLR cannot express. `CompoundElement.Increment` (`counts[i] += 1`) must be rejected at its `ldelema` with the method and IL offset.
+`npm test` compares every export with the same DLL on the CLR: empty, negative and huge lengths, out-of-range indexes, wraparound values, NaN/∞ conversions, and 300 seeded random values. It also checks the JS host boundary directly: `ShortParameter(40000)` is -25536, which the CLR cannot express. `IncrementElement` exercises the managed Int32 element address used by `counts[i] += 1`, including both ends of the array and out-of-bounds indexes.
 
 Element types are classified by CLI identity: a primitive must come from a platform BCL assembly (`src/AssemblyReader/PlatformAssemblyIdentity.cs`), not just carry its name. `identity/` keeps Codex's two-DLL reproduction from the #75 review, where a third-party class named `System.Int16` reached through an extern alias must be rejected rather than lowered as `short[]`.
 

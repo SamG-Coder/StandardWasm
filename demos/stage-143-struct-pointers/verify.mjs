@@ -84,8 +84,9 @@ async function runCases(compiler, fixture, cases, imageSize) {
     for (const test of cases) {
         if (test.status !== undefined) { results.push(diagnose(test)); continue; }
         const memory = new WebAssembly.Memory({ initial: 1 });
-        const bytes = new Uint8Array(memory.buffer);
-        bytes.set(test.image, base);
+        const initialBytes = new Uint8Array(memory.buffer);
+        const borrowedLength = initialBytes.length;
+        initialBytes.set(test.image, base);
         // sizeof-only kernels need no memory, so they import nothing.
         const compiledModule = await module(test.row);
         const instance = await WebAssembly.instantiate(compiledModule,
@@ -104,6 +105,9 @@ async function runCases(compiler, fixture, cases, imageSize) {
         }
         if (test.wasmOnly) throw Error(test.name + " returned " + value + " instead of trapping");
         const text = typeof value === "bigint" ? value.toString() : test.result === "Double" ? String(value) : String(value);
+        // A native local can grow memory for the shadow stack. Refresh the
+        // view after the call and compare the caller's original page.
+        const bytes = new Uint8Array(memory.buffer, 0, borrowedLength);
         const after = Array.from(bytes.slice(base, base + imageSize));
         if (text !== test.expected) throw Error(test.name + " returned " + text + ", the CLR returned " + test.expected);
         if (after.some((byte, i) => byte !== test.after[i])) throw Error(test.name + " left memory different from the CLR");

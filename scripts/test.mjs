@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { decode, invoke, invokeGenerated, managedExceptionType } from "./invoke.mjs";
 import { demoInputs, listDemos } from "./demos.mjs";
-import { chromium } from "playwright-core";
 import { oracleCases } from "./oracle.mjs";
 import { compile, invokeCompiler, root, run } from "./toolchain.mjs";
 import { verify } from "./verify.mjs";
+import { verifyBrowserSuite } from "./verify-browser-suite.mjs";
 import { compareRuntimeVersions } from "./runtime-packs.mjs";
 
 process.chdir(root);
@@ -58,17 +58,20 @@ function assertUnsupported(dll, type, diagnostic) {
     assert.equal(existsSync(output), false);
 }
 
-// Unsupported members, non-platform identities and managed element addresses remain diagnostics.
+// Unsupported members, non-platform identities and unsupported address forms remain diagnostics.
 assertUnsupported(mathDemo.dll, "MathIntrinsics.UnmappedMath", /UnmappedMath::Power at IL_[0-9a-f]+ returned compiler status -2/);
 const identityProbe = "demos/stage-29-math-intrinsics/identity/IdentityProbe";
 run("dotnet", ["build", "-c", "Release", identityProbe]);
 assertUnsupported(identityProbe + "/bin/Release/netstandard2.0/IdentityProbe.dll", "IdentityProbe.Probe",
     /Probe::Compute at IL_[0-9a-f]+ returned compiler status -2/);
-assertUnsupported(arraysDemo.dll, "PrimitiveArrays.CompoundElement",
-    /CompoundElement::Increment at IL_[0-9a-f]+ returned compiler status -2/);
 const inlineArrays = demos.find(d => d.assembly === "InlineArrayLayouts");
 assertUnsupported(inlineArrays.dll, "InlineArrayLayouts.LayoutBoundary",
     /LayoutBoundary::Read returned compiler status -2/);
+const objectLocations = demos.find(d => d.assembly === "ManagedObjectByrefs");
+assertUnsupported(objectLocations.dll, "ManagedObjectByrefs.HostBoundary",
+    /HostBoundary::HostAlias returned compiler status -2/);
+assertUnsupported(objectLocations.dll, "ManagedObjectByrefs.TypedBoundary",
+    /TypedBoundary::TypedElement at IL_[0-9a-f]+ returned compiler status -2/);
 const arrayIdentityProbe = "demos/stage-37-primitive-arrays/identity/ArrayIdentityProbe";
 run("dotnet", ["build", "-c", "Release", arrayIdentityProbe]);
 assertUnsupported(arrayIdentityProbe + "/bin/Release/netstandard2.0/ArrayIdentityProbe.dll", "ArrayIdentityProbe.Probe",
@@ -83,53 +86,9 @@ assertUnsupported("artifacts/culture-probe/MathIntrinsics.dll", "MathIntrinsics.
     assert.deepEqual([exports.ShortParameter(40000), exports.CharParameter(-1), exports.SByteParameter(200)], [-25536, 65535, -56]);
 }
 const rawOracle = JSON.parse(readFileSync("artifacts/oracle.json"));
-// The combined oracle carries tens of MB of assembly bytes. As JSON number arrays they exhaust the
-// Edge renderer, so the page receives the shared blobs as one binary file plus their lengths.
-const blobs = Array.isArray(rawOracle) ? [] : rawOracle.blobs;
-const browserOracle = JSON.stringify(Array.isArray(rawOracle) ? rawOracle
-    : { cases: rawOracle.cases, blobLengths: blobs.map(blob => blob.length) });
-const blobBytes = Buffer.concat(blobs.map(blob => Buffer.from(blob)));
 const cases = oracleCases(rawOracle);
 console.log("Node:", await verify(name => readFileSync("artifacts/" + name + ".wasm"), cases,
     bytes => writeFileSync("artifacts/StandardWasm.Compiler.wasm", bytes)));
 
-const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
-const browser = await chromium.launch({
-    executablePath: process.env.BROWSER_PATH || (existsSync(edge) ? edge : undefined)
-});
-try {
-    const page = await browser.newPage();
-    // Serve only these fixture assets to the isolated test page.
-    const assets = new Map([
-        // Serve the oracle as JSON so the browser can parse the DLL byte arrays
-        // without Playwright serializing each individual byte as an argument.
-        ["/oracle.json", ["application/json", browserOracle]],
-        ["/blobs.bin", ["application/octet-stream", blobBytes]],
-        ["/oracle.mjs", ["text/javascript", readFileSync("scripts/oracle.mjs")]],
-        ["/bootstrap.mjs", ["text/javascript", readFileSync("scripts/bootstrap.mjs")]],
-        ["/invoke.mjs", ["text/javascript", readFileSync("scripts/invoke.mjs")]],
-        ["/verify.mjs", ["text/javascript", readFileSync("scripts/verify.mjs")]],
-        ...demos.map(d => ["/" + d.assembly, ["application/wasm", readFileSync(d.wasm)]])
-    ]);
-    await page.route("http://standardwasm.test/**", async route => {
-        const path = new URL(route.request().url()).pathname;
-        const [contentType, body] = assets.get(path) || ["text/html", "<title>StandardWasm verification</title>"];
-        await route.fulfill({ contentType, body });
-    });
-    await page.goto("http://standardwasm.test/");
-    const result = await page.evaluate(async () => {
-        const { oracleCases } = await import("/oracle.mjs");
-        const oracle = await (await fetch("/oracle.json")).json();
-        if (!Array.isArray(oracle)) {
-            const bytes = new Uint8Array(await (await fetch("/blobs.bin")).arrayBuffer());
-            let offset = 0;
-            oracle.blobs = oracle.blobLengths.map(length => Array.from(bytes.subarray(offset, offset += length)));
-        }
-        const cases = oracleCases(oracle);
-        const { verify } = await import("/verify.mjs");
-        return verify(async name => (await fetch("/" + name)).arrayBuffer(), cases);
-    });
-    console.log("Chromium " + browser.version() + ":", result);
-} finally {
-    await browser.close();
-}
+const { result, version } = await verifyBrowserSuite(demos, rawOracle);
+console.log("Chromium " + version + ":", result);

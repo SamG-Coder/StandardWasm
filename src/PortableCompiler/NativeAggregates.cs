@@ -36,16 +36,15 @@ namespace PortableCompiler
             int fields = FieldCount(objects, type), stored = 0;
             for (int i = 0; i < fields; i++) if (FieldTypeAt(objects, type, i) != 0) stored++;
             var entries = new int[stored * Entry];
-            int first = FirstRow(objects, type), ordinal = 0;
+            int first = FirstRow(objects, type), ordinal = 0, declared = DeclaredFieldCount(objects, type);
             var field = new int[2];
-            // Field rows map to registry ordinals; static fields have no ordinal.
-            for (int row = first; ordinal < stored && row < first + fields + 64; row++)
+            // Registry storage uses the declared row index, including gaps
+            // for static fields. The Wasm aggregate omits those gaps.
+            for (int index = 0; index < declared; index++)
             {
-                int index = FieldOrdinal(objects, type, row);
-                if (index < 0) continue;
                 int storage = FieldTypeAt(objects, type, index);
                 if (storage == 0) continue;
-                status = NativeValueLayouts.Field(bundle, owner, definition, row, field);
+                status = NativeValueLayouts.Field(bundle, owner, definition, first + index, field);
                 if (status < 0) return status;
                 int nested = 0;
                 if (field[1] == 0)
@@ -54,7 +53,7 @@ namespace PortableCompiler
                     if (nested < 0) return nested;
                     nested++;
                 }
-                int slot = StoredIndex(objects, type, index) * Entry;
+                int slot = ordinal * Entry;
                 entries[slot] = field[0];
                 entries[slot + 1] = field[1];
                 entries[slot + 2] = nested;
@@ -104,7 +103,7 @@ namespace PortableCompiler
         // aggregate uses its own type's spill local at the store's depth: that slot holds the
         // outer struct, so the nested type's bank there is free.
         internal static int Store(byte[] code, int used, int[] plans, int[] objects, int plan, int address, int offset,
-            int value, int spills, int maximum, int depth)
+            int value, int spills, int maximum, int spillFlags, int depth)
         {
             int count = plans[plan + 2], type = plans[plan];
             for (int i = 0; i < count; i++)
@@ -115,14 +114,14 @@ namespace PortableCompiler
                 if (plans[at + 2] != 0)
                 {
                     int nestedPlan = plans[at + 2] - 1, nestedType = plans[nestedPlan];
-                    int local = BranchWasm.Spill(spills, maximum, nestedType, depth);
+                    int local = BranchWasm.Spill(spills, maximum, spillFlags, nestedType, depth);
                     used = BranchWasm.Local(code, used, 0x20, value);
                     used = BranchWasm.Gc(code, used, FieldAccess.LoadInstruction(storage), type);
                     used = WasmBinary.Unsigned(code, used, i);
                     used = BranchWasm.Local(code, used, 0x21, local);
                     used = ValueFieldsWasm.Materialize(code, used, nestedType, local);
                     used = BranchWasm.Local(code, used, 0x21, local);
-                    used = Store(code, used, plans, objects, nestedPlan, address, fieldOffset, local, spills, maximum, depth);
+                    used = Store(code, used, plans, objects, nestedPlan, address, fieldOffset, local, spills, maximum, spillFlags, depth);
                 }
                 else
                 {
@@ -144,13 +143,6 @@ namespace PortableCompiler
             used = BranchWasm.Const(code, used, plans[plan + 1]);
             code[used++] = 0xfc; code[used++] = 0x0b; code[used++] = 0; // memory.fill 0
             return used;
-        }
-
-        private static int StoredIndex(int[] objects, int type, int index)
-        {
-            int stored = 0;
-            for (int i = 0; i < index; i++) if (FieldTypeAt(objects, type, i) != 0) stored++;
-            return stored;
         }
 
         private static int StoredStorage(int[] objects, int type, int stored)

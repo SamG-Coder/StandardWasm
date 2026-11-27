@@ -115,6 +115,11 @@
     <ProjectReference Include="../demos/stage-129-type-initializers/Fixture/TypeInitializerFixture.csproj" />
     <ProjectReference Include="../demos/stage-130-fieldless-values/FieldlessSequentialValue.csproj" />
     <ProjectReference Include="../demos/stage-138-inline-array-layouts/InlineArrayLayouts.csproj" />
+    <ProjectReference Include="../demos/stage-139-managed-object-byrefs/ManagedObjectByrefs.csproj" />
+    <ProjectReference Include="../demos/stage-140-inline-object-addresses/InlineObjectAddressesFixture.csproj" />
+    <ProjectReference Include="../demos/stage-141-object-readonly-spans/ObjectReadOnlySpansFixture.csproj" />
+    <ProjectReference Include="../demos/stage-142-character-readonly-spans/CharacterReadOnlySpansFixture.csproj" />
+    <ProjectReference Include="../demos/stage-144-writable-character-spans/WritableCharacterSpansFixture.csproj" />
     <ProjectReference Include="../demos/stage-124-closed-generic-bases/GenericBaseDemo.csproj" />
     <ProjectReference Include="../demos/stage-125-runtime-type-handles/RuntimeTypeDemo.csproj" />
     <ProjectReference Include="../demos/stage-111-value-construction/ValueConstructionDemo.csproj" />

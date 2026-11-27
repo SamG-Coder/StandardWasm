@@ -22,6 +22,8 @@ compiler's own verdict. Results go to `artifacts/winforms-census/`:
 - `census.json` lists every reached method with its assembly, MethodDef row,
   the edge that reached it, static feature tags, any P/Invoke import, and the
   compiler status with its [assembly, MethodDef, IL offset] location.
+  The graph also lists instantiated types with an effective `Object.Finalize`
+  override and records whether each type inherits its implementation.
 - `census-summary.json` holds the same rankings without the per-method list.
 - `summary.md` holds the ranked tables.
 
@@ -59,8 +61,11 @@ path for each assembly, so a reader can see why each one is included.
 ## Compiler verdicts
 
 Each reached method with IL is compiled as the only export of a bundle. Its
-own assembly is the main image, and the bundle also holds the Stage 95
-framework pack and every other assembly that owns reached code. The compiler
+own assembly is the main image. The bundle also holds the launch framework
+pack, reached method owners, and the assemblies used to resolve type
+forwarders during the walk. A reference to `Win32Exception`, for example,
+requires `Microsoft.Win32.Primitives` even though the constructor's IL
+belongs to CoreLib. The compiler
 lowers the export first and then its callees in registration order:
 
 - **compiles**: the whole closure from that method lowered.

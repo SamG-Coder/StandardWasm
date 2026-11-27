@@ -11,12 +11,15 @@ namespace FriendFixture
 
     public class Widener
     {
+        public static int Shared;
         public static int Wide(int input) => input * 3;
     }
 
     public sealed class Box
     {
         public readonly int Value;
+        public int Mutable;
+        public Box() { Mutable = 37; }
         public Box(int value) { Value = value; }
         public int Twice() => Value * 2;
     }
@@ -35,6 +38,7 @@ namespace FriendFixture
 
     public class Widener
     {
+        protected internal static int Shared;
         // FamORAssem (protected internal): a friend that is not a subclass reaches it
         // through the assembly part.
         protected internal static int Wide(int input) => input * 3;
@@ -43,8 +47,16 @@ namespace FriendFixture
     public sealed class Box
     {
         public readonly int Value;
+        internal int Mutable;
+        public Box() { Mutable = 37; }
         internal Box(int value) { Value = value; }
         internal int Twice() => Value * 2;
     }
 #endif
+
+    public class ProtectedBase
+    {
+        protected virtual int Transform(int input) => input + 11;
+        protected int Scale(int input) => input * 3;
+    }
 }

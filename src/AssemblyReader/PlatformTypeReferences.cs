@@ -58,10 +58,15 @@ namespace PeLibrary
         // A TypeDefOrRef coded index naming the platform System.String.
         internal static bool IsString(byte[] image, int[] streams, int[] methods, int coded)
         {
-            if ((coded & 3) != 1) return false;
+            int kind = coded & 3;
+            if (kind != 0 && kind != 1) return false;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
-            return first >= 0 && Identify(image, streams, methods, counts, first, coded >> 2) == String;
+            if (first < 0) return false;
+            int row = coded >> 2;
+            return kind == 1 ? Identify(image, streams, methods, counts, first, row) == String :
+                ObjectLayouts.NamedDefinition(image, streams, methods, counts, first, row, "System", "String") &&
+                PlatformAssemblyIdentity.IsCoreLibDefinition(image, streams, methods, counts);
         }
 
         // Compare a #Strings entry with up to twelve ASCII bytes packed
