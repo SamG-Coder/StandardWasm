@@ -3,6 +3,12 @@ using Windows.Win32.Foundation;
 
 namespace Windows.Win32.Foundation
 {
+    internal struct BOOL
+    {
+        internal readonly int Value;
+        internal BOOL(int value) => Value = value;
+    }
+
     internal unsafe struct HANDLE
     {
         internal readonly void* Value;
@@ -26,6 +32,54 @@ public static unsafe class ActivationContextProbe
 
     [DllImport("KERNEL32.dll", EntryPoint = "CreateActCtxW", ExactSpelling = true)]
     private static extern nint CreateFromPointer(void* request);
+
+    [DllImport("KERNEL32.dll", ExactSpelling = true)]
+    private static extern BOOL GetCurrentActCtx(HANDLE* current);
+
+    [DllImport("KERNEL32.dll", ExactSpelling = true)]
+    private static extern BOOL ActivateActCtx(HANDLE handle, nuint* cookie);
+
+    [DllImport("KERNEL32.dll", ExactSpelling = true)]
+    private static extern BOOL DeactivateActCtx(uint flags, nuint cookie);
+
+    [DllImport("KERNEL32.dll", ExactSpelling = true)]
+    private static extern void ReleaseActCtx(HANDLE handle);
+
+    public static int Lifecycle()
+    {
+        nint created = Create(0);
+        if (created == -1) return 0;
+        HANDLE handle = new HANDLE((void*)created);
+        HANDLE* current = stackalloc HANDLE[1];
+        ulong* cookieStorage = stackalloc ulong[1];
+        nuint* cookie = (nuint*)cookieStorage;
+        if (GetCurrentActCtx(current).Value == 0)
+        {
+            ReleaseActCtx(handle);
+            return 1;
+        }
+        void* before = current->Value;
+        if (before != null) ReleaseActCtx(new HANDLE(before));
+        if (ActivateActCtx(handle, cookie).Value == 0)
+        {
+            ReleaseActCtx(handle);
+            return 2;
+        }
+        int result = 4;
+        if (GetCurrentActCtx(current).Value != 0)
+        {
+            if (current->Value == handle.Value) result |= 8;
+            if (current->Value != null) ReleaseActCtx(new HANDLE(current->Value));
+        }
+        if (DeactivateActCtx(0, *cookie).Value != 0) result |= 16;
+        if (GetCurrentActCtx(current).Value != 0)
+        {
+            if (current->Value == before) result |= 32;
+            if (current->Value != null) ReleaseActCtx(new HANDLE(current->Value));
+        }
+        ReleaseActCtx(handle);
+        return result;
+    }
 
     public static nint Create(int scenario)
     {

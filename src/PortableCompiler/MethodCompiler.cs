@@ -244,12 +244,12 @@ namespace PortableCompiler
                     int import = Win32ModuleBinding.FindImport(image, heaps, layout, source,
                         MethodDefinitions.ReadColumn(image, layout, source, 1));
                     if (import == 0) return -2;
-                    hostUse[0] = hostUse[0] | (import == Win32ModuleBinding.Module ? WasmImports.Win32Modules : WasmImports.Win32Activation);
+                    hostUse[0] = hostUse[0] | WasmImports.Win32NativeFeature(import);
                     if (moduleCode.Length - length < Win32ModuleWasm.BodyCapacity) return -3;
                     bodyOffsets[current] = length;
                     int shape = offsets[current];
-                    length = Win32ModuleWasm.WriteBody(moduleCode, length, signatures[shape + 1], signatures[shape],
-                        WasmImports.Win32UnarySlot(hostFeatures, import), hostImports, initializerPrologue);
+                    length = Win32ModuleWasm.WriteBody(moduleCode, length, signatures, shape, import,
+                        WasmImports.Win32NativeSlot(hostFeatures, import), hostImports, initializerPrologue);
                     sizes[current] = length - bodyOffsets[current];
                     continue;
                 }
@@ -1802,8 +1802,8 @@ namespace PortableCompiler
             }
             int signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
             int arity = SignatureTypes.Read(bundle, image, heaps, signature, types, offset, receiver, layout, objects, assembly, context, methodArguments);
-            if (imported && arity >= 0 && (arity != 1 ||
-                !Win32ModuleBinding.MatchesSignature(bundle, objects, nativeImport, types[offset + 1], types[offset]))) return -2;
+            if (imported && arity >= 0 && !Win32ModuleBinding.MatchesSignature(bundle, objects, nativeImport, types, offset, arity))
+                return -2;
             if (arity > 0 && !isStatic && ObjectLayouts.IsValueType(objects, receiver) &&
                 ObjectLayouts.IsConstructor(image, heaps, layout, row))
             {

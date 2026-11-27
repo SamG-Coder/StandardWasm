@@ -141,7 +141,7 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
 
     const fixture = upload(fixtureBytes);
     const encoder = new TextEncoder();
-    const names = ["Exchange", "Read", "LookupModule", "Create"].map(name => encoder.encode(name));
+    const names = ["Exchange", "Read", "LookupModule", "Create", "Lifecycle"].map(name => encoder.encode(name));
     const manifest = new Uint8Array(names.reduce((size, name) => size + 8 + name.length, 0));
     const view = new DataView(manifest.buffer);
     let offset = 0;
@@ -161,9 +161,10 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
         [0, 1, 2].map(index => compiler.ReadDiagnostic(location, index)));
     const code = Uint8Array.from({ length }, (_, i) => compiler.ReadByte(output, i));
     const module = await WebAssembly.compile(code);
-    if (!WebAssembly.Module.imports(module).some(entry =>
-        entry.module === "standardwasm:win32" && entry.name === "createActCtxW"))
-        throw Error("The generated fixture omitted the activation context import");
+    const nativeImports = new Set(WebAssembly.Module.imports(module)
+        .filter(entry => entry.module === "standardwasm:win32").map(entry => entry.name));
+    for (const name of ["createActCtxW", "getCurrentActCtx", "activateActCtx", "deactivateActCtx", "releaseActCtx"])
+        if (!nativeImports.has(name)) throw Error("The generated fixture omitted " + name);
     const { exports } = await instantiate(module, compiler,
         [{ path: framework.name, bytes: new Uint8Array(framework.bytes) }]);
     const legacy = [exports.Exchange(19), exports.Exchange(-13), exports.Read(),
@@ -172,14 +173,14 @@ async function exerciseCompiler(instantiate, compilerBytes, fixtureBytes, framew
         const handle = exports.Create(scenario);
         return [handle === -1 ? -1 : handle > 0 ? 1 : 0, exports.Read()];
     });
-    return { legacy, activation };
+    return { legacy, activation, lifecycle: exports.Lifecycle() };
 }
 
 const oracle = JSON.parse(execFileSync("dotnet", ["run", "--file",
     fileURLToPath(new URL("./Win32HostOracle.cs", import.meta.url))], { encoding: "utf8" }));
 const compilerPath = process.argv[2];
 const framework = { name: basename(oracle.framework), bytes: readFileSync(oracle.framework) };
-const expectedCompiler = { legacy: oracle.compiledFixture, activation: oracle.compiledActivation };
+const expectedCompiler = { legacy: oracle.compiledFixture, activation: oracle.compiledActivation, lifecycle: oracle.compiledLifecycle };
 let compilerBytes, fixtureBytes;
 if (compilerPath) {
     execFileSync("dotnet", ["build", fileURLToPath(new URL("./Win32Fixture", import.meta.url)), "-c", "Release"],
@@ -231,7 +232,7 @@ try {
         }, { source: exerciseCompiler.toString(), compilerBytes: [...compilerBytes], fixtureBytes: [...fixtureBytes],
             name: framework.name });
         assert.deepEqual(compiled, expectedCompiler);
-        console.log("The Wasm compiler matched CLR module lookups, activation-context creation, and Marshal error exchange in Node and Edge.");
+        console.log("The Wasm compiler matched CLR module lookups, the activation-context lifecycle, and Marshal error exchange in Node and Edge.");
     }
     console.log("Node and Edge matched 6 CLR module lookups and both last-error slots. Memory growth and host isolation passed.");
     console.log("Node and Edge matched the WinForms manifest activation lifecycle and Windows error results.");
