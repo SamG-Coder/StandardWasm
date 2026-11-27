@@ -47,6 +47,11 @@ namespace PortableCompiler
         internal const int CallIndirect = 119, FunctionAddress = 120;
         // Console.ReadLine() (decision 0079): [] -> [String or null at EOF].
         internal const int ConsoleReadLine = 121;
+        // Stage 156 (decision 0083): native thunk records (NativeThunks). NativePresent calls the
+        // host's present import (operand, absolute) with entry (extra) and pushes i32; NativeHelper
+        // calls a () -> () host import (operand); CallNative forwards the method's own arguments
+        // (operand: its function, for the signature) to the typed import (extra, absolute).
+        internal const int NativePresent = 122, NativeHelper = 123, CallNative = 124;
         internal const int ProvenNativeZero = 2;
         // A platform System.Math call lowered in place. The operand is a PlatformMembers intrinsic id.
         internal const int MathCall = 60;
