@@ -29,7 +29,7 @@ namespace PortableCompiler
             type == ObjectLayouts.ObjectReference ? ObjectLocation : type == String ? StringLocation :
             type == GenericScalar.Key(3) ? CharacterLocation : type == GenericScalar.Key(2) ? BooleanLocation :
             type == GenericScalar.Key(5) ? StaticByteLocation :
-            ObjectLayouts.IsValueType(objects, type) ? (ObjectLayouts.IsByRefLikeValue(objects, type) ? 0 : ValueLocation(type)) :
+            ObjectLayouts.IsValueType(objects, type) ? ValueLocation(type) :
             type >= ObjectLayouts.FirstClass && type - ObjectLayouts.FirstClass < objects[0] ? ReferenceLocationBase + type : 0;
         internal static int CellValue(int location) =>
             IsValueLocation(location) ? LocatedValue(location) :

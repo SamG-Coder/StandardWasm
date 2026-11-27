@@ -1221,7 +1221,14 @@ namespace PortableCompiler
                     int address = kind == GetField ? top : top - 1;
                     int reference = states[state + address] == ConstructorAddress ? 0 :
                         Spill(spills, maximum, spillFlags, states[state + address], address);
-                    if (ManagedValueLocationWasm.UsesCell(objects, type, storage))
+                    if (IsValueLocation(states[state + address]) && kind == SetField)
+                    {
+                        used = GuardNull(code, used, reference);
+                        used = ValueFieldsWasm.Update(code, used, objects, type, reference,
+                            temporaries + type - FirstClass, operand,
+                            Spill(spills, maximum, spillFlags, states[state + top], top), states[state + top], true);
+                    }
+                    else if (ManagedValueLocationWasm.UsesCell(objects, type, storage))
                     {
                         used = GuardNull(code, used, reference);
                         if (kind == GetField)
@@ -1238,6 +1245,13 @@ namespace PortableCompiler
                     }
                     else
                     {
+                        if (IsValueLocation(states[state + address]))
+                        {
+                            used = GuardNull(code, used, reference);
+                            used = ManagedValueLocationWasm.ReadLocation(code, used, reference, type);
+                            reference = temporaries + type - FirstClass;
+                            used = Local(code, used, 0x21, reference);
+                        }
                         if (IsValueType(objects, type))
                             used = ValueFieldsWasm.Materialize(code, used, type, reference);
                         else

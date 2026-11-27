@@ -724,7 +724,8 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - unwindBytes) return -3;
                                 capacity += unwindBytes;
                             }
-                            if (kind == BranchIl.UpdateValue || kind == BranchIl.UpdateConstructorField)
+                            if (kind == BranchIl.UpdateValue || kind == BranchIl.UpdateConstructorField ||
+                                kind == BranchIl.SetField && IsValueLocation(states[pc * maximum + depths[pc] - 3]))
                             {
                                 int fields = ObjectLayouts.FieldCount(objects, FieldAccess.Owner(records[slot + 3]));
                                 if (fields > (int.MaxValue - capacity) / 16) return -3;
@@ -966,6 +967,12 @@ namespace PortableCompiler
                 int kind = records[slot];
                 if (kind == 0) continue;
                 if (location.Length != 0) location[2] = slot / BranchIl.Width;
+                if (kind == BranchIl.BoundScopedFieldLoad || kind == BranchIl.BoundScopedFieldStore)
+                {
+                    // The earlier field-address record already bound the declaring type and ordinal.
+                    records[slot] = kind == BranchIl.BoundScopedFieldLoad ? BranchIl.GetField : BranchIl.SetField;
+                    continue;
+                }
                 if (kind == BranchIl.LoadTypeToken)
                 {
                     int global = RuntimeTypeTokens.Bind(bundle, image, layout, heaps, owner, records[slot + 1],
@@ -1139,7 +1146,7 @@ namespace PortableCompiler
                     int lowered = ValueOperands.LowerFrame(bundle, image, layout, heaps,
                         owner, bases[owner + 1] - bases[owner], records, slot, frame, objects, clauses, context, methodArguments);
                     if (lowered == -2 && ObjectLayouts.IsValueType(objects, type) &&
-                        !ObjectLayouts.IsByRefLikeValue(objects, type) && !ObjectLayouts.IsExplicitValue(objects, type))
+                        !ObjectLayouts.IsExplicitValue(objects, type))
                     {
                         int locationType = ValueLocation(type);
                         frameCells[local] = locationType;
@@ -1371,7 +1378,7 @@ namespace PortableCompiler
                                 // StackDepths distinguishes that receiver from the managed this.
                                 if (valueConstructor && frame[0] == FieldAccess.Owner(descriptor))
                                     records[slot] = BranchIl.UpdateConstructorField;
-                                else if (!pointerField)
+                                else if (!pointerField && !ObjectLayouts.IsByRefLikeValue(objects, FieldAccess.Owner(descriptor)))
                                     return -2;
                                 continue;
                             }
@@ -1389,6 +1396,9 @@ namespace PortableCompiler
                     if (kind == BranchIl.FieldAddress)
                     {
                         int next = records[slot + 2];
+                        if (ObjectLayouts.IsByRefLikeValue(objects, FieldAccess.Owner(descriptor)) &&
+                            FieldAccess.Storage(descriptor) == I32 && ValueOperands.LowerScopedIntField(records, slot, clauses))
+                            continue;
                         if (pointerField && !ObjectLayouts.IsValueType(objects, FieldAccess.Storage(descriptor)))
                             continue; // &p->F of a primitive field: native address arithmetic
                         if (ObjectLayouts.IsValueType(objects, FieldAccess.Storage(descriptor)) &&

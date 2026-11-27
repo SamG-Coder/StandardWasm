@@ -93,7 +93,9 @@ namespace PortableCompiler
 
         internal static int ReadLocation(byte[] code, int used, int local, int type)
         {
-            used = Local(code, used, 0x20, local);
+            // Evaluation-stack locations can spill as eqref. Recover the
+            // cell's heap type before reading its snapshot.
+            used = LoadOperand(code, used, local, SignatureTypes.ValueLocation(type), SignatureTypes.ValueLocation(type));
             return ReadSnapshot(code, used, type);
         }
 

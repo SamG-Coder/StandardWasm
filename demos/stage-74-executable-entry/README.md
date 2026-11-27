@@ -80,6 +80,9 @@ The CLR, Node, and Edge compare the alias, the length of a default span, and
 UTF-16 values at the wraparound boundary. The same compiled module exercises
 a pointer-backed span over the shadow stack, a readonly view over the same
 memory, and typed exceptions for a negative length and invalid indices.
+The by-reference case mutates an integer field and replaces a span in the
+caller's scoped struct. The caller observes both updates while its earlier
+value copy still refers to the original array.
 
 The managed probe also checks pinned addresses of blittable static structs.
 A direct managed store and a pointer store use the same stable linear-memory

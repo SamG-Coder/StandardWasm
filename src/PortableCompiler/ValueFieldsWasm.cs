@@ -56,7 +56,7 @@ namespace PortableCompiler
             {
                 used = ManagedValueLocationWasm.ReadLocation(code, used, local, type);
                 used = Local(code, used, 0x21, temporary);
-                used = Local(code, used, 0x20, local);
+                used = LoadOperand(code, used, local, SignatureTypes.ValueLocation(type), SignatureTypes.ValueLocation(type));
                 local = temporary;
             }
             used = Materialize(code, used, type, local);

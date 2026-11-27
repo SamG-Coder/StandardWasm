@@ -108,8 +108,9 @@ gets past both calls and reaches CoreLib's `System.IO.Path.GetTempPath`.
 The compiler resolves its `ValueStringBuilder` local, whose `Span<char>` field
 uses the existing owner-carrying Wasm representation. The pointer-based
 `Span<char>` constructor now produces a view over the Wasm shadow stack.
-The next diagnostic is the call to `Path.GetTempPath(ref ValueStringBuilder)`,
-which requires an addressable scoped aggregate across a managed call.
+The compiler passes the scoped `ValueStringBuilder` by reference to the
+original `Path.GetTempPath` helper. The latest replay stops at `ldftn` for the
+callback that CoreLib's `Path.GetRandomFileName` supplies to `String.Create`.
 Node and Edge verify that static initialization preserves live managed arguments
 and field operands, and that a cached failure clears abandoned frame roots.
 Browser startup remains unverified.

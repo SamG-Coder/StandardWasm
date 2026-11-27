@@ -9,6 +9,39 @@ public static class ScopedSpanProbe
         internal CharacterView(Span<char> characters) => Characters = characters;
     }
 
+    private ref struct MutableCharacterView
+    {
+        internal Span<char> Characters;
+        internal int Count;
+
+        internal MutableCharacterView(Span<char> characters, int count)
+        {
+            Characters = characters;
+            Count = count;
+        }
+    }
+
+    public static int CheckScopedReference(int seed)
+    {
+        var left = new char[2];
+        var right = new char[2];
+        left[1] = 'a';
+        var view = new MutableCharacterView(new Span<char>(left), seed);
+        var copy = view;
+        ReplaceView(ref view, new Span<char>(right));
+        var before = copy.Characters;
+        var after = view.Characters;
+        return before[1] + after[1] + right[1] + copy.Count + view.Count;
+    }
+
+    private static void ReplaceView(ref MutableCharacterView view, Span<char> replacement)
+    {
+        view.Count++;
+        view.Characters = replacement;
+        Span<char> alias = view.Characters;
+        alias[1] = (char)view.Count;
+    }
+
     public static unsafe int CheckStackBackedSpan(int scenario)
     {
         char* storage = stackalloc char[3];

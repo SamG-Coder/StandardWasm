@@ -5,6 +5,8 @@ namespace PortableCompiler
 {
     internal static class ValueOperands
     {
+        private const int CallConsumesAddress = -3;
+
         internal static int LowerFrame(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int methodCount, int[] records, int slot, int[] frame, int[] objects, int[] clauses,
             int context, int[] methodArguments)
@@ -55,6 +57,48 @@ namespace PortableCompiler
                 return readOnly || SignatureTypes.IsValueLocation(frame[0]) ? -2 :
                     Clear(bundle, image, layout, heaps, owner, records, slot, next, frame[0], objects, context, methodArguments);
             return LowerAddressUse(image, layout, heaps, methodCount, records, slot, 0, clauses, readOnly);
+        }
+
+        // Keep the owning value location on the stack for an immediate read
+        // or an arithmetic read-modify-write of a scoped Int32 field.
+        internal static bool LowerScopedIntField(int[] records, int address, int[] clauses)
+        {
+            int load = records[address + 2] * Width;
+            if (load >= records.Length || Entry(records, load / Width, clauses)) return false;
+            bool modifies = records[load] == Dup;
+            if (modifies) load = records[load + 2] * Width;
+            if (load >= records.Length || Entry(records, load / Width, clauses) ||
+                records[load] != LoadIndirect || records[load + 1] != 0x4a) return false;
+            int store = -1;
+            if (modifies)
+            {
+                int depth = 1;
+                for (int at = records[load + 2] * Width; at < records.Length; at = records[at + 2] * Width)
+                {
+                    if (Entry(records, at / Width, clauses)) return false;
+                    int kind = records[at];
+                    if (kind == StoreIndirect && records[at + 1] == 0x54 && depth == 1)
+                    {
+                        store = at;
+                        break;
+                    }
+                    if (kind == Load || kind == Constant) depth++;
+                    else if ((kind == Binary || kind == CheckedInteger) && depth >= 2) depth--;
+                    else return false;
+                }
+                if (store < 0) return false;
+            }
+            BindScopedField(records, load, address, BoundScopedFieldLoad);
+            if (store >= 0) BindScopedField(records, store, address, BoundScopedFieldStore);
+            records[address] = Nop;
+            return true;
+        }
+
+        private static void BindScopedField(int[] records, int at, int address, int kind)
+        {
+            records[at] = kind;
+            records[at + 1] = records[address + 1];
+            records[at + 3] = records[address + 3];
         }
 
         internal static int LowerClassField(byte[] image, int[] layout, int[] heaps, int methodCount,
@@ -119,19 +163,22 @@ namespace PortableCompiler
                     records[next + Width + 1] = local + 1;
                     return 0;
                 }
-                if (kind == Call && records[next + 3] == 0 || kind == MemberCall && records[next + 3] == 0x28)
+                bool construction = kind == NewObject || kind == MemberCall && records[next + 3] == 0x73;
+                if (construction || kind == Call && records[next + 3] == 0 || kind == MemberCall && records[next + 3] == 0x28)
                 {
-                    int after = StaticCallDepth(image, layout, heaps, methodCount,
-                        kind, records[next + 1], depth);
+                    int after = TemporaryCallDepth(image, layout, heaps, methodCount,
+                        kind, records[next + 1], depth, construction);
                     if (after >= 0)
                     {
-                        // This call consumes only the temporary operands.
-                        // The address stays pending for the later field store.
+                        // The call or construction consumes only temporary operands.
+                        // The managed address stays pending on the stack.
                         depth = after;
                         next = records[next + 2] * Width;
                         continue;
                     }
 
+                    // A static call that consumes the address uses a real managed location.
+                    if (after == CallConsumesAddress || construction) return -2;
                     // [&value, arguments] -> call -> []. The link step accepts only
                     // a value-type instance constructor (ConstructValue) or a
                     // read-only instance method (decision 0049) with exactly
@@ -161,14 +208,14 @@ namespace PortableCompiler
 
         // Read only the stack effect. Normal call binding still validates the
         // signature, the target and the types of every argument and result.
-        private static int StaticCallDepth(byte[] image, int[] layout, int[] heaps, int methodCount,
-            int kind, int row, int depth)
+        private static int TemporaryCallDepth(byte[] image, int[] layout, int[] heaps, int methodCount,
+            int kind, int row, int depth, bool construction)
         {
             int blob;
-            if (kind == Call)
+            if (kind == Call || kind == NewObject)
             {
                 if (row < 1 || row > methodCount ||
-                    (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x10) == 0) return -1;
+                    ((MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x10) != 0) == construction) return -1;
                 blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
             }
             else
@@ -184,14 +231,17 @@ namespace PortableCompiler
             var cursor = new int[1];
             int size = ImageBytes.CompressedUnsigned(image, heaps[0] + blob, limit, cursor);
             int start = cursor[0];
-            // Default calling convention, with neither this nor a generic arity.
-            if (size < 3 || size > limit - start || image[start] != 0) return -1;
+            // Default calling convention. A constructor has a receiver in its signature,
+            // but newobj supplies it and consumes only the explicit arguments.
+            if (size < 3 || size > limit - start || image[start] != (construction ? 0x20 : 0)) return -1;
             int end = start + size;
             int parameters = ImageBytes.CompressedUnsigned(image, start + 1, end, cursor);
-            if (parameters < 0 || parameters > depth || cursor[0] >= end) return -1;
+            if (parameters < 0 || cursor[0] >= end) return -1;
+            if (parameters > depth) return CallConsumesAddress;
             int result = image[cursor[0]];
             if (result == 0x1f || result == 0x20) return -1; // Return custom modifiers.
-            return depth - parameters + (result == 1 ? 0 : 1);
+            if (construction && result != 1) return -1;
+            return depth - parameters + (construction || result != 1 ? 1 : 0);
         }
 
         internal static bool Entry(int[] records, int target, int[] clauses)

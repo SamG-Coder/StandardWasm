@@ -55,6 +55,7 @@ Console.WriteLine(JsonSerializer.Serialize(new { executable, results, errors = n
     compiledStringTrim = Enumerable.Range(0, 8).Select(CoreStringFieldProbe.CheckCoreStringTrim).ToArray(),
     scopedWritableSpan = new[] { 0, 65, 0x2000, 0xffff }.Select(ScopedSpanProbe.ScopedWritableSpan).ToArray(),
     stackBackedSpan = Enumerable.Range(0, 6).Select(ScopedSpanProbe.CheckStackBackedSpan).ToArray(),
+    scopedReference = new[] { 0, -1, 65, 0xffff }.Select(ScopedSpanProbe.CheckScopedReference).ToArray(),
     compiledTypeReturn = Enumerable.Range(0, 2).Select(TypeReturnProbe.CompareReturnedType).ToArray(),
     compiledRootDispatch = Enumerable.Range(0, 4).Select(RootDispatchProbe.CompareThroughRoot).ToArray(),
     compiledValueAliases = Enumerable.Range(0, 3).Select(ValueAliasProbe.CheckValueAlias).ToArray(),
