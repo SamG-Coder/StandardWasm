@@ -47,7 +47,7 @@ namespace PortableCompiler
             used = dispatch ? Local(code, used, 0x20, address) :
                 ManagedLocationWasm.AccessElement(code, used, address, vector);
             if (source >= 0) used = Local(code, used, 0x20, source);
-            else if (vector == Bytes) used = Const(code, used, 0);
+            else if (vector == Bytes || vector == Ints) used = Const(code, used, 0);
             else
             {
                 code[used++] = 0xd0; // ref.null eq

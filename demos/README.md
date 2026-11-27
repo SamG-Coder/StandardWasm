@@ -248,6 +248,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [249 · Display device capabilities](stage-249-display-device-capabilities/README.md) | `npm run demo -- stage-249-display-device-capabilities` | Compare display capability queries and common device-context lifetime with Windows |
 | [251 · CoreLib string interface tests](stage-251-string-interface-type-tests/README.md) | `npm run demo -- stage-251-string-interface-type-tests` | Compare dynamic string interface membership, reference identity and typed cast failure with Windows |
 | [258 · Constrained Int32 object equality](stage-258-constrained-int32-equals/README.md) | `npm run demo -- stage-258-constrained-int32-equals` | Compare the original override, exact box identity and null managed locations with Windows |
+| [259 · Zero initialization through managed Int32 locations](stage-259-int32-managed-zero/README.md) | `npm run demo -- stage-259-int32-managed-zero` | Compare zero writes through closed generic local and field aliases with Windows |
 | [254 · Virtual long-path lookup](stage-254-virtual-long-paths/README.md) | `npm run demo -- stage-254-virtual-long-paths` | Match Windows UTF-16 path expansion over an explicitly mounted browser filesystem |
 
 ## Adding a stage
