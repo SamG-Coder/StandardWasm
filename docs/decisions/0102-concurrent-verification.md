@@ -29,7 +29,7 @@ Results are combined in the sequential suite's order: CLR comparisons, then G1 =
 
 ## Engines per suite
 
-Owner direction (#316): `npm test` runs for every change and every gate and verifies in Edge, the engine the product ships to. `npm run test:release` (`--release`) also runs the same jobs in Node, concurrently, and is required only for an actual release of the library. An Edge-only run gives Edge every lane. Both paths save the verified G2 compiler to `artifacts/StandardWasm.Compiler.wasm` for the stage runners.
+Owner direction, 2026-11-28, quoted in [#316](https://github.com/SamG-Coder/StandardWasm/issues/316#issuecomment-7230307519): `npm test` runs for every change and every gate and verifies in Edge, the engine the product ships to. `npm run test:release` (`--release`) also runs the same jobs in Node, concurrently, and is required only for an actual release of the library. An Edge-only run gives Edge every lane. Both paths save the verified G2 compiler to `artifacts/StandardWasm.Compiler.wasm` for the stage runners.
 
 ## 3. Binary oracle store (harness)
 
