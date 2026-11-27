@@ -3031,6 +3031,15 @@ namespace PortableCompiler
                     // Platform shortcuts do not consume a managed location.
                     int address = records[slot + BranchIl.Width + 1];
                     bool addressed = address != 0;
+                    int laneCount = !addressed && opcode == 0x28 ? VectorLaneCount.Identify(bundle, image, layout, heaps,
+                        owner, member, context, methodArguments, objects) : 0;
+                    if (laneCount != 0)
+                    {
+                        records[slot] = BranchIl.Constant;
+                        records[slot + 1] = laneCount;
+                        records[slot + 3] = 0;
+                        continue;
+                    }
                     if (!addressed && (opcode == 0x73 || opcode == 0x28))
                     {
                         int equality = opcode == 0x28 ? SpanMetadata.CharacterEquality(bundle, image, layout, heaps,

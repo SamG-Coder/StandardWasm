@@ -301,6 +301,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [313 · Readonly signed Int16 span views](stage-313-readonly-int16-span-cast/README.md) | `npm run demo -- stage-313-readonly-int16-span-cast` | Preserve aliased packed storage and signed CLR element reads |
 | [314 · Addressable character locals](stage-314-addressable-character-locals/README.md) | `npm run demo -- stage-314-addressable-character-locals` | Preserve UTF-16 out values, aliases and frame lifetime |
 | [317 · Readonly ordinal string borrow](stage-317-readonly-ordinal-string-borrow/README.md) | `npm run demo -- stage-317-readonly-ordinal-string-borrow` | Lend the original ordinal caller a readonly packed-string location |
+| [320 · Closed Vector128 lane counts](stage-320-vector128-count/README.md) | `npm run demo -- stage-320-vector128-count` | Compare exact platform lane counts and preserve assembly identity |
 
 ## Adding a stage
 

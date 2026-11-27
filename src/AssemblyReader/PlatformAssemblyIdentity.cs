@@ -96,7 +96,12 @@ namespace PeLibrary
             IsPlatformAssembly(image, heaps, methods, counts, row, includeRuntimeExtensions: false) ||
             MatchesAscii(image, heaps, MicrosoftFacadeName(image, heaps, methods, counts, row), "System.Runtime.InteropServices");
 
-        private static uint MicrosoftFacadeName(byte[] image, int[] heaps, int[] methods, int[] counts, int row)
+        internal static bool IsIntrinsicsAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row) =>
+            MatchesAscii(image, heaps, MicrosoftFacadeName(image, heaps, methods, counts, row, 0xff137bcc, 0x51dd2dcd),
+                "System.Runtime.Intrinsics");
+
+        private static uint MicrosoftFacadeName(byte[] image, int[] heaps, int[] methods, int[] counts, int row,
+            uint tokenLow = 0x7f5f3fb0, uint tokenHigh = 0x3a0ad511)
         {
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 35);
             if (table < 0 || row < 1 || row > counts[35]) return 0;
@@ -106,7 +111,7 @@ namespace PeLibrary
             uint key = Index(image, at + 12, blobs);
             if (key == 0 || !Fits(key, 9, (uint)heaps[1])) return 0;
             uint blob = (uint)heaps[0] + key;
-            if (image[blob] != 8 || U32(image, blob + 1) != 0x7f5f3fb0 || U32(image, blob + 5) != 0x3a0ad511) return 0;
+            if (image[blob] != 8 || U32(image, blob + 1) != tokenLow || U32(image, blob + 5) != tokenHigh) return 0;
             return Index(image, at + (uint)(12 + blobs), strings);
         }
 
