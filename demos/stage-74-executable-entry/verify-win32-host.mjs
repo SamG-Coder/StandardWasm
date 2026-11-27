@@ -8,7 +8,9 @@ import { instantiateManagedModule } from "./resource-host.mjs";
 
 const methods = [
     ["getModuleHandleW", 0], ["getLastSystemError", 1], ["setLastSystemError", 2],
-    ["getLastPInvokeError", 1], ["setLastPInvokeError", 2]
+    ["getLastPInvokeError", 1], ["setLastPInvokeError", 2],
+    ["createActCtxW", 0], ["getCurrentActCtx", 0], ["activateActCtx", 3],
+    ["deactivateActCtx", 3], ["releaseActCtx", 2]
 ];
 
 function unsigned(value) {
@@ -37,7 +39,7 @@ function probeModule() {
     ];
     return Uint8Array.from([
         0, 97, 115, 109, 1, 0, 0, 0,
-        ...section(1, [3, 0x60, 1, 0x7f, 1, 0x7f, 0x60, 0, 1, 0x7f, 0x60, 1, 0x7f, 0]),
+        ...section(1, [4, 0x60, 1, 0x7f, 1, 0x7f, 0x60, 0, 1, 0x7f, 0x60, 1, 0x7f, 0, 0x60, 2, 0x7f, 0x7f, 1, 0x7f]),
         ...section(2, [methods.length + 1, ...imports]),
         ...section(7, [methods.length + 1, ...exports])
     ]);
@@ -81,7 +83,49 @@ async function exercise(instantiate, bytes, executable, framework) {
     const frameworkLookup = [winForms === 0 ? 0 : 1, host.getLastSystemError()];
     const explicitHandle = host.getModuleHandleW(writeName(32, asset.path));
     const embedded = second.getModuleHandleW(writeName(32, framework.name, second.memory));
-    return { results, errors, isolated, pathMatches: afterGrowth === processHandle,
+    const request = addr + 1024;
+    const current = request + 32;
+    const cookieAddress = current + 4;
+    const view = new DataView(host.memory.buffer);
+    view.setUint32(request, 32, true);
+    view.setUint32(request + 4, 0x88, true);
+    view.setUint32(request + 20, 2, true);
+    view.setUint32(request + 28, winForms, true);
+    host.setLastSystemError(0);
+    const context = host.createActCtxW(request);
+    const createError = host.getLastSystemError();
+    function currentContext() {
+        if (!host.getCurrentActCtx(current)) throw Error("Could not query the active context");
+        const handle = view.getUint32(current, true);
+        if (handle) host.releaseActCtx(handle);
+        return handle;
+    }
+    const before = currentContext();
+    const activated = host.activateActCtx(context, cookieAddress) === 1;
+    const cookie = view.getUint32(cookieAddress, true);
+    const currentMatches = currentContext() === context;
+    const contextIsolated = second.getCurrentActCtx(32) === 1 &&
+        new DataView(second.memory.buffer).getUint32(32, true) === 0;
+
+    const inner = host.createActCtxW(request);
+    host.activateActCtx(inner, cookieAddress);
+    const innerCookie = view.getUint32(cookieAddress, true);
+    host.releaseActCtx(inner); // The active stack retains its copy.
+    const nestedMatches = innerCookie !== cookie && currentContext() === inner &&
+        host.deactivateActCtx(0, innerCookie) === 1 && currentContext() === context;
+    const restored = host.deactivateActCtx(0, cookie) === 1 && currentContext() === before;
+    host.releaseActCtx(context);
+
+    view.setUint32(request + 20, 65535, true);
+    const missing = [host.createActCtxW(request), host.getLastSystemError()];
+    view.setUint32(request + 20, 2, true);
+    view.setUint32(request + 4, 0x80000088, true);
+    const invalidFlags = [host.createActCtxW(request), host.getLastSystemError()];
+    const invalidRequest = [host.createActCtxW(host.memory.buffer.byteLength - 31), host.getLastSystemError()];
+    const activationContext = { createError, activated, currentMatches, restored, missing, invalidFlags,
+        contextIsolated, nestedMatches, invalidRequest, validHandle: context > 0 };
+
+    return { results, errors, isolated, activationContext, pathMatches: afterGrowth === processHandle,
         otherPath, pathError, invalidAddress, pointerError, nonzeroProcessHandle: processHandle !== 0, frameworkLookup,
         stableFrameworkHandle: winForms !== 0 && winForms === explicitHandle && winForms !== processHandle,
         embeddedFramework: [embedded, second.getLastSystemError()] };
@@ -135,7 +179,11 @@ if (compilerPath) {
 const bytes = probeModule();
 const framework = { name: basename(oracle.framework), bytes: readFileSync(oracle.framework) };
 const node = await exercise(instantiateManagedModule, bytes, oracle.executable, framework);
-assert.deepEqual(node, { results: oracle.results, errors: oracle.errors,
+const { createError, activated, currentMatches, restored, missing, invalidFlags } = oracle.activationContext;
+assert.deepEqual(node, { activationContext: {
+    createError, activated, currentMatches, restored, missing: [-1, missing], invalidFlags: [-1, invalidFlags],
+    contextIsolated: true, nestedMatches: true, invalidRequest: [-1, 998], validHandle: true
+}, results: oracle.results, errors: oracle.errors,
     isolated: [0, 0, true], pathMatches: true, otherPath: 0, pathError: 126,
     invalidAddress: 0, pointerError: 998, nonzeroProcessHandle: true, frameworkLookup: oracle.frameworkLookup,
     stableFrameworkHandle: true, embeddedFramework: [0,126] });
@@ -152,7 +200,7 @@ try {
         if (path === "/stage-73-executable-intake/loader/pe.mjs")
             return route.fulfill({ contentType: "text/javascript",
                 body: readFileSync(new URL("../stage-73-executable-intake/loader/pe.mjs", import.meta.url)) });
-        if (path === "/resource-host.mjs" || path === "/win32-host.mjs")
+        if (["/resource-host.mjs", "/win32-host.mjs", "/activation-context.mjs"].includes(path))
             return route.fulfill({ contentType: "text/javascript", body: readFileSync(new URL("." + path, import.meta.url)) });
         return route.abort();
     });
@@ -173,6 +221,8 @@ try {
         console.log("The self-hosted compiler matched CLR module lookups and Marshal error exchange in Node and Edge.");
     }
     console.log("Node and Edge matched 6 CLR module lookups and both last-error slots. Memory growth and host isolation passed.");
+    console.log("Node and Edge matched the WinForms manifest activation lifecycle and Windows error results.");
+    console.log("Nested activation, browser instance isolation, and Wasm32 request bounds passed.");
 } finally {
     await browser.close();
 }

@@ -1,4 +1,4 @@
-import { createWin32Host, win32ImportModule, win32ImportNames } from "./win32-host.mjs";
+import { createWin32Host, win32ImportModule, win32ImportNames, win32MemoryImports } from "./win32-host.mjs";
 
 export const resourceImportModule = "standardwasm:resources";
 
@@ -106,8 +106,8 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         if (!group || kind !== "function" || !Object.hasOwn(group, name) || typeof group[name] !== "function")
             throw Error("The generated module requests an unsupported runtime import.");
     }
-    if (requestedWin32.has("getModuleHandleW") && !requestedResources.has("memory"))
-        throw Error("Win32 module lookup requires the StandardWasm memory import.");
+    if ([...requestedWin32].some(name => win32MemoryImports.has(name)) && !requestedResources.has("memory"))
+        throw Error("The requested Win32 functions require the StandardWasm memory import.");
 
     let memory;
     let imports = { ...runtimeImports };
@@ -122,7 +122,9 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         memory = resource.memory;
         imports = { ...imports, ...resource.imports };
     }
-    if (requestedWin32.size)
-        imports[win32ImportModule] = createWin32Host(memory, executablePath, requestedWin32.has("getModuleHandleW") ? assets : []);
+    if (requestedWin32.size) {
+        const usesModules = requestedWin32.has("getModuleHandleW") || requestedWin32.has("createActCtxW");
+        imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : []);
+    }
     return WebAssembly.instantiate(module, imports);
 }

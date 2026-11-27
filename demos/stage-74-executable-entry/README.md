@@ -27,7 +27,11 @@ file-backed companion with neutral PE manifest resource 2 also receives a
 handle. Bundled companions keep the managed manifest fallback. Unknown modules
 return a failed lookup. The system error and cached P/Invoke error occupy
 separate slots, and lookup uses the same linear memory as other imports.
-Native activation-context creation still needs a browser implementation.
+The browser host can create an activation-context handle from a file-backed
+module's numeric, language-neutral manifest resource and maintain the active
+contexts in stack order. The current contract retains the original manifest
+bytes. Side-by-side dependency resolution, file-path manifests, and compiler
+binding for the activation-context functions remain pending.
 
 Run `node demos/stage-74-executable-entry/verify-win32-host.mjs` on Windows to
 compare the host import contract in Node and Edge against native .NET calls.

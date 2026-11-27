@@ -1,8 +1,13 @@
 import { readPeResource } from "../stage-73-executable-intake/loader/pe.mjs";
+import { createActivationContexts } from "./activation-context.mjs";
 
 export const win32ImportModule = "standardwasm:win32";
+export const win32MemoryImports = new Set([
+    "getModuleHandleW", "createActCtxW", "getCurrentActCtx", "activateActCtx"
+]);
 export const win32ImportNames = new Set([
-    "getModuleHandleW", "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError"
+    ...win32MemoryImports, "deactivateActCtx", "releaseActCtx",
+    "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError"
 ]);
 
 const moduleNotFound = 126;
@@ -14,21 +19,23 @@ const normalize = name => name.replaceAll("\\", "/").toLowerCase();
 export function createWin32Host(memory, executablePath, assets = []) {
     const byPath = new Map();
     const byBaseName = new Map();
+    const moduleImages = new Map();
     const baseName = name => name.slice(name.lastIndexOf("/") + 1);
     function register(path, handle) {
         const name = normalize(path);
-        if (!name || byPath.has(name)) return;
+        if (!name || byPath.has(name)) return false;
         byPath.set(name, handle);
         const leaf = baseName(name);
         if (!byBaseName.has(leaf)) byBaseName.set(leaf, handle);
+        return true;
     }
     if (executablePath) register(executablePath, executableHandle);
     let nextHandle = executableHandle + 1;
     // File-backed manifested DLLs can provide Win32 activation-context
     // resources. Images unpacked from a bundle keep the managed fallback.
     for (const asset of assets) {
-        if (!asset.loadedFromBytes && readPeResource(asset.bytes, 24, 2, 0))
-            register(asset.path, nextHandle++);
+        if (!asset.loadedFromBytes && readPeResource(asset.bytes, 24, 2, 0) &&
+            register(asset.path, nextHandle)) moduleImages.set(nextHandle++, asset.bytes);
     }
 
     let systemError = 0;
@@ -61,8 +68,14 @@ export function createWin32Host(memory, executablePath, assets = []) {
         return 0;
     }
 
+    function findManifest(handle, id) {
+        const image = moduleImages.get(handle);
+        return image && readPeResource(image, 24, id, 0);
+    }
+
     return {
         getModuleHandleW,
+        ...createActivationContexts(memory, findManifest, value => { systemError = value; }),
         getLastSystemError: () => systemError,
         setLastSystemError: value => { systemError = value | 0; },
         getLastPInvokeError: () => pinvokeError,
