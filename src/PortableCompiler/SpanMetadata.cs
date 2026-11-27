@@ -169,45 +169,53 @@ namespace PortableCompiler
             return at + 3;
         }
 
-        internal static bool IsSpanIndexOfAny(byte[] image, int[] layout, int[] heaps, int[] counts, int target)
+        internal static int ReadOnlySearchArity(byte[] image, int[] layout, int[] heaps, int[] counts, int target)
         {
             int row = target >> 1;
-            int blob;
+            int blob, arity;
             if ((target & 1) == 0)
             {
                 if (row < 1 || row > counts[6] ||
-                    !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "IndexOfAny") ||
-                    (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x10) == 0) return false;
+                    (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x10) == 0) return 0;
+                arity = SearchArity(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 3));
+                if (arity == 0) return 0;
                 int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
                 if (owner < 1 || !IsPlatformType(image, layout, heaps, owner << 2, "System", "MemoryExtensions"))
-                    return false;
+                    return 0;
                 blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
             }
             else
             {
                 var reference = new int[AssemblyReferences.SymbolWidth];
-                if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference) < 0 ||
-                    !MatchesAscii(image, heaps, (uint)reference[4], "IndexOfAny") ||
+                if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference) < 0) return 0;
+                arity = SearchArity(image, heaps, reference[4]);
+                if (arity == 0 ||
                     !MatchReference(image, layout, heaps, counts, reference, "System", "MemoryExtensions", includeMemory: true))
-                    return false;
+                    return 0;
                 blob = reference[5];
             }
+
+            if (blob < 1 || blob >= heaps[1]) return 0;
             var cursor = new int[1];
             int limit = heaps[0] + heaps[1];
-            if (blob < 1 || blob >= heaps[1]) return false;
             int size = CompressedUnsigned(image, heaps[0] + blob, limit, cursor);
             int at = cursor[0];
-            // static int IndexOfAny<T>(ReadOnlySpan<T>, T, T)
-            if (size < 14 || size > limit - at || U32(image, (uint)at) != 0x08030110) return false;
+            // static int IndexOf<T>(ReadOnlySpan<T>, T) or IndexOfAny<T>(ReadOnlySpan<T>, T, T).
+            if (size < 8 + 2 * arity || size > limit - at ||
+                U32(image, (uint)at) != (0x08000110u | (uint)arity << 16)) return 0;
             cursor[0] = at + 4;
             int end = at + size;
             int span = SignatureReader.ReadSingleArgumentValue(image, cursor, end);
-            if (span < 1 || !IsDefinition(image, layout, heaps, span)) return false;
-            for (int element = 0; element < 3; element++)
+            if (span < 1 || !IsDefinition(image, layout, heaps, span)) return 0;
+            for (int element = 0; element < arity; element++)
                 if (!SignatureReader.TakeElement(image, cursor, end, 0x1e) ||
-                    !SignatureReader.TakeElement(image, cursor, end, 0)) return false;
-            return cursor[0] == end;
+                    !SignatureReader.TakeElement(image, cursor, end, 0)) return 0;
+            return cursor[0] == end ? arity : 0;
         }
+
+        private static int SearchArity(byte[] image, int[] heaps, int name) =>
+            MatchesAscii(image, heaps, (uint)name, "IndexOf") ? 2 :
+                MatchesAscii(image, heaps, (uint)name, "IndexOfAny") ? 3 : 0;
 
         internal static bool IsCharacterCopyTo(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int member, int context, int[] methodArguments, int sourceType, int[] objects)

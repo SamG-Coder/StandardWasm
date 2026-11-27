@@ -475,9 +475,10 @@ namespace PortableCompiler
             if (kind == PinStaticBytes) return Push(stack, allocated, depth, Native);
             if (kind == CopyCharacterSpan)
                 return Match(stack, depth, WritableCharacterSpan) && Match(stack, depth - 1, extra) ? depth - 2 : -2;
-            if (kind == FindCharacterSpanAny)
-                return Match(stack, depth - 2, CharacterSpan) && Match(stack, depth - 1, I32) && Match(stack, depth, I32)
-                    ? Push(stack, allocated, depth - 3, I32) : -2;
+            if (kind == FindCharacterInSpan)
+                return Match(stack, depth - operand + 1, CharacterSpan) && Match(stack, depth, I32) &&
+                    (operand == 2 || operand == 3 && Match(stack, depth - 1, I32))
+                    ? Push(stack, allocated, depth - operand, I32) : -2;
             if (kind == EqualCharacterSpans)
                 return Match(stack, depth, extra) && Match(stack, depth - 1, extra)
                     ? Push(stack, allocated, depth - 2, I32) : -2;

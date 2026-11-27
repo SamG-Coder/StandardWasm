@@ -523,13 +523,14 @@ namespace PortableCompiler
                         Spill(spills, maximum, spillFlags, WritableCharacterSpan, top),
                         scratch + 3, scratch + 4, frameShape[25] != 0);
                 }
-                else if (kind == FindCharacterSpanAny)
+                else if (kind == FindCharacterInSpan)
                 {
-                    used = CharacterSpanSearchWasm.FindAny(code, used,
-                        Spill(spills, maximum, spillFlags, CharacterSpan, top - 2),
-                        Spill(spills, maximum, spillFlags, I32, top - 1),
-                        Spill(spills, maximum, spillFlags, I32, top),
-                        Spill(spills, maximum, spillFlags, I32, top - 2),
+                    int view = top - operand + 1;
+                    used = CharacterSpanSearchWasm.Find(code, used,
+                        Spill(spills, maximum, spillFlags, CharacterSpan, view),
+                        Spill(spills, maximum, spillFlags, I32, view + 1),
+                        operand == 3 ? Spill(spills, maximum, spillFlags, I32, top) : -1,
+                        Spill(spills, maximum, spillFlags, I32, view),
                         scratch + 3, scratch + 4, frameShape[25] != 0);
                 }
                 else if (kind == StringRange)

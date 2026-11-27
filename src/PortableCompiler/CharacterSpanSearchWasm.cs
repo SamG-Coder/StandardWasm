@@ -7,13 +7,13 @@ namespace PortableCompiler
     {
         internal const int Capacity = 224;
 
-        // The caller has evaluated the view and both needles. Search its
-        // current UTF-16 range without creating an escaping element reference.
-        internal static int FindAny(byte[] code, int used, int view, int first, int second,
+        // Search the evaluated view's current UTF-16 range. A negative
+        // second local index means the caller supplied just one needle.
+        internal static int Find(byte[] code, int used, int view, int first, int second,
             int result, int length, int index, bool nativeViews)
         {
             used = NarrowNeedle(code, used, first);
-            used = NarrowNeedle(code, used, second);
+            if (second >= 0) used = NarrowNeedle(code, used, second);
             used = Local(code, SpanWasm.Length(code, used, view), 0x21, length);
             used = Local(code, Const(code, used, 0), 0x21, index);
             code[used++] = 0x02; code[used++] = 0x40; // search block
@@ -27,13 +27,16 @@ namespace PortableCompiler
             code[used++] = 0x0b;
 
             used = Read(code, used, view, index, nativeViews);
-            used = Local(code, used, 0x22, result);
+            if (second >= 0) used = Local(code, used, 0x22, result);
             used = Local(code, used, 0x20, first);
             code[used++] = 0x46; // i32.eq
-            used = Local(code, used, 0x20, result);
-            used = Local(code, used, 0x20, second);
-            code[used++] = 0x46;
-            code[used++] = 0x72; // i32.or
+            if (second >= 0)
+            {
+                used = Local(code, used, 0x20, result);
+                used = Local(code, used, 0x20, second);
+                code[used++] = 0x46;
+                code[used++] = 0x72; // i32.or
+            }
             code[used++] = 0x04; code[used++] = 0x40;
             used = Local(code, Local(code, used, 0x20, index), 0x21, result);
             code[used++] = 0x0c; code[used++] = 2; // first match

@@ -1144,7 +1144,7 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - CharacterSpanCopyWasm.Capacity) return -3;
                                 capacity += CharacterSpanCopyWasm.Capacity;
                             }
-                            else if (kind == BranchIl.FindCharacterSpanAny)
+                            else if (kind == BranchIl.FindCharacterInSpan)
                             {
                                 if ((hostFeatures & WasmImports.NativeCharacterViews) != 0) tags = ExceptionTypes.NullReference;
                                 if (capacity > int.MaxValue - CharacterSpanSearchWasm.Capacity) return -3;
@@ -1245,7 +1245,7 @@ namespace PortableCompiler
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
                             kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.StringFromSpan || kind == BranchIl.ConsoleWrite ||
                             kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine || kind == BranchIl.CopyCharacterSpan ||
-                            kind == BranchIl.FindCharacterSpanAny) frameShape[5] |= 1;
+                            kind == BranchIl.FindCharacterInSpan) frameShape[5] |= 1;
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
@@ -1856,8 +1856,9 @@ namespace PortableCompiler
                                 continue;
                             }
                         }
-                        if (spec[MethodSpecifications.Arity] == 1 &&
-                            SpanMetadata.IsSpanIndexOfAny(image, layout, heaps, counts, spec[MethodSpecifications.Target]))
+                        int searchArity = spec[MethodSpecifications.Arity] == 1
+                            ? SpanMetadata.ReadOnlySearchArity(image, layout, heaps, counts, spec[MethodSpecifications.Target]) : 0;
+                        if (searchArity != 0)
                         {
                             var element = new int[1];
                             status = MethodInstantiations.ReadArguments(bundle, image, layout, heaps, owner,
@@ -1865,7 +1866,8 @@ namespace PortableCompiler
                             if (status < 0) return status;
                             if (element[0] == GenericScalar.Key(3))
                             {
-                                records[slot] = BranchIl.FindCharacterSpanAny;
+                                records[slot] = BranchIl.FindCharacterInSpan;
+                                records[slot + 1] = searchArity;
                                 continue;
                             }
                         }
