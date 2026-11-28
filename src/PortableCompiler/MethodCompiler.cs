@@ -3400,9 +3400,12 @@ namespace PortableCompiler
                         continue;
                     }
                     int stringMember = addressed ? 0 : StringMetadata.Member(image, heaps, layout, member);
-                    if (stringMember == StringMetadata.OrdinalEquals && opcode == 0x28)
+                    if ((stringMember == StringMetadata.OrdinalEquals || stringMember == StringMetadata.OrdinalUnequal) &&
+                        opcode == 0x28)
                     {
+                        // The operand selects op_Inequality, which negates the ordinal result.
                         records[slot] = BranchIl.StringEquals;
+                        records[slot + 1] = stringMember == StringMetadata.OrdinalUnequal ? 1 : 0;
                         continue;
                     }
                     bool joinStrings = stringMember == StringMetadata.Concat && opcode == 0x28;

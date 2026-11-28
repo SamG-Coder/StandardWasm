@@ -548,6 +548,13 @@ namespace PortableCompiler
                     int left = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);
                     int right = Spill(spills, maximum, spillFlags, states[state + top], top);
                     used = StringWasm.OrdinalEquals(code, used, left, right, spills + top - 1, scratch);
+                    if (operand == 1)
+                    {
+                        // [left, right] -> [!equal] for String.op_Inequality.
+                        used = Local(code, used, 0x20, spills + top - 1);
+                        code[used++] = 0x45; // i32.eqz
+                        used = Local(code, used, 0x21, spills + top - 1);
+                    }
                 }
                 else if (kind == JoinStrings || kind == StringFromChars)
                 {

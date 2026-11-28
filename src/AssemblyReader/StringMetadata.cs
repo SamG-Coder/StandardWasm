@@ -4,7 +4,7 @@ namespace PeLibrary
 {
     internal static class StringMetadata
     {
-        internal const int Length = 1, Character = 2, Concat = 3, FromChars = 4, OrdinalEquals = 5, Empty = 6, PinnableReference = 7;
+        internal const int Length = 1, Character = 2, Concat = 3, FromChars = 4, OrdinalEquals = 5, Empty = 6, PinnableReference = 7, OrdinalUnequal = 8;
 
         internal static int CopyLiteral(byte[] image, int[] streams, int tokenOffset, byte[] bytes, int used)
         {
@@ -82,9 +82,11 @@ namespace PeLibrary
                 0x61757145, 0x736c, 0) || // Equals
                 PlatformTypeReferences.Named(image, (uint)streams[2], (uint)streams[3], name, 11,
                     0x455f706f, 0x6c617571, 0x797469); // op_Equality
-            if (equals && Fits(sig, 6, (uint)streams[1]) && U32(image, signature) == 0x02020005 &&
+            // op_Inequality(string, string) is the negation of the same ordinal comparison.
+            bool unequal = !equals && MatchesAscii(image, streams, name, "op_Inequality");
+            if ((equals || unequal) && Fits(sig, 6, (uint)streams[1]) && U32(image, signature) == 0x02020005 &&
                 U16(image, signature + 4) == 0x0e0e)
-                return OrdinalEquals;
+                return equals ? OrdinalEquals : OrdinalUnequal;
             if (U32(image, n) == 0x6f74632e && U16(image, n + 4) == 0x72 &&
                 Fits(sig, 6, (uint)streams[1]) && U32(image, signature) == 0x01012005 &&
                 U16(image, signature + 4) == 0x031d)

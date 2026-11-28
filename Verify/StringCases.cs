@@ -21,6 +21,11 @@ internal static class StringCases
                 indexes.Add([choice, i]);
         }
         Verify(nameof(Kernels.CodeUnit), indexes, args => Kernels.CodeUnit(args[0], args[1]));
+        var pairs = new List<int[]>();
+        for (int left = 0; left <= 5; left++)
+            for (int right = 0; right <= 5; right++)
+                pairs.Add([left, right]);
+        Verify(nameof(Kernels.Equality), pairs, args => Kernels.Equality(args[0], args[1]));
 
         using var pe = new PEReader(new MemoryStream(image));
         var metadata = pe.GetMetadataReader();
