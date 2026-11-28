@@ -25,4 +25,5 @@ Calling a null pointer is an access violation on the CLR, which ends the process
 is an engine trap, so that case runs in Wasm only.
 
 `delegate* unmanaged[Cdecl]` stays a located diagnostic, since unmanaged calls belong with
-P/Invoke (#274). The design is decision 0078.
+P/Invoke (#274). A delegate type declared in the dependency (`RemoteDelegate`) was diagnosed until
+Stage 220 and is now a CLR-compared value case. The design is decision 0078.

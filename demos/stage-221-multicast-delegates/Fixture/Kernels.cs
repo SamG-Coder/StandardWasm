@@ -8,7 +8,11 @@ namespace MulticastDelegateFixture
     public delegate int Measure(int value);
     public delegate void PaintLike(object sender, Canvas canvas);
 
-    public sealed class Canvas { public int Strokes; }
+    public sealed class Canvas
+    {
+        public int Strokes;
+        public int Paint(int value) => Strokes += value;
+    }
 
     // Field-like events: the C# compiler emits Delegate.Combine/Remove, castclass and an
     // Interlocked.CompareExchange<T> loop in add/remove.
@@ -229,12 +233,50 @@ namespace MulticastDelegateFixture
             return combined();
         }
 
-        // Delegate equality (op_Equality, Equals) compares targets and methods; not lowered yet.
-        public static int RejectDelegateEquality()
+        // Delegate equality: C#'s == and != call Delegate.op_Equality / op_Inequality, which compare
+        // nominal type, then each invocation-list entry's target and method.
+        public static int EqualitySameMethod()
         {
-            Notify a = One, b = One;
-            return a == b ? 1 : 0;
+            Notify a = One, b = One, c = Two;
+            return (a == b ? 1 : 0) + (a == c ? 10 : 0) + (a != c ? 100 : 0) + (a != b ? 1000 : 0); // 101
         }
+
+        public static int EqualityTargets()
+        {
+            var first = new Canvas();
+            var second = new Canvas();
+            Measure a = first.Paint, b = first.Paint, c = second.Paint;
+            return (a == b ? 1 : 0) + (a == c ? 10 : 0); // 1
+        }
+
+        public static int EqualityNulls()
+        {
+            Notify none = null, other = null, one = One;
+            return (none == other ? 1 : 0) + (one == none ? 10 : 0) + (none == one ? 100 : 0) +
+                (one != none ? 1000 : 0); // 1001
+        }
+
+        public static int EqualityMulticast()
+        {
+            Notify one = One, two = Two;
+            Notify ab = one + two, ab2 = one + two, ba = two + one;
+            return (ab == ab2 ? 1 : 0) + (ab == ba ? 10 : 0) + (ab == one ? 100 : 0) + ((ab - two) == one ? 1000 : 0); // 1001
+        }
+
+        public static int EqualityNominalTypes()
+        {
+            Delegate notify = (Notify)One, alert = (Alert)One, again = (Notify)One;
+            return (notify == alert ? 1 : 0) + (notify == again ? 10 : 0); // 10
+        }
+
+        public static int EqualityEventHandler()
+        {
+            EventHandler a = OnEvent, b = OnEvent;
+            EventHandler c = a + b;
+            return (a == b ? 1 : 0) + (c == a ? 10 : 0) + ((c - b) == a ? 100 : 0); // 101
+        }
+
+        static void OnEvent(object sender, EventArgs args) { }
 
         // A Func<int> closure is not an object reference yet (decision 0088), so it cannot reach a cast.
         public static int RejectFuncIntAsObject()

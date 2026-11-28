@@ -15,9 +15,9 @@ This record pins what "reproduces the module" and "passes the library suite" mea
 
 ## Required evidence
 
-1. **Fixed point that agrees with the CLR.** C, G1, G2 and G3 are byte-identical, and `npm test` asserts this in Node and Chromium. G1 = G2 alone is not enough, because a self-consistent miscompilation would pass it. G2 is the "second compiler" in GOAL.md, and G3 = G2 is the reproduction it must achieve.
+1. **Fixed point that agrees with the CLR.** C, G1, G2 and G3 are byte-identical. `npm test` asserts this in Edge; `npm run test:release` also asserts it in Node (owner direction, decision 0102). G1 = G2 alone is not enough, because a self-consistent miscompilation would pass it. G2 is the "second compiler" in GOAL.md, and G3 = G2 is the reproduction it must achieve.
 2. **Harness boundary after B.** Once B has emitted G1, the JavaScript harness may only pass input bytes through a generated module's own transport exports, instantiate and validate the modules it returns, call their exports, and compare results. It may not compile IL, run any part of the compiler, or reuse B's exports, the host compiler, or Binaryen. Every compilation from G1 onward runs inside a generated module (#25, #26).
-3. **The library suite is the CLR-equivalence suite.** G2 compiles the fixture DLL of every stage whose cases compare against the CLR, and the resulting modules pass the same oracle cases in Node and Chromium. Stages that only exercise the reader or the compiler itself also count, through their existing generated-code cases.
+3. **The library suite is the CLR-equivalence suite.** G2 compiles the fixture DLL of every stage whose cases compare against the CLR, and the resulting modules pass the same oracle cases in Edge, and in Node as well for a release. Stages that only exercise the reader or the compiler itself also count, through their existing generated-code cases.
 4. **Gaps are explicit.** If G2 cannot compile some stage fixture, its unsupported cases are listed in GOAL.md with a tracking issue. They are never routed to the host compiler. Self-hosting is not marked complete while any CLR-equivalence case is on that list.
 5. **Reproducible record.** The PR that closes the milestone lists the exact commands, the .NET SDK, Node and browser versions, and the byte counts and SHA-256 hashes of C, G1, G2 and G3.
 

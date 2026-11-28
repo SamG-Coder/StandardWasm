@@ -40,5 +40,11 @@ namespace ReferencedDelegateDependency
         public static long Apply(Combine combine, long a, int b) => combine(a, b);
         public static void Send(Sink sink, string text) => sink(text);
         public static Combine Doubler() => (a, b) => a * 2 + b;
+        public static long Mix(long a, int b) => a * 100 + b;
+    }
+
+    public class Shape
+    {
+        public virtual int Sides(int scale) => 0 * scale;
     }
 }
