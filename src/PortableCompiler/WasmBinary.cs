@@ -181,6 +181,9 @@ namespace PortableCompiler
                 (nullReference ? 1 : 0) + (invalidCast ? 1 : 0) + (argumentException ? 1 : 0) + (objectTag ? 1 : 0) +
                 (argumentNull ? 1 : 0) + (synchronizationLock ? 1 : 0) + (argumentOutOfRange ? 1 : 0);
             if (rootProbe) exportCount += RootStackWasm.ExportCount;
+            // Decision 0104: Environment.Exit publishes its status through an exported global.
+            int exitStatus = ProcessExit.StatusGlobal(globals);
+            if (exitStatus >= 0) exportCount++;
             int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
                 (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
                 (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0) +
@@ -190,6 +193,7 @@ namespace PortableCompiler
                 (argumentOutOfRange ? ExceptionTagsWasm.ArgumentOutOfRangeExportSize : 0);
             if (argumentArray != 0) exportSize += EntryArgumentsWasm.ExportBytes(builderIndex);
             if (rootProbe) exportSize += RootStackWasm.ExportSize(rootCount, rootWalker);
+            if (exitStatus >= 0) exportSize += ProcessExit.ExportBytes(exitStatus);
             int tagSize = 1 + (tagCount - (objectTag ? 1 : 0)) * (1 + UnsignedSize(tagType)) +
                 (objectTag ? 1 + UnsignedSize(objectTagType) : 0);
             for (int i = 0; i < exports.Length; i++)
@@ -537,6 +541,7 @@ namespace PortableCompiler
             if (argumentOutOfRange) cursor = ExceptionTagsWasm.WriteArgumentOutOfRangeExport(output, cursor);
             if (objectTag) cursor = ExceptionTagsWasm.WriteObjectExport(output, cursor);
             if (rootProbe) cursor = RootStackWasm.WriteExports(output, cursor, rootCount, rootWalker);
+            if (exitStatus >= 0) cursor = ProcessExit.WriteExport(output, cursor, exitStatus);
 
             if (elements)
             {

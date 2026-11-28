@@ -5,14 +5,15 @@ namespace PortableCompiler
 {
     // Decision 0104: static void System.Environment::Exit(int32).
     // CLR: the process ends with the status; no finally or catch block of the calling thread runs.
-    // Wasm: `call standardwasm:process exit(status)` records the status in the host, then
-    // `unreachable` traps. A trap is the one unwind that Wasm exception handling (catch_all,
-    // which lowers finally) cannot intercept, so no managed handler observes it. The launcher
-    // reports the recorded status as the exit code.
+    // Wasm: the status is stored in the module's exported i64 global "\0exitStatus" as
+    // (1 << 32) | (uint)status, so zero still means "no exit", and then `unreachable` traps. A trap
+    // is the one unwind that Wasm exception handling (catch_all, which lowers finally) cannot
+    // intercept, so no managed handler observes it. The launcher reads the export after the trap.
     internal static class ProcessExit
     {
-        private const string Module = "standardwasm:process", Member = "exit";
-        internal const int TypeBytes = 4, Capacity = 16;
+        // The exit-status global in the StaticFields registry.
+        internal const int StatusOwner = int.MaxValue - 4;
+        internal const string ExportName = "\0exitStatus";
 
         internal static bool IsExit(byte[] image, int[] heaps, int[] layout, int row)
         {
@@ -28,31 +29,35 @@ namespace PortableCompiler
                 "System", "Environment");
         }
 
-        internal static int EntryBytes(int type) => Module.Length + Member.Length + 3 + WasmBinary.UnsignedSize(type);
-
-        internal static int WriteType(byte[] output, int cursor)
+        // The registry index of the exit-status global, or -1 when no reachable code exits.
+        internal static int StatusGlobal(int[] globals)
         {
-            output[cursor++] = 0x60;
-            output[cursor++] = 1;
-            output[cursor++] = 0x7f; // exit status
-            output[cursor++] = 0;
-            return cursor;
+            for (int index = 0; index < globals[0]; index++)
+                if (StaticFields.Owner(globals, index) == StatusOwner) return index;
+            return -1;
         }
 
-        internal static int WriteEntry(byte[] output, int cursor, int type)
+        internal static int ExportBytes(int global) =>
+            WasmBinary.UnsignedSize(ExportName.Length) + ExportName.Length + 1 + WasmBinary.UnsignedSize(global);
+
+        internal static int WriteExport(byte[] output, int cursor, int global)
         {
-            cursor = Win32ErrorWasm.WriteName(output, cursor, Module);
-            cursor = Win32ErrorWasm.WriteName(output, cursor, Member);
-            output[cursor++] = 0;
-            return WasmBinary.Unsigned(output, cursor, type);
+            cursor = WasmBinary.Unsigned(output, cursor, ExportName.Length);
+            for (int i = 0; i < ExportName.Length; i++) output[cursor++] = (byte)ExportName[i];
+            output[cursor++] = 3; // global
+            return WasmBinary.Unsigned(output, cursor, global);
         }
 
         // [status] -> (no return)
-        internal static int Emit(byte[] code, int used, int status, int import)
+        internal static int Emit(byte[] code, int used, int status, int global)
         {
             used = BranchWasm.Local(code, used, 0x20, status);
-            code[used++] = 0x10;
-            used = WasmBinary.Unsigned(code, used, import);
+            code[used++] = 0xad; // i64.extend_i32_u
+            code[used++] = 0x42; code[used++] = 0x80; code[used++] = 0x80; code[used++] = 0x80;
+            code[used++] = 0x80; code[used++] = 0x10; // i64.const 1 << 32
+            code[used++] = 0x84; // i64.or
+            code[used++] = 0x24; // global.set
+            used = WasmBinary.Unsigned(code, used, global);
             code[used++] = 0x00; // unreachable
             return used;
         }

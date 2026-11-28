@@ -92,8 +92,9 @@ export async function runConsoleEntry(compilerBytes, selection) {
         returned = exports.run.length ? run(buildArguments(exports, selection.arguments ?? [])) : run();
         if (reads) returned = await returned;
     } catch (error) {
-        // Environment.Exit recorded a status and trapped (decision 0104).
-        if (host.exitStatus() !== null) return { ...finished, state: "finished", exitCode: host.exitStatus(), ...streams(host) };
+        // Environment.Exit stored (1 << 32) | status in its exported global, then trapped (decision 0104).
+        const exited = exports["\0exitStatus"]?.value ?? 0n;
+        if (exited !== 0n) return { ...finished, state: "finished", exitCode: Number(BigInt.asIntN(32, exited)), ...streams(host) };
         // An unhandled managed exception prints a CLR report and sets a Windows
         // exit status that this host does not reproduce, so it is not "finished".
         if (!(error instanceof WebAssembly.Exception)) throw error;

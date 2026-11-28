@@ -114,7 +114,7 @@ namespace PortableCompiler
         internal const int JoinManyStrings = 422;
         internal const int CharacterCall = 423; // [char] -> [Boolean]; the operand is a CharacterMembers id
         internal const int ReadTimestamp = 424; // [] -> [i64]; the operand becomes the clock import index
-        internal const int ExitProcess = 425; // [status] -> (traps); the operand becomes the exit import index
+        internal const int ExitProcess = 425; // [status] -> (traps); the operand is the exit-status global
         // NativeMemory members (decision 0104); the operand is the member id and operand 3 becomes
         // the alloc import index. [args...] -> [void*] or [].
         internal const int NativeMemoryCall = 426;

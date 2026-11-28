@@ -338,7 +338,9 @@ namespace PortableCompiler
                         next[0] = cursor - 1;
                         int type = ManagedReferenceSignatures.ReadStorage(bundle, image, methods, heap,
                             assembly, next, end, context, objects, methodArguments);
-                        if (type == -2 && locals && unresolvedLocals != null)
+                        // -4: the type's assembly is not in the bundle (decision 0080), such as
+                        // System.Runtime.Intrinsics for a console publish without framework packs.
+                        if ((type == -2 || type == -4) && locals && unresolvedLocals != null)
                         {
                             // Decision 0104: a generic local this target cannot lay out (such as a
                             // Vector512<T> in a pruned accelerated path) gets an i32 placeholder. The

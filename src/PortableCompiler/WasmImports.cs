@@ -34,10 +34,6 @@ namespace PortableCompiler
         internal const long ConsoleInput = Debugger << 1;
         // Decision 0104: standardwasm:clock timestamp, after every earlier group.
         internal const long Clock = ConsoleInput << 1;
-        // Decision 0104: standardwasm:process exit, after the clock.
-        internal const long Exit = Clock << 1;
-        // Decision 0104: standardwasm:native alloc/free/realloc over memory 0, after the exit import.
-        internal const long NativeHeap = Exit << 1;
 
         internal static int MonitorSlot(long features) => Win32NativeSlot(features, Win32ModuleBinding.Count + 1);
 
@@ -51,12 +47,7 @@ namespace PortableCompiler
 
         internal static int ClockFunction(long features) => InputFunction(features) + ((features & ConsoleInput) != 0 ? ConsoleInputWasm.ImportCount : 0);
 
-        internal static int ExitFunction(long features) => ClockFunction(features) + ((features & Clock) != 0 ? 1 : 0);
-
-        internal static int NativeHeapFunction(long features) => ExitFunction(features) + ((features & Exit) != 0 ? 1 : 0);
-
-        internal static int FixedFunctionCount(long features) =>
-            NativeHeapFunction(features) + ((features & NativeHeap) != 0 ? NativeMemoryMembers.ImportCount : 0);
+        internal static int FixedFunctionCount(long features) => ClockFunction(features) + ((features & Clock) != 0 ? 1 : 0);
 
         internal static int Win32NativeSlot(long features, int member)
         {
@@ -77,9 +68,7 @@ namespace PortableCompiler
                 ((features & Monitor) != 0 ? MonitorWasm.TypeBytes : 0) +
                 ((features & Debugger) != 0 ? RuntimeDebuggerWasm.TypeBytes : 0) +
                 ((features & ConsoleInput) != 0 ? ConsoleInputWasm.TypeBytes : 0) +
-                ((features & Clock) != 0 ? PlatformClock.TypeBytes : 0) +
-                ((features & Exit) != 0 ? ProcessExit.TypeBytes : 0) +
-                ((features & NativeHeap) != 0 ? NativeMemoryMembers.TypeBytes : 0);
+                ((features & Clock) != 0 ? PlatformClock.TypeBytes : 0);
             for (int member = 1; member <= Win32ModuleBinding.Count; member++)
                 if ((features & Win32NativeFeature(member)) != 0) size += Win32ModuleWasm.TypeBytes(member);
             return size + natives.TypeBytes();
@@ -89,7 +78,7 @@ namespace PortableCompiler
 
         // Resource calls and native indirection share one memory index.
         private static bool HasMemory(long features) =>
-            (features & (Resources | Memory | NativeMemoryFeatures | NativeCharacterViews | NativeHeap)) != 0;
+            (features & (Resources | Memory | NativeMemoryFeatures | NativeCharacterViews)) != 0;
 
         private static int EntryCount(long features, NativeImportTable natives) =>
             FunctionCount(features, natives) + (HasMemory(features) ? 1 : 0);
@@ -111,8 +100,6 @@ namespace PortableCompiler
             if ((features & Debugger) != 0) size += RuntimeDebuggerWasm.EntryBytes(firstType + DebuggerSlot(features));
             if ((features & ConsoleInput) != 0) size += ConsoleInputWasm.ImportEntryBytes(firstType + InputFunction(features));
             if ((features & Clock) != 0) size += PlatformClock.EntryBytes(firstType + ClockFunction(features));
-            if ((features & Exit) != 0) size += ProcessExit.EntryBytes(firstType + ExitFunction(features));
-            if ((features & NativeHeap) != 0) size += NativeMemoryMembers.EntryBytes(firstType + NativeHeapFunction(features));
             size += natives.ImportEntryBytes(firstType + FixedFunctionCount(features));
             return size;
         }
@@ -129,8 +116,6 @@ namespace PortableCompiler
             if ((features & Debugger) != 0) cursor = RuntimeDebuggerWasm.WriteType(output, cursor);
             if ((features & ConsoleInput) != 0) cursor = ConsoleInputWasm.WriteTypes(output, cursor);
             if ((features & Clock) != 0) cursor = PlatformClock.WriteType(output, cursor);
-            if ((features & Exit) != 0) cursor = ProcessExit.WriteType(output, cursor);
-            if ((features & NativeHeap) != 0) cursor = NativeMemoryMembers.WriteTypes(output, cursor);
             return natives.WriteTypes(output, cursor);
         }
 
@@ -148,8 +133,6 @@ namespace PortableCompiler
             if ((features & Debugger) != 0) cursor = RuntimeDebuggerWasm.WriteEntry(output, cursor, firstType + DebuggerSlot(features));
             if ((features & ConsoleInput) != 0) cursor = ConsoleInputWasm.WriteEntries(output, cursor, firstType + InputFunction(features));
             if ((features & Clock) != 0) cursor = PlatformClock.WriteEntry(output, cursor, firstType + ClockFunction(features));
-            if ((features & Exit) != 0) cursor = ProcessExit.WriteEntry(output, cursor, firstType + ExitFunction(features));
-            if ((features & NativeHeap) != 0) cursor = NativeMemoryMembers.WriteEntries(output, cursor, firstType + NativeHeapFunction(features));
             return natives.WriteEntries(output, cursor, firstType + FixedFunctionCount(features));
         }
     }

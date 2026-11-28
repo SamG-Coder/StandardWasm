@@ -1616,8 +1616,6 @@ namespace PortableCompiler
                     {
                         int kind = records[slot];
                         if (kind == BranchIl.ReadTimestamp) records[slot + 1] = WasmImports.ClockFunction(hostFeatures);
-                        if (kind == BranchIl.ExitProcess) records[slot + 1] = WasmImports.ExitFunction(hostFeatures);
-                        if (kind == BranchIl.NativeMemoryCall) records[slot + 3] = WasmImports.NativeHeapFunction(hostFeatures);
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.JoinManyStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
                             kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.StringFromSpan || kind == BranchIl.ConsoleWrite ||
                             kind == BranchIl.NativeUtf16Length || kind == BranchIl.CopyNativeConstructionString ||
@@ -1626,8 +1624,10 @@ namespace PortableCompiler
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
                         if (kind == BranchIl.FormatEnum || kind == BranchIl.FormatPrimitive ||
                             kind == BranchIl.JoinStringArray || kind == BranchIl.MultiplyDivideUInt64 ||
-                            kind == BranchIl.SortPrimitiveArray || kind == BranchIl.MultiplyHighUInt64) frameShape[5] |= 5;
-                        if (kind == BranchIl.SortPrimitiveArray) frameShape[6] = 1; // five i32 loop counters
+                            kind == BranchIl.SortPrimitiveArray || kind == BranchIl.MultiplyHighUInt64 ||
+                            kind == BranchIl.NativeMemoryCall) frameShape[5] |= 5;
+                        // Five i32 loop counters: Array.Sort and the NativeMemory heap.
+                        if (kind == BranchIl.SortPrimitiveArray || kind == BranchIl.NativeMemoryCall) frameShape[6] = 1;
                         if (kind == BranchIl.PinScopedValue) frameShape[5] |= 2 | ScopedValuePins.FrameFlag;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler || kind == BranchIl.DelegateEquality ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
@@ -3443,15 +3443,18 @@ namespace PortableCompiler
                     {
                         records[slot] = BranchIl.NativeMemoryCall;
                         records[slot + 1] = nativeMemory;
-                        bool bulk = nativeMemory == NativeMemoryMembers.Clear || nativeMemory == NativeMemoryMembers.Fill ||
-                            nativeMemory == NativeMemoryMembers.Copy;
-                        hostUse[0] = hostUse[0] | (bulk ? WasmImports.Memory : WasmImports.NativeHeap);
+                        int heapGlobal = StaticFields.Register(globals, NativeMemoryMembers.HeapOwner, 0, I32);
+                        if (heapGlobal < 0) return heapGlobal;
+                        records[slot + 3] = heapGlobal;
+                        hostUse[0] = hostUse[0] | WasmImports.Memory;
                         continue;
                     }
                     if (opcode == 0x28 && !addressed && ProcessExit.IsExit(image, heaps, layout, member))
                     {
+                        int status = StaticFields.Register(globals, ProcessExit.StatusOwner, 0, I64);
+                        if (status < 0) return status;
                         records[slot] = BranchIl.ExitProcess;
-                        hostUse[0] = hostUse[0] | WasmImports.Exit;
+                        records[slot + 1] = status;
                         continue;
                     }
                     if (opcode == 0x28 && !addressed && PlatformClock.IsGetTimestamp(image, heaps, layout, member))

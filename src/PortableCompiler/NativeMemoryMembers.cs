@@ -4,10 +4,9 @@ using static PeLibrary.ImageBytes;
 namespace PortableCompiler
 {
     // Decision 0104: System.Runtime.InteropServices.NativeMemory over memory 0 (decision 0060).
-    // The host owns the heap: `standardwasm:native` alloc(size, alignment, zero) -> address,
-    // free(address) and realloc(address, size, alignment) -> address manage blocks in pages it
-    // grows itself, so they never overlap the shadow stack (decision 0065) or resource pages.
-    // Clear, Fill and Copy are Wasm bulk-memory instructions.
+    // The module owns the heap (NativeHeapWasm): it lives in pages the module grows itself, so it
+    // never overlaps the shadow stack (decision 0065) or host resource pages. Clear, Fill and Copy
+    // are Wasm bulk-memory instructions.
     //
     // CLR-to-Wasm:
     // - A zero byte count allocates one byte, as .NET does, so a successful call never returns null.
@@ -20,8 +19,9 @@ namespace PortableCompiler
     {
         internal const int Alloc = 1, AllocCount = 2, AllocZeroed = 3, AllocZeroedCount = 4, AlignedAlloc = 5,
             AlignedRealloc = 6, AlignedFree = 7, Free = 8, Realloc = 9, Clear = 10, Fill = 11, Copy = 12;
-        internal const int ImportCount = 3, Capacity = 160;
-        private const string Module = "standardwasm:native";
+        internal const int Capacity = 1400;
+        // The heap's control-block address lives in this module global (StaticFields registry).
+        internal const int HeapOwner = int.MaxValue - 3;
         // malloc alignment of the 32-bit CLR heap, rounded up to the Wasm SIMD width.
         private const int DefaultAlignment = 16;
         private const byte VoidPointer = 0x0f, NativeUnsigned = 0x19;
@@ -114,46 +114,9 @@ namespace PortableCompiler
             return true;
         }
 
-        internal static int TypeBytes => 7 + 4 + 7; // (i32 i32 i32)->i32, (i32)->(), (i32 i32 i32)->i32
-
-        internal static int EntryBytes(int firstType) =>
-            3 * (Module.Length + 3) + "alloc".Length + "free".Length + "realloc".Length +
-            WasmBinary.UnsignedSize(firstType) + WasmBinary.UnsignedSize(firstType + 1) +
-            WasmBinary.UnsignedSize(firstType + 2);
-
-        internal static int WriteTypes(byte[] output, int cursor)
-        {
-            cursor = Triple(output, cursor);
-            output[cursor++] = 0x60; output[cursor++] = 1; output[cursor++] = 0x7f; output[cursor++] = 0;
-            return Triple(output, cursor);
-        }
-
-        private static int Triple(byte[] output, int cursor)
-        {
-            output[cursor++] = 0x60; output[cursor++] = 3;
-            output[cursor++] = 0x7f; output[cursor++] = 0x7f; output[cursor++] = 0x7f;
-            output[cursor++] = 1; output[cursor++] = 0x7f;
-            return cursor;
-        }
-
-        internal static int WriteEntries(byte[] output, int cursor, int firstType)
-        {
-            cursor = Entry(output, cursor, "alloc", firstType);
-            cursor = Entry(output, cursor, "free", firstType + 1);
-            return Entry(output, cursor, "realloc", firstType + 2);
-        }
-
-        private static int Entry(byte[] output, int cursor, string name, int type)
-        {
-            cursor = Win32ErrorWasm.WriteName(output, cursor, Module);
-            cursor = Win32ErrorWasm.WriteName(output, cursor, name);
-            output[cursor++] = 0;
-            return WasmBinary.Unsigned(output, cursor, type);
-        }
-
-        // Operands are in `arguments` (in order); a returned address goes to `result`.
-        // `first` is the alloc import; free and realloc follow it.
-        internal static int Emit(byte[] code, int used, int member, int[] arguments, int result, int first)
+        // Operands are in `arguments` (in order); a returned address goes to `result`. `heap` is the
+        // control-block global and `scratch` holds NativeHeapWasm.ScratchCount i32 locals.
+        internal static int Emit(byte[] code, int used, int member, int[] arguments, int result, int heap, int[] scratch)
         {
             if (member == Clear || member == Fill || member == Copy)
             {
@@ -178,10 +141,7 @@ namespace PortableCompiler
                 return used;
             }
             if (member == Free || member == AlignedFree)
-            {
-                used = Get(code, used, arguments[0]);
-                return Call(code, used, first + 1);
-            }
+                return NativeHeapWasm.Release(code, used, heap, arguments[0], scratch);
             bool aligned = member == AlignedAlloc || member == AlignedRealloc;
             int alignment = aligned ? arguments[member == AlignedAlloc ? 1 : 2] : -1;
             if (aligned)
@@ -198,8 +158,7 @@ namespace PortableCompiler
                 used = ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.ArgumentTag);
             }
             bool reallocate = member == Realloc || member == AlignedRealloc;
-            if (reallocate) used = Get(code, used, arguments[0]);
-            int size = arguments[reallocate ? 1 : 0];
+            int size = scratch[NativeHeapWasm.Size];
             if (member == AllocCount || member == AllocZeroedCount)
             {
                 // elementCount * elementSize must fit nuint (32 bits); otherwise OutOfMemoryException.
@@ -216,15 +175,31 @@ namespace PortableCompiler
                 used = Get(code, used, arguments[1]);
                 code[used++] = 0x6c; // i32.mul
             }
-            else used = Get(code, used, size);
-            if (aligned) used = Get(code, used, alignment);
+            else used = Get(code, used, arguments[reallocate ? 1 : 0]);
+            // .NET allocates one byte for a zero-byte request, so success never returns null.
+            used = BranchWasm.Local(code, used, 0x22, size);
+            code[used++] = 0x45;
+            code[used++] = 0x04; code[used++] = 0x40;
+            used = BranchWasm.Const(code, used, 1);
+            used = BranchWasm.Local(code, used, 0x21, size);
+            code[used++] = 0x0b;
+            // alignment = max(requested, 8), or the default malloc alignment
+            int alignmentLocal = scratch[NativeHeapWasm.Alignment];
+            if (aligned)
+            {
+                used = Get(code, used, alignment);
+                used = BranchWasm.Const(code, used, 8);
+                used = Get(code, used, alignment);
+                used = BranchWasm.Const(code, used, 8);
+                code[used++] = 0x4b; // i32.gt_u
+                code[used++] = 0x1b; // select
+            }
             else used = BranchWasm.Const(code, used, DefaultAlignment);
-            if (!reallocate) used = BranchWasm.Const(code, used, member == AllocZeroed || member == AllocZeroedCount ? 1 : 0);
-            used = Call(code, used, reallocate ? first + 2 : first);
-            used = BranchWasm.Local(code, used, 0x22, result);
-            code[used++] = 0x45; // the host returns 0 only when it cannot allocate
-            code[used++] = 0x04; code[used++] = 0x40; code[used++] = 0x00; code[used++] = 0x0b;
-            return used;
+            used = BranchWasm.Local(code, used, 0x21, alignmentLocal);
+            used = reallocate ? NativeHeapWasm.Resize(code, used, heap, arguments[0], scratch)
+                : NativeHeapWasm.Allocate(code, used, heap, scratch, member == AllocZeroed || member == AllocZeroedCount);
+            used = Get(code, used, scratch[NativeHeapWasm.Result]);
+            return BranchWasm.Local(code, used, 0x21, result);
         }
 
         // Traps when address == 0 && length != 0.
@@ -242,10 +217,5 @@ namespace PortableCompiler
 
         private static int Get(byte[] code, int used, int local) => BranchWasm.Local(code, used, 0x20, local);
 
-        private static int Call(byte[] code, int used, int function)
-        {
-            code[used++] = 0x10;
-            return WasmBinary.Unsigned(code, used, function);
-        }
     }
 }

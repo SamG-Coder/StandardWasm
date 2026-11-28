@@ -1285,8 +1285,12 @@ namespace PortableCompiler
                     var operands = new int[arity];
                     for (int i = 0; i < arity; i++)
                         operands[i] = Spill(spills, maximum, spillFlags, states[state + first + i], first + i);
+                    // Six i32 heap locals: the event bank's five counters and one string-scratch i32.
+                    var heapScratch = new int[NativeHeapWasm.ScratchCount];
+                    for (int i = 0; i < 5; i++) heapScratch[i] = eventLocals + i;
+                    heapScratch[5] = scratch + 3;
                     used = NativeMemoryMembers.Emit(code, used, operand, operands,
-                        Spill(spills, maximum, spillFlags, Native, first), records[slot + 3]);
+                        Spill(spills, maximum, spillFlags, Native, first), records[slot + 3], heapScratch);
                 }
                 else if (kind == ExitProcess)
                     used = ProcessExit.Emit(code, used, Spill(spills, maximum, spillFlags, I32, top), operand);
