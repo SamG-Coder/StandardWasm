@@ -1495,6 +1495,8 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.DivideByZero; // UInt128 division by zero
                             else if (kind == BranchIl.SortPrimitiveArray)
                                 tags = ExceptionTypes.ArgumentNull; // Array.Sort(null)
+                            else if (kind == BranchIl.ArrayDataReference)
+                                tags = ExceptionTypes.NullReference; // GetArrayDataReference(null)
                             else if (kind == BranchIl.ThrowFrameworkArgument)
                                 tags = operation == PlatformExceptionThrows.Trap ? 0 :
                                     operation == ExceptionTagsWasm.ArgumentTag ? ExceptionTypes.Argument :

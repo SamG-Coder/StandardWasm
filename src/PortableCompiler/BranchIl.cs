@@ -125,6 +125,10 @@ namespace PortableCompiler
         // Unsafe.BitCast<TFrom, TTo> over equal-size primitives; operand and operand 3 are the element types.
         internal const int PrimitiveBitCast = 429;
         internal const int SortPrimitiveArray = 430; // [T[]] -> [] for Array.Sort<T>; the operand is T's element type
+        // MemoryMarshal.GetArrayDataReference<T>: [T[]] -> [location of element 0]; the operand is the vector.
+        internal const int ArrayDataReference = 431;
+        // Unsafe.Add<T>(ref T, int): [location, offset] -> [location]; the operand is the vector.
+        internal const int OffsetLocation = 432;
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

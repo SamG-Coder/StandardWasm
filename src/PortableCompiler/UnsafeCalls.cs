@@ -33,7 +33,23 @@ namespace PortableCompiler
                 if ((target & 1) == 0) continue; // a MemberRef into the platform Unsafe class
                 var member = new int[AssemblyReferences.SymbolWidth];
                 if (AssemblyReferences.ReadMember(image, heaps, layout, target >> 1, member) < 0 ||
-                    member[AssemblyReferences.Depth] != 0 || !MatchesAscii(image, heaps, (uint)member[2], "Unsafe") ||
+                    member[AssemblyReferences.Depth] != 0) continue;
+                int single = spec[MethodSpecifications.Arity] == 1 &&
+                    spec[MethodSpecifications.Arguments] + 1 == spec[MethodSpecifications.End]
+                    ? image[spec[MethodSpecifications.Arguments]] : 0;
+                // MemoryMarshal.GetArrayDataReference<T>(T[]): the location of element 0, null-checked
+                // but not bounds-checked, as the CLR returns it even for an empty array.
+                if (ElementVector(single) != 0 && MatchesAscii(image, heaps, (uint)member[4], "GetArrayDataReference") &&
+                    MatchesAscii(image, heaps, (uint)member[2], "MemoryMarshal") &&
+                    MatchesAscii(image, heaps, (uint)member[3], "System.Runtime.InteropServices") &&
+                    PlatformAssemblyIdentity.IsPlatformAssembly(image, heaps, layout, counts, member[AssemblyReferences.AssemblyRow]))
+                {
+                    records[slot] = ArrayDataReference;
+                    records[slot + 1] = ElementVector(single);
+                    records[slot + 3] = 0;
+                    continue;
+                }
+                if (!MatchesAscii(image, heaps, (uint)member[2], "Unsafe") ||
                     !MatchesAscii(image, heaps, (uint)member[3], "System.Runtime.CompilerServices") ||
                     !PlatformAssemblyIdentity.IsUnsafeAssembly(image, heaps, layout, counts, member[AssemblyReferences.AssemblyRow]))
                     continue;
@@ -48,6 +64,16 @@ namespace PortableCompiler
                         records[slot] = Nop;
                     }
                     else records[slot] = Pop; // an existing managed address (an out parameter): [address] -> []
+                    continue;
+                }
+                // Unsafe.Add<T>(ref T, int or nint): the location `offset` elements further on. A read or
+                // write outside the array traps, where the CLR's behavior is undefined.
+                if (arity == 1 && ElementVector(single) != 0 && MatchesAscii(image, heaps, name, "Add") &&
+                    AddsToReference(image, heaps, member[5]))
+                {
+                    records[slot] = OffsetLocation;
+                    records[slot + 1] = ElementVector(single);
+                    records[slot + 3] = 0;
                     continue;
                 }
                 if (arity != 2 || !MatchesAscii(image, heaps, name, "BitCast") ||
@@ -67,6 +93,25 @@ namespace PortableCompiler
             for (int at = 0; at < records.Length; at += Width)
                 if (records[at] != 0 && records[at + 2] * Width == slot) return at;
             return -1;
+        }
+
+        // The Wasm vector of Int32/UInt32 and Int64/UInt64 elements, or 0. A `ref byte` local is a
+        // read-only static byte location in this compiler, so byte elements stay diagnosed here.
+        internal static int ElementVector(int element) =>
+            element == 0x08 || element == 0x09 ? Ints : element == 0x0a || element == 0x0b ? Longs : 0;
+
+        // The managed location type of a vector's elements.
+        internal static int ElementLocation(int vector) => vector == Ints ? Int32Location : Int64Location;
+
+        // !!0& Add<T>(!!0&, int32 or native int)
+        private static bool AddsToReference(byte[] image, int[] heaps, int blob)
+        {
+            if (blob < 1 || !Fits((uint)blob, 11, (uint)heaps[1])) return false;
+            uint s = (uint)(heaps[0] + blob);
+            return image[s] == 10 && image[s + 1] == 0x10 && image[s + 2] == 1 && image[s + 3] == 2 &&
+                image[s + 4] == 0x10 && image[s + 5] == 0x1e && image[s + 6] == 0 &&
+                image[s + 7] == 0x10 && image[s + 8] == 0x1e && image[s + 9] == 0 &&
+                (image[s + 10] == 0x08 || image[s + 10] == 0x18);
         }
 
         // Byte size of a primitive element type, or 0.

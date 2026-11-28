@@ -807,6 +807,11 @@ namespace PortableCompiler
                 return kind == Binary ? Push(stack, allocated, remaining, IsComparison(operand) ? I32 : type) : remaining;
             }
             if (kind == ReadTimestamp) return Push(stack, allocated, depth, I64);
+            if (kind == ArrayDataReference)
+                return Match(stack, depth, operand) ? Push(stack, allocated, depth - 1, UnsafeCalls.ElementLocation(operand)) : -2;
+            if (kind == OffsetLocation)
+                return depth >= 2 && ArrayIndex(stack, depth) && Match(stack, depth - 1, UnsafeCalls.ElementLocation(operand))
+                    ? Push(stack, allocated, depth - 2, UnsafeCalls.ElementLocation(operand)) : -2;
             if (kind == SortPrimitiveArray)
                 return Match(stack, depth, ArraySortPrimitive.Vector(operand)) ? depth - 1 : -2;
             if (kind == PrimitiveBitCast)

@@ -1210,6 +1210,25 @@ namespace PortableCompiler
                     else if (backing != 0)
                         used = InlineObjectStorageWasm.Store(code, used, type, backing, target, temporary, FieldCount(objects, type));
                 }
+                else if (kind == ArrayDataReference)
+                {
+                    int array = Spill(spills, maximum, spillFlags, states[state + top], top);
+                    used = GuardNull(code, used, array);
+                    used = Local(code, used, 0x20, array);
+                    used = Const(code, used, 0);
+                    used = Gc(code, used, 0, ObjectLocation); // struct.new (array, 0)
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, UnsafeCalls.ElementLocation(operand), top));
+                }
+                else if (kind == OffsetLocation)
+                {
+                    int location = Spill(spills, maximum, spillFlags, UnsafeCalls.ElementLocation(operand), top - 1);
+                    used = ManagedLocationWasm.LoadField(code, used, location, 0);
+                    used = ManagedLocationWasm.LoadField(code, used, location, 1);
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
+                    code[used++] = 0x6a; // i32.add
+                    used = Gc(code, used, 0, ObjectLocation);
+                    used = Local(code, used, 0x21, location);
+                }
                 else if (kind == SortPrimitiveArray)
                 {
                     bool wide = operand >= 0x0a;
