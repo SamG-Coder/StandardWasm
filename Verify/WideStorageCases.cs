@@ -32,22 +32,9 @@ internal static class WideStorageCases
         }
         Check(nameof(Ledger.NullRead), [], () => Wide(Ledger.NullRead()));
 
-        var unsupported = typeof(Ledger).GetMethod(nameof(Ledger.RefUpdate))!;
-        int unsupportedRow = unsupported.MetadataToken & 0xffffff;
-        int offset = IlOffsets.Find(unsupported.GetMethodBody()!.GetILAsByteArray()!, OpCodes.Ldelema);
-        int[] location = CompilerExports.CreateDiagnostic();
-        Array.Fill(output, (byte)0xa5);
-        int status = CompilerExports.CompileDetailed(image, unsupportedRow, output, location);
-        if (offset < 0 || status != -2 || !location.SequenceEqual(new[] { 0, unsupportedRow, offset }) ||
-            output.Any(value => value != 0xa5))
-            throw new InvalidOperationException("Expected ldelema to be rejected at its IL offset without writing output.");
-        cases.Add(new
-        {
-            module = "BootstrapLibrary", method = "Compile", fixture = nameof(Ledger.RefUpdate),
-            inputs = new object[] { encoded, unsupportedRow },
-            generated = new { capacity, arguments = Array.Empty<int>(), reject = true, diagnostic = location },
-            expected = -2
-        });
+        // #326 (decision 0104): ldelema int64 yields an Int64 managed element location.
+        foreach ((int size, int index) in new[] { (1, 0), (4, 3), (3, -1), (2, 2), (0, 0) })
+            Check(nameof(Ledger.RefUpdate), [size, index], () => Wide(Ledger.RefUpdate(size, index)));
 
         void Check(string method, object[] arguments, Func<object> oracle)
         {
