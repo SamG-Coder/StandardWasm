@@ -2289,9 +2289,11 @@ namespace PortableCompiler
                             records[slot + 1] = primitive <= 9 ? Ints : Longs;
                             continue;
                         }
-                        // byte[] elements use the packed byte location; bool[] and sbyte[] share the
-                        // Wasm heap type but not ldind.u1/stind.i1 semantics, so they stay diagnosed.
-                        if (primitive == 5)
+                        // byte[] elements use the packed byte location. Decision 0105: so do bool[]
+                        // elements. The location admits only ldind.u1 and stind.i1, which are the CLR's
+                        // bool& accesses, and the element is the same byte either way. sbyte[] needs
+                        // ldind.i1 sign extension, so it stays diagnosed.
+                        if (primitive == 5 || primitive == 2)
                         {
                             records[slot + 1] = Bytes;
                             continue;

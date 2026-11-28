@@ -35,6 +35,9 @@ internal static class WideStorageCases
         // #326 (decision 0104): ldelema int64 yields an Int64 managed element location.
         foreach ((int size, int index) in new[] { (1, 0), (4, 3), (3, -1), (2, 2), (0, 0) })
             Check(nameof(Ledger.RefUpdate), [size, index], () => Wide(Ledger.RefUpdate(size, index)));
+        foreach ((int size, int index) in new[] { (1, 0), (4, 3), (3, -1), (2, 2), (5, 1) })
+            foreach (int set in new[] { 0, 1 })
+                Check(nameof(Ledger.BoolRefUpdate), [size, index, set], () => Ledger.BoolRefUpdate(size, index, set));
 
         void Check(string method, object[] arguments, Func<object> oracle)
         {
