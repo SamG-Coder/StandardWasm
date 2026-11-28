@@ -56,6 +56,33 @@ namespace PeLibrary
             return extent;
         }
 
+        // Decision 0105: the declared ClassLayout size (0 when none) of a native explicit value, with
+        // offsets[i] = FieldLayout offset + 1 of field first + i. Packing must be the default.
+        internal static int ReadNative(byte[] image, int[] heaps, int[] methods, int row, int first, int[] offsets)
+        {
+            var counts = new int[45];
+            if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;
+            var declared = new uint[2];
+            int layout = ReadClassLayout(image, heaps, methods, counts, row, declared);
+            if (layout < 0) return layout;
+            if (declared[0] != 0 || declared[1] > MaxArrayElementSize) return -2;
+            if (counts[16] == 0) return (int)declared[1];
+            int fields = MetadataTableRows.TableStart(heaps, methods, counts, 16);
+            if (fields < 0) return -1;
+            int fieldIndex = counts[4] < 65536 ? 2 : 4;
+            for (int i = 0; i < counts[16]; i++)
+            {
+                uint at = (uint)(fields + i * (4 + fieldIndex));
+                int field = (int)ReadIndex(image, at + 4, fieldIndex) - first;
+                if (field < 0 || field >= offsets.Length) continue;
+                if (offsets[field] != 0) return -1;
+                uint offset = U32(image, at);
+                if (offset > MaxArrayElementSize) return -2;
+                offsets[field] = (int)offset + 1;
+            }
+            return (int)declared[1];
+        }
+
         internal static int ReadClassLayout(byte[] image, int[] heaps, int[] methods, int[] counts, int row, uint[] declared)
         {
             if (counts[15] == 0) return 0;

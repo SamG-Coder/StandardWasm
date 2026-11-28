@@ -169,7 +169,8 @@ namespace PortableCompiler
             if (visited[0] + 1 >= visited.Length) return false;
             visited[++visited[0]] = row;
             // A direct call runs exactly this body, whose IL is scanned, so class parameters are fine.
-            if (!SafeSignature(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), vector, true)) return false;
+            // Its signature needs no check: every array it receives can only be reached through the
+            // instructions and calls scanned below.
             var body = new int[6];
             uint rva = unchecked((uint)MethodDefinitions.ReadColumn(image, layout, row, 0));
             if (rva == 0) return false;
@@ -259,8 +260,8 @@ namespace PortableCompiler
         private static bool SafeMember(byte[] image, int[] layout, int[] heaps, int row, int vector)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
-            if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference) < 0) return false;
-            return SafeSignature(image, heaps, reference[5], vector);
+            if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference, allowClosedParent: true) < 0) return false;
+            return SafeSignature(image, layout, heaps, reference[5]);
         }
 
         private static bool SafeMethodSpec(byte[] image, int[] layout, int[] heaps, int row, int vector)
@@ -269,18 +270,26 @@ namespace PortableCompiler
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return false;
             var spec = new int[MethodSpecifications.Width];
             if (MethodSpecifications.Read(image, heaps, layout, counts, row, spec) < 0) return false;
-            // Only primitive instantiations: a generic argument could be an array or span type.
-            for (int at = spec[MethodSpecifications.Arguments]; at < spec[MethodSpecifications.End]; at++)
-                if (image[at] < 0x02 || image[at] > 0x0d) return false;
+            // Only primitive and SIMD vector instantiations: another generic argument could be an
+            // array or span type.
+            var cursor = new int[1];
+            for (int at = spec[MethodSpecifications.Arguments]; at < spec[MethodSpecifications.End];)
+            {
+                if (image[at] >= 0x02 && image[at] <= 0x0d) { at++; continue; }
+                cursor[0] = at;
+                if (image[at] != 0x15 || !SafeType(image, layout, heaps, cursor, spec[MethodSpecifications.End])) return false;
+                at = cursor[0];
+            }
             int target = spec[MethodSpecifications.Target];
             if ((target & 1) == 0) return false;
             return SafeMember(image, layout, heaps, target >> 1, vector);
         }
 
-        // A method signature whose parameters and return carry no array, byref, object or generic
-        // instance (such as Span<T>) cannot hand the callee a managed view of an array. Class
-        // references are allowed only for methods whose IL this proof also scans (`scanned`).
-        private static bool SafeSignature(byte[] image, int[] heaps, int blob, int vector, bool scanned = false)
+        // A platform method signature whose parameters and return carry no array, byref, object or
+        // generic instance (such as Span<T>) cannot hand the callee a managed view of an array. The
+        // one generic instance accepted is a SIMD vector of a primitive (Vector64/128/256/512<T>,
+        // Vector<T>): a value of lanes that holds no reference.
+        private static bool SafeSignature(byte[] image, int[] layout, int[] heaps, int blob)
         {
             if (blob < 1 || blob >= heaps[1]) return false;
             var next = new int[1];
@@ -298,25 +307,49 @@ namespace PortableCompiler
             if (count < 0) return false;
             var cursor = new int[] { next[0] };
             for (int i = 0; i <= count; i++) // the return type, then each parameter
-                if (!SafeType(image, cursor, end, scanned)) return false;
+                if (!SafeType(image, layout, heaps, cursor, end)) return false;
             return cursor[0] == end;
         }
 
-        private static bool SafeType(byte[] image, int[] cursor, int end, bool scanned)
+        private static bool SafeType(byte[] image, int[] layout, int[] heaps, int[] cursor, int end)
         {
             if (cursor[0] >= end) return false;
             int element = image[cursor[0]++];
             if (element >= 0x01 && element <= 0x0e || element == 0x18 || element == 0x19 || element == 0x1e && Skip(image, cursor, end))
                 return true;
-            if (element == 0x0f) return SafeType(image, cursor, end, scanned); // pointer
-            if (element == 0x11 || element == 0x12 && scanned)
+            if (element == 0x0f) return SafeType(image, layout, heaps, cursor, end); // pointer
+            var next = new int[1];
+            if (element == 0x11)
             {
-                var next = new int[1];
                 if (CompressedUnsigned(image, cursor[0], end, next) < 0) return false;
                 cursor[0] = next[0];
                 return true;
             }
-            return false;
+            if (element != 0x15 || cursor[0] >= end || image[cursor[0]++] != 0x11) return false;
+            int coded = CompressedUnsigned(image, cursor[0], end, next);
+            if (coded < 0 || !IsSimdVector(image, layout, heaps, coded)) return false;
+            if (CompressedUnsigned(image, next[0], end, next) != 1 || next[0] >= end) return false;
+            cursor[0] = next[0];
+            int lane = image[cursor[0]];
+            if (lane == 0x1e) { cursor[0]++; return Skip(image, cursor, end); } // Vector512<!!0>
+            if (lane == 0x13) { cursor[0]++; return Skip(image, cursor, end); } // Vector512<!0>
+            if (lane < 0x02 || lane > 0x0d && lane != 0x18 && lane != 0x19) return false;
+            cursor[0]++;
+            return true;
+        }
+
+        // A TypeRef to System.Runtime.Intrinsics.Vector64/128/256/512`1 or System.Numerics.Vector`1.
+        // A method instantiation of such a member is separately limited to primitive arguments.
+        private static bool IsSimdVector(byte[] image, int[] layout, int[] heaps, int coded)
+        {
+            if ((coded & 3) != 1) return false;
+            var type = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadType(image, heaps, layout, coded >> 2, type) < 0) return false;
+            uint name = (uint)type[2], space = (uint)type[3];
+            if (MatchesAscii(image, heaps, space, "System.Numerics")) return MatchesAscii(image, heaps, name, "Vector`1");
+            return MatchesAscii(image, heaps, space, "System.Runtime.Intrinsics") &&
+                (MatchesAscii(image, heaps, name, "Vector64`1") || MatchesAscii(image, heaps, name, "Vector128`1") ||
+                 MatchesAscii(image, heaps, name, "Vector256`1") || MatchesAscii(image, heaps, name, "Vector512`1"));
         }
 
         // Skips the compressed MVAR index after ELEMENT_TYPE_MVAR.

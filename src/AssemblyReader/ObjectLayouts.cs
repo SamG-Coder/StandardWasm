@@ -511,6 +511,11 @@ namespace PeLibrary
         internal static bool IsByRefLikeValue(int[] registry, int type) =>
             IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & ByRefLikeShape) != 0;
 
+        // Decision 0105: an explicit value proved to have pairwise disjoint fields keeps managed
+        // sequential slots; its byte layout stays with the native layout reader.
+        internal static void MarkDisjointExplicit(int[] registry, int type) =>
+            registry[Slot(type) + ShapeFlags] = (registry[Slot(type) + ShapeFlags] & ~0x18) | 0x08;
+
         internal static bool IsExplicitValue(int[] registry, int type) =>
             IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & 0x18) == 0x10;
 

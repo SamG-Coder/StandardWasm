@@ -158,7 +158,14 @@ namespace PortableCompiler
             }
             int[] offsets = new int[overlay ? fields : 0];
             int limit = overlay ? ExplicitValueLayouts.Read(image, heaps, layout, ObjectLayouts.TypeDef(objects, type), first, offsets) : 0;
-            if (limit == -2)
+            if (limit == -2 && NativeValueLayouts.IsDisjointExplicit(bundle, ObjectLayouts.AssemblyOf(objects, type), ObjectLayouts.TypeDef(objects, type)) == 1)
+            {
+                ObjectLayouts.MarkDisjointExplicit(objects, type);
+                overlay = false;
+                limit = 0;
+                offsets = new int[0];
+            }
+            else if (limit == -2)
                 return ExplicitSlotLayouts.Bind(bundle, image, layout, heaps, owner, type, objects);
             if (limit < 0) return limit;
             for (int offset = 0; offset < fields; offset++)
