@@ -4,19 +4,24 @@ using static PeLibrary.ImageBytes;
 namespace PortableCompiler
 {
     // Decision 0104: System.Diagnostics.Stopwatch and the constant platform static fields that
-    // benchmark-style console programs read. The browser host supplies a monotonic clock in
-    // nanoseconds through `standardwasm:clock` `timestamp: () -> i64`, so Stopwatch.Frequency
-    // is the constant 1_000_000_000 (the value .NET reports on Linux). Windows reports the QPC
-    // rate instead; programs that convert ticks through Frequency observe the same durations.
+    // benchmark-style console programs read.
+    //
+    // WebAssembly has no time source, so the clock is the one host call. It uses the typed native
+    // import table of decision 0083 with the entries CoreLib's own Stopwatch calls on Windows:
+    //   native:kernel32.dll QueryPerformanceCounter(LARGE_INTEGER*)   -> BOOL
+    //   native:kernel32.dll QueryPerformanceFrequency(LARGE_INTEGER*) -> BOOL
+    // The LARGE_INTEGER is written to an 8-byte slot of the module's NativeMemory control block
+    // (NativeHeapWasm) and read back. Stopwatch.GetTimestamp() is the counter and
+    // Stopwatch.Frequency the frequency, so programs observe ticks and a rate as on Windows; the
+    // host decides the rate (the browser host reports nanoseconds).
     internal static class PlatformClock
     {
         internal const int Frequency = 1, IsHighResolution = 2, IsLittleEndian = 3;
-        internal const long TicksPerSecond = 1000000000;
+        internal const int Capacity = 96;
+        // Synthetic owner of the two entries in the native table (MethodDef owners are >= 0).
+        private const int EntryOwner = -3;
 
-        private const string Module = "standardwasm:clock", Member = "timestamp";
-        internal const int TypeBytes = 4, Capacity = 16;
-
-        // A MemberRef row naming one of the constant platform static fields, or 0.
+        // A MemberRef row naming one of the platform static fields, or 0.
         internal static int StaticField(byte[] image, int[] heaps, int[] layout, int row)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
@@ -54,23 +59,39 @@ namespace PortableCompiler
                 "System.Diagnostics", "Stopwatch");
         }
 
-        internal static int EntryBytes(int type) => Module.Length + Member.Length + 3 + WasmBinary.UnsignedSize(type);
-
-        internal static int WriteType(byte[] output, int cursor)
+        // Registers the kernel32 entry (and the helpers every typed native table imports) and
+        // returns its index in the native table.
+        internal static int Register(NativeImportTable natives, bool frequency)
         {
-            output[cursor++] = 0x60;
-            output[cursor++] = 0;
-            output[cursor++] = 1;
-            output[cursor++] = 0x7e; // monotonic nanoseconds
-            return cursor;
+            natives.Helper(NativeImportTable.PresentHelper);
+            natives.Helper(NativeImportTable.LibraryHelper);
+            byte[] module = NativeImportTable.Ascii("native:kernel32.dll");
+            byte[] name = NativeImportTable.Ascii(frequency ? "QueryPerformanceFrequency" : "QueryPerformanceCounter");
+            var types = new byte[1];
+            types[0] = 0x7f; // LARGE_INTEGER*: a wasm32 address in memory 0
+            return natives.Add(EntryOwner, frequency ? 2 : 1, module, module.Length, name, name.Length, types, 1, 0x7f);
         }
 
-        internal static int WriteEntry(byte[] output, int cursor, int type)
+        // [] -> [i64] through the kernel32 entry `function`, using the heap control block's slot.
+        internal static int Emit(byte[] code, int used, int function, int heap)
         {
-            cursor = Win32ErrorWasm.WriteName(output, cursor, Module);
-            cursor = Win32ErrorWasm.WriteName(output, cursor, Member);
-            output[cursor++] = 0;
-            return WasmBinary.Unsigned(output, cursor, type);
+            used = NativeHeapWasm.EnsureCreated(code, used, heap);
+            used = Slot(code, used, heap);
+            code[used++] = 0x10; // call the typed native import
+            used = WasmBinary.Unsigned(code, used, function);
+            code[used++] = 0x1a; // drop the BOOL: both calls always succeed on supported hosts
+            used = Slot(code, used, heap);
+            code[used++] = 0x29; code[used++] = 3; code[used++] = 0; // i64.load align 8
+            return used;
+        }
+
+        private static int Slot(byte[] code, int used, int heap)
+        {
+            code[used++] = 0x23; // global.get
+            used = WasmBinary.Unsigned(code, used, heap);
+            used = BranchWasm.Const(code, used, NativeHeapWasm.ClockSlot);
+            code[used++] = 0x6a;
+            return used;
         }
     }
 }

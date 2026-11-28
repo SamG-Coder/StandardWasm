@@ -32,8 +32,6 @@ namespace PortableCompiler
         internal const long Monitor = FirstNativeFeature << Win32ModuleBinding.Count;
         internal const long Debugger = Monitor << 1;
         internal const long ConsoleInput = Debugger << 1;
-        // Decision 0104: standardwasm:clock timestamp, after every earlier group.
-        internal const long Clock = ConsoleInput << 1;
 
         internal static int MonitorSlot(long features) => Win32NativeSlot(features, Win32ModuleBinding.Count + 1);
 
@@ -45,9 +43,7 @@ namespace PortableCompiler
         internal static int FunctionCount(long features, NativeImportTable natives) =>
             FixedFunctionCount(features) + natives.Count;
 
-        internal static int ClockFunction(long features) => InputFunction(features) + ((features & ConsoleInput) != 0 ? ConsoleInputWasm.ImportCount : 0);
-
-        internal static int FixedFunctionCount(long features) => ClockFunction(features) + ((features & Clock) != 0 ? 1 : 0);
+        internal static int FixedFunctionCount(long features) => InputFunction(features) + ((features & ConsoleInput) != 0 ? ConsoleInputWasm.ImportCount : 0);
 
         internal static int Win32NativeSlot(long features, int member)
         {
@@ -67,8 +63,7 @@ namespace PortableCompiler
                 ((features & Win32Errors) != 0 ? Win32ErrorWasm.TypeBytes : 0) +
                 ((features & Monitor) != 0 ? MonitorWasm.TypeBytes : 0) +
                 ((features & Debugger) != 0 ? RuntimeDebuggerWasm.TypeBytes : 0) +
-                ((features & ConsoleInput) != 0 ? ConsoleInputWasm.TypeBytes : 0) +
-                ((features & Clock) != 0 ? PlatformClock.TypeBytes : 0);
+                ((features & ConsoleInput) != 0 ? ConsoleInputWasm.TypeBytes : 0);
             for (int member = 1; member <= Win32ModuleBinding.Count; member++)
                 if ((features & Win32NativeFeature(member)) != 0) size += Win32ModuleWasm.TypeBytes(member);
             return size + natives.TypeBytes();
@@ -99,7 +94,6 @@ namespace PortableCompiler
             if ((features & Monitor) != 0) size += MonitorWasm.EntryBytes(firstType + MonitorSlot(features));
             if ((features & Debugger) != 0) size += RuntimeDebuggerWasm.EntryBytes(firstType + DebuggerSlot(features));
             if ((features & ConsoleInput) != 0) size += ConsoleInputWasm.ImportEntryBytes(firstType + InputFunction(features));
-            if ((features & Clock) != 0) size += PlatformClock.EntryBytes(firstType + ClockFunction(features));
             size += natives.ImportEntryBytes(firstType + FixedFunctionCount(features));
             return size;
         }
@@ -115,7 +109,6 @@ namespace PortableCompiler
             if ((features & Monitor) != 0) cursor = MonitorWasm.WriteType(output, cursor);
             if ((features & Debugger) != 0) cursor = RuntimeDebuggerWasm.WriteType(output, cursor);
             if ((features & ConsoleInput) != 0) cursor = ConsoleInputWasm.WriteTypes(output, cursor);
-            if ((features & Clock) != 0) cursor = PlatformClock.WriteType(output, cursor);
             return natives.WriteTypes(output, cursor);
         }
 
@@ -132,7 +125,6 @@ namespace PortableCompiler
             if ((features & Monitor) != 0) cursor = MonitorWasm.WriteEntry(output, cursor, firstType + MonitorSlot(features));
             if ((features & Debugger) != 0) cursor = RuntimeDebuggerWasm.WriteEntry(output, cursor, firstType + DebuggerSlot(features));
             if ((features & ConsoleInput) != 0) cursor = ConsoleInputWasm.WriteEntries(output, cursor, firstType + InputFunction(features));
-            if ((features & Clock) != 0) cursor = PlatformClock.WriteEntry(output, cursor, firstType + ClockFunction(features));
             return natives.WriteEntries(output, cursor, firstType + FixedFunctionCount(features));
         }
     }

@@ -70,10 +70,11 @@ try {
     const page = await browser.newPage();
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
-    await page.goto(url + "/");
-    await page.selectOption("#encoding", consoleOptions.encoding);
-    await page.selectOption("#newline", "crlf");
     for (const row of results) {
+        // A fresh page per argument set: dropping the same files again fires no change event.
+        await page.goto(url + "/");
+        await page.selectOption("#encoding", consoleOptions.encoding);
+        await page.selectOption("#newline", "crlf");
         await page.locator("#files").setInputFiles(paths.map(path => join(publish, path)));
         await page.waitForFunction(() => document.querySelector("#status").dataset.state === "ready");
         await page.fill("#arguments", JSON.stringify(row.arguments));

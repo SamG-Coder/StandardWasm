@@ -1294,10 +1294,9 @@ namespace PortableCompiler
                 }
                 else if (kind == ExitProcess)
                     used = ProcessExit.Emit(code, used, Spill(spills, maximum, spillFlags, I32, top), operand);
-                else if (kind == ReadTimestamp)
+                else if (kind == ReadTimestamp || kind == ReadFrequency)
                 {
-                    code[used++] = 0x10; // call standardwasm:clock timestamp
-                    used = WasmBinary.Unsigned(code, used, operand);
+                    used = PlatformClock.Emit(code, used, operand, records[slot + 3]);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I64, depth));
                 }
                 else if (kind == CharacterCall)

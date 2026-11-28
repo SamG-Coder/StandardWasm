@@ -1441,6 +1441,11 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - NativeMemoryMembers.Capacity) return -3;
                                 capacity += NativeMemoryMembers.Capacity;
                             }
+                            if (kind == BranchIl.ReadTimestamp || kind == BranchIl.ReadFrequency)
+                            {
+                                if (capacity > int.MaxValue - PlatformClock.Capacity) return -3;
+                                capacity += PlatformClock.Capacity;
+                            }
                             if (kind == BranchIl.CharacterCall)
                             {
                                 if (capacity > int.MaxValue - CharacterMembers.Capacity) return -3;
@@ -1615,7 +1620,10 @@ namespace PortableCompiler
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
-                        if (kind == BranchIl.ReadTimestamp) records[slot + 1] = WasmImports.ClockFunction(hostFeatures);
+                        // Decision 0104: the clock is a typed kernel32 entry; registering a new entry
+                        // grows the native table, which re-emits every body below.
+                        if (kind == BranchIl.ReadTimestamp || kind == BranchIl.ReadFrequency)
+                            records[slot + 1] = nativeBase + PlatformClock.Register(natives, kind == BranchIl.ReadFrequency);
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.JoinManyStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
                             kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.StringFromSpan || kind == BranchIl.ConsoleWrite ||
                             kind == BranchIl.NativeUtf16Length || kind == BranchIl.CopyNativeConstructionString ||
@@ -2968,9 +2976,12 @@ namespace PortableCompiler
                     int platformField = !write && linked ? PlatformClock.StaticField(image, heaps, layout, field) : 0;
                     if (platformField == PlatformClock.Frequency)
                     {
-                        records[slot] = BranchIl.WideConstant;
-                        records[slot + 1] = unchecked((int)PlatformClock.TicksPerSecond);
-                        records[slot + 3] = (int)(PlatformClock.TicksPerSecond >> 32);
+                        int heapGlobal = StaticFields.Register(globals, NativeMemoryMembers.HeapOwner, 0, I32);
+                        if (heapGlobal < 0) return heapGlobal;
+                        records[slot] = BranchIl.ReadFrequency;
+                        records[slot + 1] = 0;
+                        records[slot + 3] = heapGlobal;
+                        hostUse[0] = hostUse[0] | WasmImports.Memory;
                         continue;
                     }
                     if (platformField != 0)
@@ -3459,8 +3470,12 @@ namespace PortableCompiler
                     }
                     if (opcode == 0x28 && !addressed && PlatformClock.IsGetTimestamp(image, heaps, layout, member))
                     {
+                        int heapGlobal = StaticFields.Register(globals, NativeMemoryMembers.HeapOwner, 0, I32);
+                        if (heapGlobal < 0) return heapGlobal;
                         records[slot] = BranchIl.ReadTimestamp;
-                        hostUse[0] = hostUse[0] | WasmImports.Clock;
+                        records[slot + 1] = 0;
+                        records[slot + 3] = heapGlobal;
+                        hostUse[0] = hostUse[0] | WasmImports.Memory;
                         continue;
                     }
                     int characterMember = opcode == 0x28 && !addressed ? CharacterMembers.Identify(image, heaps, layout, member) : 0;

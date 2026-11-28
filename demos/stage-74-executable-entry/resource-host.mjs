@@ -1,4 +1,4 @@
-import { comImportModule, isNativeImportModule, nativeImports, nativeIndirectImportModule, windowsScalars } from "../../scripts/native-imports.mjs";
+import { comImportModule, isNativeImportModule, nativeImports, nativeIndirectImportModule, windowsClock, windowsScalars } from "../../scripts/native-imports.mjs";
 import { comActivationName, createComHost, isComDispatchSignature } from "./com-host.mjs";
 import { createDynamicLibraryHost, createNativeIndirectDispatch, nativeIndirectSignature, scopedUtf16Signature } from "./dynamic-library-host.mjs";
 import { createNativeSymbolLookup, createWin32Host, win32ImportModule, win32ImportNames, win32MemoryImports } from "./win32-host.mjs";
@@ -236,9 +236,11 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         }
     }
     if (wantsNative) {
-        const registry = wantsNativeSymbol ? { ...windowsScalars,
+        // Pointer entries such as the kernel32 clock (decision 0104) dereference memory 0.
+        if (memory) errors.memory = memory;
+        const registry = wantsNativeSymbol ? { ...windowsScalars, ...windowsClock,
             "qcall!NativeLibrary_GetSymbol": createNativeSymbolLookup(memory, dynamicLibraries, errors)
-        } : windowsScalars;
+        } : { ...windowsScalars, ...windowsClock };
         Object.assign(imports, nativeImports(module, registry, errors));
     }
     if (requestedWin32.size) {

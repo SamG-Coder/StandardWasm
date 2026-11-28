@@ -808,7 +808,7 @@ namespace PortableCompiler
                 int remaining = depth - needed;
                 return kind == Binary ? Push(stack, allocated, remaining, IsComparison(operand) ? I32 : type) : remaining;
             }
-            if (kind == ReadTimestamp) return Push(stack, allocated, depth, I64);
+            if (kind == ReadTimestamp || kind == ReadFrequency) return Push(stack, allocated, depth, I64);
             if (kind == NativeConstant) return Push(stack, allocated, depth, Native);
             if (kind == BitCount)
             {

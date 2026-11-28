@@ -19,6 +19,8 @@ namespace PortableCompiler
     internal static class NativeHeapWasm
     {
         private const int Heads = 0, Bump = 128, Limit = 132, MinimumClass = 5;
+        // 8 bytes of the control block that receive a LARGE_INTEGER from the clock (PlatformClock).
+        internal const int ClockSlot = 136;
 
         // Indexes into the scratch array of six i32 Wasm locals.
         internal const int Size = 0, Alignment = 1, SizeClass = 2, Block = 3, Extra = 4, Result = 5, ScratchCount = 6;
@@ -215,6 +217,8 @@ namespace PortableCompiler
             code[used++] = 0x6b;
             return Set(code, used, target);
         }
+
+        internal static int EnsureCreated(byte[] code, int used, int heap) => Create(code, used, heap);
 
         // Creates the control block on first use.
         private static int Create(byte[] code, int used, int heap)
