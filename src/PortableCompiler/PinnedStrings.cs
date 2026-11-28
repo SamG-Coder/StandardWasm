@@ -10,6 +10,8 @@ namespace PortableCompiler
         internal const int Text = 1;
         // pinned char&: the form that calls string.GetPinnableReference().
         internal const int Character = 2, Byte = 3, StaticPointer = 4;
+        // pinned T[] over a primitive element (decision 0105, PinnedArrays).
+        internal const int Array = 5;
 
         internal static int Kind(byte[] image, int cursor, int end)
         {

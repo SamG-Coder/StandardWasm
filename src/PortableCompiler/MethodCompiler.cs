@@ -815,6 +815,17 @@ namespace PortableCompiler
                     PlatformExceptionThrows.Lower(image, layout, heaps, records, catchRegion);
                     UnsafeCalls.Lower(image, layout, heaps, records, catchRegion);
                     ArraySortPrimitive.Lower(image, layout, heaps, records);
+                    // Decision 0105: proved alias-free pins of primitive arrays.
+                    if (pinned != null)
+                    {
+                        status = PinnedArrays.Lower(bundle, image, layout, heaps, owner, records, pinned, frame,
+                            parameters, locals, catchRegion, globals, location);
+                        if (status < 0)
+                        {
+                            if (location.Length != 0) { location[0] = owner; location[1] = source; }
+                            return status;
+                        }
+                    }
                     // Decision 0104: a placeholder local must be unreachable after the folds above.
                     int unresolvedUse = UnresolvedLocalUse(records, unresolvedLocals, parameters);
                     if (unresolvedUse >= 0)
@@ -1427,6 +1438,15 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - WideMultiplyDivide.Capacity) return -3;
                                 capacity += WideMultiplyDivide.Capacity;
                             }
+                            if (kind == BranchIl.PinArray || kind == BranchIl.Return ||
+                                kind == BranchIl.Store && records[slot + 3] == PinnedLocals.Array)
+                            {
+                                // A pin copies in; every unpinning store and ret copies each pin back.
+                                int pinBytes = kind == BranchIl.PinArray ? PinnedArraysWasm.PinCapacity :
+                                    PinnedArraysWasm.UnpinCapacity * PinnedArraysWasm.CountPins(records);
+                                if (capacity > int.MaxValue - pinBytes) return -3;
+                                capacity += pinBytes;
+                            }
                             if (kind == BranchIl.SortPrimitiveArray)
                             {
                                 if (capacity > int.MaxValue - ArraySortPrimitive.Capacity) return -3;
@@ -1634,9 +1654,10 @@ namespace PortableCompiler
                         if (kind == BranchIl.FormatEnum || kind == BranchIl.FormatPrimitive ||
                             kind == BranchIl.JoinStringArray || kind == BranchIl.MultiplyDivideUInt64 ||
                             kind == BranchIl.SortPrimitiveArray || kind == BranchIl.MultiplyHighUInt64 ||
-                            kind == BranchIl.NativeMemoryCall) frameShape[5] |= 5;
-                        // Five i32 loop counters: Array.Sort and the NativeMemory heap.
-                        if (kind == BranchIl.SortPrimitiveArray || kind == BranchIl.NativeMemoryCall) frameShape[6] = 1;
+                            kind == BranchIl.NativeMemoryCall || kind == BranchIl.PinArray) frameShape[5] |= 5;
+                        // Five i32 loop counters: Array.Sort, the NativeMemory heap and array pins.
+                        if (kind == BranchIl.SortPrimitiveArray || kind == BranchIl.NativeMemoryCall ||
+                            kind == BranchIl.PinArray) frameShape[6] = 1;
                         if (kind == BranchIl.PinScopedValue) frameShape[5] |= 2 | ScopedValuePins.FrameFlag;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler || kind == BranchIl.DelegateEquality ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))

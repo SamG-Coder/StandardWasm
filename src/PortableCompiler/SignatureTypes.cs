@@ -260,6 +260,16 @@ namespace PortableCompiler
                         types[target] = Native;
                         continue;
                     }
+                    if (kind == 0 && locals && pinned != null && end - cursor >= 2 && image[cursor] == 0x1d &&
+                        PinnedArrays.Vector(image[cursor + 1]) != 0)
+                    {
+                        // Decision 0105: a pinned primitive array keeps its array storage; PinnedArrays
+                        // gives its address a proved alias-free copy in the module heap.
+                        pinned[i] = PinnedLocals.Array;
+                        types[target] = PinnedArrays.Vector(image[cursor + 1]);
+                        cursor += 2;
+                        continue;
+                    }
                     if (kind == 0) return -2;
                     pinned[i] = kind;
                     cursor += kind == PinnedLocals.Text ? 1 : 2;

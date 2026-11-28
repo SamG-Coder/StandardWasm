@@ -72,6 +72,11 @@ namespace PortableCompiler
             int enumLocals = scratch + (stringScratch ? 5 : 0);
             int eventLocals = enumLocals + (enumScratch ? 2 : 0);
             int scopedPinLocals = eventLocals + (eventScratch ? 6 : 0);
+            // Decision 0105: proved alias-free array pins and the heap scratch they share.
+            int[] arrayPins = PinnedArrays.Pins(records, frame);
+            var pinScratch = new int[NativeHeapWasm.ScratchCount];
+            for (int i = 0; i < 5; i++) pinScratch[i] = eventLocals + i;
+            pinScratch[5] = scratch + 3;
             int resourceLocals = scopedPinLocals + (scopedPinScratch ? 8 : 0);
             int pcLocal = resourceLocals + (resourceFunction >= 0 ? 7 : 0);
             int continuationBase = pcLocal + 1 + exceptionLocals;
@@ -258,7 +263,7 @@ namespace PortableCompiler
                 used = StackAllocationWasm.Begin(code, used, stackPointer, stackFrame);
                 if (pins >= 0) used = PinRegistryWasm.Begin(code, used, pins, pinFrame);
             }
-            if (tracksRoots || stackPointer >= 0)
+            if (tracksRoots || stackPointer >= 0 || arrayPins != null)
             {
                 // A single cleanup region owns the frame's roots, pins and native allocations.
                 code[used++] = 0x02; code[used++] = ExceptionDispatchWasm.ExceptionReference; // block (result exnref)
@@ -844,6 +849,11 @@ namespace PortableCompiler
                 }
                 else if (kind == Store)
                 {
+                    // A store to a pinned array local ends its pin: copy the block back first.
+                    if (arrayPins != null && records[slot + 3] == PinnedLocals.Array)
+                        for (int site = 0; site < arrayPins.Length / 4; site++)
+                            if (arrayPins[site * 4] == operand)
+                                used = PinnedArraysWasm.Unpin(code, used, arrayPins, site, pinScratch, false);
                     int source = states[state + top];
                     int spilled = Spill(spills, maximum, spillFlags, source, top);
                     int type = frame[operand], backing = inlineLocations[operand];
@@ -1254,6 +1264,14 @@ namespace PortableCompiler
                     code[used++] = 0x6a; // i32.add
                     used = Gc(code, used, 0, ObjectLocation);
                     used = Local(code, used, 0x21, location);
+                }
+                else if (kind == PinArray)
+                {
+                    int site = 0;
+                    for (int at = 0; at < slot; at += Width) if (records[at] == PinArray) site++;
+                    used = PinnedArraysWasm.Pin(code, used, arrayPins, site,
+                        Spill(spills, maximum, spillFlags, states[state + top], top),
+                        Spill(spills, maximum, spillFlags, Native, top), pinScratch);
                 }
                 else if (kind == SortPrimitiveArray)
                 {
@@ -2083,6 +2101,10 @@ namespace PortableCompiler
 
                 if (kind == Return)
                 {
+                    // Every live array pin is copied back before the frame returns.
+                    if (arrayPins != null)
+                        for (int site = 0; site < arrayPins.Length / 4; site++)
+                            used = PinnedArraysWasm.Unpin(code, used, arrayPins, site, pinScratch, true);
                     if (scopedValuePin >= 0)
                         used = ScopedValuePinWasm.CopyBack(code, used, nativePlans, records[scopedValuePin + 3],
                             LocatedValue(frame[0]), records[scopedValuePin + 1], projections, frameShape[7]);
@@ -2202,11 +2224,15 @@ namespace PortableCompiler
             }
             code[used++] = 0x0b;
             code[used++] = 0;
-            if (tracksRoots || stackPointer >= 0)
+            if (tracksRoots || stackPointer >= 0 || arrayPins != null)
             {
                 code[used++] = 0x0b; // end try_table
                 code[used++] = 0x00;
                 code[used++] = 0x0b; // the caught exnref is on the stack
+                // An exception leaving the frame: every live array pin is copied back first.
+                if (arrayPins != null)
+                    for (int site = 0; site < arrayPins.Length / 4; site++)
+                        used = PinnedArraysWasm.Unpin(code, used, arrayPins, site, pinScratch, true);
                 if (tracksRoots) used = RootStackWasm.Leave(code, used, rootCount, rootFrame);
                 if (pins >= 0) used = PinRegistryWasm.Release(code, used, pins, pinFrame);
                 if (stackPointer >= 0) used = StackAllocationWasm.Release(code, used, stackPointer, stackLimit, stackFrame);

@@ -117,6 +117,9 @@ namespace PortableCompiler
         // QueryPerformanceFrequency: [] -> [i64]. The operand becomes the native function index and
         // operand 3 is the NativeMemory heap global whose control block holds the LARGE_INTEGER.
         internal const int ReadTimestamp = 424, ReadFrequency = 436;
+        // Decision 0105: [T[]] -> [native address of a heap copy]; operand = the pinned local,
+        // operand 3 = the NativeMemory heap global. The following record stores the address.
+        internal const int PinArray = 437;
         internal const int ExitProcess = 425; // [status] -> (traps); the operand is the exit-status global
         // NativeMemory members (decision 0104); the operand is the member id and operand 3 becomes
         // the alloc import index. [args...] -> [void*] or [].
