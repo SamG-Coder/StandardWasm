@@ -18,6 +18,7 @@ internal static class NestedHandlerCases
         Check(nameof(Handlers.NestedInsideHandler), [(9, 0), (int.MaxValue, 0), (int.MaxValue, 3)], Handlers.NestedInsideHandler);
         Check(nameof(Handlers.Disjoint), [(8, 3), (8, 0), (int.MaxValue, 1), (int.MaxValue, 0), (int.MinValue, -1)], Handlers.Disjoint);
         Check(nameof(Handlers.Escapes), [(9, 3), (9, 0), (int.MinValue, -1)], Handlers.Escapes);
+        Check(nameof(Handlers.GroupedLoop), [(9, 3), (9, 2), (int.MaxValue, 5), (int.MinValue, -1), (-40, 1)], Handlers.GroupedLoop);
 
         int row = Row(nameof(Handlers.InnerThenOuter));
         using var pe = new PEReader(new MemoryStream(image));

@@ -57,6 +57,25 @@ namespace NestedHandlers
             catch (OverflowException) { return -502; }
         }
 
+        // More than 32 IL states, so the dispatch loop groups them into blocks (decision 0102).
+        // The loop's back edge and both handlers' resumptions branch across those groups.
+        public static int GroupedLoop(int a, int b)
+        {
+            int total = 0;
+            for (int i = 0; i < 12; i++)
+            {
+                try
+                {
+                    total += Divide(a + i, b - i % 3);
+                    total = checked(total + a);
+                }
+                catch (DivideByZeroException) { total -= 7 * i; }
+                catch (OverflowException) { total ^= i; }
+                total = (total << 1) ^ ((total >> 3) + i);
+            }
+            return total;
+        }
+
         private static int Divide(int a, int b) => a / b;
     }
 

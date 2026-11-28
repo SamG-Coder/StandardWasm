@@ -22,9 +22,19 @@ internal static class OracleWriter
         writer.WriteStartObject();
         writer.WritePropertyName("cases");
         JsonSerializer.Serialize(writer, cases, new JsonSerializerOptions { TypeInfoResolver = resolver });
-        writer.WritePropertyName("blobs");
-        JsonSerializer.Serialize(writer, blobs.Payloads);
+        // The assembly images go to one binary file next to the JSON, indexed by length in
+        // payload order. Tens of MB of JSON number arrays cost Node and the browser seconds to parse.
+        writer.WritePropertyName("blobLengths");
+        JsonSerializer.Serialize(writer, blobs.Payloads.Select(payload => payload.Length));
         writer.WriteEndObject();
+        writer.Flush();
+        using var blobFile = File.Create(Path.ChangeExtension(path, null) + ".blobs.bin");
+        foreach (int[] payload in blobs.Payloads)
+        {
+            var bytes = new byte[payload.Length];
+            for (int i = 0; i < payload.Length; i++) bytes[i] = checked((byte)payload[i]);
+            blobFile.Write(bytes);
+        }
     }
 
     private sealed class BlobIndexConverter : JsonConverter<int[]>
