@@ -10,7 +10,7 @@ namespace PortableCompiler
     // through it instead of calling the CoreLib body.
     internal static class PrimitiveFormatting
     {
-        // Returns the CLI element type of the receiver (8 = I4, 9 = U4, 10 = I8, 11 = U8)
+        // Returns the CLI element type of the receiver (4 = I1, 5 = U1, 6 = I2, 7 = U2, 8 = I4, 9 = U4, 10 = I8, 11 = U8)
         // when `member` names the parameterless platform primitive ToString, otherwise 0.
         internal static int Identify(byte[] image, int[] heaps, int[] layout, int member)
         {
@@ -23,7 +23,7 @@ namespace PortableCompiler
             if (end < 0 || !SignatureReader.TakeElement(image, cursor, end, 0x0e) || cursor[0] != end) return 0;
             // PrimitiveElement also proves that the TypeRef resolves to a platform assembly.
             int element = ArrayTypeRefs.PrimitiveElement(image, heaps, layout, reference[AssemblyReferences.Leaf] << 2 | 1);
-            return element >= 8 && element <= 11 ? element : 0;
+            return element >= 4 && element <= 11 ? element : 0; // SByte .. UInt64
         }
 
         // Operand 3 of a FormatPrimitive record whose receiver was folded into a plain value load.
@@ -52,6 +52,9 @@ namespace PortableCompiler
 
         // The managed location a receiver of `element` must have on the evaluation stack.
         // Int32Location and Int64Location carry no signedness; the declaring type supplies it.
-        internal static int ReceiverLocation(int element) => element <= 9 ? Int32Location : Int64Location;
+        // Only byte, Int32/UInt32 and Int64/UInt64 have managed locations; 0 rejects the others.
+        internal static int ReceiverLocation(int element) =>
+            element == 5 ? WritableByteLocation : element == 8 || element == 9 ? Int32Location :
+            element >= 10 ? Int64Location : 0;
     }
 }

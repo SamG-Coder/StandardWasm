@@ -790,6 +790,8 @@ namespace PortableCompiler
                     // Decision 0104: constant-false hardware feature queries prune accelerated paths first.
                     IsaFolding.Lower(image, layout, heaps, records, catchRegion);
                     WideMultiplyDivide.Lower(image, layout, heaps, records, catchRegion);
+                    PlatformExceptionThrows.Lower(image, layout, heaps, records, catchRegion);
+                    UnsafeCalls.Lower(image, layout, heaps, records, catchRegion);
                     if (contexts[current] == CoreVersionByref.ContextKey)
                     {
                         status = CoreVersionByref.Lower(bundle, image, layout, heaps, owner, source, records, natives, nativeBase, current);
@@ -1486,7 +1488,9 @@ namespace PortableCompiler
                             else if (kind == BranchIl.MultiplyDivideUInt64)
                                 tags = ExceptionTypes.DivideByZero; // UInt128 division by zero
                             else if (kind == BranchIl.ThrowFrameworkArgument)
-                                tags = operation == ExceptionTagsWasm.ArgumentNullTag
+                                tags = operation == PlatformExceptionThrows.Trap ? 0 :
+                                    operation == ExceptionTagsWasm.ArgumentTag ? ExceptionTypes.Argument :
+                                    operation == ExceptionTagsWasm.ArgumentNullTag
                                     ? ExceptionTypes.ArgumentNull : ExceptionTypes.ArgumentOutOfRange;
                             else if (kind == BranchIl.StringFromSpan)
                                 tags = (hostFeatures & WasmImports.NativeCharacterViews) != 0 ? ExceptionTypes.NullReference : 0;
@@ -2157,6 +2161,13 @@ namespace PortableCompiler
                         if (primitive >= 8 && primitive <= 11)
                         {
                             records[slot + 1] = primitive <= 9 ? Ints : Longs;
+                            continue;
+                        }
+                        // byte[] elements use the packed byte location; bool[] and sbyte[] share the
+                        // Wasm heap type but not ldind.u1/stind.i1 semantics, so they stay diagnosed.
+                        if (primitive == 5)
+                        {
+                            records[slot + 1] = Bytes;
                             continue;
                         }
                         int type = ArrayAllocations.TokenIdentity(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);

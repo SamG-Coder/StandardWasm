@@ -404,7 +404,7 @@ namespace PortableCompiler
                 int array = stack[depth - 2];
                 if (array != operand && array != NullValue) return -2;
                 int location = extra >= FirstClass ? ValueLocation(extra) : operand == Ints ? Int32Location :
-                    operand == Longs ? Int64Location : ObjectLocation;
+                    operand == Longs ? Int64Location : operand == Bytes ? WritableByteLocation : ObjectLocation;
                 return Push(stack, allocated, depth - 2, location);
             }
             if (kind == LoadObjectIndirect)
@@ -807,6 +807,9 @@ namespace PortableCompiler
                 return kind == Binary ? Push(stack, allocated, remaining, IsComparison(operand) ? I32 : type) : remaining;
             }
             if (kind == ReadTimestamp) return Push(stack, allocated, depth, I64);
+            if (kind == PrimitiveBitCast)
+                return Match(stack, depth, UnsafeCalls.StackType(operand))
+                    ? Push(stack, allocated, depth - 1, UnsafeCalls.StackType(extra)) : -1;
             if (kind == MultiplyDivideUInt64)
                 return Match(stack, depth, I64) && Match(stack, depth - 1, I64) && Match(stack, depth - 2, I64)
                     ? Push(stack, allocated, depth - 3, I64) : -1;

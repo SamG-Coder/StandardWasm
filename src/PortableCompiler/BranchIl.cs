@@ -122,6 +122,8 @@ namespace PortableCompiler
         internal const int GarbageCollectorCall = 427;
         // (ulong)((UInt128)a * b / c) with UInt128 temporaries: [a, b, c] -> [uint64] (decision 0104).
         internal const int MultiplyDivideUInt64 = 428;
+        // Unsafe.BitCast<TFrom, TTo> over equal-size primitives; operand and operand 3 are the element types.
+        internal const int PrimitiveBitCast = 429;
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

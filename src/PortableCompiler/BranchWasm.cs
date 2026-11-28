@@ -466,8 +466,10 @@ namespace PortableCompiler
                     bool wide = operand >= 10;
                     // A folded receiver (ldloca/ldflda then ToString) is already the value.
                     if (records[slot + 3] == PrimitiveFormatting.ValueReceiver) used = Local(code, used, 0x20, address);
-                    else used = ValueFieldProjectionWasm.Read(code, used, frameShape[7], address, wide ? Longs : Ints, type, projections);
-                    if (!wide) code[used++] = operand == 8 ? (byte)0xac : (byte)0xad; // i64.extend_i32_s/u
+                    else used = ValueFieldProjectionWasm.Read(code, used, frameShape[7], address,
+                        wide ? Longs : operand == 5 ? Bytes : Ints, type, projections);
+                    // Small and 32-bit stack values are already sign- or zero-extended to i32.
+                    if (!wide) code[used++] = (operand & 1) == 0 ? (byte)0xac : (byte)0xad; // i64.extend_i32_s/u
                     used = Local(code, used, 0x21, enumLocals);
                     used = EnumFormattingWasm.FormatDecimal(code, used, (operand & 1) == 0, scratch, scratch + 3, scratch + 4,
                         enumLocals, enumLocals + 1);
@@ -1208,6 +1210,13 @@ namespace PortableCompiler
                     else if (backing != 0)
                         used = InlineObjectStorageWasm.Store(code, used, type, backing, target, temporary, FieldCount(objects, type));
                 }
+                else if (kind == PrimitiveBitCast)
+                {
+                    int source = Spill(spills, maximum, spillFlags, UnsafeCalls.StackType(operand), top);
+                    used = Local(code, used, 0x20, source);
+                    used = UnsafeCalls.Emit(code, used, operand, records[slot + 3]);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, UnsafeCalls.StackType(records[slot + 3]), top));
+                }
                 else if (kind == MultiplyDivideUInt64)
                 {
                     int a = Spill(spills, maximum, spillFlags, I64, top - 2);
@@ -1569,7 +1578,8 @@ namespace PortableCompiler
                     int array = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);
                     int index = Spill(spills, maximum, spillFlags, states[state + top], top);
                     int resultSpill = Spill(spills, maximum, spillFlags, records[slot + 3] >= FirstClass ? ValueLocation(records[slot + 3]) :
-                        operand == Ints ? Int32Location : operand == Longs ? Int64Location : ObjectLocation, top - 1);
+                        operand == Ints ? Int32Location : operand == Longs ? Int64Location :
+                        operand == Bytes ? WritableByteLocation : ObjectLocation, top - 1);
                     if (records[slot + 3] >= FirstClass)
                     {
                         used = GuardNull(code, used, array);
@@ -2036,7 +2046,10 @@ namespace PortableCompiler
                     }
                 }
                 else if (kind == ThrowFrameworkArgument)
-                    used = ExceptionTagsWasm.Throw(code, used, operand);
+                {
+                    if (operand == PlatformExceptionThrows.Trap) code[used++] = 0x00; // unreachable (decision 0104)
+                    else used = ExceptionTagsWasm.Throw(code, used, operand);
+                }
                 else if (kind == Rethrow)
                     used = ExceptionDispatchWasm.ReraiseCaught(code, used, pcLocal + 2 + operand, objectBase + 1 + operand);
                 else
