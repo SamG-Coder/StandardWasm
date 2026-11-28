@@ -5,6 +5,8 @@ namespace PeLibrary
     internal static class EventMetadata
     {
         internal const int Empty = 1, Construct = 2, ConstructHandler = 3, InvokeHandler = 4, CombineHandler = 5, RemoveHandler = 6;
+        // Delegate.op_Equality and op_Inequality (#256): 7 is the private ExchangeMember.
+        internal const int DelegateEqual = 8, DelegateNotEqual = 9;
         private const int DelegateType = ObjectLayouts.DelegateReference, InterlockedType = 257;
         private const int ExchangeMember = 7;
 
@@ -34,22 +36,33 @@ namespace PeLibrary
 
         internal static bool IsHandlerExchange(byte[] image, int[] heaps, int[] methods, int row)
         {
+            int type = ExchangeArgument(image, heaps, methods, row);
+            if (type <= 0 || (type & 3) != 1) return false;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
-            if (first < 0) return false;
+            return first >= 0 && ReadType(image, heaps, methods, counts, first, type >> 2) == ObjectLayouts.EventHandlerReference;
+        }
+
+        // The TypeDefOrRef coded class argument T of a MethodSpec for the platform
+        // Interlocked.CompareExchange<T>(ref T, T, T) MemberRef, or 0 (Stage 221: a field-like event of
+        // any delegate type uses it).
+        internal static int ExchangeArgument(byte[] image, int[] heaps, int[] methods, int row)
+        {
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0) return 0;
             var signature = new int[MethodSpecifications.Width];
             if (MethodSpecifications.Read(image, heaps, methods, counts, row, signature) < 0)
-                return false;
+                return 0;
             int member = signature[MethodSpecifications.Target];
             if ((member & 1) != 1 || Member(image, heaps, methods, member >> 1) != ExchangeMember ||
                 signature[MethodSpecifications.Arity] != 1)
-                return false;
+                return 0;
             int argument = signature[MethodSpecifications.Arguments], end = signature[MethodSpecifications.End];
-            if (image[argument] != 0x12) return false;
+            if (image[argument] != 0x12) return 0;
             var next = new int[1];
             int type = CompressedUnsigned(image, argument + 1, end, next);
-            return type > 0 && next[0] == end && (type & 3) == 1 &&
-                ReadType(image, heaps, methods, counts, first, type >> 2) == ObjectLayouts.EventHandlerReference;
+            return type > 0 && next[0] == end && (type & 3) != 2 ? type : 0;
         }
 
         internal static int Member(byte[] image, int[] heaps, int[] methods, int row)
@@ -87,6 +100,23 @@ namespace PeLibrary
             if (type == DelegateType)
             {
                 if (image[signature] != 0 || image[signature + 1] != 2) return 0;
+                // static bool op_Equality(Delegate, Delegate) and op_Inequality: C#'s == and != on
+                // any delegate type.
+                if (size == 7 && image[signature + 2] == 0x02 && (MatchesAscii(image, heaps, name, "op_Equality") ||
+                    MatchesAscii(image, heaps, name, "op_Inequality")))
+                {
+                    int operand = signature + 3;
+                    for (int i = 0; i < 2; i++)
+                    {
+                        if (image[operand] != 0x12) return 0;
+                        int reference = CompressedUnsigned(image, operand + 1, signature + size, next);
+                        if ((reference & 3) != 1 || ReadType(image, heaps, methods, counts, first, reference >> 2) != DelegateType)
+                            return 0;
+                        operand = next[0];
+                    }
+                    if (operand != signature + size) return 0;
+                    return MatchesAscii(image, heaps, name, "op_Equality") ? DelegateEqual : DelegateNotEqual;
+                }
                 int member;
                 if (Name(image, heaps, name, 7, 0x626d6f43, 0x656e69, 0)) // Combine
                     member = CombineHandler;

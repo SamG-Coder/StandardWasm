@@ -103,11 +103,13 @@ namespace PortableCompiler
                 }
                 else if (kind == ExchangeHandlerField)
                 {
+                    // The field's storage: EventHandler or a general delegate key (Stage 221).
+                    int exchanged = FieldAccess.Storage(records[slot + 3]);
                     if ((depth == 0 || !Assignable(stack[depth - 1], FieldAccess.Owner(records[slot + 3]), objects)) ||
-                        frame[records[slot + BranchIl.Width + 1]] != EventHandlerReference ||
-                        frame[records[slot + 2 * BranchIl.Width + 1]] != EventHandlerReference)
+                        frame[records[slot + BranchIl.Width + 1]] != exchanged ||
+                        frame[records[slot + 2 * BranchIl.Width + 1]] != exchanged)
                         return -1;
-                    next = Push(stack, allocated, depth - 1, EventHandlerReference);
+                    next = Push(stack, allocated, depth - 1, exchanged);
                 }
                 else if ((kind == GetField || fieldStore || kind == FieldAddress || kind == TakeProjectedFieldAddress) &&
                     records.Length > slot + 2 * BranchIl.Width + 3 && records[slot + 2 * BranchIl.Width + 2] != 0 &&
@@ -429,15 +431,30 @@ namespace PortableCompiler
             if (kind == NullLiteral) return Push(stack, allocated, depth, NullValue);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, allocated, depth, EventArgsReference);
             if (kind == NewRootObject) return Push(stack, allocated, depth, ObjectReference, true);
-            if (kind == CombineHandler || kind == RemoveHandler)
+            if (kind == DelegateEquality)
                 return depth >= 2 && Assignable(stack[depth - 1], DelegateReference, objects) &&
-                    Assignable(stack[depth - 2], DelegateReference, objects)
-                    ? Push(stack, allocated, depth - 2, EventHandlerReference) : -2;
+                    Assignable(stack[depth - 2], DelegateReference, objects) ? Push(stack, allocated, depth - 2, I32) : -2;
+            if (kind == CombineHandler || kind == RemoveHandler)
+            {
+                if (depth < 2 || !Assignable(stack[depth - 1], DelegateReference, objects) ||
+                    !Assignable(stack[depth - 2], DelegateReference, objects)) return -2;
+                // Decision 0092: the result keeps a nominal type only when both operands prove it
+                // (the same EventHandler or general key, or a null literal). Otherwise it is a
+                // System.Delegate, and a later cast checks the nominal type at run time.
+                int left = stack[depth - 2], right = stack[depth - 1];
+                int combined = left == right ? left : left == NullValue ? right : right == NullValue ? left : DelegateReference;
+                return Push(stack, allocated, depth - 2, combined == NullValue ? DelegateReference : combined);
+            }
             if (kind == CastHandler)
             {
-                if (depth == 0 || !Assignable(stack[depth - 1], DelegateReference, objects)) return -2;
-                // The CLR types differ, but every supported Delegate uses the EventHandler heap.
-                if (stack[depth - 1] != NullValue) stack[depth - 1] = EventHandlerReference;
+                // castclass/isinst EventHandler or a general delegate key (operand). A Delegate,
+                // object or other invocation-list value is checked at run time; heap-3 delegates
+                // (Func<int>, SpanAction) are a different family and stay diagnosed.
+                if (depth == 0) return -2;
+                int source = stack[depth - 1];
+                if (source == NullValue || source == operand) return depth;
+                if (source != ObjectReference && !Assignable(source, DelegateReference, objects)) return -2;
+                stack[depth - 1] = operand;
                 return depth;
             }
             if (kind == BoxAggregate || kind == UnboxAggregate || kind == UnboxAggregateAddress || kind == TestAggregateBox)
@@ -501,6 +518,8 @@ namespace PortableCompiler
                 return Match(stack, depth, I32) && Match(stack, depth - 1, String)
                     ? Push(stack, allocated, depth - 2, I32) : -1;
             if (kind == LoadFunction) return Push(stack, allocated, depth, MethodPointer);
+            if (kind == LoadVirtualFunction)
+                return depth >= 1 && IsReference(stack[depth - 1]) ? Push(stack, allocated, depth - 1, MethodPointer) : -2;
             // Decision 0078: a function pointer is a native int; calli takes it last.
             if (kind == FunctionAddress) return Push(stack, allocated, depth, Native);
             // Unsafe.AsPointer preserves an address that already lives in memory 0.
@@ -547,7 +566,11 @@ namespace PortableCompiler
             }
             if (kind == NewDelegate)
             {
-                if (!Match(stack, depth, MethodPointer) || depth < 2 || stack[depth - 2] != extra) return -1;
+                // The target is the delegate's receiver (extra) or, for an instance method, any
+                // subclass of it: the closure keeps it as eqref and the thunk casts it back.
+                if (!Match(stack, depth, MethodPointer) || depth < 2 || stack[depth - 2] != extra &&
+                    (extra == NullValue || stack[depth - 2] == NullValue || !Assignable(stack[depth - 2], extra, objects)))
+                    return -1;
                 return Push(stack, allocated, depth - 2, operand);
             }
             if (kind == InvokeDelegate)

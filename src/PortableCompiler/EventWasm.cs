@@ -6,10 +6,15 @@ namespace PortableCompiler
 {
     internal static class EventWasm
     {
-        // Stack on entry: target, typed thunk. Wrap the callback in a one-entry list.
-        internal static int NewList(byte[] code, int used, int method, int singleton)
+        // Entry fields (decision 0092): target, method (ref func), method identity, nominal delegate
+        // type, singleton list.
+        internal const byte EntryTarget = 0, EntryMethod = 1, EntryIdentity = 2, EntryDelegateType = 3, EntrySingleton = 4;
+
+        // Stack on entry: target, thunk. Wrap the callback in a one-entry list of this nominal type.
+        internal static int NewList(byte[] code, int used, int method, int singleton, int delegateType)
         {
             used = Local(code, used, 0x20, method);
+            used = Const(code, used, delegateType);
             used = NullList(code, used);
             used = Instruction(code, used, 0, EventEntryHeap); // struct.new
             used = Instruction(code, used, 8, EventHandlerHeap); // array.new_fixed
@@ -19,7 +24,7 @@ namespace PortableCompiler
             used = Instruction(code, used, 11, EventHandlerHeap);
             used = Local(code, used, 0x20, singleton);
             used = Instruction(code, used, 5, EventEntryHeap); // struct.set singleton
-            code[used++] = 3;
+            code[used++] = EntrySingleton;
             used = Local(code, used, 0x20, singleton);
             return used;
         }
@@ -35,6 +40,7 @@ namespace PortableCompiler
             used = IfNull(code, used, right);
             used = Local(code, used, 0x20, left);
             code[used++] = 0x05;
+            used = RejectMismatch(code, used, left, right);
             used = Length(code, used, left);
             used = Local(code, used, 0x22, leftLength);
             used = Length(code, used, right);
@@ -59,6 +65,7 @@ namespace PortableCompiler
             used = IfNull(code, used, value);
             used = Local(code, used, 0x20, source);
             code[used++] = 0x05;
+            used = RejectMismatch(code, used, source, value);
             used = Length(code, used, source);
             used = Length(code, used, value);
             used = Local(code, used, 0x22, valueLength);
@@ -159,7 +166,7 @@ namespace PortableCompiler
             code[used++] = 0x45;
             code[used++] = 0x1b;
             used = Local(code, used, 0x21, skip);
-            used = EntryField(code, used, source, skip, 3);
+            used = EntryField(code, used, source, skip, EntrySingleton);
             code[used++] = 0x05;
             used = Local(code, used, 0x20, remaining);
             used = Instruction(code, used, 7, EventHandlerHeap);
@@ -201,7 +208,10 @@ namespace PortableCompiler
             used = EntryField(code, used, list, index, 0);
             used = Local(code, used, 0x20, sender);
             used = Local(code, used, 0x20, arguments);
-            used = EntryField(code, used, list, index, 1);
+            used = EntryField(code, used, list, index, EntryMethod);
+            code[used++] = 0xfb; // ref.cast (ref EventThunkType): the entry holds any function
+            code[used++] = 0x16;
+            code[used++] = EventThunkType;
             code[used++] = 0x14; // call_ref
             code[used++] = EventThunkType;
             used = Local(code, used, 0x20, index);
@@ -213,6 +223,84 @@ namespace PortableCompiler
             code[used++] = 0x0b;
             code[used++] = 0x0b;
             return used;
+        }
+
+        // Delegate.op_Equality (#256): equal when both are null or the same reference; one null is
+        // unequal; otherwise the invocation lists must have the same length and pairwise equal entries
+        // (target identity, method identity and nominal delegate type), as MulticastDelegate.Equals
+        // compares them. A different nominal type is unequal, not an exception. Leaves an i32.
+        internal static int ListsEqual(byte[] code, int used, int left, int right, int scratch)
+        {
+            int index = scratch, length = scratch + 1;
+            code[used++] = 0x02; code[used++] = 0x7f; // block (result i32)
+            used = Local(code, used, 0x20, left); code[used++] = 0xd1;
+            used = Local(code, used, 0x20, right); code[used++] = 0xd1;
+            code[used++] = 0x72; // i32.or: at least one null
+            code[used++] = 0x04; code[used++] = 0x40;
+            used = Local(code, used, 0x20, left); code[used++] = 0xd1;
+            used = Local(code, used, 0x20, right); code[used++] = 0xd1;
+            code[used++] = 0x71; // i32.and: equal only when both are null
+            code[used++] = 0x0c; code[used++] = 1;
+            code[used++] = 0x0b;
+            used = Local(code, used, 0x20, left);
+            used = Local(code, used, 0x20, right);
+            code[used++] = 0xd3; // ref.eq
+            used = Result(code, used, 1);
+            used = Length(code, used, left);
+            used = Local(code, used, 0x22, length);
+            used = Length(code, used, right);
+            code[used++] = 0x47; // i32.ne
+            used = Result(code, used, 0);
+            used = Const(code, used, 0);
+            used = Local(code, used, 0x21, index);
+            code[used++] = 0x03; code[used++] = 0x40; // loop
+            used = Local(code, used, 0x20, index);
+            used = Local(code, used, 0x20, length);
+            code[used++] = 0x4f; // i32.ge_u: every entry matched
+            used = Result(code, used, 1, 2);
+            used = EntryField(code, used, left, index, EntryTarget);
+            used = EntryField(code, used, right, index, EntryTarget);
+            code[used++] = 0xd3;
+            code[used++] = 0x45;
+            used = Result(code, used, 0, 2);
+            used = EntryField(code, used, left, index, EntryIdentity);
+            used = EntryField(code, used, right, index, EntryIdentity);
+            code[used++] = 0x47;
+            used = Result(code, used, 0, 2);
+            used = EntryField(code, used, left, index, EntryDelegateType);
+            used = EntryField(code, used, right, index, EntryDelegateType);
+            code[used++] = 0x47;
+            used = Result(code, used, 0, 2);
+            used = Local(code, used, 0x20, index);
+            used = Const(code, used, 1);
+            code[used++] = 0x6a;
+            used = Local(code, used, 0x21, index);
+            code[used++] = 0x0c; code[used++] = 0; // br loop
+            code[used++] = 0x0b;
+            code[used++] = 0x00; // unreachable: the loop only exits through its results
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        // With the condition on the stack: if it holds, leave `value` as the enclosing block's result.
+        // `depth` is the block's label depth from inside this if (1 outside the loop, 2 inside it).
+        private static int Result(byte[] code, int used, int value, int depth = 1)
+        {
+            code[used++] = 0x04; code[used++] = 0x40;
+            used = Const(code, used, value);
+            code[used++] = 0x0c; code[used++] = (byte)depth;
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        // Decision 0092: Combine or Remove of two nonnull delegates of different nominal types raises
+        // ArgumentException, as on the CLR. Every entry of a list shares its nominal type.
+        private static int RejectMismatch(byte[] code, int used, int left, int right)
+        {
+            used = EntryField(code, used, left, -1, EntryDelegateType);
+            used = EntryField(code, used, right, -1, EntryDelegateType);
+            code[used++] = 0x47; // i32.ne
+            return ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.ArgumentTag);
         }
 
         private static int IfNull(byte[] code, int used, int reference)
@@ -259,7 +347,7 @@ namespace PortableCompiler
         private static int EntryField(byte[] code, int used, int list, int index, byte field)
         {
             used = Local(code, used, 0x20, list);
-            used = Local(code, used, 0x20, index);
+            used = index < 0 ? Const(code, used, 0) : Local(code, used, 0x20, index); // negative: entry 0
             used = Instruction(code, used, 11, EventHandlerHeap); // array.get
             used = Instruction(code, used, 2, EventEntryHeap); // struct.get
             code[used++] = field;
