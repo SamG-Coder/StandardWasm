@@ -148,7 +148,13 @@ export function createConsoleHost({ encoding = "utf-8", newLine = "\r\n", input 
             return line.length;
         });
     }
-    const imports = { [consoleImportModule]: consoleImports };
+    // Decision 0104: Stopwatch.GetTimestamp reads monotonic nanoseconds (Stopwatch.Frequency
+    // is 1e9). Node supplies hrtime; a browser supplies performance.now at its own resolution.
+    const hrtime = globalThis.process?.hrtime?.bigint;
+    const clockImports = {
+        timestamp: hrtime ? () => hrtime() : () => BigInt(Math.round(performance.now() * 1e6))
+    };
+    const imports = { [consoleImportModule]: consoleImports, "standardwasm:clock": clockImports };
     return {
         imports,
         encoding,

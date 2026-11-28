@@ -1208,6 +1208,12 @@ namespace PortableCompiler
                     else if (backing != 0)
                         used = InlineObjectStorageWasm.Store(code, used, type, backing, target, temporary, FieldCount(objects, type));
                 }
+                else if (kind == ReadTimestamp)
+                {
+                    code[used++] = 0x10; // call standardwasm:clock timestamp
+                    used = WasmBinary.Unsigned(code, used, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I64, depth));
+                }
                 else if (kind == CharacterCall)
                 {
                     int value = Spill(spills, maximum, spillFlags, I32, top);

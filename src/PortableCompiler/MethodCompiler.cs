@@ -1551,6 +1551,7 @@ namespace PortableCompiler
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
+                        if (kind == BranchIl.ReadTimestamp) records[slot + 1] = WasmImports.ClockFunction(hostFeatures);
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.JoinManyStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
                             kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.StringFromSpan || kind == BranchIl.ConsoleWrite ||
                             kind == BranchIl.NativeUtf16Length || kind == BranchIl.CopyNativeConstructionString ||
@@ -2887,6 +2888,21 @@ namespace PortableCompiler
                         records[slot + 1] = 1; // Wasm native data is little-endian.
                         continue;
                     }
+                    int platformField = !write && linked ? PlatformClock.StaticField(image, heaps, layout, field) : 0;
+                    if (platformField == PlatformClock.Frequency)
+                    {
+                        records[slot] = BranchIl.WideConstant;
+                        records[slot + 1] = unchecked((int)PlatformClock.TicksPerSecond);
+                        records[slot + 3] = (int)(PlatformClock.TicksPerSecond >> 32);
+                        continue;
+                    }
+                    if (platformField != 0)
+                    {
+                        // Stopwatch.IsHighResolution and BitConverter.IsLittleEndian are true on this target.
+                        records[slot] = BranchIl.Constant;
+                        records[slot + 1] = 1;
+                        continue;
+                    }
                     if (!write && linked && EventMetadata.Member(image, heaps, layout, field) == EventMetadata.Empty)
                     {
                         int eventGlobal = StaticFields.Register(globals, StaticFields.EventOwner, 0, EventArgsReference);
@@ -3338,6 +3354,12 @@ namespace PortableCompiler
                         continue;
                     }
                     // Exact System.Math intrinsics, identified by platform assembly and signature (decision 0003).
+                    if (opcode == 0x28 && !addressed && PlatformClock.IsGetTimestamp(image, heaps, layout, member))
+                    {
+                        records[slot] = BranchIl.ReadTimestamp;
+                        hostUse[0] = hostUse[0] | WasmImports.Clock;
+                        continue;
+                    }
                     int characterMember = opcode == 0x28 && !addressed ? CharacterMembers.Identify(image, heaps, layout, member) : 0;
                     if (characterMember != 0)
                     {
