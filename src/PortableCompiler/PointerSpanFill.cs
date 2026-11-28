@@ -17,6 +17,9 @@ namespace PortableCompiler
 
         internal static void Lower(byte[] image, int[] layout, int[] heaps, int[] records, int[] clauses)
         {
+            // Candidates: [create, store, address, value, call, local, lane | Cleared] per site.
+            var sites = new int[records.Length / Width * 7 + 7];
+            int count = 0;
             for (int create = 0; create < records.Length; create += Width)
             {
                 if (records[create] != MemberCall || records[create + 3] != 0x73) continue;
@@ -25,7 +28,6 @@ namespace PortableCompiler
                 int store = Next(records, create, clauses), address = Next(records, store, clauses);
                 if (address < 0 || records[store] != Store || records[address] != FrameAddress ||
                     records[address + 1] != records[store + 1]) continue;
-                int local = records[store + 1];
                 int value = Next(records, address, clauses);
                 if (value < 0) continue;
                 bool clear = records[value] == MemberCall &&
@@ -34,15 +36,41 @@ namespace PortableCompiler
                 if (call < 0 || records[call] != MemberCall || records[call + 3] != 0x28) continue;
                 if (!clear && (PinnedArrays.PointerSpanMember(image, layout, heaps, records[call + 1]) != 2 ||
                     !IsLaneConstant(records, value, lane))) continue;
-                if (!SoleUse(records, local, store, address)) continue;
+                int at = count++ * 7;
+                sites[at] = create; sites[at + 1] = store; sites[at + 2] = address; sites[at + 3] = value;
+                sites[at + 4] = call; sites[at + 5] = records[store + 1]; sites[at + 6] = lane | (clear ? Cleared : 0);
+            }
+            for (int site = 0; site < count; site++)
+            {
+                int at = site * 7;
+                // The span local may be reused by several fills, but by nothing else.
+                if (!OnlyFills(records, sites, count, sites[at + 5])) continue;
+                int create = sites[at], store = sites[at + 1], address = sites[at + 2], value = sites[at + 3], call = sites[at + 4];
+                int operand = sites[at + 6];
+                bool clear = (operand & Cleared) != 0;
                 records[create] = Nop;
                 records[store] = Nop;
                 records[address] = Nop;
                 records[call] = NativeSpanFill;
-                records[call + 1] = lane | (clear ? Cleared : 0);
+                records[call + 1] = operand;
                 // aux = the memory.fill byte + 1 when the value's bytes are uniform, else 0.
-                records[call + 3] = clear ? 1 : Uniform(lane, records[value + 1], records[value + 3]) + 1;
+                records[call + 3] = clear ? 1 : Uniform(operand & 0xff, records[value + 1], records[value + 3]) + 1;
             }
+        }
+
+        // Every load, store and address of `local` is the store or the ldloca of a candidate fill.
+        private static bool OnlyFills(int[] records, int[] sites, int count, int local)
+        {
+            for (int at = 0; at < records.Length; at += Width)
+            {
+                int kind = records[at];
+                if ((kind != Load && kind != Store && kind != FrameAddress) || records[at + 1] != local) continue;
+                bool fill = false;
+                for (int site = 0; site < count && !fill; site++)
+                    fill = sites[site * 7 + 5] == local && (sites[site * 7 + 1] == at || sites[site * 7 + 2] == at);
+                if (!fill) return false;
+            }
+            return true;
         }
 
         private static int Next(int[] records, int slot, int[] clauses)
@@ -57,17 +85,6 @@ namespace PortableCompiler
             lane == 0x0a || lane == 0x0b ? records[value] == WideConstant :
             lane == 0x0c ? records[value] == SingleConstant : lane == 0x0d ? records[value] == DoubleConstant :
             records[value] == Constant;
-
-        private static bool SoleUse(int[] records, int local, int store, int address)
-        {
-            for (int at = 0; at < records.Length; at += Width)
-            {
-                if (at == store || at == address) continue;
-                int kind = records[at];
-                if ((kind == Load || kind == Store || kind == FrameAddress) && records[at + 1] == local) return false;
-            }
-            return true;
-        }
 
         internal static int Arity(int operand) => (operand & Cleared) != 0 ? 2 : 3;
 

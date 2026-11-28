@@ -103,6 +103,8 @@ namespace PortableCompiler
             {
                 int token = CompressedUnsigned(image, at + 1, end, next);
                 if (token <= 0) return -1;
+                // Decision 0105: System.UInt128 (WideTuples).
+                if (WideTuples.IsUInt128(image, layout, heaps, token)) return WideTuples.Value;
                 int primitive = ArrayTypeRefs.PrimitiveElement(image, heaps, layout, token);
                 if (primitive > 0) return GenericScalar.Key(primitive);
                 if (primitive != -2) return primitive;
@@ -132,6 +134,9 @@ namespace PortableCompiler
                 int item = Read(bundle, image, layout, heaps, owner, next, end, context, objects, depth + 1, substitutions, methodArguments);
                 if (item < 0) return item;
                 if (IsSpan(item)) return -2; // Byref-like values cannot be array elements.
+                if (SimdVectors.IsSimd(item)) return -2; // decision 0105: vector arrays are not lowered
+                if (item == WideTuples.Tuple) return WideTuples.TupleArray;
+                if (item == WideTuples.Value || item == WideTuples.TupleArray) return -2;
                 return GenericScalar.IsScalar(item) ? GenericScalar.VectorKey(item) : ObjectLayouts.RegisterArray(objects, item);
             }
             if (element != 0x15) return -2;
@@ -142,6 +147,14 @@ namespace PortableCompiler
             int status = ReadArguments(bundle, image, layout, heaps, owner, next, end, context, objects,
                 depth + 1, substitutions, arguments, methodArguments);
             if (status < 0) return status;
+            // Decision 0105: Vector128/256/512<T> and ValueTuple pairs of them (SimdVectors).
+            if (head[1] == 0x11)
+            {
+                int simd = SimdVectors.Instantiation(image, layout, heaps, head[0], arguments, count);
+                if (simd != 0) return simd;
+                int wide = WideTuples.Instantiation(image, layout, heaps, head[0], arguments, count);
+                if (wide != 0) return wide;
+            }
             if (head[1] == 0x11 && count == 1)
             {
                 int type = arguments[0] == ObjectLayouts.ObjectReference ? ObjectSpan :

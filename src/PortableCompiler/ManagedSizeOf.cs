@@ -35,6 +35,7 @@ namespace PortableCompiler
                 if (type < 0) return type;
                 if (next[0] != end) return -1;
                 if (GenericScalar.IsScalar(type)) return NativeValueLayouts.PrimitiveSize(GenericScalar.Element(type));
+                if (SimdVectors.IsVector(type)) return SimdVectors.Bytes(type);
                 if (IsEnumKey(type))
                 {
                     int storage = SignatureStorage(objects, type);

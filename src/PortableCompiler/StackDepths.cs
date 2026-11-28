@@ -835,6 +835,9 @@ namespace PortableCompiler
             if (kind == UnpinByteSpan) return depth;
             if (kind == SortPrimitiveArray)
                 return Match(stack, depth, ArraySortPrimitive.Vector(operand)) ? depth - 1 : -2;
+            if (kind == BinarySearchPrimitiveArray)
+                return Match(stack, depth - 1, ArrayBinarySearch.Vector(operand)) && Match(stack, depth, ArrayBinarySearch.ValueType(operand))
+                    ? Push(stack, allocated, depth - 2, I32) : -2;
             if (kind == NativeSpanFill)
             {
                 int arity = PointerSpanFill.Arity(operand), at = depth - arity + 1;
@@ -940,6 +943,31 @@ namespace PortableCompiler
             }
             if (kind == LoadConstructorAddress)
                 return Push(stack, allocated, depth, ConstructorAddress);
+            if (kind == PlatformUnsupported)
+                return depth < operand ? -1 : extra == Void ? depth - operand : Push(stack, allocated, depth - operand, extra);
+            if (kind == WideOp)
+            {
+                int arity = WideTuples.Arity(operand), first = depth - arity;
+                if (first < 0) return -1;
+                for (int i = 0; i < arity; i++)
+                    if (stack[first + i] != WideTuples.Input(operand, i)) return -2;
+                int result = WideTuples.Result(operand);
+                return result == Void ? first : Push(stack, allocated, first, result);
+            }
+            if (kind == CloneArray)
+                return depth > 0 && IsArray(stack[depth - 1]) ? Push(stack, allocated, depth - 1, ObjectReference) : -2;
+            if (kind == SimdOp)
+            {
+                int arity = SimdVectors.Arity(operand, extra), first = depth - arity;
+                if (first < 0) return -1;
+                for (int i = 0; i < arity; i++)
+                {
+                    int expected = SimdVectors.Input(operand, extra, i), actual = stack[first + i];
+                    if (expected == Native ? !IsNativeInteger(actual) && actual != I32 : actual != expected) return -2;
+                }
+                int result = SimdVectors.Result(operand, extra);
+                return result == Void ? first : Push(stack, allocated, first, result);
+            }
             if (kind == FlatIndex)
                 return Match(stack, depth, I32) ? Push(stack, allocated, depth - 1,
                     FlatInlineArrays.Location(FlatInlineArrays.IndexElement(extra))) : -2;

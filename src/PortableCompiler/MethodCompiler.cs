@@ -810,10 +810,13 @@ namespace PortableCompiler
                     if (status < 0)
                         return status;
                     // Decision 0104: constant-false hardware feature queries prune accelerated paths first.
-                    IsaFolding.Lower(image, layout, heaps, records, catchRegion);
+                    IsaFolding.Lower(image, layout, heaps, records, catchRegion, parameters);
                     WideMultiplyDivide.Lower(image, layout, heaps, records, catchRegion);
                     PlatformExceptionThrows.Lower(image, layout, heaps, records, catchRegion);
                     UnsafeCalls.Lower(image, layout, heaps, records, catchRegion);
+                    SimdVectors.Lower(image, layout, heaps, records);
+                    ArrayClone.Lower(image, layout, heaps, records);
+                    WideTuples.Lower(image, layout, heaps, records, catchRegion);
                     status = FlatInlineArrays.Lower(image, layout, heaps, owner, objects, records, catchRegion, frame,
                         parameters, location);
                     if (status < 0)
@@ -822,6 +825,7 @@ namespace PortableCompiler
                         return status;
                     }
                     ArraySortPrimitive.Lower(image, layout, heaps, records);
+                    ArrayBinarySearch.Lower(image, layout, heaps, records);
                     ArrayFillPrimitive.Lower(image, layout, heaps, records);
                     ArrayResizeField.Lower(image, layout, heaps, records, catchRegion);
                     ArrayCopyElements.Lower(bundle, image, layout, heaps, records, catchRegion);
@@ -1478,6 +1482,27 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - FlatInlineArrays.Capacity) return -3;
                                 capacity += FlatInlineArrays.Capacity;
                             }
+                            if (kind == BranchIl.WideOp)
+                            {
+                                if (capacity > int.MaxValue - WideTuples.Capacity(operation)) return -3;
+                                capacity += WideTuples.Capacity(operation);
+                            }
+                            if (kind == BranchIl.CloneArray)
+                            {
+                                if (capacity > int.MaxValue - ArrayClone.Capacity) return -3;
+                                capacity += ArrayClone.Capacity;
+                            }
+                            if (kind == BranchIl.SimdOp)
+                            {
+                                int simdBytes = SimdVectors.Capacity(operation) + (slot == 0 ? SimdVectors.InitializeBytes(frame, parameters, locals) : 0);
+                                if (capacity > int.MaxValue - simdBytes) return -3;
+                                capacity += simdBytes;
+                            }
+                            if (kind == BranchIl.BinarySearchPrimitiveArray)
+                            {
+                                if (capacity > int.MaxValue - ArrayBinarySearch.Capacity) return -3;
+                                capacity += ArrayBinarySearch.Capacity;
+                            }
                             if (kind == BranchIl.FailFast)
                             {
                                 if (capacity > int.MaxValue - ProcessExit.FailFastCapacity) return -3;
@@ -1604,13 +1629,23 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.Argument | ExceptionTypes.ArgumentOutOfRange; // alignment; MemoryCopy size
                             else if (kind == BranchIl.MultiplyDivideUInt64)
                                 tags = ExceptionTypes.DivideByZero; // UInt128 division by zero
-                            else if (kind == BranchIl.SortPrimitiveArray)
-                                tags = ExceptionTypes.ArgumentNull; // Array.Sort(null)
+                            else if (kind == BranchIl.SortPrimitiveArray || kind == BranchIl.BinarySearchPrimitiveArray)
+                                tags = ExceptionTypes.ArgumentNull; // Array.Sort(null), Array.BinarySearch(null, v)
                             else if (kind == BranchIl.FillPrimitiveArray)
                                 tags = ExceptionTypes.ArgumentNull | ExceptionTypes.ArgumentOutOfRange;
                             else if (kind == BranchIl.ResizeArrayField)
                                 tags = ExceptionTypes.ArgumentOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.NativeSpanFill)
+                                tags = ExceptionTypes.ArgumentOutOfRange;
+                            else if (kind == BranchIl.CloneArray)
+                                tags = ExceptionTypes.NullReference;
+                            else if (kind == BranchIl.WideOp)
+                                tags = operation == WideTuples.SortRange
+                                    ? ExceptionTypes.ArgumentNull | ExceptionTypes.ArgumentOutOfRange | ExceptionTypes.Argument
+                                    : operation == WideTuples.NewTupleArray ? ExceptionTypes.Overflow
+                                    : operation == WideTuples.StoreElement || operation == WideTuples.ElementItem2
+                                        ? ExceptionTypes.NullReference | ExceptionTypes.IndexOutOfRange : 0;
+                            else if (kind == BranchIl.SimdOp && operation == SimdVectors.GetElement)
                                 tags = ExceptionTypes.ArgumentOutOfRange;
                             else if (kind == BranchIl.GetRankTwo)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
@@ -1716,8 +1751,9 @@ namespace PortableCompiler
                             kind == BranchIl.SortPrimitiveArray || kind == BranchIl.MultiplyHighUInt64 ||
                             kind == BranchIl.NativeMemoryCall || kind == BranchIl.PinArray || kind == BranchIl.PinByteSpan) frameShape[5] |= 5;
                         if (kind == BranchIl.NativeSpanFill || kind == BranchIl.FailFast) frameShape[5] |= 1; // string scratch
+                        if (kind == BranchIl.SimdOp || kind == BranchIl.WideOp) { frameShape[5] |= 4; frameShape[6] = 1; } // i64 and i32 scratch
                         // Five i32 loop counters: Array.Sort, the NativeMemory heap and array pins.
-                        if (kind == BranchIl.SortPrimitiveArray || kind == BranchIl.NativeMemoryCall ||
+                        if (kind == BranchIl.SortPrimitiveArray || kind == BranchIl.NativeMemoryCall || kind == BranchIl.BinarySearchPrimitiveArray ||
                             kind == BranchIl.PinArray || kind == BranchIl.PinByteSpan) frameShape[6] = 1;
                         if (kind == BranchIl.PinScopedValue) frameShape[5] |= 2 | ScopedValuePins.FrameFlag;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler || kind == BranchIl.DelegateEquality ||
@@ -2338,6 +2374,16 @@ namespace PortableCompiler
                         : PlatformTypeReferences.IsString(image, heaps, layout, coded) ? String :
                             BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
                     if (type < 0) return type;
+                    // Decision 0105: castclass/isinst T[] for int/uint, long/ulong, float and double. The CLR
+                    // treats int[] and uint[] (and long[] and ulong[]) as the same array type for casts, as
+                    // their shared vector does. bool[]/byte[]/sbyte[] and char[]/short[]/ushort[] also share
+                    // a vector but are not all cast-compatible on the CLR, so they stay diagnosed.
+                    if (GenericScalar.IsVector(type))
+                    {
+                        int vector = GenericScalar.Storage(type);
+                        if (vector != Ints && vector != Longs && vector != Singles && vector != Doubles) return -2;
+                        type = vector;
+                    }
                     if (ObjectLayouts.IsValueType(objects, type)) return -2;
                     if (type == EventHandlerReference || DelegateShapes.IsKey(type))
                     {
@@ -2360,7 +2406,8 @@ namespace PortableCompiler
                             records[slot + 3] = ReferenceCastWasm.CheckedInterface;
                         }
                     }
-                    else if (type != String && (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0] ||
+                    else if (type != String && type != Ints && type != Longs && type != Singles && type != Doubles &&
+                        (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0] ||
                         ObjectLayouts.ArrayElement(objects, type) != 0)) return -2;
                     records[slot + 1] = type;
                     continue;

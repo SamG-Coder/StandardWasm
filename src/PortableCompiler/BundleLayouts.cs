@@ -248,6 +248,8 @@ namespace PortableCompiler
             }
             if (SignatureTypes.IsSpan(storage))
                 return !staticField && ObjectLayouts.IsByRefLikeValue(objects, receiver) ? storage : -2;
+            if (SimdVectors.IsSimd(storage)) return -2; // decision 0105: vector fields are not lowered
+            if (WideTuples.IsWide(storage) || storage == WideTuples.TupleArray) return -2;
             return ObjectLayouts.IsByRefLikeValue(objects, storage) ? -2 : storage;
         }
 

@@ -7,7 +7,7 @@ namespace PortableCompiler
     internal static class BranchWasm
     {
         private const int LastScalarBank = PeLibrary.ConsoleStorage.Writer;
-        private const int LocationSpill = 1, SpanSpill = 2;
+        private const int LocationSpill = 1, SpanSpill = 2, VectorSpill = 4, VectorPairSpill = 8, WideSpill = 16, WideArraySpill = 32;
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
             byte[] outgoingNulls, int[] outgoingReferences, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection,
@@ -44,10 +44,17 @@ namespace PortableCompiler
             int spillFlags = 0;
             // Only verified stack types need banks. Unused view types must not
             // reduce the local budget of methods with many ordinary classes.
-            for (int i = 0; i < states.Length && spillFlags != (LocationSpill | SpanSpill); i++)
+            // A tuple sort keeps two $wide elements in scratch even when no $wide value is on the stack.
+            for (int at = 0; at < records.Length; at += Width)
+                if (records[at] == WideOp && records[at + 1] == WideTuples.SortRange) spillFlags |= WideSpill;
+            for (int i = 0; i < states.Length && spillFlags != 63; i++)
             {
+                if (WideTuples.IsWide(states[i])) spillFlags |= WideSpill;
+                if (states[i] == WideTuples.TupleArray) spillFlags |= WideArraySpill;
                 if (IsManagedLocation(states[i])) spillFlags |= LocationSpill;
                 if (IsSpan(states[i])) spillFlags |= SpanSpill;
+                if (SimdVectors.IsVector(states[i])) spillFlags |= VectorSpill;
+                if (SimdVectors.IsPair(states[i])) spillFlags |= VectorPairSpill;
             }
             int classBase = LastScalarBank + ExtraSpillBanks(spillFlags);
             int spillKinds = classBase + classes;
@@ -118,7 +125,7 @@ namespace PortableCompiler
                     if (kind > classBase)
                         type = FirstClass + kind - classBase - 1;
                     else if (kind > LastScalarBank)
-                        type = kind == LastScalarBank + 1 && (spillFlags & LocationSpill) != 0 ? ObjectLocation : ObjectSpan;
+                        type = ExtraBankType(kind - LastScalarBank - 1, spillFlags);
                     used = WasmBinary.ValueType(code, used, Representation(objects, type));
                 }
             }
@@ -262,6 +269,8 @@ namespace PortableCompiler
             for (int local = arguments; local < inlineLocations.Length; local++)
                 if (inlineLocations[local] != 0)
                     used = InlineObjectStorageWasm.Allocate(code, used, inlineLocations[local], local, FieldCount(objects, frame[local]));
+            // Decision 0105: CLI locals are zero-initialized; a vector local starts as the zero vector.
+            used = SimdVectors.InitializeLocals(code, used, frame, arguments, locals, inlineLocations);
             if (prologue >= 0 && !tracksRoots)
                 used = TypeInitializerWasm.CallInitializer(code, used, hostImports + prologue);
             if (guard >= 0) used = TypeInitializerWasm.Begin(code, used, guard, epoch, activeInitializers, pcLocal,
@@ -1317,6 +1326,51 @@ namespace PortableCompiler
                         arity == 4 ? Spill(spills, maximum, spillFlags, I32, first + 2) : -1,
                         arity == 4 ? Spill(spills, maximum, spillFlags, I32, top) : -1);
                 }
+                else if (kind == PlatformUnsupported)
+                {
+                    // The member cannot run on this target (decision 0105): trap. The result local
+                    // assignment after `unreachable` only satisfies validation.
+                    code[used++] = 0x00;
+                    if (records[slot + 3] != Void)
+                        used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, records[slot + 3], top - operand + 1));
+                }
+                else if (kind == WideOp)
+                {
+                    int arity = WideTuples.Arity(operand), first = top - arity + 1;
+                    var operands = new int[arity];
+                    for (int i = 0; i < arity; i++)
+                        operands[i] = Spill(spills, maximum, spillFlags, states[state + first + i], first + i);
+                    int wideResult = WideTuples.Result(operand);
+                    used = WideTuples.Emit(code, used, operand, operands,
+                        wideResult == Void ? -1 : Spill(spills, maximum, spillFlags, wideResult, first),
+                        new[] { eventLocals, eventLocals + 1, eventLocals + 2, eventLocals + 3, eventLocals + 4 },
+                        new[] { enumLocals, enumLocals + 1, Spill(spills, maximum, spillFlags, I64, top - 1), Spill(spills, maximum, spillFlags, I64, top) },
+                        new[] { Spill(spills, maximum, spillFlags, WideTuples.Value, top - 1), Spill(spills, maximum, spillFlags, WideTuples.Value, top) });
+                }
+                else if (kind == CloneArray)
+                {
+                    // The eqref result bank and the receiver's array bank are different locals.
+                    used = ArrayClone.Emit(code, used, states[state + top], Spill(spills, maximum, spillFlags, states[state + top], top),
+                        Spill(spills, maximum, spillFlags, I32, top), Spill(spills, maximum, spillFlags, ObjectReference, top));
+                }
+                else if (kind == SimdOp)
+                {
+                    int arity = SimdVectors.Arity(operand, records[slot + 3]), first = top - arity + 1;
+                    var operands = new int[arity];
+                    for (int i = 0; i < arity; i++)
+                        operands[i] = Spill(spills, maximum, spillFlags, states[state + first + i], first + i);
+                    int simdResult = SimdVectors.Result(operand, records[slot + 3]);
+                    // The result occupies the first operand's depth (or the next one for a nullary member).
+                    int resultDepth = arity == 0 ? depth : first;
+                    used = SimdVectors.Emit(code, used, operand, records[slot + 3], operands,
+                        simdResult == Void ? -1 : Spill(spills, maximum, spillFlags, simdResult, resultDepth),
+                        new[] { eventLocals, eventLocals + 1, eventLocals + 2 }, new[] { enumLocals, enumLocals + 1 });
+                }
+                else if (kind == BinarySearchPrimitiveArray)
+                    used = ArrayBinarySearch.Emit(code, used, operand,
+                        Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1),
+                        Spill(spills, maximum, spillFlags, ArrayBinarySearch.ValueType(operand), top),
+                        eventLocals, eventLocals + 1, eventLocals + 2, Spill(spills, maximum, spillFlags, I32, top - 1));
                 else if (kind == SortPrimitiveArray)
                 {
                     bool wide = operand >= 0x0a;
@@ -2443,7 +2497,30 @@ namespace PortableCompiler
         internal static int Spill(int first, int maximum, int spillFlags, int type, int depth) =>
             type == NullValue ? first - 1 : first + SpillBank(type, spillFlags) * maximum + depth;
 
-        private static int ExtraSpillBanks(int flags) => (flags & LocationSpill) + (flags >> 1);
+        private static int ExtraSpillBanks(int flags) =>
+            (flags & 1) + (flags >> 1 & 1) + (flags >> 2 & 1) + (flags >> 3 & 1) + (flags >> 4 & 1) + (flags >> 5 & 1);
+
+        // The stack type of the extra bank at `index`: banks follow in the order location, span,
+        // vector, vector pair, each present only when some verified state needs it.
+        private static int ExtraBankType(int index, int flags)
+        {
+            int[] order = { ObjectLocation, ObjectSpan, SimdVectors.Tag(1, 0x08), SimdVectors.Pair(SimdVectors.Tag(4, 0x0a)),
+                WideTuples.Value, WideTuples.TupleArray };
+            for (int bit = 0; bit < 6; bit++)
+            {
+                if ((flags >> bit & 1) == 0) continue;
+                if (index-- == 0) return order[bit];
+            }
+            return ObjectSpan;
+        }
+
+        // The index of the extra bank `bit` among the present ones.
+        private static int ExtraBank(int bit, int flags)
+        {
+            int index = 0;
+            for (int i = 0; i < bit; i++) index += flags >> i & 1;
+            return index;
+        }
         // stind.* matching a field's ldind.* opcode.
         private static int StoreFor(int load) =>
             load <= 0x47 ? 0x52 : load <= 0x49 ? 0x53 : load <= 0x4b ? 0x54 : load == 0x4c ? 0x55 :
@@ -2464,7 +2541,11 @@ namespace PortableCompiler
             // ReinterpretManagedLocation is verifier-only. Both nominal
             // views keep the same reference in the shared location bank.
             IsManagedLocation(type) ? LastScalarBank :
-            IsSpan(type) ? LastScalarBank + (flags & LocationSpill) :
+            IsSpan(type) ? LastScalarBank + ExtraBank(1, flags) :
+            SimdVectors.IsVector(type) ? LastScalarBank + ExtraBank(2, flags) :
+            SimdVectors.IsPair(type) ? LastScalarBank + ExtraBank(3, flags) :
+            WideTuples.IsWide(type) ? LastScalarBank + ExtraBank(4, flags) :
+            type == WideTuples.TupleArray ? LastScalarBank + ExtraBank(5, flags) :
             type >= FirstClass ? LastScalarBank + ExtraSpillBanks(flags) + type - FirstClass :
                 (type == NativeZero ? Native : type == NativeVector ? NativeZero : type) - 1;
 

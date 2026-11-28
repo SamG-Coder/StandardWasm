@@ -16,7 +16,11 @@ namespace PortableCompiler
         private const int ObjectLocationHeap = ValueLocationHeap + 1;
         private const int ReadOnlySpanHeap = ObjectLocationHeap + 1;
         internal const int CharacterSpanThunkType = ReadOnlySpanHeap + 1;
-        private const int FirstClassHeap = CharacterSpanThunkType + 1;
+        // Decision 0105: the SIMD vector struct and the vector pair struct (SimdVectors).
+        internal const int VectorHeap = CharacterSpanThunkType + 1, VectorPairHeap = VectorHeap + 1;
+        // Decision 0105: the UInt128 / (UInt128, int) struct and its array (WideTuples).
+        internal const int WideValueHeap = VectorPairHeap + 1, WideTupleArrayHeap = WideValueHeap + 1;
+        private const int FirstClassHeap = WideTupleArrayHeap + 1;
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
@@ -117,7 +121,7 @@ namespace PortableCompiler
             int delegateTypes = DelegateShapes.EntryCount(objects);
             typeEntries += delegateTypes;
             int prefix = UnsignedSize(typeEntries) + 72 + ManagedValueLocationWasm.TypeBytes(rootCount >= 0) +
-                ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + 7 + PrimitiveArrayWasm.BaseTypeOverhead +
+                ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + 7 + SimdVectors.TypeBytes + WideTuples.TypeBytes + PrimitiveArrayWasm.BaseTypeOverhead +
                 primitiveArrays.TypeBytes +
                 (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
@@ -355,6 +359,8 @@ namespace PortableCompiler
             cursor = ValueType(output, cursor, WritableCharacterSpan);
             output[cursor++] = 0x7f;
             output[cursor++] = 0;
+            cursor = SimdVectors.WriteTypes(output, cursor, VectorHeap);
+            cursor = WideTuples.WriteTypes(output, cursor, WideValueHeap);
             if (recursive)
             {
                 output[cursor++] = 0x4e;
@@ -664,6 +670,8 @@ namespace PortableCompiler
         }
 
         internal static int HeapType(int type) =>
+            SimdVectors.IsVector(type) ? VectorHeap : SimdVectors.IsPair(type) ? VectorPairHeap :
+            WideTuples.IsWide(type) ? WideValueHeap : type == WideTuples.TupleArray ? WideTupleArrayHeap :
             IsValueLocation(type) ? ValueLocationHeap : (type == Delegate || type == CharacterSpanCallback) ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
                 type == EventArgsReference ? EventArgsHeap :
                 type == EventHandlerReference || type == DelegateReference || DelegateShapes.IsKey(type) ? EventHandlerHeap :

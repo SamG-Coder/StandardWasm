@@ -45,6 +45,13 @@ namespace PortableCompiler
                 next[0] = after;
                 return SignatureTypes.Native;
             }
+            // Decision 0105: a pointer to Vector128/256/512<T> addresses blittable SIMD data in
+            // memory 0 (ldobj/stobj of it use v128 loads and stores).
+            if (position < end && image[position] == 0x15)
+            {
+                int tag = SimdVectors.ReadSignatureTag(image, layout, heaps, position, end, next);
+                if (SimdVectors.IsVector(tag)) return SignatureTypes.Native;
+            }
             int pointee = PointerStorage.ReadPointee(image, position, end, next);
             if (pointee < 0) return pointee;
             if (image[position] == PointerStorage.Element)

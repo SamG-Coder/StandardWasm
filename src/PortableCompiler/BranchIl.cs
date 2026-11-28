@@ -138,6 +138,16 @@ namespace PortableCompiler
         internal const int FailFast = 445;
         // Decision 0105: element i of a flat inline-array field: [i] -> [FlatInlineLocation(E)] (FlatInlineArrays).
         internal const int FlatIndex = 446;
+        // Decision 0105: Array.BinarySearch<T>(T[], T) for 32/64-bit integers: [array, value] -> [index].
+        internal const int BinarySearchPrimitiveArray = 447;
+        // Decision 0105: a Vector128/256/512 member; operand = SimdVectors member, aux = its vector tag.
+        internal const int SimdOp = 448;
+        // Decision 0105: callvirt Array::Clone() on a one-dimensional array: [array] -> [object] (ArrayClone).
+        internal const int CloneArray = 449;
+        // Decision 0105: a UInt128 / (UInt128, int) tuple member; the operand is the WideTuples member.
+        internal const int WideOp = 450;
+        // Decision 0105: an X86/Arm/Wasm intrinsic member that traps; operand = parameters, aux = result type.
+        internal const int PlatformUnsupported = 451;
         internal const int ExitProcess = 425; // [status] -> (traps); the operand is the exit-status global
         // NativeMemory members (decision 0104); the operand is the member id and operand 3 becomes
         // the alloc import index. [args...] -> [void*] or [].
