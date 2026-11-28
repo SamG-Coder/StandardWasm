@@ -1210,6 +1210,14 @@ namespace PortableCompiler
                     else if (backing != 0)
                         used = InlineObjectStorageWasm.Store(code, used, type, backing, target, temporary, FieldCount(objects, type));
                 }
+                else if (kind == SortPrimitiveArray)
+                {
+                    bool wide = operand >= 0x0a;
+                    used = ArraySortPrimitive.Emit(code, used, operand,
+                        Spill(spills, maximum, spillFlags, states[state + top], top),
+                        eventLocals, eventLocals + 1, eventLocals + 2, eventLocals + 3, eventLocals + 4,
+                        wide ? enumLocals : scratch + 3, wide ? enumLocals + 1 : scratch + 4);
+                }
                 else if (kind == PrimitiveBitCast)
                 {
                     int source = Spill(spills, maximum, spillFlags, UnsafeCalls.StackType(operand), top);

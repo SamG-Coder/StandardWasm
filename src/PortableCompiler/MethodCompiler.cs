@@ -792,6 +792,7 @@ namespace PortableCompiler
                     WideMultiplyDivide.Lower(image, layout, heaps, records, catchRegion);
                     PlatformExceptionThrows.Lower(image, layout, heaps, records, catchRegion);
                     UnsafeCalls.Lower(image, layout, heaps, records, catchRegion);
+                    ArraySortPrimitive.Lower(image, layout, heaps, records);
                     if (contexts[current] == CoreVersionByref.ContextKey)
                     {
                         status = CoreVersionByref.Lower(bundle, image, layout, heaps, owner, source, records, natives, nativeBase, current);
@@ -1392,6 +1393,11 @@ namespace PortableCompiler
                                 if (bytes < 0) return bytes;
                                 capacity += bytes;
                             }
+                            if (kind == BranchIl.SortPrimitiveArray)
+                            {
+                                if (capacity > int.MaxValue - ArraySortPrimitive.Capacity) return -3;
+                                capacity += ArraySortPrimitive.Capacity;
+                            }
                             if (kind == BranchIl.MultiplyDivideUInt64)
                             {
                                 if (capacity > int.MaxValue - WideMultiplyDivide.Capacity) return -3;
@@ -1487,6 +1493,8 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.Argument; // AlignedAlloc/AlignedRealloc alignment
                             else if (kind == BranchIl.MultiplyDivideUInt64)
                                 tags = ExceptionTypes.DivideByZero; // UInt128 division by zero
+                            else if (kind == BranchIl.SortPrimitiveArray)
+                                tags = ExceptionTypes.ArgumentNull; // Array.Sort(null)
                             else if (kind == BranchIl.ThrowFrameworkArgument)
                                 tags = operation == PlatformExceptionThrows.Trap ? 0 :
                                     operation == ExceptionTagsWasm.ArgumentTag ? ExceptionTypes.Argument :
@@ -1582,7 +1590,9 @@ namespace PortableCompiler
                             kind == BranchIl.FindCharacterInSpan || kind == BranchIl.CopyConstructionString) frameShape[5] |= 1;
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
                         if (kind == BranchIl.FormatEnum || kind == BranchIl.FormatPrimitive ||
-                            kind == BranchIl.JoinStringArray || kind == BranchIl.MultiplyDivideUInt64) frameShape[5] |= 5;
+                            kind == BranchIl.JoinStringArray || kind == BranchIl.MultiplyDivideUInt64 ||
+                            kind == BranchIl.SortPrimitiveArray) frameShape[5] |= 5;
+                        if (kind == BranchIl.SortPrimitiveArray) frameShape[6] = 1; // five i32 loop counters
                         if (kind == BranchIl.PinScopedValue) frameShape[5] |= 2 | ScopedValuePins.FrameFlag;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler || kind == BranchIl.DelegateEquality ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))

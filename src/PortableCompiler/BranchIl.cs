@@ -124,6 +124,7 @@ namespace PortableCompiler
         internal const int MultiplyDivideUInt64 = 428;
         // Unsafe.BitCast<TFrom, TTo> over equal-size primitives; operand and operand 3 are the element types.
         internal const int PrimitiveBitCast = 429;
+        internal const int SortPrimitiveArray = 430; // [T[]] -> [] for Array.Sort<T>; the operand is T's element type
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

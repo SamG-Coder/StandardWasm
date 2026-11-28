@@ -7,8 +7,9 @@ namespace PortableCompiler
 {
     // Decision 0104: System.Runtime.CompilerServices.Unsafe calls over primitive type arguments.
     //
-    // - SkipInit<T>(out T) on `ldloca x`: the CLR leaves x's bits unspecified; Wasm locals and
-    //   cells already hold a valid value, so both records become nops.
+    // - SkipInit<T>(out T): the CLR leaves the target's bits unspecified; Wasm locals and cells
+    //   already hold a valid value. On `ldloca x` both records become nops; any other address
+    //   (such as an out parameter) is popped.
     // - BitCast<TFrom, TTo>(TFrom) for primitives of equal size: the bits are reinterpreted.
     //   Integer stack values are normalized to the target (a byte or Boolean target keeps the low
     //   8 bits, sbyte and short sign-extend, char and ushort keep 16 bits); float and integer pairs
@@ -41,9 +42,12 @@ namespace PortableCompiler
                 if (arity == 1 && MatchesAscii(image, heaps, name, "SkipInit"))
                 {
                     int address = Producer(records, slot, clauses);
-                    if (address < 0 || records[address] != FrameAddress) continue;
-                    records[address] = Nop;
-                    records[slot] = Nop;
+                    if (address >= 0 && records[address] == FrameAddress)
+                    {
+                        records[address] = Nop;
+                        records[slot] = Nop;
+                    }
+                    else records[slot] = Pop; // an existing managed address (an out parameter): [address] -> []
                     continue;
                 }
                 if (arity != 2 || !MatchesAscii(image, heaps, name, "BitCast") ||
