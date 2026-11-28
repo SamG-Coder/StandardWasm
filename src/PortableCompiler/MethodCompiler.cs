@@ -1393,6 +1393,11 @@ namespace PortableCompiler
                                 if (bytes < 0) return bytes;
                                 capacity += bytes;
                             }
+                            if (kind == BranchIl.MultiplyHighUInt64)
+                            {
+                                if (capacity > int.MaxValue - WideMultiplyDivide.Capacity) return -3;
+                                capacity += WideMultiplyDivide.Capacity;
+                            }
                             if (kind == BranchIl.SortPrimitiveArray)
                             {
                                 if (capacity > int.MaxValue - ArraySortPrimitive.Capacity) return -3;
@@ -1593,7 +1598,7 @@ namespace PortableCompiler
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
                         if (kind == BranchIl.FormatEnum || kind == BranchIl.FormatPrimitive ||
                             kind == BranchIl.JoinStringArray || kind == BranchIl.MultiplyDivideUInt64 ||
-                            kind == BranchIl.SortPrimitiveArray) frameShape[5] |= 5;
+                            kind == BranchIl.SortPrimitiveArray || kind == BranchIl.MultiplyHighUInt64) frameShape[5] |= 5;
                         if (kind == BranchIl.SortPrimitiveArray) frameShape[6] = 1; // five i32 loop counters
                         if (kind == BranchIl.PinScopedValue) frameShape[5] |= 2 | ScopedValuePins.FrameFlag;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler || kind == BranchIl.DelegateEquality ||
@@ -3432,6 +3437,21 @@ namespace PortableCompiler
                     {
                         records[slot] = BranchIl.CharacterCall;
                         records[slot + 1] = characterMember;
+                        continue;
+                    }
+                    int wordMember = opcode == 0x28 && !addressed ? NativeWordMembers.Identify(image, heaps, layout, member) : 0;
+                    if (wordMember == NativeWordMembers.BigMul)
+                    {
+                        records[slot] = BranchIl.MultiplyHighUInt64;
+                        records[slot + 1] = 0;
+                        continue;
+                    }
+                    if (wordMember != 0)
+                    {
+                        // IntPtr.Size is an int32; UIntPtr.MaxValue a native unsigned int (decision 0027).
+                        records[slot] = wordMember == NativeWordMembers.PointerSize ? BranchIl.Constant : BranchIl.NativeConstant;
+                        records[slot + 1] = wordMember == NativeWordMembers.PointerSize ? 4 : -1;
+                        records[slot + 3] = 0;
                         continue;
                     }
                     int intrinsic = opcode == 0x28 && !addressed ? PlatformMembers.MathIntrinsic(image, heaps, layout, member) : 0;

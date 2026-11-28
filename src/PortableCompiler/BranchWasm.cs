@@ -1210,6 +1210,24 @@ namespace PortableCompiler
                     else if (backing != 0)
                         used = InlineObjectStorageWasm.Store(code, used, type, backing, target, temporary, FieldCount(objects, type));
                 }
+                else if (kind == NativeConstant)
+                {
+                    used = Const(code, used, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, Native, depth));
+                }
+                else if (kind == MultiplyHighUInt64)
+                {
+                    // [a, b, &low] -> [high]: low = a * b (wrapping) is stored through the location.
+                    int a = Spill(spills, maximum, spillFlags, I64, top - 2), b = Spill(spills, maximum, spillFlags, I64, top - 1);
+                    int low = Spill(spills, maximum, spillFlags, Int64Location, top);
+                    used = Local(code, used, 0x20, a);
+                    used = Local(code, used, 0x20, b);
+                    code[used++] = 0x7e; // i64.mul
+                    used = Local(code, used, 0x21, enumLocals);
+                    used = ValueFieldProjectionWasm.Write(code, used, frameShape[7], low, enumLocals, Longs, Int64Location, projections);
+                    used = WideMultiplyDivide.High(code, used, a, b);
+                    used = Local(code, used, 0x21, a);
+                }
                 else if (kind == ArrayDataReference)
                 {
                     int array = Spill(spills, maximum, spillFlags, states[state + top], top);

@@ -110,7 +110,19 @@ namespace PortableCompiler
             code[used++] = 0x50; // i64.eqz
             used = ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.DivideTag);
 
-            // hi = a1*b1 + (a0*b1 >> 32) + (a1*b0 >> 32) + ((a0*b0 >> 32) + low32(a0*b1) + low32(a1*b0)) >> 32
+            used = High(code, used, a, b);
+            used = Set(code, used, hi);
+            used = Get(code, used, a);
+            used = Get(code, used, b);
+            code[used++] = 0x7e; // i64.mul: the low product word
+            used = Set(code, used, b);
+            return Divide(code, used, a, b, c, hi, remainder, bit);
+        }
+
+        // [] -> [the high 64 bits of the unsigned 128-bit product a * b]:
+        // a1*b1 + (a0*b1 >> 32) + (a1*b0 >> 32) + ((a0*b0 >> 32) + low32(a0*b1) + low32(a1*b0)) >> 32
+        internal static int High(byte[] code, int used, int a, int b)
+        {
             used = Product(code, used, a, true, b, true);
             used = Product(code, used, a, false, b, true);
             used = Shift(code, used);
@@ -128,12 +140,12 @@ namespace PortableCompiler
             code[used++] = 0x7c;
             used = Shift(code, used);
             code[used++] = 0x7c;
-            used = Set(code, used, hi);
-            used = Get(code, used, a);
-            used = Get(code, used, b);
-            code[used++] = 0x7e; // i64.mul: the low product word
-            used = Set(code, used, b);
+            return used;
+        }
 
+        // Restoring long division of hi:lo (lo in `b`) by c; the low 64 quotient bits go to `a`.
+        private static int Divide(byte[] code, int used, int a, int b, int c, int hi, int remainder, int bit)
+        {
             // Restoring long division over the 128 dividend bits, most significant first.
             used = WasmConst64(code, used, 0);
             used = Set(code, used, remainder);
