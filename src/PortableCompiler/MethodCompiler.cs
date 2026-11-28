@@ -1882,6 +1882,8 @@ namespace PortableCompiler
                 rootWalker = hostImports + functions;
                 WasmIndexFixups.Resolve(moduleCode, finalizers.RegistrationFixups[0], rootWalker + FinalizerQueueWasm.Register);
                 WasmIndexFixups.Resolve(moduleCode, finalizers.SuppressionFixups[0], rootWalker + FinalizerSuppressionWasm.Suppress);
+                WasmIndexFixups.Resolve(moduleCode, finalizers.DiscoverFixups[0], rootWalker + FinalizerQueueWasm.Discover);
+                WasmIndexFixups.Resolve(moduleCode, finalizers.RunNextFixups[0], rootWalker + FinalizerQueueWasm.RunNext);
                 for (int entry = 0; entry < FinalizerSuppressionWasm.End; entry++)
                 {
                     bool read = entry == 1;
@@ -3442,9 +3444,19 @@ namespace PortableCompiler
                         continue;
                     }
                     // Exact System.Math intrinsics, identified by platform assembly and signature (decision 0003).
+                    // Decision 0104: `base.Finalize()` in a finalizer calls the platform System.Object.Finalize,
+                    // whose body is empty: [receiver] -> [].
+                    if (opcode == 0x28 && !addressed && GarbageCollectorMembers.IsObjectFinalize(image, heaps, layout, member))
+                    {
+                        records[slot] = BranchIl.Pop;
+                        continue;
+                    }
                     int collector = opcode == 0x28 && !addressed ? GarbageCollectorMembers.Identify(image, heaps, layout, member) : 0;
                     if (collector != 0)
                     {
+                        // Collect and WaitForPendingFinalizers discover and run finalizers, which
+                        // needs the module's finalizer tracking (root stacks and registration).
+                        if (collector != GarbageCollectorMembers.KeepAlive && !tracksFinalizers) return Reemit;
                         records[slot] = BranchIl.GarbageCollectorCall;
                         records[slot + 1] = collector;
                         continue;

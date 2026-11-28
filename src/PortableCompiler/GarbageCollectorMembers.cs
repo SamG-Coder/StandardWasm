@@ -18,6 +18,17 @@ namespace PortableCompiler
     {
         internal const int Collect = 1, WaitForPendingFinalizers = 2, KeepAlive = 3;
 
+        // instance void System.Object::Finalize() on the platform type.
+        internal static bool IsObjectFinalize(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            var reference = new int[AssemblyReferences.SymbolWidth];
+            return AssemblyReferences.ReadMember(image, heaps, layout, row, reference) >= 0 &&
+                reference[AssemblyReferences.Depth] == 0 &&
+                MatchesAscii(image, heaps, (uint)reference[4], "Finalize") &&
+                FinalizerSlots.Signature(image, heaps, reference[5]) &&
+                SpanMetadata.IsPlatformType(image, layout, heaps, reference[AssemblyReferences.ParentType], "System", "Object");
+        }
+
         internal static int Identify(byte[] image, int[] heaps, int[] layout, int row)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];

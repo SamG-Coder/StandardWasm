@@ -1276,8 +1276,23 @@ namespace PortableCompiler
                 }
                 else if (kind == GarbageCollectorCall)
                 {
-                    // Nothing to emit: KeepAlive's argument stays in its spill slot and is dropped
-                    // with the stack depth; Collect/WaitForPendingFinalizers run no finalizer.
+                    // KeepAlive: nothing to emit; its argument stays in its spill slot and is dropped
+                    // with the stack depth. Collect queues every unreachable finalizable object
+                    // (Discover); WaitForPendingFinalizers runs them until the queue is empty.
+                    if (operand == GarbageCollectorMembers.Collect)
+                    {
+                        code[used++] = 0x10;
+                        used = WasmIndexFixups.Write(code, used, frameShape[7], finalizers.DiscoverFixups);
+                        code[used++] = 0x1a; // drop the discovered count
+                    }
+                    else if (operand == GarbageCollectorMembers.WaitForPendingFinalizers)
+                    {
+                        code[used++] = 0x03; code[used++] = 0x40; // loop
+                        code[used++] = 0x10;
+                        used = WasmIndexFixups.Write(code, used, frameShape[7], finalizers.RunNextFixups);
+                        code[used++] = 0x0d; code[used++] = 0; // br_if: another finalizer ran
+                        code[used++] = 0x0b;
+                    }
                 }
                 else if (kind == NativeMemoryCall)
                 {
