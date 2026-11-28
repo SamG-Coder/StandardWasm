@@ -1208,6 +1208,15 @@ namespace PortableCompiler
                     else if (backing != 0)
                         used = InlineObjectStorageWasm.Store(code, used, type, backing, target, temporary, FieldCount(objects, type));
                 }
+                else if (kind == NativeMemoryCall)
+                {
+                    int arity = NativeMemoryMembers.Arity(operand), first = top - arity + 1;
+                    var operands = new int[arity];
+                    for (int i = 0; i < arity; i++)
+                        operands[i] = Spill(spills, maximum, spillFlags, states[state + first + i], first + i);
+                    used = NativeMemoryMembers.Emit(code, used, operand, operands,
+                        Spill(spills, maximum, spillFlags, Native, first), records[slot + 3]);
+                }
                 else if (kind == ExitProcess)
                     used = ProcessExit.Emit(code, used, Spill(spills, maximum, spillFlags, I32, top), operand);
                 else if (kind == ReadTimestamp)

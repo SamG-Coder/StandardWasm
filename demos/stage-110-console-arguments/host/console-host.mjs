@@ -5,6 +5,8 @@
 // Environment.NewLine. Both are explicit options so a comparison can name
 // the Windows configuration it reproduces.
 
+import { createNativeHeap } from "./native-heap.mjs";
+
 export const consoleImportModule = "standardwasm:console";
 
 // Windows-1252 bytes 0x80-0x9f. Zero marks the five bytes the code page
@@ -158,7 +160,9 @@ export function createConsoleHost({ encoding = "utf-8", newLine = "\r\n", input 
     let exitStatus = null;
     const processImports = { exit(status) { exitStatus = status | 0; } };
     const imports = {
-        [consoleImportModule]: consoleImports, "standardwasm:clock": clockImports, "standardwasm:process": processImports
+        [consoleImportModule]: consoleImports, "standardwasm:clock": clockImports, "standardwasm:process": processImports,
+        // Decision 0104: NativeMemory blocks in the module's memory 0.
+        "standardwasm:native": createNativeHeap()
     };
     return {
         imports,

@@ -42,6 +42,23 @@ namespace PeLibrary
             return low == 0xd785ec7c && high == 0x8e79a7be && IsCoreLibName(image, n, name, size);
         }
 
+        // A named .NET reference assembly with the framework public key token b03f5f7f11d50a3a
+        // and neutral culture, such as System.Runtime.InteropServices (decision 0104).
+        internal static bool IsFrameworkAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row, string expected)
+        {
+            int table = MetadataTableRows.TableStart(heaps, methods, counts, 35);
+            if (table < 0 || row < 1 || row > counts[35]) return false;
+            int strings = methods[2], blobs = methods[3];
+            uint at = (uint)(table + (row - 1) * (12 + 2 * strings + 2 * blobs));
+            if (U32(image, at + 8) != 0 || Index(image, at + (uint)(12 + blobs + strings), strings) != 0) return false;
+            uint key = Index(image, at + 12, blobs);
+            if (key == 0 || !Fits(key, 9, (uint)heaps[1])) return false;
+            uint blob = (uint)heaps[0] + key;
+            if (image[blob] != 8 || U32(image, blob + 1) != 0x7f5f3fb0 || U32(image, blob + 5) != 0x3a0ad511) return false;
+            uint name = Index(image, at + (uint)(12 + blobs), strings);
+            return name != 0 && MatchesAscii(image, heaps, name, expected);
+        }
+
         // System.Console is a separate reference assembly in .NET Core. .NET
         // Standard and .NET Framework libraries reach it through their facade.
         internal static bool IsConsoleAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row)

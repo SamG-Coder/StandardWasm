@@ -1,3 +1,4 @@
+import { attachMemory as attachNativeHeapMemory } from "../stage-110-console-arguments/host/native-heap.mjs";
 import { comImportModule, isNativeImportModule, nativeImports, nativeIndirectImportModule, windowsScalars } from "../../scripts/native-imports.mjs";
 import { comActivationName, createComHost, isComDispatchSignature } from "./com-host.mjs";
 import { createDynamicLibraryHost, createNativeIndirectDispatch, nativeIndirectSignature, scopedUtf16Signature } from "./dynamic-library-host.mjs";
@@ -216,6 +217,10 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         memory = resource.memory;
         imports = { ...imports, ...resource.imports };
     }
+    // Decision 0104: a native heap import group allocates in this same memory 0.
+    const nativeHeap = runtimeImports["standardwasm:native"];
+    if (memory && nativeHeap && typeof nativeHeap[attachNativeHeapMemory] === "function")
+        nativeHeap[attachNativeHeapMemory](memory);
     let dynamicLibraries;
     const requestedLibrary = requestedWin32.has("loadLibraryExW") || requestedWin32.has("getProcAddress") ||
         requestedWin32.has("callWindowProcW") || requestedWin32.has("registerClassW") || requestedWin32.has("createWindowExW") ||

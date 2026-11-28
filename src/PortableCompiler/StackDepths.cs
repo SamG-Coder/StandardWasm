@@ -806,6 +806,15 @@ namespace PortableCompiler
                 return kind == Binary ? Push(stack, allocated, remaining, IsComparison(operand) ? I32 : type) : remaining;
             }
             if (kind == ReadTimestamp) return Push(stack, allocated, depth, I64);
+            if (kind == NativeMemoryCall)
+            {
+                // void* and nuint operands are wasm32 native ints; Fill's byte value is an int32.
+                int arity = NativeMemoryMembers.Arity(operand);
+                if (depth < arity) return -1;
+                for (int i = depth - arity; i < depth; i++)
+                    if (stack[i] != I32 && !IsNativeInteger(stack[i])) return -2;
+                return NativeMemoryMembers.Returns(operand) ? Push(stack, allocated, depth - arity, Native) : depth - arity;
+            }
             if (kind == ExitProcess) return Match(stack, depth, I32) ? depth - 1 : -1;
             if (kind == CharacterCall)
                 return Match(stack, depth, I32) ? Push(stack, allocated, depth - 1, I32) : -1;

@@ -1387,6 +1387,11 @@ namespace PortableCompiler
                                 if (bytes < 0) return bytes;
                                 capacity += bytes;
                             }
+                            if (kind == BranchIl.NativeMemoryCall)
+                            {
+                                if (capacity > int.MaxValue - NativeMemoryMembers.Capacity) return -3;
+                                capacity += NativeMemoryMembers.Capacity;
+                            }
                             if (kind == BranchIl.CharacterCall)
                             {
                                 if (capacity > int.MaxValue - CharacterMembers.Capacity) return -3;
@@ -1468,6 +1473,8 @@ namespace PortableCompiler
                             }
                             else if (kind == BranchIl.JoinStringArray)
                                 tags = ExceptionTypes.ArgumentNull; // String.Concat(null)
+                            else if (kind == BranchIl.NativeMemoryCall)
+                                tags = ExceptionTypes.Argument; // AlignedAlloc/AlignedRealloc alignment
                             else if (kind == BranchIl.ThrowFrameworkArgument)
                                 tags = operation == ExceptionTagsWasm.ArgumentNullTag
                                     ? ExceptionTypes.ArgumentNull : ExceptionTypes.ArgumentOutOfRange;
@@ -1553,6 +1560,7 @@ namespace PortableCompiler
                         int kind = records[slot];
                         if (kind == BranchIl.ReadTimestamp) records[slot + 1] = WasmImports.ClockFunction(hostFeatures);
                         if (kind == BranchIl.ExitProcess) records[slot + 1] = WasmImports.ExitFunction(hostFeatures);
+                        if (kind == BranchIl.NativeMemoryCall) records[slot + 3] = WasmImports.NativeHeapFunction(hostFeatures);
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.JoinManyStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
                             kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.StringFromSpan || kind == BranchIl.ConsoleWrite ||
                             kind == BranchIl.NativeUtf16Length || kind == BranchIl.CopyNativeConstructionString ||
@@ -3355,6 +3363,16 @@ namespace PortableCompiler
                         continue;
                     }
                     // Exact System.Math intrinsics, identified by platform assembly and signature (decision 0003).
+                    int nativeMemory = opcode == 0x28 && !addressed ? NativeMemoryMembers.Identify(image, heaps, layout, member) : 0;
+                    if (nativeMemory != 0)
+                    {
+                        records[slot] = BranchIl.NativeMemoryCall;
+                        records[slot + 1] = nativeMemory;
+                        bool bulk = nativeMemory == NativeMemoryMembers.Clear || nativeMemory == NativeMemoryMembers.Fill ||
+                            nativeMemory == NativeMemoryMembers.Copy;
+                        hostUse[0] = hostUse[0] | (bulk ? WasmImports.Memory : WasmImports.NativeHeap);
+                        continue;
+                    }
                     if (opcode == 0x28 && !addressed && ProcessExit.IsExit(image, heaps, layout, member))
                     {
                         records[slot] = BranchIl.ExitProcess;
