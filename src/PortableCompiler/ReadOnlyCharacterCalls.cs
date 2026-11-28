@@ -37,7 +37,7 @@ namespace PortableCompiler
             return true;
         }
 
-        internal void Apply(int[] bases, int[] indices, int[] offsets, int[] signatures)
+        internal void MarkReadOnlyParameters(int[] bases, int[] indices, int[] offsets, int[] signatures)
         {
             for (int at = 0; at < used; at += Width)
             {
