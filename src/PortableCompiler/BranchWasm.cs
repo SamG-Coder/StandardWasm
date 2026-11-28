@@ -322,6 +322,7 @@ namespace PortableCompiler
                 used = WasmBinary.Unsigned(code, used, leaderIndex[pc] >= 0 ? leaderIndex[pc] : leaderCount);
             used = WasmBinary.Unsigned(code, used, leaderCount);
             int segment = -1;
+            int copiedStore = -1; // the stobj state already performed by a fused ldobj copy
             for (int pc = 0; pc < depths.Length; pc++)
             {
                 if (depths[pc] == 0) continue;
@@ -1582,6 +1583,22 @@ namespace PortableCompiler
                         used = ValueFieldProjectionWasm.Write(code, used, frameShape[7], address, source, operand, type, projections);
                     }
                 }
+                else if (kind == LoadObject && CopiesToNative(records, depths, leaders, slot))
+                {
+                    // Decision 0106: `ldobj T; stobj T` between native addresses is one memory.copy of
+                    // sizeof(T) bytes. T is blittable, so the bytes are the CLR's; the source is null
+                    // checked first, as ldobj faults before stobj. The stobj state then emits nothing.
+                    int source = Spill(spills, maximum, spillFlags, Native, top);
+                    int destination = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);
+                    used = LinearMemoryWasm.GuardNull(code, used, source);
+                    used = LinearMemoryWasm.GuardNull(code, used, destination);
+                    used = Local(code, used, 0x20, destination);
+                    used = Local(code, used, 0x20, source);
+                    used = Const(code, used, nativePlans[records[slot + 3] - 1 + 1]);
+                    code[used++] = 0xfc; code[used++] = 10; code[used++] = 0; code[used++] = 0; // memory.copy
+                    copiedStore = records[slot + 2];
+                }
+                else if (kind == StoreObject && pc == copiedStore) { }
                 else if (kind == LoadObject)
                 {
                     int address = Spill(spills, maximum, spillFlags, Native, top);
@@ -2463,6 +2480,16 @@ namespace PortableCompiler
                 Mark(leaders, clauses[clause + 3] + clauses[clause + 4]);
             }
             return leaders;
+        }
+
+        // `ldobj T` whose value goes straight to `stobj T` (the next state, not a dispatch target) at a
+        // native address below it on the stack.
+        private static bool CopiesToNative(int[] records, int[] depths, bool[] leaders, int slot)
+        {
+            int next = records[slot + 2];
+            if ((uint)next >= (uint)depths.Length || depths[next] == 0 || leaders[next]) return false;
+            int store = next * BranchIl.Width;
+            return records[store] == StoreObject && records[store + 1] == records[slot + 1] && records[store + 3] == records[slot + 3];
         }
 
         private static void Mark(bool[] leaders, int pc)
