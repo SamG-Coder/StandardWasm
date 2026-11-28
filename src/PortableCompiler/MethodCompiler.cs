@@ -743,7 +743,7 @@ namespace PortableCompiler
                     if (falseBooleans.IsClone(bases[owner] + source, current))
                     {
                         bool instance = (MethodDefinitions.ReadColumn(image, layout, source, 2) & 0x10) == 0;
-                        FalseBooleanSpecializations.Fold(image, body, instance, records, catchRegion);
+                        FalseBooleanSpecializations.FoldFalseGuard(image, body, instance, records, catchRegion);
                     }
                     RuntimeTypeBranches.FoldClosedTypeBranches(bundle, image, layout, heaps, owner, context,
                         methodArguments, objects, frame, records, catchRegion, count);
