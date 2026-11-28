@@ -7,6 +7,8 @@ import { createMonitorHost } from "../demos/stage-74-executable-entry/resource-h
 import { runOn32BitClr, wasm32Runtime } from "./runtime-packs.mjs";
 import { root } from "./toolchain.mjs";
 
+export const isRelease = () => process.env.STANDARDWASM_RELEASE === "1" || process.argv.includes("--release");
+
 export async function verifyManagedDemo(stageName) {
     const stage = join(root, "demos", stageName);
     const evidence = join(root, "artifacts", stageName);
@@ -67,7 +69,10 @@ export async function verifyManagedDemo(stageName) {
         return outcomes;
     }
 
-    const node = await verify(compiler, bundle, oracle.cases, createMonitorHost);
+    // Owner direction (#316, decision 0102): per-change runs verify in Edge, the shipping engine.
+    // A release (STANDARDWASM_RELEASE=1 or --release) also compiles and runs every case in Node
+    // and requires the two engines to agree.
+    const node = isRelease() ? await verify(compiler, bundle, oracle.cases, createMonitorHost) : undefined;
     const browser = await chromium.launch({ channel: "msedge" });
     try {
         const page = await browser.newPage();
@@ -86,10 +91,10 @@ export async function verifyManagedDemo(stageName) {
         }, { source: verify.toString(), cases: oracle.cases, monitorSource: createMonitorHost.toString() });
         const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
         const result = { compiler: sha256(compiler), assembly: sha256(assembly), clr: oracle.runtime,
-            node: process.version, edge: browser.version(), outcomes: node };
+            node: node ? process.version : null, edge: browser.version(), outcomes: edge };
         writeFileSync(join(evidence, "results.json"), JSON.stringify(result, null, 2) + "\n");
-        assert.deepEqual(edge, node);
-        for (const [index, test] of node.entries()) {
+        if (node) assert.deepEqual(edge, node);
+        for (const [index, test] of edge.entries()) {
             const rejection = oracle.cases[index].rejection;
             if (rejection) {
                 assert.equal(test.status, rejection.status, JSON.stringify(test));

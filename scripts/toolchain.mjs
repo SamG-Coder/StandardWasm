@@ -2,15 +2,28 @@ import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { planDotnet } from "./build-cache.mjs";
 
 export const root = fileURLToPath(new URL("../", import.meta.url));
 const driverProject = "tools/PortableCompiler.Driver";
 const driver = join(root, driverProject, "bin/Release/net10.0/PortableCompiler.Driver.dll");
 let driverReady = false;
-export function run(command, args) {
+function spawnChecked(command, args) {
     const result = spawnSync(command, args, { stdio: "inherit", cwd: root });
     if (result.error) throw result.error;
     if (result.status !== 0) throw Error(command + " exited with " + result.status);
+}
+
+// dotnet build/publish/run skip the build when the inputs' sha256 matches the last
+// successful build (scripts/build-cache.mjs); every other command runs as given.
+export function run(command, args) {
+    if (command !== "dotnet") return spawnChecked(command, args);
+    const plan = planDotnet(root, args);
+    if (plan.note) console.log(plan.note);
+    if (plan.skip) return;
+    if (plan.prebuild) spawnChecked(command, plan.prebuild);
+    spawnChecked(command, plan.args);
+    plan.record();
 }
 
 export function invokeCompiler(dll, exportType, output, options = {}) {
