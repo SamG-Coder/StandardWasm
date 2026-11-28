@@ -57,7 +57,8 @@ namespace PortableCompiler
             return vector > 0 && next[0] == end ? vector : 0;
         }
 
-        // 1 for `.ctor(int32, int32)`, 2 for `T Get(int32, int32)`, otherwise 0.
+        // 1 for `.ctor(int32, int32)`, 2 for `T Get(int32, int32)`, 3 for `T& Address(int32, int32)`,
+        // 4 for `void Set(int32, int32, T)`, otherwise 0.
         internal static int Member(byte[] image, int[] heaps, int[] layout, int member)
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
@@ -76,6 +77,20 @@ namespace PortableCompiler
             {
                 int result = image[signature + 3];
                 return result >= 0x08 && result <= 0x0b ? 2 : 0;
+            }
+            // instance void Set(int32, int32, T): length 6
+            if (MatchesAscii(image, heaps, name, "Set") && U16(image, signature) == 0x2006 &&
+                image[signature + 2] == 3 && image[signature + 3] == 1 && U16(image, signature + 4) == 0x0808)
+            {
+                int element = image[signature + 6];
+                return element >= 0x08 && element <= 0x0b ? 4 : 0;
+            }
+            // instance T& Address(int32, int32): length 6 (BYREF T)
+            if (MatchesAscii(image, heaps, name, "Address") && U16(image, signature) == 0x2006 &&
+                image[signature + 2] == 2 && image[signature + 3] == 0x10 && U16(image, signature + 5) == 0x0808)
+            {
+                int result = image[signature + 4];
+                return result >= 0x08 && result <= 0x0b ? 3 : 0;
             }
             return 0;
         }
@@ -120,6 +135,68 @@ namespace PortableCompiler
             used = BranchWasm.Const(code, used, 2);
             code[used++] = 0x6a;
             return BranchWasm.Gc(code, used, 0x0b, wide ? Longs : Ints); // array.get
+        }
+
+        // [rows, cols] -> [array]: a negative dimension raises OverflowException, as on the CLR. An
+        // element count beyond the Wasm array limit traps, as the CLR raises OutOfMemoryException.
+        internal static int EmitNew(byte[] code, int used, int vector, int rows, int columns, int target)
+        {
+            bool wide = vector == Longs;
+            used = BranchWasm.Local(code, used, 0x20, rows);
+            used = BranchWasm.Local(code, used, 0x20, columns);
+            code[used++] = 0x72; // i32.or: either negative
+            used = BranchWasm.Const(code, used, 0);
+            code[used++] = 0x48;
+            used = ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.OverflowTag);
+            // rows * cols + 2 must fit an i32 element count.
+            used = BranchWasm.Local(code, used, 0x20, rows);
+            code[used++] = 0xad; // i64.extend_i32_u
+            used = BranchWasm.Local(code, used, 0x20, columns);
+            code[used++] = 0xad;
+            code[used++] = 0x7e; // i64.mul
+            code[used++] = 0x42; code[used++] = 0xfd; code[used++] = 0xff; code[used++] = 0xff; code[used++] = 0xff; code[used++] = 0x07; // 2^31 - 3
+            code[used++] = 0x56; // i64.gt_u
+            code[used++] = 0x04; code[used++] = 0x40; code[used++] = 0x00; code[used++] = 0x0b; // if: unreachable
+            used = BranchWasm.Local(code, used, 0x20, rows);
+            used = BranchWasm.Local(code, used, 0x20, columns);
+            code[used++] = 0x6c;
+            used = BranchWasm.Const(code, used, 2);
+            code[used++] = 0x6a;
+            used = BranchWasm.Gc(code, used, 0x07, vector); // array.new_default
+            used = BranchWasm.Local(code, used, 0x22, target);
+            used = BranchWasm.Const(code, used, 0);
+            used = BranchWasm.Local(code, used, 0x20, rows);
+            if (wide) code[used++] = 0xac; // i64.extend_i32_s
+            used = BranchWasm.Gc(code, used, 0x0e, vector); // array.set [0] = rows
+            used = BranchWasm.Local(code, used, 0x20, target);
+            used = BranchWasm.Const(code, used, 1);
+            used = BranchWasm.Local(code, used, 0x20, columns);
+            if (wide) code[used++] = 0xac;
+            return BranchWasm.Gc(code, used, 0x0e, vector); // [1] = cols
+        }
+
+        // [array, i, j, value] -> []
+        internal static int EmitSet(byte[] code, int used, int vector, int array, int row, int column, int value)
+        {
+            used = BranchWasm.GuardNull(code, used, array);
+            used = BranchWasm.Local(code, used, 0x20, row);
+            used = Dimension(code, used, vector, array, 0);
+            code[used++] = 0x4f;
+            used = BranchWasm.Local(code, used, 0x20, column);
+            used = Dimension(code, used, vector, array, 1);
+            code[used++] = 0x4f;
+            code[used++] = 0x72;
+            used = ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.IndexTag);
+            used = BranchWasm.Local(code, used, 0x20, array);
+            used = BranchWasm.Local(code, used, 0x20, row);
+            used = Dimension(code, used, vector, array, 1);
+            code[used++] = 0x6c;
+            used = BranchWasm.Local(code, used, 0x20, column);
+            code[used++] = 0x6a;
+            used = BranchWasm.Const(code, used, 2);
+            code[used++] = 0x6a;
+            used = BranchWasm.Local(code, used, 0x20, value);
+            return BranchWasm.Gc(code, used, 0x0e, vector);
         }
 
         // [] -> [dimension as i32]

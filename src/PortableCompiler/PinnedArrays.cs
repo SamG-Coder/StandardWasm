@@ -219,8 +219,8 @@ namespace PortableCompiler
         }
 
         // The records that can run while the pin taken at record `start` is live: everything reachable
-        // from it before a store to (or span unpin of) the pinned local or a ret. A throw, and any
-        // record inside a protected region, conservatively reaches every handler of the method.
+        // from it before a store to (or span unpin of) the pinned local or a ret. Any record inside a
+        // protected region also reaches that region's handler.
         private static bool[] Live(int[] records, int[] clauses, int start, int local)
         {
             int count = records.Length / Width;
@@ -228,7 +228,6 @@ namespace PortableCompiler
             var work = new int[4 * count + 64];
             int top = 0;
             work[top++] = start;
-            bool handlers = false;
             while (top > 0)
             {
                 int index = work[--top];
@@ -237,11 +236,15 @@ namespace PortableCompiler
                 int slot = index * Width, kind = records[slot];
                 if (index != start && ((kind == Store || kind == UnpinByteSpan) && records[slot + 1] == local || kind == Return))
                     continue;
-                if (!handlers && clauses.Length != 0)
+                // An exception raised inside a protected region reaches its handler.
+                for (int clause = 0; clause < clauses.Length; clause += ExceptionClauses.Width)
                 {
-                    handlers = true;
-                    for (int clause = 0; clause < clauses.Length; clause += ExceptionClauses.Width)
-                        if (top < work.Length) work[top++] = clauses[clause + 3];
+                    int tryStart = clauses[clause + 1], tryEnd = tryStart + clauses[clause + 2];
+                    if (index >= tryStart && index < tryEnd)
+                    {
+                        if (top >= work.Length) return null;
+                        work[top++] = clauses[clause + 3];
+                    }
                 }
                 if (kind == Rethrow || kind == ThrowNull || kind == EndFinally) continue;
                 if (kind == Branch || kind == Conditional || kind == Leave)
@@ -311,7 +314,11 @@ namespace PortableCompiler
                 int kind = records[slot];
                 if (kind == ObjectElementAddress)
                 {
-                    // Allowed only as the ldelema of a pin sequence: ldc.i4.0 before it, conv.u after it.
+                    // An element address of another primitive element type cannot alias the pin.
+                    int element = ArrayTypeRefs.PrimitiveElement(image, heaps, layout, records[slot + 1]);
+                    int other = element > 0 ? Vector(element) : 0;
+                    if (other != 0 && other != vector) continue;
+                    // Otherwise allowed only as the ldelema of a pin sequence: ldc.i4.0 before it, conv.u after it.
                     int next = records[slot + 2] * Width;
                     if (next >= records.Length || records[next] != ConvertInteger || records[next + 1] != 0xe0) return false;
                     continue;

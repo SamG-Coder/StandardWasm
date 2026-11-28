@@ -827,6 +827,11 @@ namespace PortableCompiler
             if (kind == OffsetLocation)
                 return depth >= 2 && ArrayIndex(stack, depth) && Match(stack, depth - 1, UnsafeCalls.ElementLocation(operand))
                     ? Push(stack, allocated, depth - 2, UnsafeCalls.ElementLocation(operand)) : -2;
+            if (kind == NewRankTwo)
+                return Match(stack, depth, I32) && Match(stack, depth - 1, I32) ? Push(stack, allocated, depth - 2, operand) : -2;
+            if (kind == SetRankTwo)
+                return Match(stack, depth, operand == Longs ? I64 : I32) && Match(stack, depth - 1, I32) &&
+                    Match(stack, depth - 2, I32) && Match(stack, depth - 3, operand) ? depth - 4 : -2;
             if (kind == GetRankTwo)
                 return Match(stack, depth, I32) && Match(stack, depth - 1, I32) && Match(stack, depth - 2, operand)
                     ? Push(stack, allocated, depth - 3, operand == Longs ? I64 : I32) : -2;

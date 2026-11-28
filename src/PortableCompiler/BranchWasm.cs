@@ -1282,6 +1282,13 @@ namespace PortableCompiler
                     used = Gc(code, used, 0, ObjectLocation);
                     used = Local(code, used, 0x21, location);
                 }
+                else if (kind == NewRankTwo)
+                    used = MdArrays.EmitNew(code, used, operand, Spill(spills, maximum, spillFlags, I32, top - 1),
+                        Spill(spills, maximum, spillFlags, I32, top), Spill(spills, maximum, spillFlags, operand, top - 1));
+                else if (kind == SetRankTwo)
+                    used = MdArrays.EmitSet(code, used, operand, Spill(spills, maximum, spillFlags, operand, top - 3),
+                        Spill(spills, maximum, spillFlags, I32, top - 2), Spill(spills, maximum, spillFlags, I32, top - 1),
+                        Spill(spills, maximum, spillFlags, operand == Longs ? I64 : I32, top));
                 else if (kind == GetRankTwo)
                 {
                     int array = Spill(spills, maximum, spillFlags, states[state + top - 2], top - 2);

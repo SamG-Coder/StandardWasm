@@ -57,6 +57,9 @@ namespace PortableCompiler
                 return ExceptionTagsWasm.ArgumentNullTag;
             if (SpanMetadata.IsPlatformType(image, layout, heaps, parent, "System", "ArgumentOutOfRangeException"))
                 return ExceptionTagsWasm.ArgumentOutOfRangeTag;
+            // Decision 0105: the fixed tag castclass raises, so typed catches see the same type.
+            if (SpanMetadata.IsPlatformType(image, layout, heaps, parent, "System", "InvalidCastException"))
+                return ExceptionTagsWasm.InvalidCastTag;
             return SpanMetadata.IsPlatformType(image, layout, heaps, parent, "System", "InvalidOperationException") ||
                 SpanMetadata.IsPlatformType(image, layout, heaps, parent, "System", "OutOfMemoryException") ? Trap : 0;
         }

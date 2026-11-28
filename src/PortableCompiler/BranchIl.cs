@@ -148,6 +148,8 @@ namespace PortableCompiler
         internal const int WideOp = 450;
         // Decision 0105: an X86/Arm/Wasm intrinsic member that traps; operand = parameters, aux = result type.
         internal const int PlatformUnsupported = 451;
+        // Decision 0105: new T[rows, cols] without an initializer: [rows, cols] -> [array]; T[,]::Set: [array, i, j, v] -> [].
+        internal const int NewRankTwo = 452, SetRankTwo = 453;
         internal const int ExitProcess = 425; // [status] -> (traps); the operand is the exit-status global
         // NativeMemory members (decision 0104); the operand is the member id and operand 3 becomes
         // the alloc import index. [args...] -> [void*] or [].

@@ -60,7 +60,11 @@ namespace PortableCompiler
                 {
                     // ldelema (UInt128, int); ldfld Item2 -> one element read.
                     int next = records[slot + 2] * Width;
-                    if (next < records.Length && records[next] == GetField && records[next + 3] == 1 &&
+                    // ... or `ldflda Item2; call int32::ToString()`, which only reads the field (#326 fold).
+                    bool read = next < records.Length && (records[next] == GetField ||
+                        records[next] == FieldAddress && PrimitiveFormatting.FoldValueReceiver(image, heaps, layout, records,
+                            records[next + 2] * Width, clauses, I32));
+                    if (read && records[next + 3] == 1 &&
                         !ValueOperands.Entry(records, next / Width, clauses) &&
                         IsTupleItem2(image, layout, heaps, records[next + 1]))
                     {

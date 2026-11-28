@@ -1472,7 +1472,7 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - pinBytes) return -3;
                                 capacity += pinBytes;
                             }
-                            if (kind == BranchIl.GetRankTwo)
+                            if (kind == BranchIl.GetRankTwo || kind == BranchIl.NewRankTwo || kind == BranchIl.SetRankTwo)
                             {
                                 if (capacity > int.MaxValue - MdArrays.Capacity) return -3;
                                 capacity += MdArrays.Capacity;
@@ -1647,13 +1647,16 @@ namespace PortableCompiler
                                         ? ExceptionTypes.NullReference | ExceptionTypes.IndexOutOfRange : 0;
                             else if (kind == BranchIl.SimdOp && operation == SimdVectors.GetElement)
                                 tags = ExceptionTypes.ArgumentOutOfRange;
-                            else if (kind == BranchIl.GetRankTwo)
+                            else if (kind == BranchIl.GetRankTwo || kind == BranchIl.SetRankTwo)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
+                            else if (kind == BranchIl.NewRankTwo)
+                                tags = ExceptionTypes.Overflow;
                             else if (kind == BranchIl.ArrayDataReference)
                                 tags = ExceptionTypes.NullReference; // GetArrayDataReference(null)
                             else if (kind == BranchIl.ThrowFrameworkArgument)
                                 tags = operation == PlatformExceptionThrows.Trap ? 0 :
                                     operation == ExceptionTagsWasm.ArgumentTag ? ExceptionTypes.Argument :
+                                    operation == ExceptionTagsWasm.InvalidCastTag ? ExceptionTypes.InvalidCast :
                                     operation == ExceptionTagsWasm.ArgumentNullTag
                                     ? ExceptionTypes.ArgumentNull : ExceptionTypes.ArgumentOutOfRange;
                             else if (kind == BranchIl.StringFromSpan)
@@ -3632,11 +3635,16 @@ namespace PortableCompiler
                         continue;
                     }
                     // Decision 0105: T T[,]::Get(int32, int32) on a rank-2 Int32/Int64 array (MdArrays).
-                    int rankTwo = opcode == 0x28 && !addressed ? MdArrays.MemberVector(image, heaps, layout, member) : 0;
-                    if (rankTwo != 0 && MdArrays.Member(image, heaps, layout, member) == 2)
+                    int rankTwo = (opcode == 0x28 || opcode == 0x73) && !addressed ? MdArrays.MemberVector(image, heaps, layout, member) : 0;
+                    int rankMember = rankTwo != 0 ? MdArrays.Member(image, heaps, layout, member) : 0;
+                    // `Address(i, j)` read only by a primitive ToString() (#326 fold) is the same element read.
+                    if (rankMember == 3 && PrimitiveFormatting.FoldValueReceiver(image, heaps, layout, records,
+                        records[slot + 2] * BranchIl.Width, clauses, rankTwo == Longs ? I64 : I32)) rankMember = 2;
+                    if (rankMember == 2 && opcode == 0x28 || rankMember == 1 && opcode == 0x73 || rankMember == 4 && opcode == 0x28)
                     {
-                        records[slot] = BranchIl.GetRankTwo;
+                        records[slot] = rankMember == 2 ? BranchIl.GetRankTwo : rankMember == 1 ? BranchIl.NewRankTwo : BranchIl.SetRankTwo;
                         records[slot + 1] = rankTwo;
+                        records[slot + 3] = 0;
                         continue;
                     }
                     int characterMember = opcode == 0x28 && !addressed ? CharacterMembers.Identify(image, heaps, layout, member) : 0;
