@@ -407,7 +407,7 @@ namespace PortableCompiler
                     else functions = expanded;
                 }
                 if (rows[current] == 0 || sizes[current] != 0 || !receiverDemand.Needed(current, contexts)) continue;
-                readOnlyCharacters.Apply(bases, indices, offsets, signatures);
+                readOnlyCharacters.MarkReadOnlyParameters(bases, indices, offsets, signatures);
                 int owner = owners[current], source = rows[current], context = contexts[current];
                 context = NativeReceiverCalls.DeclaringContext(context);
                 int[] methodArguments = instantiations.Arguments(current);
@@ -919,7 +919,7 @@ namespace PortableCompiler
                     }
                     for (int local = 0; local < frameCells.Length; local++)
                         if (frameCells[local] != 0 && inlineLocations[local] != 0) return -2;
-                    readOnlyCharacters.Apply(bases, indices, offsets, signatures);
+                    readOnlyCharacters.MarkReadOnlyParameters(bases, indices, offsets, signatures);
                     typeCalls.ApplyDescriptorSignatures(bases, indices, offsets, signatures);
                     typeCalls.ApplyClosedSignatures(bundle, owners, rows, contexts, instantiations, offsets, signatures, objects, closedSignaturesThrough, functions);
                     closedSignaturesThrough = functions;
