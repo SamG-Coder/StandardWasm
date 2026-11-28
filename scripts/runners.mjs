@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createWriteStream, mkdirSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
@@ -6,7 +6,7 @@ import { listDemos } from "./demos.mjs";
 import { root, run } from "./toolchain.mjs";
 
 // Runs every demo marked "runner" after `npm test` has saved artifacts/StandardWasm.Compiler.wasm.
-// Usage: node scripts/runners.mjs [--release] [--lanes N] [stage ...]
+// Usage: node scripts/runners.mjs [--release] [--lanes N] [--timeout seconds] [stage ...]
 //
 // Stages are independent except where they build the same project or another stage's outputs.
 // Those run in fixed serial chains (below), each chain in its own lane; every other stage takes the
@@ -46,7 +46,10 @@ const args = process.argv.slice(2);
 const release = args.includes("--release");
 const lanesArgument = args.indexOf("--lanes");
 const lanes = lanesArgument >= 0 ? Number(args[lanesArgument + 1]) : Math.min(8, Math.max(2, availableParallelism() - 2));
-const selected = args.filter((arg, i) => !arg.startsWith("--") && args[i - 1] !== "--lanes");
+const timeoutArgument = args.indexOf("--timeout");
+// Seconds per stage. The slowest stage (117, the WinForms census) takes about 220 s.
+const timeoutSeconds = timeoutArgument >= 0 ? Number(args[timeoutArgument + 1]) : 900;
+const selected = args.filter((arg, i) => !arg.startsWith("--") && !["--lanes", "--timeout"].includes(args[i - 1]));
 const stages = listDemos().filter(demo => demo.runner).map(demo => demo.stage)
     .filter(stage => selected.length === 0 || selected.includes(stage));
 
@@ -69,11 +72,20 @@ function runStage(stage) {
         const child = spawn(process.execPath, command(stage), { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
         child.stdout.pipe(log, { end: false });
         child.stderr.pipe(log, { end: false });
+        // A hung stage (a browser that never answers, a server that never exits) fails alone
+        // instead of stalling its lane. The whole process tree goes, including Edge and dotnet.
+        let timedOut = false;
+        const timer = setTimeout(() => {
+            timedOut = true;
+            if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+            else child.kill("SIGKILL");
+        }, timeoutSeconds * 1000);
         child.on("close", status => {
+            clearTimeout(timer);
             log.end();
             const seconds = Math.round((Date.now() - begin) / 1000);
-            results.push({ stage, status, seconds });
-            console.log(`${status === 0 ? "pass" : "FAIL"} ${stage} ${seconds}s`);
+            results.push({ stage, status: timedOut ? "timeout" : status, seconds });
+            console.log(`${status === 0 && !timedOut ? "pass" : timedOut ? "FAIL timeout" : "FAIL"} ${stage} ${seconds}s`);
             done();
         });
     });

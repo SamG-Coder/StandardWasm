@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
 // Skips `dotnet build`, `dotnet publish` and the build half of `dotnet run` when the
@@ -37,7 +37,7 @@ function sdk(root) {
 // Returns the .csproj path for a project argument (a folder holding one project, or the file).
 function projectFile(root, argument) {
     const path = resolve(root, argument);
-    if (existsSync(path) && statSync(path).isFile()) return path;
+    if (existsSync(path) && statSync(path).isFile()) return /\.(cs|fs|vb)proj$/.test(path) ? path : undefined;
     if (!existsSync(path)) return undefined;
     const projects = readdirSync(path).filter(name => /\.(cs|fs|vb)proj$/.test(name));
     return projects.length === 1 ? join(path, projects[0]) : undefined;
@@ -116,12 +116,13 @@ function inputHash(root, project, args) {
     return hash.digest("hex");
 }
 
+// One stamp per output folder. The hash covers the arguments, so a build with other arguments
+// into the same folder replaces the stamp and the first argument set rebuilds next time.
 function stampPath(project, args) {
     const output = option(args, "-o", "--output");
     const configuration = option(args, "-c", "--configuration") ?? "Debug";
     const folder = output ? output : join(dirname(project), "bin", configuration);
-    const key = createHash("sha256").update(JSON.stringify(args)).digest("hex").slice(0, 16);
-    return join(folder, `.standardwasm-inputs-${key}.sha256`);
+    return join(folder, ".standardwasm-inputs.sha256");
 }
 
 // Plans a dotnet command. Returns { skip, args, record } where `args` is what to run (undefined
@@ -134,6 +135,13 @@ export function planDotnet(root, args) {
     const argument = projectArgument(args);
     const project = argument && projectFile(root, argument);
     if (!project) return none;
+    // The run prebuild keeps only the configuration; options that pick another output folder
+    // would make `run --no-build` read a different build, so such runs are not cached.
+    if (verb === "run") {
+        const own = args.indexOf("--") >= 0 ? args.slice(0, args.indexOf("--")) : args;
+        if (own.some(arg => ["-a", "--arch", "-r", "--runtime", "-f", "--framework", "--os", "-o", "--output"].includes(arg)
+            || /^(-p|--property)[:=]/i.test(arg))) return none;
+    }
     // `dotnet run` is split into a cached build and `run --no-build` with the same configuration.
     const buildArgs = verb === "run"
         ? ["build", "-c", option(args, "-c", "--configuration") ?? "Debug", relative(root, project)]
@@ -142,6 +150,9 @@ export function planDotnet(root, args) {
     if (!hash) return none;
     const stamp = resolve(root, stampPath(project, buildArgs));
     const current = existsSync(stamp) && readFileSync(stamp, "utf8") === hash;
+    // A build that starts invalidates the stamp first, so a failed or interrupted build that
+    // already replaced some outputs can never be mistaken for a current one.
+    if (!current) rmSync(stamp, { force: true });
     const record = () => { mkdirSync(dirname(stamp), { recursive: true }); writeFileSync(stamp, hash); };
     const label = relative(root, project).replace(/\\/g, "/");
     if (verb === "run") {
