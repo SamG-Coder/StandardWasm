@@ -805,6 +805,8 @@ namespace PortableCompiler
                 int remaining = depth - needed;
                 return kind == Binary ? Push(stack, allocated, remaining, IsComparison(operand) ? I32 : type) : remaining;
             }
+            if (kind == CharacterCall)
+                return Match(stack, depth, I32) ? Push(stack, allocated, depth - 1, I32) : -1;
             if (kind == MathCall)
             {
                 // Every mapped overload is T(T) or T(T, T) over one numeric stack type.

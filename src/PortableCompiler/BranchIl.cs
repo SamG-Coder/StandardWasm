@@ -112,6 +112,7 @@ namespace PortableCompiler
         internal const int JoinStringArray = 421; // [String[]] -> [String] for String.Concat(string[])
         // [String x arity] -> [String] for Concat(string, string, string[, string]); operand 3 is the arity.
         internal const int JoinManyStrings = 422;
+        internal const int CharacterCall = 423; // [char] -> [Boolean]; the operand is a CharacterMembers id
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

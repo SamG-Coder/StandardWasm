@@ -1208,6 +1208,12 @@ namespace PortableCompiler
                     else if (backing != 0)
                         used = InlineObjectStorageWasm.Store(code, used, type, backing, target, temporary, FieldCount(objects, type));
                 }
+                else if (kind == CharacterCall)
+                {
+                    int value = Spill(spills, maximum, spillFlags, I32, top);
+                    used = CharacterMembers.EmitIsWhiteSpace(code, used, value);
+                    used = Local(code, used, 0x21, value);
+                }
                 else if (kind == MathCall)
                 {
                     byte type = MathWasm.Type(operand);

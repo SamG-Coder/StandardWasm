@@ -1387,6 +1387,11 @@ namespace PortableCompiler
                                 if (bytes < 0) return bytes;
                                 capacity += bytes;
                             }
+                            if (kind == BranchIl.CharacterCall)
+                            {
+                                if (capacity > int.MaxValue - CharacterMembers.Capacity) return -3;
+                                capacity += CharacterMembers.Capacity;
+                            }
                             if (kind == BranchIl.JoinManyStrings)
                             {
                                 // One two-string join per extra operand (StringWasm.Copy, under 160 bytes).
@@ -3333,6 +3338,13 @@ namespace PortableCompiler
                         continue;
                     }
                     // Exact System.Math intrinsics, identified by platform assembly and signature (decision 0003).
+                    int characterMember = opcode == 0x28 && !addressed ? CharacterMembers.Identify(image, heaps, layout, member) : 0;
+                    if (characterMember != 0)
+                    {
+                        records[slot] = BranchIl.CharacterCall;
+                        records[slot + 1] = characterMember;
+                        continue;
+                    }
                     int intrinsic = opcode == 0x28 && !addressed ? PlatformMembers.MathIntrinsic(image, heaps, layout, member) : 0;
                     if (intrinsic != 0)
                     {
