@@ -3439,6 +3439,13 @@ namespace PortableCompiler
                         records[slot + 1] = characterMember;
                         continue;
                     }
+                    int bitCount = opcode == 0x28 && !addressed ? BitOperationMembers.Identify(image, heaps, layout, member) : 0;
+                    if (bitCount != 0)
+                    {
+                        records[slot] = BranchIl.BitCount;
+                        records[slot + 1] = bitCount;
+                        continue;
+                    }
                     int wordMember = opcode == 0x28 && !addressed ? NativeWordMembers.Identify(image, heaps, layout, member) : 0;
                     if (wordMember == NativeWordMembers.BigMul)
                     {

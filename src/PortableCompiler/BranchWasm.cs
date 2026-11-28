@@ -1210,6 +1210,12 @@ namespace PortableCompiler
                     else if (backing != 0)
                         used = InlineObjectStorageWasm.Store(code, used, type, backing, target, temporary, FieldCount(objects, type));
                 }
+                else if (kind == BitCount)
+                {
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
+                    used = BitOperationMembers.Emit(code, used, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top));
+                }
                 else if (kind == NativeConstant)
                 {
                     used = Const(code, used, operand);

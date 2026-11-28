@@ -133,6 +133,8 @@ namespace PortableCompiler
         internal const int MultiplyHighUInt64 = 433;
         // IntPtr.Size and UIntPtr.MaxValue on wasm32: [] -> [native int constant operand].
         internal const int NativeConstant = 434;
+        // BitOperations.LeadingZeroCount/TrailingZeroCount/PopCount: [value] -> [int32]; see BitOperationMembers.
+        internal const int BitCount = 435;
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
