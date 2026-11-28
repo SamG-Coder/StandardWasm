@@ -40,12 +40,19 @@ namespace PortableCompiler
                 records[call + 3] != 0x28 || records[call + BranchIl.Width + 1] != 0 ||
                 ValueOperands.Entry(records, call / BranchIl.Width, clauses)) return false;
             int element = Identify(image, heaps, layout, records[call + 1]);
-            if (element == 0 || storage != (element <= 9 ? I32 : I64)) return false;
+            if (element == 0 || !Holds(storage, element)) return false;
             records[call] = BranchIl.FormatPrimitive;
             records[call + 1] = element;
             records[call + 3] = ValueReceiver;
             return true;
         }
+
+        // Whether a local or field of `storage` holds the receiver type exactly. Narrow storage
+        // loads as a normalized int32, so the folded receiver is still I32.
+        private static bool Holds(int storage, int element) =>
+            storage == ReceiverValue(element) || element == 4 && storage == Signed8 ||
+            element == 5 && storage == Unsigned8 || element == 6 && storage == Signed16 ||
+            element == 7 && storage == Unsigned16;
 
         // The stack value a folded receiver of `element` must have.
         internal static int ReceiverValue(int element) => element <= 9 ? I32 : I64;

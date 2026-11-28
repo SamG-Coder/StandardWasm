@@ -80,7 +80,9 @@ namespace PortableCompiler
                 }
                 if (kind == ThrowFrameworkArgument)
                 {
-                    if (!Match(stack, depth, I32)) return -1;
+                    // A lowered `newobj <platform exception>; throw` leaves the constructor's
+                    // arguments, which the throw discards (decision 0104).
+                    if (records[slot + 3] != PlatformExceptionThrows.DiscardsArguments && !Match(stack, depth, I32)) return -1;
                     continue;
                 }
                 if (kind == Rethrow || kind == EndFinally) continue; // Unwinding drops the evaluation stack.

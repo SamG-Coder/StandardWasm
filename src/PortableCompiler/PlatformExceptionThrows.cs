@@ -5,8 +5,8 @@ namespace PortableCompiler
 {
     // Decision 0104: `newobj <platform exception>::.ctor(...)` immediately followed by `throw`.
     //
-    // The constructor arguments are still evaluated in order. The newobj becomes a placeholder
-    // push, and the throw becomes the fixed typed throw of decision 0054's tags:
+    // The constructor arguments are still evaluated in order. The newobj becomes a nop and the
+    // throw becomes the fixed typed throw of decision 0054's tags, discarding the arguments:
     //   ArgumentException -> Argument, ArgumentNullException -> ArgumentNull,
     //   ArgumentOutOfRangeException -> ArgumentOutOfRange.
     // The message and parameter name are not carried. A typed catch observes the same type,
@@ -19,6 +19,9 @@ namespace PortableCompiler
     internal static class PlatformExceptionThrows
     {
         internal const int Trap = -1;
+        // Operand 3 of the ThrowFrameworkArgument record: the evaluation stack holds the
+        // constructor arguments, which the throw discards instead of an int32 operand.
+        internal const int DiscardsArguments = 1;
 
         internal static void Lower(byte[] image, int[] layout, int[] heaps, int[] records, int[] clauses)
         {
@@ -30,13 +33,13 @@ namespace PortableCompiler
                     ValueOperands.Entry(records, next / Width, clauses)) continue;
                 int tag = Tag(image, layout, heaps, records[slot + 1]);
                 if (tag == 0) continue;
-                // [arguments...] -> [arguments..., 0]: ThrowFrameworkArgument ends the block and
-                // drops the evaluation stack, so the arguments need no consumer.
-                records[slot] = Constant;
-                records[slot + 1] = 0;
+                // [arguments...] stays on the stack, never deeper than before the newobj (so the
+                // body's maxstack still holds); ThrowFrameworkArgument ends the block and drops it.
+                records[slot] = Nop;
                 records[slot + 3] = 0;
                 records[next] = ThrowFrameworkArgument;
                 records[next + 1] = tag;
+                records[next + 3] = DiscardsArguments;
             }
         }
 

@@ -189,6 +189,24 @@ namespace PortableCompiler
         // a host feature, so re-emit with its function indices reserved.
         internal const int Reemit = -1000;
 
+        // The IL offset of the first live record that loads, stores or addresses a local whose
+        // type could not be laid out (decision 0104), or -1.
+        private static int UnresolvedLocalUse(int[] records, bool[] unresolved, int parameters)
+        {
+            if (unresolved == null) return -1;
+            bool any = false;
+            for (int i = 0; i < unresolved.Length; i++) any |= unresolved[i];
+            if (!any) return -1;
+            for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
+            {
+                int kind = records[slot];
+                if (kind != BranchIl.Load && kind != BranchIl.Store && kind != BranchIl.FrameAddress) continue;
+                int local = records[slot + 1] - parameters;
+                if (local >= 0 && local < unresolved.Length && unresolved[local]) return slot / BranchIl.Width;
+            }
+            return -1;
+        }
+
         private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location,
             long hostFeatures, MissingAssemblyStubs stubs, bool rootProbe = false)
         {
@@ -728,6 +746,7 @@ namespace PortableCompiler
                     if (IsNarrow(type)) narrowParameters++;
                 }
                 int locals = 0, localBlob = 0;
+                bool[] unresolvedLocals = null;
                 if (resourceOpen)
                 {
                     locals = ResourceOpenIl.Frame(frame, parameters);
@@ -738,7 +757,9 @@ namespace PortableCompiler
                     localBlob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, body[3]);
                     if (localBlob < 0)
                         return -1;
-                    locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context, methodArguments, pinned, filters, localElements);
+                    unresolvedLocals = new bool[frame.Length];
+                    locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context, methodArguments, pinned, filters, localElements,
+                        unresolvedLocals);
                     if (locals < 0)
                         return locals;
                     // CorILMethod_InitLocals (body[4]) is deliberately not required. Without it
@@ -793,6 +814,13 @@ namespace PortableCompiler
                     PlatformExceptionThrows.Lower(image, layout, heaps, records, catchRegion);
                     UnsafeCalls.Lower(image, layout, heaps, records, catchRegion);
                     ArraySortPrimitive.Lower(image, layout, heaps, records);
+                    // Decision 0104: a placeholder local must be unreachable after the folds above.
+                    int unresolvedUse = UnresolvedLocalUse(records, unresolvedLocals, parameters);
+                    if (unresolvedUse >= 0)
+                    {
+                        if (location.Length != 0) { location[0] = owner; location[1] = source; location[2] = unresolvedUse; }
+                        return -2;
+                    }
                     if (contexts[current] == CoreVersionByref.ContextKey)
                     {
                         status = CoreVersionByref.Lower(bundle, image, layout, heaps, owner, source, records, natives, nativeBase, current);
@@ -2281,7 +2309,7 @@ namespace PortableCompiler
                     if (type == I32 && PrimitiveHashCalls.LowerFrame(bundle, image, layout, heaps, owner,
                         context, methodArguments, objects, records, clauses, slot)) continue;
                     // #326: ldloca x; call {Int32,UInt32,Int64,UInt64}::ToString() formats the loaded value.
-                    if ((type == I32 || type == I64) &&
+                    if ((type == I32 || type == I64 || IsNarrow(type)) &&
                         PrimitiveFormatting.FoldValueReceiver(image, heaps, layout, records, next, clauses, type))
                     {
                         records[slot] = BranchIl.Load;
