@@ -10,7 +10,8 @@
     "winforms": "node scripts/winforms.mjs",
     "test:winforms": "node scripts/winforms.mjs --verify",
     "bench:webgpu": "node scripts/dense-webgpu.mjs --verify",
-    "audit:portable": "node scripts/portable-audit.mjs"
+    "audit:portable": "node scripts/portable-audit.mjs",
+    "test:runners": "node scripts/runners.mjs"
   },
   "type": "commonjs",
   "dependencies": {
