@@ -4,7 +4,7 @@ namespace PeLibrary
 {
     internal static class StringMetadata
     {
-        internal const int Length = 1, Character = 2, Concat = 3, FromChars = 4, OrdinalEquals = 5, Empty = 6, PinnableReference = 7, OrdinalUnequal = 8, ConcatArray = 9;
+        internal const int Length = 1, Character = 2, Concat = 3, FromChars = 4, OrdinalEquals = 5, Empty = 6, PinnableReference = 7, OrdinalUnequal = 8, ConcatArray = 9, ConcatThree = 10, ConcatFour = 11;
 
         internal static int CopyLiteral(byte[] image, int[] streams, int tokenOffset, byte[] bytes, int used)
         {
@@ -84,6 +84,15 @@ namespace PeLibrary
                 Fits(sig, 6, (uint)streams[1]) && U32(image, signature) == 0x0e010005 &&
                 U16(image, signature + 4) == 0x0e1d)
                 return ConcatArray;
+            // static string Concat(string, string, string[, string])
+            if (Fits(name, 7, (uint)streams[3]) && U32(image, n) == 0x636e6f43 &&
+                U16(image, n + 4) == 0x7461 && image[n + 6] == 0 && Fits(sig, 7, (uint)streams[1]) &&
+                U16(image, signature + 4) == 0x0e0e && image[signature + 6] == 0x0e)
+            {
+                if (U32(image, signature) == 0x0e030006) return ConcatThree;
+                if (Fits(sig, 8, (uint)streams[1]) && U32(image, signature) == 0x0e040007 && image[signature + 7] == 0x0e)
+                    return ConcatFour;
+            }
             bool equals = PlatformTypeReferences.Named(image, (uint)streams[2], (uint)streams[3], name, 6,
                 0x61757145, 0x736c, 0) || // Equals
                 PlatformTypeReferences.Named(image, (uint)streams[2], (uint)streams[3], name, 11,

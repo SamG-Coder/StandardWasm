@@ -26,6 +26,30 @@ namespace PortableCompiler
             return element >= 8 && element <= 11 ? element : 0;
         }
 
+        // Operand 3 of a FormatPrimitive record whose receiver was folded into a plain value load.
+        internal const int ValueReceiver = 1;
+
+        // `ldloca x` / `ldflda F` immediately consumed by the primitive ToString call: the address
+        // is only read, so the caller loads the value instead (no managed cell, and init-only
+        // fields need no address). `call` is the record offset of the call; `storage` is the
+        // stack storage of the local or field. Returns true after rewriting the call record.
+        internal static bool FoldValueReceiver(byte[] image, int[] heaps, int[] layout, int[] records, int call,
+            int[] clauses, int storage)
+        {
+            if (call + BranchIl.Width + 1 >= records.Length || records[call] != BranchIl.MemberCall ||
+                records[call + 3] != 0x28 || records[call + BranchIl.Width + 1] != 0 ||
+                ValueOperands.Entry(records, call / BranchIl.Width, clauses)) return false;
+            int element = Identify(image, heaps, layout, records[call + 1]);
+            if (element == 0 || storage != (element <= 9 ? I32 : I64)) return false;
+            records[call] = BranchIl.FormatPrimitive;
+            records[call + 1] = element;
+            records[call + 3] = ValueReceiver;
+            return true;
+        }
+
+        // The stack value a folded receiver of `element` must have.
+        internal static int ReceiverValue(int element) => element <= 9 ? I32 : I64;
+
         // The managed location a receiver of `element` must have on the evaluation stack.
         // Int32Location and Int64Location carry no signedness; the declaring type supplies it.
         internal static int ReceiverLocation(int element) => element <= 9 ? Int32Location : Int64Location;

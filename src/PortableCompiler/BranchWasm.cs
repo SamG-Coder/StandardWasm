@@ -435,6 +435,21 @@ namespace PortableCompiler
                     code[used++] = operand == I64 ? (byte)0x51 : (byte)0x46; // eq
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top - 1));
                 }
+                else if (kind == JoinManyStrings)
+                {
+                    // Concat(a, b, c[, d]) == Concat(Concat(Concat(a, b), c), d) for both content and
+                    // identity: each step returns the other operand when one side is null or empty, so a
+                    // single non-empty argument is returned as-is and only two or more allocate.
+                    int at = top - records[slot + 3] + 1;
+                    int accumulator = Spill(spills, maximum, spillFlags, states[state + at], at);
+                    for (int i = 1; i < records[slot + 3]; i++)
+                    {
+                        used = StringWasm.Copy(code, used, accumulator,
+                            Spill(spills, maximum, spillFlags, states[state + at + i], at + i), scratch, true, operand);
+                        accumulator = Spill(spills, maximum, spillFlags, String, at);
+                        used = Local(code, used, 0x21, accumulator);
+                    }
+                }
                 else if (kind == JoinStringArray)
                 {
                     int vector = PeLibrary.ObjectLayouts.FindArray(objects, String);
@@ -449,7 +464,9 @@ namespace PortableCompiler
                     int type = states[state + top];
                     int address = Spill(spills, maximum, spillFlags, type, top);
                     bool wide = operand >= 10;
-                    used = ValueFieldProjectionWasm.Read(code, used, frameShape[7], address, wide ? Longs : Ints, type, projections);
+                    // A folded receiver (ldloca/ldflda then ToString) is already the value.
+                    if (records[slot + 3] == PrimitiveFormatting.ValueReceiver) used = Local(code, used, 0x20, address);
+                    else used = ValueFieldProjectionWasm.Read(code, used, frameShape[7], address, wide ? Longs : Ints, type, projections);
                     if (!wide) code[used++] = operand == 8 ? (byte)0xac : (byte)0xad; // i64.extend_i32_s/u
                     used = Local(code, used, 0x21, enumLocals);
                     used = EnumFormattingWasm.FormatDecimal(code, used, (operand & 1) == 0, scratch, scratch + 3, scratch + 4,
@@ -725,7 +742,7 @@ namespace PortableCompiler
                 }
                 else if (kind == ConsoleWrite)
                 {
-                    bool text = operand != PeLibrary.ConsoleMetadata.WriteEmptyLine;
+                    bool text = operand != PeLibrary.ConsoleMetadata.WriteEmptyLine && operand != PeLibrary.ConsoleMetadata.Flush;
                     int writer = text ? top - 1 : top;
                     // The String scratch bank supplies a Char[] and two i32 locals.
                     used = ConsoleWasm.Write(code, used, operand,

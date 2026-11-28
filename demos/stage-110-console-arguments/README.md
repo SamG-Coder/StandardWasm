@@ -24,6 +24,6 @@ To use the browser page directly, run `node demos/stage-110-console-arguments/ru
 
 Limitations:
 
-- `Console.WriteLine` (the static overloads), formatting overloads, `Flush` and `Write(char)` are diagnosed as unsupported. `Console.ReadLine` and interactive stdin are Stage 151.
+- `Console.WriteLine` (the static overloads), formatting overloads and `Write(char)` are diagnosed as unsupported. `TextWriter.Flush()` on `Console.Out` or `Console.Error` is accepted and has no observable effect ([decision 0104](../../docs/decisions/0104-benchmark-console-members.md)). `Console.ReadLine` and interactive stdin are Stage 151.
 - Best-fit console encodings are not modeled.
 - An unhandled managed exception is reported, but its CLR stderr text and exit status are not reproduced.

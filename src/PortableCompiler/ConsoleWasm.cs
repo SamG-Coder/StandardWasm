@@ -27,6 +27,9 @@ namespace PortableCompiler
         internal static int Write(byte[] code, int used, int member, int writer, int text,
             int characters, int index, int length)
         {
+            // [writer] -> [] for Flush(). The CLR console writers auto-flush, and the host
+            // receives every code unit synchronously, so nothing is buffered in the module.
+            if (member == ConsoleMetadata.Flush) return used;
             if (member != ConsoleMetadata.WriteEmptyLine)
             {
                 used = Local(code, used, 0x20, text);

@@ -451,13 +451,20 @@ namespace PortableCompiler
             if (kind == EnumHasFlag)
                 return depth >= 2 && Match(stack, depth, operand) && Match(stack, depth - 1, operand)
                     ? Push(stack, allocated, depth - 2, I32) : -2;
+            if (kind == JoinManyStrings)
+            {
+                for (int i = 0; i < extra; i++)
+                    if (!Match(stack, depth - i, String)) return -1;
+                return Push(stack, allocated, depth - extra, String);
+            }
             if (kind == JoinStringArray)
             {
                 int vector = PeLibrary.ObjectLayouts.FindArray(objects, String);
                 return vector != 0 && Match(stack, depth, vector) ? Push(stack, allocated, depth - 1, String) : -2;
             }
             if (kind == FormatPrimitive)
-                return Match(stack, depth, PrimitiveFormatting.ReceiverLocation(operand))
+                return Match(stack, depth, extra == PrimitiveFormatting.ValueReceiver
+                    ? PrimitiveFormatting.ReceiverValue(operand) : PrimitiveFormatting.ReceiverLocation(operand))
                     ? Push(stack, allocated, depth - 1, String) : -2;
             if (kind == FormatEnum)
                 return Match(stack, depth, EnumFormatting.StackStorage(extra))
@@ -482,7 +489,8 @@ namespace PortableCompiler
                 return CallShape(stack, allocated, depth, signatures, offsets[operand], arities[operand], 0, objects);
             if (kind == ConsoleWrite)
             {
-                int writer = operand == PeLibrary.ConsoleMetadata.WriteEmptyLine ? depth - 1 : depth - 2;
+                int writer = operand == PeLibrary.ConsoleMetadata.WriteEmptyLine || operand == PeLibrary.ConsoleMetadata.Flush
+                    ? depth - 1 : depth - 2;
                 if (writer < 0 || stack[writer] != PeLibrary.ConsoleStorage.Writer) return -1;
                 return writer == depth - 1 || Match(stack, depth, String) ? writer : -1;
             }

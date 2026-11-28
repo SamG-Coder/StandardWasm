@@ -66,6 +66,7 @@ namespace StringVectors
 
         public static int Read() => Console.Read();
 
+        // TextWriter.Flush() on a console writer is supported since #326 (decision 0104).
         public static int Flush()
         {
             Console.Out.Flush();

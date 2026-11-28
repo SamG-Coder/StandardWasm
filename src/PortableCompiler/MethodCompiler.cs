@@ -1387,6 +1387,12 @@ namespace PortableCompiler
                                 if (bytes < 0) return bytes;
                                 capacity += bytes;
                             }
+                            if (kind == BranchIl.JoinManyStrings)
+                            {
+                                // One two-string join per extra operand (StringWasm.Copy, under 160 bytes).
+                                if (capacity > int.MaxValue - 480) return -3;
+                                capacity += 480;
+                            }
                             if (kind == BranchIl.FormatPrimitive || kind == BranchIl.JoinStringArray)
                             {
                                 if (capacity > int.MaxValue - EnumFormattingWasm.Capacity) return -3;
@@ -1540,7 +1546,7 @@ namespace PortableCompiler
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
-                        if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
+                        if (kind == BranchIl.JoinStrings || kind == BranchIl.JoinManyStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
                             kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.StringFromSpan || kind == BranchIl.ConsoleWrite ||
                             kind == BranchIl.NativeUtf16Length || kind == BranchIl.CopyNativeConstructionString ||
                             kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine || kind == BranchIl.CopyCharacterSpan ||
@@ -2219,6 +2225,13 @@ namespace PortableCompiler
                     int next = records[slot + 2] * BranchIl.Width;
                     if (type == I32 && PrimitiveHashCalls.LowerFrame(bundle, image, layout, heaps, owner,
                         context, methodArguments, objects, records, clauses, slot)) continue;
+                    // #326: ldloca x; call {Int32,UInt32,Int64,UInt64}::ToString() formats the loaded value.
+                    if ((type == I32 || type == I64) &&
+                        PrimitiveFormatting.FoldValueReceiver(image, heaps, layout, records, next, clauses, type))
+                    {
+                        records[slot] = BranchIl.Load;
+                        continue;
+                    }
                     int enumFormatting = EnumFormatting.LowerFrame(bundle, image, layout, heaps, owner,
                         context, methodArguments, objects, records, clauses, slot, type, globals, literals, literalSize);
                     if (enumFormatting != 0)
@@ -2756,6 +2769,13 @@ namespace PortableCompiler
                     {
                         int next = records[slot + 2];
                         int fieldOwner = FieldAccess.Owner(descriptor), fieldStorage = FieldAccess.Storage(descriptor);
+                        // #326: ldflda F; call {Int32,UInt32,Int64,UInt64}::ToString() only reads F.
+                        if (PrimitiveFormatting.FoldValueReceiver(image, heaps, layout, records, next * BranchIl.Width,
+                            clauses, fieldStorage))
+                        {
+                            records[slot] = BranchIl.GetField;
+                            continue;
+                        }
                         if (ObjectLayouts.IsValueType(objects, fieldOwner) &&
                             (fieldStorage == Character || fieldStorage == Unsigned16) &&
                             nextSlot < records.Length && records[nextSlot] == BranchIl.LoadIndirect &&
@@ -3431,6 +3451,15 @@ namespace PortableCompiler
                         if (vector < 0) return vector;
                         records[slot] = BranchIl.JoinStringArray;
                         records[slot + 1] = empty;
+                        continue;
+                    }
+                    if ((stringMember == StringMetadata.ConcatThree || stringMember == StringMetadata.ConcatFour) && opcode == 0x28)
+                    {
+                        int empty = StringLiterals.Empty(globals);
+                        if (empty < 0) return empty;
+                        records[slot] = BranchIl.JoinManyStrings;
+                        records[slot + 1] = empty;
+                        records[slot + 3] = stringMember == StringMetadata.ConcatThree ? 3 : 4;
                         continue;
                     }
                     bool joinStrings = stringMember == StringMetadata.Concat && opcode == 0x28;
