@@ -72,7 +72,9 @@ namespace PortableCompiler
             return branch == 0x2c || branch == 0x2d || branch == 0x39 || branch == 0x3a ? pc : -1;
         }
 
-        internal static void Fold(byte[] image, int[] body, bool instance, int[] records, int[] clauses)
+        // Not named Fold: demo fixtures that compile the compiler's own sources look their
+        // entry up by a module-unique name (MethodNames.FindRow), and Stage 10's entry is Fold.
+        internal static void FoldFalseGuard(byte[] image, int[] body, bool instance, int[] records, int[] clauses)
         {
             if (clauses.Length != 0) return;
             int pc = GuardLoad(image, body[0], body[1], instance);
