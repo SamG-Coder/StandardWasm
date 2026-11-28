@@ -1552,6 +1552,7 @@ namespace PortableCompiler
                     {
                         int kind = records[slot];
                         if (kind == BranchIl.ReadTimestamp) records[slot + 1] = WasmImports.ClockFunction(hostFeatures);
+                        if (kind == BranchIl.ExitProcess) records[slot + 1] = WasmImports.ExitFunction(hostFeatures);
                         if (kind == BranchIl.JoinStrings || kind == BranchIl.JoinManyStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
                             kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.StringFromSpan || kind == BranchIl.ConsoleWrite ||
                             kind == BranchIl.NativeUtf16Length || kind == BranchIl.CopyNativeConstructionString ||
@@ -3354,6 +3355,12 @@ namespace PortableCompiler
                         continue;
                     }
                     // Exact System.Math intrinsics, identified by platform assembly and signature (decision 0003).
+                    if (opcode == 0x28 && !addressed && ProcessExit.IsExit(image, heaps, layout, member))
+                    {
+                        records[slot] = BranchIl.ExitProcess;
+                        hostUse[0] = hostUse[0] | WasmImports.Exit;
+                        continue;
+                    }
                     if (opcode == 0x28 && !addressed && PlatformClock.IsGetTimestamp(image, heaps, layout, member))
                     {
                         records[slot] = BranchIl.ReadTimestamp;

@@ -1208,6 +1208,8 @@ namespace PortableCompiler
                     else if (backing != 0)
                         used = InlineObjectStorageWasm.Store(code, used, type, backing, target, temporary, FieldCount(objects, type));
                 }
+                else if (kind == ExitProcess)
+                    used = ProcessExit.Emit(code, used, Spill(spills, maximum, spillFlags, I32, top), operand);
                 else if (kind == ReadTimestamp)
                 {
                     code[used++] = 0x10; // call standardwasm:clock timestamp

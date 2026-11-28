@@ -806,6 +806,7 @@ namespace PortableCompiler
                 return kind == Binary ? Push(stack, allocated, remaining, IsComparison(operand) ? I32 : type) : remaining;
             }
             if (kind == ReadTimestamp) return Push(stack, allocated, depth, I64);
+            if (kind == ExitProcess) return Match(stack, depth, I32) ? depth - 1 : -1;
             if (kind == CharacterCall)
                 return Match(stack, depth, I32) ? Push(stack, allocated, depth - 1, I32) : -1;
             if (kind == MathCall)

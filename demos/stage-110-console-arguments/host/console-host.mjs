@@ -154,9 +154,15 @@ export function createConsoleHost({ encoding = "utf-8", newLine = "\r\n", input 
     const clockImports = {
         timestamp: hrtime ? () => hrtime() : () => BigInt(Math.round(performance.now() * 1e6))
     };
-    const imports = { [consoleImportModule]: consoleImports, "standardwasm:clock": clockImports };
+    // Decision 0104: Environment.Exit records its status here, then the module traps.
+    let exitStatus = null;
+    const processImports = { exit(status) { exitStatus = status | 0; } };
+    const imports = {
+        [consoleImportModule]: consoleImports, "standardwasm:clock": clockImports, "standardwasm:process": processImports
+    };
     return {
         imports,
+        exitStatus: () => exitStatus,
         encoding,
         newLine,
         output: () => ({ stdout: encode(streams[1]), stderr: encode(streams[2]) })

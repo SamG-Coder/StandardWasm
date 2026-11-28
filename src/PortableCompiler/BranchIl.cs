@@ -114,6 +114,7 @@ namespace PortableCompiler
         internal const int JoinManyStrings = 422;
         internal const int CharacterCall = 423; // [char] -> [Boolean]; the operand is a CharacterMembers id
         internal const int ReadTimestamp = 424; // [] -> [i64]; the operand becomes the clock import index
+        internal const int ExitProcess = 425; // [status] -> (traps); the operand becomes the exit import index
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
