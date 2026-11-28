@@ -36,7 +36,15 @@ npm ci
 npm test
 ```
 
-The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds the netstandard2.0 demo libraries, records expected results on the CLR, compiles the DLLs and executes the binaries in Node and a headless browser. It checks managed overflow, unsupported operations and one million tail calls. Typed managed exceptions match the CLR exception type. Older cases that still trap report that outcome separately.
+The harness uses the installed Microsoft Edge on Windows. On another platform, set `BROWSER_PATH` to a Chromium executable or install the matching Playwright browser with `npx playwright-core install chromium`. The test builds the netstandard2.0 demo libraries, records expected results on the CLR, compiles the DLLs and executes the binaries in headless Edge, the shipping engine. `npm run test:release` also runs every job in Node and is required only for a library release ([decision 0102](docs/decisions/0102-concurrent-verification.md)). It checks managed overflow, unsupported operations and one million tail calls. Typed managed exceptions match the CLR exception type. Older cases that still trap report that outcome separately.
+
+A milestone gate also runs every stage runner after `npm test`:
+
+```sh
+npm run test:runners
+```
+
+It runs the runners in parallel lanes, with serial chains for stages that share builds, and skips `dotnet` builds whose inputs' sha256 is unchanged. Set `STANDARDWASM_REBUILD=1` to rebuild everything. Pass `--release` after the npm argument separator to verify in Node as well. Logs go to `artifacts/runners/`. See [decision 0103](docs/decisions/0103-stage-runner-cache-and-lanes.md).
 
 To compile another DLL:
 
