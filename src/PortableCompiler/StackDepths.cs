@@ -825,6 +825,9 @@ namespace PortableCompiler
             if (kind == OffsetLocation)
                 return depth >= 2 && ArrayIndex(stack, depth) && Match(stack, depth - 1, UnsafeCalls.ElementLocation(operand))
                     ? Push(stack, allocated, depth - 2, UnsafeCalls.ElementLocation(operand)) : -2;
+            if (kind == GetRankTwo)
+                return Match(stack, depth, I32) && Match(stack, depth - 1, I32) && Match(stack, depth - 2, operand)
+                    ? Push(stack, allocated, depth - 3, operand == Longs ? I64 : I32) : -2;
             if (kind == PinArray)
                 return Match(stack, depth, frame[operand]) ? Push(stack, allocated, depth - 1, Native) : -2;
             if (kind == SortPrimitiveArray)
@@ -846,7 +849,8 @@ namespace PortableCompiler
                 int arity = NativeMemoryMembers.Arity(operand);
                 if (depth < arity) return -1;
                 for (int i = depth - arity; i < depth; i++)
-                    if (stack[i] != I32 && !IsNativeInteger(stack[i])) return -2;
+                    if (NativeMemoryMembers.WideOperand(operand, i - depth + arity) ? stack[i] != I64 :
+                        stack[i] != I32 && !IsNativeInteger(stack[i])) return -2;
                 return NativeMemoryMembers.Returns(operand) ? Push(stack, allocated, depth - arity, Native) : depth - arity;
             }
             if (kind == ExitProcess) return Match(stack, depth, I32) ? depth - 1 : -1;
@@ -857,7 +861,8 @@ namespace PortableCompiler
                 // Every mapped overload is T(T) or T(T, T) over one numeric stack type.
                 byte type = MathWasm.Type(operand);
                 int arity = MathWasm.Arity(operand);
-                if (!Match(stack, depth, type) || (arity == 2 && !Match(stack, depth - 1, type))) return -1;
+                if (!Match(stack, depth, type) || (arity >= 2 && !Match(stack, depth - 1, type)) ||
+                    (arity == 3 && !Match(stack, depth - 2, type))) return -1;
                 return Push(stack, allocated, depth - arity, type);
             }
             if (kind == Call || kind == NewObject)

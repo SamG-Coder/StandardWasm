@@ -17,7 +17,9 @@ namespace PeLibrary
     {
         internal const int SqrtF64 = 1, AbsF64 = 2, AbsF32 = 3, FloorF64 = 4, CeilingF64 = 5, TruncateF64 = 6,
             RoundF64 = 7, MaxF64 = 8, MinF64 = 9, MaxF32 = 10, MinF32 = 11, MaxI32 = 12, MinI32 = 13, MaxU32 = 14,
-            MinU32 = 15, MaxI64 = 16, MinI64 = 17, MaxU64 = 18, MinU64 = 19, AbsI32 = 20, AbsI64 = 21;
+            MinU32 = 15, MaxI64 = 16, MinI64 = 17, MaxU64 = 18, MinU64 = 19, AbsI32 = 20, AbsI64 = 21,
+            // Integer Clamp(value, min, max) (decision 0105).
+            ClampI32 = 22, ClampU32 = 23, ClampI64 = 24, ClampU64 = 25;
 
         // streams: blob start/size, strings start/size, tables start/size (as used by the other readers).
         // methods: MethodDef layout with the string and blob index widths at [2] and [3].
@@ -112,13 +114,19 @@ namespace PeLibrary
             if (!Fits(signature, 6, (uint)streams[1])) return 0;
             uint blob = (uint)streams[0] + signature;
             int size = image[blob];
-            if (size < 4 || size > 5 || image[blob + 1] != 0) return 0;
+            if (size < 4 || size > 6 || image[blob + 1] != 0) return 0;
             if (!Fits(signature, (uint)size + 1, (uint)streams[1])) return 0;
             int count = image[blob + 2];
             if (size != count + 3) return 0;
             int result = image[blob + 3];
             for (int i = 0; i < count; i++)
-                if (image[blob + 4 + (uint)i] != result) return 0; // every mapped overload is T(T) or T(T, T)
+                if (image[blob + 4 + (uint)i] != result) return 0; // every mapped overload is T(T), T(T, T) or T(T, T, T)
+            if (count == 3)
+            {
+                if (!Text(image, streams, name, 5, 0x6d616c43, 0x70, 0, 0, 0, 0, 0)) return 0; // Clamp
+                return result == 0x08 ? ClampI32 : result == 0x09 ? ClampU32 : result == 0x0a ? ClampI64 :
+                    result == 0x0b ? ClampU64 : 0;
+            }
 
             if (count == 1)
             {

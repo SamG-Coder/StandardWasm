@@ -117,6 +117,8 @@ namespace PortableCompiler
                 }
                 return BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, token, objects);
             }
+            // Decision 0105: a rank-2 zero-based Int32/Int64 ARRAY shares its element's vector (MdArrays).
+            if (element == 0x14) return MdArrays.ReadArray(image, next, end);
             if (element == 0x1d)
             {
                 int item = Read(bundle, image, layout, heaps, owner, next, end, context, objects, depth + 1, substitutions, methodArguments);

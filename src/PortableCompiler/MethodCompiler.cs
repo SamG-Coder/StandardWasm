@@ -879,6 +879,8 @@ namespace PortableCompiler
                         objects, records, catchRegion, literals, literalSize, location);
                     if (status < 0)
                         return status;
+                    status = ArrayInitializers.LowerRankTwo(image, heaps, layout, records, catchRegion, literals, literalSize, location);
+                    if (status < 0) return status;
                     status = StaticByteSpans.Lower(bundle, image, layout, heaps, owner, context, methodArguments,
                         records, objects, catchRegion, literals, literalSize, location);
                     if (status < 0) return status;
@@ -1447,6 +1449,11 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - pinBytes) return -3;
                                 capacity += pinBytes;
                             }
+                            if (kind == BranchIl.GetRankTwo)
+                            {
+                                if (capacity > int.MaxValue - MdArrays.Capacity) return -3;
+                                capacity += MdArrays.Capacity;
+                            }
                             if (kind == BranchIl.SortPrimitiveArray)
                             {
                                 if (capacity > int.MaxValue - ArraySortPrimitive.Capacity) return -3;
@@ -1502,7 +1509,7 @@ namespace PortableCompiler
                             if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion || kind == BranchIl.NewArray ||
                                 (kind == BranchIl.MathCall && MathWasm.CanOverflow(operation)))
                                 tags = ExceptionTypes.Overflow;
-                            else if (kind == BranchIl.NewDelegate)
+                            else if (kind == BranchIl.NewDelegate || (kind == BranchIl.MathCall && MathWasm.ThrowsArgument(operation)))
                                 tags = ExceptionTypes.Argument;
                             else if (kind == BranchIl.LoadVirtualFunction)
                                 tags = ExceptionTypes.NullReference;
@@ -1549,11 +1556,13 @@ namespace PortableCompiler
                             else if (kind == BranchIl.JoinStringArray)
                                 tags = ExceptionTypes.ArgumentNull; // String.Concat(null)
                             else if (kind == BranchIl.NativeMemoryCall)
-                                tags = ExceptionTypes.Argument; // AlignedAlloc/AlignedRealloc alignment
+                                tags = ExceptionTypes.Argument | ExceptionTypes.ArgumentOutOfRange; // alignment; MemoryCopy size
                             else if (kind == BranchIl.MultiplyDivideUInt64)
                                 tags = ExceptionTypes.DivideByZero; // UInt128 division by zero
                             else if (kind == BranchIl.SortPrimitiveArray)
                                 tags = ExceptionTypes.ArgumentNull; // Array.Sort(null)
+                            else if (kind == BranchIl.GetRankTwo)
+                                tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.ArrayDataReference)
                                 tags = ExceptionTypes.NullReference; // GetArrayDataReference(null)
                             else if (kind == BranchIl.ThrowFrameworkArgument)
@@ -3510,6 +3519,14 @@ namespace PortableCompiler
                         records[slot + 1] = 0;
                         records[slot + 3] = heapGlobal;
                         hostUse[0] = hostUse[0] | WasmImports.Memory;
+                        continue;
+                    }
+                    // Decision 0105: T T[,]::Get(int32, int32) on a rank-2 Int32/Int64 array (MdArrays).
+                    int rankTwo = opcode == 0x28 && !addressed ? MdArrays.MemberVector(image, heaps, layout, member) : 0;
+                    if (rankTwo != 0 && MdArrays.Member(image, heaps, layout, member) == 2)
+                    {
+                        records[slot] = BranchIl.GetRankTwo;
+                        records[slot + 1] = rankTwo;
                         continue;
                     }
                     int characterMember = opcode == 0x28 && !addressed ? CharacterMembers.Identify(image, heaps, layout, member) : 0;

@@ -120,6 +120,8 @@ namespace PortableCompiler
         // Decision 0105: [T[]] -> [native address of a heap copy]; operand = the pinned local,
         // operand 3 = the NativeMemory heap global. The following record stores the address.
         internal const int PinArray = 437;
+        // Decision 0105: T[,]::Get(int32, int32): [array, i, j] -> [element]; the operand is the vector.
+        internal const int GetRankTwo = 438;
         internal const int ExitProcess = 425; // [status] -> (traps); the operand is the exit-status global
         // NativeMemory members (decision 0104); the operand is the member id and operand 3 becomes
         // the alloc import index. [args...] -> [void*] or [].

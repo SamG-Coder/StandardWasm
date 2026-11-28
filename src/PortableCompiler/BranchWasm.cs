@@ -1265,6 +1265,13 @@ namespace PortableCompiler
                     used = Gc(code, used, 0, ObjectLocation);
                     used = Local(code, used, 0x21, location);
                 }
+                else if (kind == GetRankTwo)
+                {
+                    int array = Spill(spills, maximum, spillFlags, states[state + top - 2], top - 2);
+                    used = MdArrays.EmitGet(code, used, operand, array, Spill(spills, maximum, spillFlags, I32, top - 1),
+                        Spill(spills, maximum, spillFlags, I32, top));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, operand == Longs ? I64 : I32, top - 2));
+                }
                 else if (kind == PinArray)
                 {
                     int site = 0;
@@ -1344,7 +1351,8 @@ namespace PortableCompiler
                 {
                     byte type = MathWasm.Type(operand);
                     int first = top - MathWasm.Arity(operand) + 1;
-                    used = MathWasm.Emit(code, used, operand, Spill(spills, maximum, spillFlags, type, first), Spill(spills, maximum, spillFlags, type, top));
+                    used = MathWasm.Emit(code, used, operand, Spill(spills, maximum, spillFlags, type, first),
+                        Spill(spills, maximum, spillFlags, type, first + 1 <= top ? first + 1 : top), Spill(spills, maximum, spillFlags, type, top));
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, type, first));
                 }
                 else if (kind == ExchangeHandlerField)

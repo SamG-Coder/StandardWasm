@@ -18,7 +18,9 @@ namespace PortableCompiler
     internal static class NativeMemoryMembers
     {
         internal const int Alloc = 1, AllocCount = 2, AllocZeroed = 3, AllocZeroedCount = 4, AlignedAlloc = 5,
-            AlignedRealloc = 6, AlignedFree = 7, Free = 8, Realloc = 9, Clear = 10, Fill = 11, Copy = 12;
+            AlignedRealloc = 6, AlignedFree = 7, Free = 8, Realloc = 9, Clear = 10, Fill = 11, Copy = 12,
+            // Decision 0105: System.Buffer.MemoryCopy(void*, void*, (u)long destinationSizeInBytes, (u)long sourceBytesToCopy).
+            BufferCopy = 13;
         internal const int Capacity = 1400;
         // The heap's control-block address lives in this module global (StaticFields registry).
         internal const int HeapOwner = int.MaxValue - 3;
@@ -31,8 +33,9 @@ namespace PortableCompiler
         {
             var reference = new int[AssemblyReferences.SymbolWidth];
             if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference) < 0 ||
-                reference[AssemblyReferences.Depth] != 0 || !IsNativeMemoryType(image, heaps, layout,
-                    reference[AssemblyReferences.ParentType])) return 0;
+                reference[AssemblyReferences.Depth] != 0) return 0;
+            bool buffer = SpanMetadata.IsPlatformType(image, layout, heaps, reference[AssemblyReferences.ParentType], "System", "Buffer");
+            if (!buffer && !IsNativeMemoryType(image, heaps, layout, reference[AssemblyReferences.ParentType])) return 0;
             var next = new int[1];
             int blob = reference[5], limit = heaps[0] + heaps[1];
             if (blob < 1 || blob >= heaps[1]) return 0;
@@ -40,8 +43,11 @@ namespace PortableCompiler
             int at = next[0];
             if (length < 3 || length > limit - at || image[at] != 0) return 0; // static, default
             int count = image[at + 1];
-            if (count < 1 || count > 3 || length != 2 + Size(image, at + 2, at + length)) return 0;
+            if (count < 1 || count > 4 || length != 2 + Size(image, at + 2, at + length)) return 0;
             uint name = (uint)reference[4];
+            if (buffer)
+                return (Shape(image, at, "vPPLL") || Shape(image, at, "vPPII")) &&
+                    MatchesAscii(image, heaps, name, "MemoryCopy") ? BufferCopy : 0;
             // Parameter kinds: P = void*, U = nuint, B = byte; the return is void or void*.
             if (Shape(image, at, "*U")) return MatchesAscii(image, heaps, name, "Alloc") ? Alloc :
                 MatchesAscii(image, heaps, name, "AllocZeroed") ? AllocZeroed : 0;
@@ -78,9 +84,12 @@ namespace PortableCompiler
 
         internal static int Arity(int member) =>
             member == AlignedFree || member == Free || member == Alloc || member == AllocZeroed ? 1 :
-            member == AlignedRealloc || member == Fill || member == Copy ? 3 : 2;
+            member == AlignedRealloc || member == Fill || member == Copy ? 3 : member == BufferCopy ? 4 : 2;
 
         internal static bool Returns(int member) => member <= Realloc && member != AlignedFree && member != Free;
+
+        // The stack type of operand `index`: MemoryCopy's two sizes are 64-bit; the rest are wasm32 native ints.
+        internal static bool WideOperand(int member, int index) => member == BufferCopy && index >= 2;
 
         // Encoded size of a return type and parameters made only of void, void*, nuint and byte.
         private static int Size(byte[] image, int at, int end)
@@ -109,7 +118,7 @@ namespace PortableCompiler
                     if (image[cursor] != VoidPointer || image[cursor + 1] != 0x01) return false;
                     cursor += 2;
                 }
-                else if (image[cursor++] != (kind == 'U' ? NativeUnsigned : 0x05)) return false;
+                else if (image[cursor++] != (kind == 'U' ? NativeUnsigned : kind == 'L' ? 0x0b : kind == 'I' ? 0x0a : 0x05)) return false;
             }
             return true;
         }
@@ -118,6 +127,33 @@ namespace PortableCompiler
         // control-block global and `scratch` holds NativeHeapWasm.ScratchCount i32 locals.
         internal static int Emit(byte[] code, int used, int member, int[] arguments, int result, int heap, int[] scratch)
         {
+            if (member == BufferCopy)
+            {
+                // sourceBytesToCopy > destinationSizeInBytes -> ArgumentOutOfRangeException (unsigned, as
+                // the CLR compares the (ulong) values; the long overload converts the same way).
+                used = Get(code, used, arguments[3]);
+                used = Get(code, used, arguments[2]);
+                code[used++] = 0x56; // i64.gt_u
+                used = ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.ArgumentOutOfRangeTag);
+                // A count beyond the 32-bit address space cannot be a valid range: the CLR's access violation.
+                used = Get(code, used, arguments[3]);
+                code[used++] = 0x42; code[used++] = 32; // i64.const 32
+                code[used++] = 0x88; // i64.shr_u
+                code[used++] = 0xa7; // i32.wrap_i64
+                code[used++] = 0x04; code[used++] = 0x40; code[used++] = 0x00; code[used++] = 0x0b; // if: unreachable
+                int count = scratch[NativeHeapWasm.Size];
+                used = Get(code, used, arguments[3]);
+                code[used++] = 0xa7;
+                used = BranchWasm.Local(code, used, 0x21, count);
+                used = TrapIfNullRange(code, used, arguments[0], count);
+                used = TrapIfNullRange(code, used, arguments[1], count);
+                // Buffer.Memmove semantics: memory.copy handles overlapping ranges.
+                used = Get(code, used, arguments[1]);
+                used = Get(code, used, arguments[0]);
+                used = Get(code, used, count);
+                code[used++] = 0xfc; code[used++] = 10; code[used++] = 0; code[used++] = 0; // memory.copy
+                return used;
+            }
             if (member == Clear || member == Fill || member == Copy)
             {
                 // Clear(ptr, count), Fill(ptr, count, value), Copy(source, destination, count)
