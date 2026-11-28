@@ -5,7 +5,7 @@ import { parseArgs } from "node:util";
 import { chromium } from "playwright-core";
 import { auditPortable } from "./audit-portable-core.mjs";
 import { listDemos } from "./demos.mjs";
-import { oracleCases } from "./oracle.mjs";
+import { loadOracle } from "./oracle-store.mjs";
 import { root, run } from "./toolchain.mjs";
 
 const { values: options } = parseArgs({ options: {
@@ -15,7 +15,8 @@ const { values: options } = parseArgs({ options: {
 } });
 const compilerBytes = readFileSync(options.compiler);
 const oracleBytes = readFileSync(join(root, "artifacts/oracle.json"));
-const oracle = oracleCases(JSON.parse(oracleBytes));
+// The audit hashes the case JSON; its byte inputs come from the blob file as number arrays.
+const oracle = loadOracle(join(root, "artifacts/oracle.json")).cases;
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const demos = new Map(listDemos().filter(demo => !demo.runner).map(demo => [demo.assembly, demo]));
 const grouped = new Map();
