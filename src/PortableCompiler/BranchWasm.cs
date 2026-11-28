@@ -7,13 +7,13 @@ namespace PortableCompiler
     internal static class BranchWasm
     {
         private const int LastScalarBank = PeLibrary.ConsoleStorage.Writer;
-        private const int LocationSpill = 1, SpanSpill = 2;
+        private const int LocationSpill = 1, SpanSpill = 2, VectorSpill = 4, VectorPairSpill = 8, WideSpill = 16, WideArraySpill = 32;
         internal static int Emit(int[] records, int[] depths, int[] states, int[] frameShape, int[] frame,
             int[] signatures, int[] offsets, int[] arities, byte[] code, int[] remainderFixup, int[] catchRegion,
             byte[] outgoingNulls, int[] outgoingReferences, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection,
             int[] inlineLocations, int[] nativePlans, int[] filters, int[] frameCells,
             FunctionPointerPlan pointers, int rootCount, byte[] frameRoots, FinalizerSlots finalizers, int[] failure,
-            PrimitiveArrayWasm primitiveArrays, ValueFieldProjections projections, byte[] literals)
+            PrimitiveArrayWasm primitiveArrays, ValueFieldProjections projections, byte[] literals, CollectionReach reach = null)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -40,14 +40,24 @@ namespace PortableCompiler
             // Stage 149 (decision 0077): a pinning frame also saves the live-pin count.
             int pins = frameShape[24] - 1;
             bool tracksRoots = frameRoots != null;
+            // Decision 0106: a frame may skip root publishing while the module still tracks
+            // finalizers; the managed cell layout follows the module, not the frame.
+            bool rootLayout = finalizers != null;
             bool hasNull = outgoingNulls.Length != 0;
             int spillFlags = 0;
             // Only verified stack types need banks. Unused view types must not
             // reduce the local budget of methods with many ordinary classes.
-            for (int i = 0; i < states.Length && spillFlags != (LocationSpill | SpanSpill); i++)
+            // A tuple sort keeps two $wide elements in scratch even when no $wide value is on the stack.
+            for (int at = 0; at < records.Length; at += Width)
+                if (records[at] == WideOp && records[at + 1] == WideTuples.SortRange) spillFlags |= WideSpill;
+            for (int i = 0; i < states.Length && spillFlags != 63; i++)
             {
+                if (WideTuples.IsWide(states[i])) spillFlags |= WideSpill;
+                if (states[i] == WideTuples.TupleArray) spillFlags |= WideArraySpill;
                 if (IsManagedLocation(states[i])) spillFlags |= LocationSpill;
                 if (IsSpan(states[i])) spillFlags |= SpanSpill;
+                if (SimdVectors.IsVector(states[i])) spillFlags |= VectorSpill;
+                if (SimdVectors.IsPair(states[i])) spillFlags |= VectorPairSpill;
             }
             int classBase = LastScalarBank + ExtraSpillBanks(spillFlags);
             int spillKinds = classBase + classes;
@@ -72,6 +82,12 @@ namespace PortableCompiler
             int enumLocals = scratch + (stringScratch ? 5 : 0);
             int eventLocals = enumLocals + (enumScratch ? 2 : 0);
             int scopedPinLocals = eventLocals + (eventScratch ? 6 : 0);
+            // Decision 0105: proved alias-free pins, their per-site block locals (declared last) and
+            // the heap scratch they share.
+            int pinSites = PinnedArraysWasm.CountPins(records);
+            var pinScratch = new int[NativeHeapWasm.ScratchCount];
+            for (int i = 0; i < 5; i++) pinScratch[i] = eventLocals + i;
+            pinScratch[5] = scratch + 3;
             int resourceLocals = scopedPinLocals + (scopedPinScratch ? 8 : 0);
             int pcLocal = resourceLocals + (resourceFunction >= 0 ? 7 : 0);
             int continuationBase = pcLocal + 1 + exceptionLocals;
@@ -81,12 +97,14 @@ namespace PortableCompiler
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
                 (stringScratch ? 2 : 0) + (enumScratch ? 1 : 0) + (eventScratch ? 2 : 0) + (scopedPinScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
                 (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0) +
-                (staticRegion >= 0 ? 1 : 0) + cellCount + (tracksRoots ? 1 : 0) + (failure != null ? 1 : 0));
+                (staticRegion >= 0 ? 1 : 0) + cellCount + (tracksRoots ? 1 : 0) + (failure != null ? 1 : 0) +
+                (pinSites != 0 ? 1 : 0));
             // The saved shadow-stack pointer follows every other local.
             int stackFrame = objectBase + exceptionLocals, pinFrame = stackFrame + 1;
             int staticAddress = stackFrame + (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0);
             int rootFrame = staticAddress + (staticRegion >= 0 ? 1 : 0) + cellCount;
             if (failure != null) failure[TypeInitializerWasm.FailureInner] = rootFrame + (tracksRoots ? 1 : 0);
+            int[] arrayPins = PinnedArrays.Pins(records, frame, rootFrame + (tracksRoots ? 1 : 0) + (failure != null ? 1 : 0));
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < arguments + locals; i++)
             {
@@ -110,7 +128,7 @@ namespace PortableCompiler
                     if (kind > classBase)
                         type = FirstClass + kind - classBase - 1;
                     else if (kind > LastScalarBank)
-                        type = kind == LastScalarBank + 1 && (spillFlags & LocationSpill) != 0 ? ObjectLocation : ObjectSpan;
+                        type = ExtraBankType(kind - LastScalarBank - 1, spillFlags);
                     used = WasmBinary.ValueType(code, used, Representation(objects, type));
                 }
             }
@@ -200,6 +218,11 @@ namespace PortableCompiler
                 code[used++] = 1;
                 code[used++] = 0x6d; // eqref: the escaped managed object
             }
+            if (arrayPins != null)
+            {
+                used = WasmBinary.Unsigned(code, used, arrayPins.Length / 4);
+                code[used++] = 0x7f; // one live heap block per pin site (decision 0105)
+            }
             int[] cellLocals = null;
             if (cellCount != 0)
             {
@@ -223,7 +246,7 @@ namespace PortableCompiler
                         code[used++] = 0xd0; // ref.null eq
                         code[used++] = 0x6d;
                     }
-                    if (IsValueLocation(vector)) used = ManagedValueLocationWasm.CreateCell(code, used, tracksRoots);
+                    if (IsValueLocation(vector)) used = ManagedValueLocationWasm.CreateCell(code, used, rootLayout);
                     else
                     {
                         used = Gc(code, used, 8, vector); // array.new_fixed
@@ -249,6 +272,8 @@ namespace PortableCompiler
             for (int local = arguments; local < inlineLocations.Length; local++)
                 if (inlineLocations[local] != 0)
                     used = InlineObjectStorageWasm.Allocate(code, used, inlineLocations[local], local, FieldCount(objects, frame[local]));
+            // Decision 0105: CLI locals are zero-initialized; a vector local starts as the zero vector.
+            used = SimdVectors.InitializeLocals(code, used, frame, arguments, locals, inlineLocations);
             if (prologue >= 0 && !tracksRoots)
                 used = TypeInitializerWasm.CallInitializer(code, used, hostImports + prologue);
             if (guard >= 0) used = TypeInitializerWasm.Begin(code, used, guard, epoch, activeInitializers, pcLocal,
@@ -258,7 +283,7 @@ namespace PortableCompiler
                 used = StackAllocationWasm.Begin(code, used, stackPointer, stackFrame);
                 if (pins >= 0) used = PinRegistryWasm.Begin(code, used, pins, pinFrame);
             }
-            if (tracksRoots || stackPointer >= 0)
+            if (tracksRoots || stackPointer >= 0 || arrayPins != null)
             {
                 // A single cleanup region owns the frame's roots, pins and native allocations.
                 code[used++] = 0x02; code[used++] = ExceptionDispatchWasm.ExceptionReference; // block (result exnref)
@@ -277,21 +302,38 @@ namespace PortableCompiler
             // consecutive states into blocks headed by `br_if (pc >= next group's first pc)`,
             // so re-entering the loop skips a whole group with one comparison instead of
             // testing each of its states (#316). A branch to the loop leaves one more block.
-            int emitted = 0;
+            // Decision 0106: the loop re-enters with one br_table over pc. Each basic-block leader owns
+            // a block; its code follows the block's end, and the states after it fall through in pc
+            // order. Leader 0 is innermost, so br_table label i reaches leader i's code; any other pc
+            // takes the outermost default block, which ends in the trailing unreachable as before.
+            bool[] leaders = Leaders(records, depths, catchRegion, filters != null, 0, continuations != 0);
+            int leaderCount = 0;
+            var leaderIndex = new int[depths.Length];
             for (int pc = 0; pc < depths.Length; pc++)
-                if (depths[pc] != 0) emitted++;
-            int groupSize = emitted > MinimumGroupedStates ? GroupSize(emitted) : 0;
-            int loopDepth = (catchRegion.Length == 0 ? 1 : ExceptionDispatchWasm.Depth) + (groupSize != 0 ? 1 : 0);
-            int ordinal = 0;
+                leaderIndex[pc] = depths[pc] != 0 && leaders[pc] ? leaderCount++ : -1;
+            // Labels between a state's block and the loop besides the leader blocks: catch dispatch
+            // adds try_table and one block per tag (ExceptionDispatchWasm.Depth counted the old `if`).
+            int exceptionLabels = catchRegion.Length == 0 ? 0 : ExceptionDispatchWasm.Depth - 1;
+            for (int i = 0; i <= leaderCount; i++) { code[used++] = 0x02; code[used++] = 0x40; } // default + leaders
+            used = Local(code, used, 0x20, pcLocal);
+            code[used++] = 0x0e; // br_table (pc is in range for every emitted state)
+            used = WasmBinary.Unsigned(code, used, depths.Length);
+            for (int pc = 0; pc < depths.Length; pc++)
+                used = WasmBinary.Unsigned(code, used, leaderIndex[pc] >= 0 ? leaderIndex[pc] : leaderCount);
+            used = WasmBinary.Unsigned(code, used, leaderCount);
+            int segment = -1;
+            int copiedStore = -1; // the stobj state already performed by a fused ldobj copy
             for (int pc = 0; pc < depths.Length; pc++)
             {
                 if (depths[pc] == 0) continue;
-                if (groupSize != 0 && ordinal % groupSize == 0)
+                if (leaderIndex[pc] >= 0)
                 {
-                    if (ordinal != 0) code[used++] = 0x0b; // end the previous group
-                    used = BeginGroup(code, used, depths, pc, groupSize, pcLocal);
+                    code[used++] = 0x0b; // end the leader's block: its code follows
+                    segment = leaderIndex[pc];
                 }
-                ordinal++;
+                // From inside this state's block: the remaining leader blocks, the default block, the
+                // exception labels and then the loop.
+                int loopDepth = 1 + (leaderCount - 1 - segment) + 1 + exceptionLabels;
                 int slot = pc * BranchIl.Width;
                 int kind = records[slot], operand = records[slot + 1], next = records[slot + 2];
                 int depth = depths[pc] - 1;
@@ -299,16 +341,17 @@ namespace PortableCompiler
                 int top = depth - 1;
                 bool fallsThrough = false;
                 bool fieldStore = kind == SetField || kind == UpdateConstructorField;
-                used = Local(code, used, 0x20, pcLocal);
-                used = Const(code, used, pc);
-                code[used++] = 0x46;
-                code[used++] = 0x04;
+                code[used++] = 0x02; // the state's own label, as the former `if`
                 code[used++] = 0x40;
 
                 int tracked = 0;
-                bool publishesRoots = tracksRoots && (kind == Call || kind == NewObject || kind == ConstructValue ||
+                // Decision 0106: a direct call to a function that cannot reach a collection publishes nothing.
+                bool collectingCall = reach == null || (kind != Call && kind != NewObject && kind != ConstructValue) || reach.MayCollect(operand);
+                bool publishesRoots = tracksRoots && collectingCall && (kind == Call || kind == NewObject || kind == ConstructValue ||
                     kind == ResourceLookup || kind == InvokeDelegate || kind == CallNativeIndirect || kind == CallComCookieLookup ||
                     kind == CallDynamicNative || kind == CallPinnedCharacterNative ||
+                    // Decision 0104: Collect marks from the root stack; finalizers can allocate and collect.
+                    kind == GarbageCollectorCall && operand != GarbageCollectorMembers.KeepAlive ||
                     TypeInitializerWasm.HasFieldTrigger(kind, operand, fieldInitializers));
                 if (publishesRoots)
                 {
@@ -435,6 +478,46 @@ namespace PortableCompiler
                     code[used++] = operand == I64 ? (byte)0x51 : (byte)0x46; // eq
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top - 1));
                 }
+                else if (kind == JoinManyStrings)
+                {
+                    // Concat(a, b, c[, d]) == Concat(Concat(Concat(a, b), c), d) for both content and
+                    // identity: each step returns the other operand when one side is null or empty, so a
+                    // single non-empty argument is returned as-is and only two or more allocate.
+                    int at = top - records[slot + 3] + 1;
+                    int accumulator = Spill(spills, maximum, spillFlags, states[state + at], at);
+                    for (int i = 1; i < records[slot + 3]; i++)
+                    {
+                        used = StringWasm.Copy(code, used, accumulator,
+                            Spill(spills, maximum, spillFlags, states[state + at + i], at + i), scratch, true, operand);
+                        accumulator = Spill(spills, maximum, spillFlags, String, at);
+                        used = Local(code, used, 0x21, accumulator);
+                    }
+                }
+                else if (kind == JoinStringArray)
+                {
+                    int vector = PeLibrary.ObjectLayouts.FindArray(objects, String);
+                    used = StringArrayJoinWasm.Emit(code, used, vector, Spill(spills, maximum, spillFlags, states[state + top], top),
+                        operand, scratch, scratch + 1, scratch + 3, scratch + 4, enumLocals, enumLocals + 1);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, String, top));
+                }
+                else if (kind == FormatPrimitive)
+                {
+                    // [location] -> [String]: read the receiver through its managed location as
+                    // ldind.i4/ldind.i8 would, widen to the i64 magnitude workspace, then format.
+                    int type = states[state + top];
+                    int address = Spill(spills, maximum, spillFlags, type, top);
+                    bool wide = operand >= 10;
+                    // A folded receiver (ldloca/ldflda then ToString) is already the value.
+                    if (records[slot + 3] == PrimitiveFormatting.ValueReceiver) used = Local(code, used, 0x20, address);
+                    else used = ValueFieldProjectionWasm.Read(code, used, frameShape[7], address,
+                        wide ? Longs : operand == 5 ? Bytes : Ints, type, projections);
+                    // Small and 32-bit stack values are already sign- or zero-extended to i32.
+                    if (!wide) code[used++] = (operand & 1) == 0 ? (byte)0xac : (byte)0xad; // i64.extend_i32_s/u
+                    used = Local(code, used, 0x21, enumLocals);
+                    used = EnumFormattingWasm.FormatDecimal(code, used, (operand & 1) == 0, scratch, scratch + 3, scratch + 4,
+                        enumLocals, enumLocals + 1);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, String, top));
+                }
                 else if (kind == FormatEnum)
                 {
                     int element = records[slot + 3];
@@ -548,6 +631,13 @@ namespace PortableCompiler
                     int left = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);
                     int right = Spill(spills, maximum, spillFlags, states[state + top], top);
                     used = StringWasm.OrdinalEquals(code, used, left, right, spills + top - 1, scratch);
+                    if (operand == 1)
+                    {
+                        // [left, right] -> [!equal] for String.op_Inequality.
+                        used = Local(code, used, 0x20, spills + top - 1);
+                        code[used++] = 0x45; // i32.eqz
+                        used = Local(code, used, 0x21, spills + top - 1);
+                    }
                 }
                 else if (kind == JoinStrings || kind == StringFromChars)
                 {
@@ -697,7 +787,7 @@ namespace PortableCompiler
                 }
                 else if (kind == ConsoleWrite)
                 {
-                    bool text = operand != PeLibrary.ConsoleMetadata.WriteEmptyLine;
+                    bool text = operand != PeLibrary.ConsoleMetadata.WriteEmptyLine && operand != PeLibrary.ConsoleMetadata.Flush;
                     int writer = text ? top - 1 : top;
                     // The String scratch bank supplies a Char[] and two i32 locals.
                     used = ConsoleWasm.Write(code, used, operand,
@@ -795,6 +885,11 @@ namespace PortableCompiler
                 }
                 else if (kind == Store)
                 {
+                    // A store to a pinned array local ends its pin: copy the block back first.
+                    if (arrayPins != null && records[slot + 3] == PinnedLocals.Array)
+                        for (int site = 0; site < arrayPins.Length / 4; site++)
+                            if (arrayPins[site * 4] == operand)
+                                used = PinnedArraysWasm.Unpin(code, used, arrayPins, site, pinScratch, false);
                     int source = states[state + top];
                     int spilled = Spill(spills, maximum, spillFlags, source, top);
                     int type = frame[operand], backing = inlineLocations[operand];
@@ -836,7 +931,7 @@ namespace PortableCompiler
                         kind == BoxAggregateToInterface ? FieldAccess.Storage(operand) : ObjectReference;
                     int target = Spill(spills, maximum, spillFlags, resultType, top);
                     if (kind == BoxAggregate || kind == BoxAggregateToInterface)
-                        used = AggregateBoxing.Box(code, used, source, target, box, descriptor, tracksRoots);
+                        used = AggregateBoxing.Box(code, used, source, target, box, descriptor, rootLayout);
                     else
                     {
                         used = kind == UnboxAggregate || address ? AggregateBoxing.Unbox(code, used, source, operand, box, descriptor, address) :
@@ -1037,7 +1132,10 @@ namespace PortableCompiler
                     // Preserve the current frame whenever it can handle an exception.
                     // With the same result type, the callee already normalizes its return value.
                     // An initializer must observe its callee's failure, so it never tail-calls.
+                    // Decision 0106: pins copied back or released at ret also keep the frame (a tail call
+                    // would skip that cleanup).
                     if (kind == Call && tracked == 0 && catchRegion.Length == 0 && guard < 0 && stackPointer < 0 && first == 0 && returned == result &&
+                        arrayPins == null && scopedValuePin < 0 && pins < 0 &&
                         next < depths.Length && records[next * Width] == Return)
                     {
                         code[used++] = 0x12; // return_call
@@ -1163,11 +1261,221 @@ namespace PortableCompiler
                     else if (backing != 0)
                         used = InlineObjectStorageWasm.Store(code, used, type, backing, target, temporary, FieldCount(objects, type));
                 }
+                else if (kind == BitCount)
+                {
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
+                    used = BitOperationMembers.Emit(code, used, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top));
+                }
+                else if (kind == NativeConstant)
+                {
+                    used = Const(code, used, operand);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, Native, depth));
+                }
+                else if (kind == MultiplyHighUInt64)
+                {
+                    // [a, b, &low] -> [high]: low = a * b (wrapping) is stored through the location.
+                    int a = Spill(spills, maximum, spillFlags, I64, top - 2), b = Spill(spills, maximum, spillFlags, I64, top - 1);
+                    int low = Spill(spills, maximum, spillFlags, Int64Location, top);
+                    used = Local(code, used, 0x20, a);
+                    used = Local(code, used, 0x20, b);
+                    code[used++] = 0x7e; // i64.mul
+                    used = Local(code, used, 0x21, enumLocals);
+                    used = ValueFieldProjectionWasm.Write(code, used, frameShape[7], low, enumLocals, Longs, Int64Location, projections);
+                    used = WideMultiplyDivide.High(code, used, a, b);
+                    used = Local(code, used, 0x21, a);
+                }
+                else if (kind == ArrayDataReference)
+                {
+                    int array = Spill(spills, maximum, spillFlags, states[state + top], top);
+                    used = GuardNull(code, used, array);
+                    used = Local(code, used, 0x20, array);
+                    used = Const(code, used, 0);
+                    used = Gc(code, used, 0, ObjectLocation); // struct.new (array, 0)
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, UnsafeCalls.ElementLocation(operand), top));
+                }
+                else if (kind == OffsetLocation)
+                {
+                    int location = Spill(spills, maximum, spillFlags, UnsafeCalls.ElementLocation(operand), top - 1);
+                    used = ManagedLocationWasm.LoadField(code, used, location, 0);
+                    used = ManagedLocationWasm.LoadField(code, used, location, 1);
+                    used = Local(code, used, 0x20, Spill(spills, maximum, spillFlags, states[state + top], top));
+                    code[used++] = 0x6a; // i32.add
+                    used = Gc(code, used, 0, ObjectLocation);
+                    used = Local(code, used, 0x21, location);
+                }
+                else if (kind == NewRankTwo)
+                    used = MdArrays.EmitNew(code, used, operand, Spill(spills, maximum, spillFlags, I32, top - 1),
+                        Spill(spills, maximum, spillFlags, I32, top), Spill(spills, maximum, spillFlags, operand, top - 1));
+                else if (kind == SetRankTwo)
+                    used = MdArrays.EmitSet(code, used, operand, Spill(spills, maximum, spillFlags, operand, top - 3),
+                        Spill(spills, maximum, spillFlags, I32, top - 2), Spill(spills, maximum, spillFlags, I32, top - 1),
+                        Spill(spills, maximum, spillFlags, operand == Longs ? I64 : I32, top));
+                else if (kind == GetRankTwo)
+                {
+                    int array = Spill(spills, maximum, spillFlags, states[state + top - 2], top - 2);
+                    used = MdArrays.EmitGet(code, used, operand, array, Spill(spills, maximum, spillFlags, I32, top - 1),
+                        Spill(spills, maximum, spillFlags, I32, top));
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, operand == Longs ? I64 : I32, top - 2));
+                }
+                else if (kind == PinArray || kind == PinByteSpan)
+                {
+                    used = PinnedArraysWasm.Pin(code, used, arrayPins, PinnedArrays.Site(records, slot),
+                        Spill(spills, maximum, spillFlags, states[state + top], top),
+                        Spill(spills, maximum, spillFlags, Native, top), pinScratch);
+                }
+                else if (kind == UnpinByteSpan)
+                {
+                    for (int site = 0; site < arrayPins.Length / 4; site++)
+                        if (arrayPins[site * 4] == operand)
+                            used = PinnedArraysWasm.Unpin(code, used, arrayPins, site, pinScratch, true);
+                }
+                else if (kind == NativeSpanFill)
+                {
+                    int arity = PointerSpanFill.Arity(operand), first = top - arity + 1;
+                    used = PointerSpanFill.Emit(code, used, operand, Spill(spills, maximum, spillFlags, states[state + first], first),
+                        Spill(spills, maximum, spillFlags, I32, first + 1),
+                        arity == 3 ? Spill(spills, maximum, spillFlags, PointerSpanFill.ValueType(operand), top) : -1,
+                        scratch + 3, records[slot + 3] - 1);
+                }
+                else if (kind == ResizeArrayField)
+                {
+                    int field = operand * Width, aux = records[slot + 3];
+                    int vector = ArrayResizeField.Vector(aux);
+                    used = ArrayResizeField.Emit(code, used, vector, Spill(spills, maximum, spillFlags, vector, top - 1),
+                        Spill(spills, maximum, spillFlags, I32, top), ArrayResizeField.Receiver(aux),
+                        FieldAccess.Owner(records[field + 3]), records[field + 1], Spill(spills, maximum, spillFlags, vector, top));
+                }
+                else if (kind == FillPrimitiveArray)
+                {
+                    int arity = ArrayFillPrimitive.Arity(operand), first = top - arity + 1;
+                    used = ArrayFillPrimitive.Emit(code, used, operand,
+                        Spill(spills, maximum, spillFlags, states[state + first], first),
+                        Spill(spills, maximum, spillFlags, ArrayFillPrimitive.ValueType(operand), first + 1),
+                        arity == 4 ? Spill(spills, maximum, spillFlags, I32, first + 2) : -1,
+                        arity == 4 ? Spill(spills, maximum, spillFlags, I32, top) : -1);
+                }
+                else if (kind == PlatformUnsupported)
+                {
+                    // The member cannot run on this target (decision 0105): trap. The result local
+                    // assignment after `unreachable` only satisfies validation.
+                    code[used++] = 0x00;
+                    if (records[slot + 3] != Void)
+                        used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, records[slot + 3], top - operand + 1));
+                }
+                else if (kind == WideOp)
+                {
+                    int arity = WideTuples.Arity(operand), first = top - arity + 1;
+                    var operands = new int[arity];
+                    for (int i = 0; i < arity; i++)
+                        operands[i] = Spill(spills, maximum, spillFlags, states[state + first + i], first + i);
+                    int wideResult = WideTuples.Result(operand);
+                    used = WideTuples.Emit(code, used, operand, operands,
+                        wideResult == Void ? -1 : Spill(spills, maximum, spillFlags, wideResult, first),
+                        new[] { eventLocals, eventLocals + 1, eventLocals + 2, eventLocals + 3, eventLocals + 4 },
+                        new[] { enumLocals, enumLocals + 1, Spill(spills, maximum, spillFlags, I64, top - 1), Spill(spills, maximum, spillFlags, I64, top) },
+                        new[] { Spill(spills, maximum, spillFlags, WideTuples.Value, top - 1), Spill(spills, maximum, spillFlags, WideTuples.Value, top) });
+                }
+                else if (kind == CloneArray)
+                {
+                    // The eqref result bank and the receiver's array bank are different locals.
+                    used = ArrayClone.Emit(code, used, states[state + top], Spill(spills, maximum, spillFlags, states[state + top], top),
+                        Spill(spills, maximum, spillFlags, I32, top), Spill(spills, maximum, spillFlags, ObjectReference, top));
+                }
+                else if (kind == SimdOp)
+                {
+                    int arity = SimdVectors.Arity(operand, records[slot + 3]), first = top - arity + 1;
+                    var operands = new int[arity];
+                    for (int i = 0; i < arity; i++)
+                        operands[i] = Spill(spills, maximum, spillFlags, states[state + first + i], first + i);
+                    int simdResult = SimdVectors.Result(operand, records[slot + 3]);
+                    // The result occupies the first operand's depth (or the next one for a nullary member).
+                    int resultDepth = arity == 0 ? depth : first;
+                    used = SimdVectors.Emit(code, used, operand, records[slot + 3], operands,
+                        simdResult == Void ? -1 : Spill(spills, maximum, spillFlags, simdResult, resultDepth),
+                        new[] { eventLocals, eventLocals + 1, eventLocals + 2 }, new[] { enumLocals, enumLocals + 1 });
+                }
+                else if (kind == BinarySearchPrimitiveArray)
+                    used = ArrayBinarySearch.Emit(code, used, operand,
+                        Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1),
+                        Spill(spills, maximum, spillFlags, ArrayBinarySearch.ValueType(operand), top),
+                        eventLocals, eventLocals + 1, eventLocals + 2, Spill(spills, maximum, spillFlags, I32, top - 1));
+                else if (kind == SortPrimitiveArray)
+                {
+                    bool wide = operand >= 0x0a;
+                    used = ArraySortPrimitive.Emit(code, used, operand,
+                        Spill(spills, maximum, spillFlags, states[state + top], top),
+                        eventLocals, eventLocals + 1, eventLocals + 2, eventLocals + 3, eventLocals + 4,
+                        wide ? enumLocals : scratch + 3, wide ? enumLocals + 1 : scratch + 4);
+                }
+                else if (kind == PrimitiveBitCast)
+                {
+                    int source = Spill(spills, maximum, spillFlags, UnsafeCalls.StackType(operand), top);
+                    used = Local(code, used, 0x20, source);
+                    used = UnsafeCalls.Emit(code, used, operand, records[slot + 3]);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, UnsafeCalls.StackType(records[slot + 3]), top));
+                }
+                else if (kind == MultiplyDivideUInt64)
+                {
+                    int a = Spill(spills, maximum, spillFlags, I64, top - 2);
+                    used = WideMultiplyDivide.Emit(code, used, a, Spill(spills, maximum, spillFlags, I64, top - 1),
+                        Spill(spills, maximum, spillFlags, I64, top), enumLocals, enumLocals + 1, scratch + 3);
+                }
+                else if (kind == GarbageCollectorCall)
+                {
+                    // KeepAlive: nothing to emit; its argument stays in its spill slot and is dropped
+                    // with the stack depth. Collect queues every unreachable finalizable object
+                    // (Discover); WaitForPendingFinalizers runs them until the queue is empty.
+                    if (operand == GarbageCollectorMembers.Collect)
+                    {
+                        code[used++] = 0x10;
+                        used = WasmIndexFixups.Write(code, used, frameShape[7], finalizers.DiscoverFixups);
+                        code[used++] = 0x1a; // drop the discovered count
+                    }
+                    else if (operand == GarbageCollectorMembers.WaitForPendingFinalizers)
+                    {
+                        code[used++] = 0x03; code[used++] = 0x40; // loop
+                        code[used++] = 0x10;
+                        used = WasmIndexFixups.Write(code, used, frameShape[7], finalizers.RunNextFixups);
+                        code[used++] = 0x0d; code[used++] = 0; // br_if: another finalizer ran
+                        code[used++] = 0x0b;
+                    }
+                }
+                else if (kind == NativeMemoryCall)
+                {
+                    int arity = NativeMemoryMembers.Arity(operand), first = top - arity + 1;
+                    var operands = new int[arity];
+                    for (int i = 0; i < arity; i++)
+                        operands[i] = Spill(spills, maximum, spillFlags, states[state + first + i], first + i);
+                    // Six i32 heap locals: the event bank's five counters and one string-scratch i32.
+                    var heapScratch = new int[NativeHeapWasm.ScratchCount];
+                    for (int i = 0; i < 5; i++) heapScratch[i] = eventLocals + i;
+                    heapScratch[5] = scratch + 3;
+                    used = NativeMemoryMembers.Emit(code, used, operand, operands,
+                        Spill(spills, maximum, spillFlags, Native, first), records[slot + 3], heapScratch);
+                }
+                else if (kind == FailFast)
+                    used = ProcessExit.EmitFailFast(code, used, Spill(spills, maximum, spillFlags, states[state + top], top),
+                        Spill(spills, maximum, spillFlags, I32, top), scratch, scratch + 3, scratch + 4, operand);
+                else if (kind == ExitProcess)
+                    used = ProcessExit.Emit(code, used, Spill(spills, maximum, spillFlags, I32, top), operand);
+                else if (kind == ReadTimestamp || kind == ReadFrequency)
+                {
+                    used = PlatformClock.Emit(code, used, operand, records[slot + 3]);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I64, depth));
+                }
+                else if (kind == CharacterCall)
+                {
+                    int value = Spill(spills, maximum, spillFlags, I32, top);
+                    used = CharacterMembers.EmitIsWhiteSpace(code, used, value);
+                    used = Local(code, used, 0x21, value);
+                }
                 else if (kind == MathCall)
                 {
                     byte type = MathWasm.Type(operand);
                     int first = top - MathWasm.Arity(operand) + 1;
-                    used = MathWasm.Emit(code, used, operand, Spill(spills, maximum, spillFlags, type, first), Spill(spills, maximum, spillFlags, type, top));
+                    used = MathWasm.Emit(code, used, operand, Spill(spills, maximum, spillFlags, type, first),
+                        Spill(spills, maximum, spillFlags, type, first + 1 <= top ? first + 1 : top), Spill(spills, maximum, spillFlags, type, top));
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, type, first));
                 }
                 else if (kind == ExchangeHandlerField)
@@ -1275,6 +1583,22 @@ namespace PortableCompiler
                         used = ValueFieldProjectionWasm.Write(code, used, frameShape[7], address, source, operand, type, projections);
                     }
                 }
+                else if (kind == LoadObject && CopiesToNative(records, depths, leaders, slot))
+                {
+                    // Decision 0106: `ldobj T; stobj T` between native addresses is one memory.copy of
+                    // sizeof(T) bytes. T is blittable, so the bytes are the CLR's; the source is null
+                    // checked first, as ldobj faults before stobj. The stobj state then emits nothing.
+                    int source = Spill(spills, maximum, spillFlags, Native, top);
+                    int destination = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);
+                    used = LinearMemoryWasm.GuardNull(code, used, source);
+                    used = LinearMemoryWasm.GuardNull(code, used, destination);
+                    used = Local(code, used, 0x20, destination);
+                    used = Local(code, used, 0x20, source);
+                    used = Const(code, used, nativePlans[records[slot + 3] - 1 + 1]);
+                    code[used++] = 0xfc; code[used++] = 10; code[used++] = 0; code[used++] = 0; // memory.copy
+                    copiedStore = records[slot + 2];
+                }
+                else if (kind == StoreObject && pc == copiedStore) { }
                 else if (kind == LoadObject)
                 {
                     int address = Spill(spills, maximum, spillFlags, Native, top);
@@ -1373,9 +1697,9 @@ namespace PortableCompiler
                     int resultSpill = Spill(spills, maximum, spillFlags, ObjectSpan, top - 1);
                     used = SpanWasm.Create(code, used, vector, count, resultSpill);
                 }
-                else if (kind == StringAsSpan || kind == WritableByteArraySpan)
+                else if (kind == StringAsSpan || kind == WritableByteArraySpan || kind == ReadOnlyByteArraySpan)
                 {
-                    int type = kind == StringAsSpan ? CharacterSpan : WritableByteSpan;
+                    int type = kind == StringAsSpan ? CharacterSpan : kind == ReadOnlyByteArraySpan ? ReadOnlyByteSpan : WritableByteSpan;
                     int first = top - operand;
                     int source = Spill(spills, maximum, spillFlags, states[state + first], first);
                     int view = Spill(spills, maximum, spillFlags, type, first);
@@ -1466,12 +1790,12 @@ namespace PortableCompiler
                     int destination = Spill(spills, maximum, spillFlags, targetType, target);
                     int sourceIndex = operand == 3 ? -1 : Spill(spills, maximum, spillFlags, I32, first + 1);
                     int destinationIndex = operand == 3 ? -1 : Spill(spills, maximum, spillFlags, I32, target + 1);
-                    int vector = ArrayCopyWasm.Vector(objects, sourceType, targetType);
+                    int vector = ArrayCopyWasm.Vector(objects, sourceType, targetType, (records[slot + 3] & ArrayCopyElements.Exact) != 0);
                     // The array operands do not use their i32 positions, and the length
                     // does not use its eqref position. These slots are dead after Copy.
                     used = ArrayCopyWasm.Emit(code, used, vector, source, sourceIndex, destination, destinationIndex,
                         Spill(spills, maximum, spillFlags, I32, top), IsValueType(objects, ArrayElement(objects, vector)),
-                        records[slot + 3] != 0, tracksRoots, Spill(spills, maximum, spillFlags, I32, first),
+                        (records[slot + 3] & 1) != 0, rootLayout, Spill(spills, maximum, spillFlags, I32, first),
                         Spill(spills, maximum, spillFlags, I32, target), Spill(spills, maximum, spillFlags, ObjectReference, top));
                 }
                 else if (kind == SpanRead)
@@ -1490,12 +1814,13 @@ namespace PortableCompiler
                     int array = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);
                     int index = Spill(spills, maximum, spillFlags, states[state + top], top);
                     int resultSpill = Spill(spills, maximum, spillFlags, records[slot + 3] >= FirstClass ? ValueLocation(records[slot + 3]) :
-                        operand == Ints ? Int32Location : ObjectLocation, top - 1);
+                        operand == Ints ? Int32Location : operand == Longs ? Int64Location :
+                        operand == Bytes ? WritableByteLocation : ObjectLocation, top - 1);
                     if (records[slot + 3] >= FirstClass)
                     {
                         used = GuardNull(code, used, array);
                         used = GuardArrayIndex(code, used, array, index, false);
-                        used = ValueArrayWasm.Take(code, used, operand, array, index, tracksRoots);
+                        used = ValueArrayWasm.Take(code, used, operand, array, index, rootLayout);
                         used = Local(code, used, 0x21, resultSpill);
                     }
                     else used = ManagedLocationWasm.TakeElement(code, used, array, index, resultSpill);
@@ -1663,7 +1988,7 @@ namespace PortableCompiler
                     int descriptor = records[slot + 3], storage = FieldAccess.Storage(descriptor);
                     int reference = Spill(spills, maximum, spillFlags, states[state + top], top);
                     used = GuardNull(code, used, reference);
-                    used = ManagedValueLocationWasm.Take(code, used, FieldAccess.Owner(descriptor), reference, operand, tracksRoots);
+                    used = ManagedValueLocationWasm.Take(code, used, FieldAccess.Owner(descriptor), reference, operand, rootLayout);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, ValueLocation(storage), top));
                 }
                 else if (kind == GetReferenceField || kind == SetReferenceField || kind == TakeReferenceFieldAddress)
@@ -1722,13 +2047,28 @@ namespace PortableCompiler
                     int descriptor = records[slot + 3], owner = FieldAccess.Owner(descriptor);
                     int location = ValueFieldProjections.DecodeLocation(objects, FieldAccess.Storage(descriptor));
                     int source = Spill(spills, maximum, spillFlags, states[state + top], top);
-                    used = ValueFieldProjectionWasm.Take(code, used, source, owner, operand, location, IsValueType(objects, owner), tracksRoots);
+                    used = ValueFieldProjectionWasm.Take(code, used, source, owner, operand, location, IsValueType(objects, owner), rootLayout);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, location, top));
                 }
                 else if (kind == ClearInteriorField)
                     used = ValueFieldsWasm.ClearAtLocation(code, used, objects, operand, FieldAccess.Owner(records[slot + 3]),
                         Spill(spills, maximum, spillFlags, states[state + top], top), temporaries,
                         states[state + top] == ConstructorAddress, projections, frameShape[7]);
+                else if ((kind == GetField || kind == SetField) &&
+                    FlatInlineArrays.IsLocation(states[state + (kind == GetField ? top : top - 1)]))
+                {
+                    // Decision 0105: E field `operand` of a flat inline-array element.
+                    int receiver = kind == GetField ? top : top - 1;
+                    int flatField = FlatInlineArrays.Field(records), storage = FieldAccess.Storage(records[slot + 3]);
+                    int baseIndex = Spill(spills, maximum, spillFlags, states[state + receiver], receiver);
+                    used = FlatInlineArrays.EmitAccess(code, used, objects, frame[0], flatField, operand, baseIndex,
+                        kind == SetField ? Spill(spills, maximum, spillFlags, states[state + top], top) : -1, kind == SetField, storage);
+                    if (kind == GetField) used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, StackType(storage), top));
+                }
+                else if (kind == FlatIndex)
+                    used = FlatInlineArrays.EmitIndex(code, used, objects, frame[0], operand, records[slot + 3] & 0xffff,
+                        Spill(spills, maximum, spillFlags, I32, top),
+                        Spill(spills, maximum, spillFlags, FlatInlineArrays.Location(FlatInlineArrays.IndexElement(records[slot + 3])), top));
                 else if (kind == GetField || kind == SetField)
                 {
                     int descriptor = records[slot + 3];
@@ -1757,7 +2097,7 @@ namespace PortableCompiler
                         {
                             int source = states[state + top];
                             used = ManagedValueLocationWasm.Write(code, used, type, reference, operand,
-                                Spill(spills, maximum, spillFlags, source, top), source, storage, tracksRoots);
+                                Spill(spills, maximum, spillFlags, source, top), source, storage, rootLayout);
                         }
                     }
                     else
@@ -1885,7 +2225,7 @@ namespace PortableCompiler
                 else if ((kind == ArrayGet || kind == ArraySet) && records[slot + 3] != 0)
                 {
                     used = ValueArrayWasm.EmitAccess(code, used, kind == ArrayGet, operand, records[slot + 3], state, top, states,
-                        spills, maximum, spillFlags, objects, tracksRoots);
+                        spills, maximum, spillFlags, objects, rootLayout);
                 }
                 else if (kind == ArrayGet)
                 {
@@ -1923,6 +2263,10 @@ namespace PortableCompiler
 
                 if (kind == Return)
                 {
+                    // Every live array pin is copied back before the frame returns.
+                    if (arrayPins != null)
+                        for (int site = 0; site < arrayPins.Length / 4; site++)
+                            used = PinnedArraysWasm.Unpin(code, used, arrayPins, site, pinScratch, true);
                     if (scopedValuePin >= 0)
                         used = ScopedValuePinWasm.CopyBack(code, used, nativePlans, records[scopedValuePin + 3],
                             LocatedValue(frame[0]), records[scopedValuePin + 1], projections, frameShape[7]);
@@ -1957,7 +2301,10 @@ namespace PortableCompiler
                     }
                 }
                 else if (kind == ThrowFrameworkArgument)
-                    used = ExceptionTagsWasm.Throw(code, used, operand);
+                {
+                    if (operand == PlatformExceptionThrows.Trap) code[used++] = 0x00; // unreachable (decision 0104)
+                    else used = ExceptionTagsWasm.Throw(code, used, operand);
+                }
                 else if (kind == Rethrow)
                     used = ExceptionDispatchWasm.ReraiseCaught(code, used, pcLocal + 2 + operand, objectBase + 1 + operand);
                 else
@@ -2017,13 +2364,12 @@ namespace PortableCompiler
                     if (!fallsThrough)
                     {
                         code[used++] = 0x0c;
-                        // Catch dispatch adds try_table and one block per tag around the instruction if.
-                        code[used++] = (byte)loopDepth;
+                        used = WasmBinary.Unsigned(code, used, loopDepth);
                     }
                 }
-                code[used++] = 0x0b;
+                code[used++] = 0x0b; // the state's block
             }
-            if (groupSize != 0) code[used++] = 0x0b; // end the last group
+            code[used++] = 0x0b; // the default block
             code[used++] = 0;
             if (catchRegion.Length != 0)
             {
@@ -2039,11 +2385,15 @@ namespace PortableCompiler
             }
             code[used++] = 0x0b;
             code[used++] = 0;
-            if (tracksRoots || stackPointer >= 0)
+            if (tracksRoots || stackPointer >= 0 || arrayPins != null)
             {
                 code[used++] = 0x0b; // end try_table
                 code[used++] = 0x00;
                 code[used++] = 0x0b; // the caught exnref is on the stack
+                // An exception leaving the frame: every live array pin is copied back first.
+                if (arrayPins != null)
+                    for (int site = 0; site < arrayPins.Length / 4; site++)
+                        used = PinnedArraysWasm.Unpin(code, used, arrayPins, site, pinScratch, true);
                 if (tracksRoots) used = RootStackWasm.Leave(code, used, rootCount, rootFrame);
                 if (pins >= 0) used = PinRegistryWasm.Release(code, used, pins, pinFrame);
                 if (stackPointer >= 0) used = StackAllocationWasm.Release(code, used, stackPointer, stackLimit, stackFrame);
@@ -2089,6 +2439,73 @@ namespace PortableCompiler
             code[used++] = 0x0d;
             code[used++] = 0;
             return used;
+        }
+
+        // Decision 0106: the states that keep their `pc == state` test. Every other state is entered
+        // only by falling through from the state before it, which then leaves its `if` open, so the
+        // state runs with no dispatch test (pc is still written before every state ends, so exception
+        // dispatch and the helpers that use pc as scratch observe the same values as before).
+        //   - the first state, the first state of each dispatch group, and any state the dispatch
+        //     loop can re-enter: branch, leave and switch targets, a conditional's fall-through, and
+        //     every exception clause boundary, resume point and handler;
+        //   - any state after one that does not fall through (a branch to another state, a
+        //     conditional, switch, return, throw, rethrow, endfinally or a leave through finally);
+        //   - every state of a method with exception filters, which keep their dispatch unchanged.
+        private static bool[] Leaders(int[] records, int[] depths, int[] clauses, bool filtered, int groupSize, bool continuations)
+        {
+            var leaders = new bool[depths.Length];
+            int ordinal = 0, previous = -1;
+            for (int pc = 0; pc < depths.Length; pc++)
+            {
+                if (depths[pc] == 0) continue;
+                if (filtered || previous < 0 || groupSize != 0 && ordinal % groupSize == 0 || !FallsThrough(records, depths, previous, continuations))
+                    leaders[pc] = true;
+                ordinal++;
+                previous = pc;
+                int slot = pc * BranchIl.Width, kind = records[slot];
+                if (kind == Branch || kind == Conditional || kind == Leave) Mark(leaders, records[slot + 1]);
+                if (kind == Conditional) Mark(leaders, records[slot + 2]);
+                if (kind == Switch)
+                {
+                    for (int i = 0; i < records[slot + 3]; i++) Mark(leaders, BranchIl.SwitchTarget(records, records[slot + 1], i));
+                    Mark(leaders, records[slot + 2]);
+                }
+            }
+            for (int clause = 0; clause < clauses.Length; clause += ExceptionClauses.Width)
+            {
+                Mark(leaders, clauses[clause]);
+                Mark(leaders, clauses[clause + 1]);
+                Mark(leaders, clauses[clause + 1] + clauses[clause + 2]);
+                Mark(leaders, clauses[clause + 3]);
+                Mark(leaders, clauses[clause + 3] + clauses[clause + 4]);
+            }
+            return leaders;
+        }
+
+        // `ldobj T` whose value goes straight to `stobj T` (the next state, not a dispatch target) at a
+        // native address below it on the stack.
+        private static bool CopiesToNative(int[] records, int[] depths, bool[] leaders, int slot)
+        {
+            int next = records[slot + 2];
+            if ((uint)next >= (uint)depths.Length || depths[next] == 0 || leaders[next]) return false;
+            int store = next * BranchIl.Width;
+            return records[store] == StoreObject && records[store + 1] == records[slot + 1] && records[store + 3] == records[slot + 3];
+        }
+
+        private static void Mark(bool[] leaders, int pc)
+        {
+            if ((uint)pc < (uint)leaders.Length) leaders[pc] = true;
+        }
+
+        // Mirrors the state epilogue: true when the state at `pc` ends by writing the next emitted
+        // state to pc without branching back to the dispatch loop.
+        private static bool FallsThrough(int[] records, int[] depths, int pc, bool continuations)
+        {
+            int slot = pc * BranchIl.Width, kind = records[slot];
+            if (kind == Return || kind == ThrowNull || kind == ThrowFrameworkArgument || kind == Rethrow ||
+                kind == Conditional || kind == Switch || kind == EndFinally || kind == Leave && continuations) return false;
+            int successor = kind == Branch || kind == Leave ? records[slot + 1] : records[slot + 2];
+            return successor == NextEmitted(depths, pc);
         }
 
         // The next pc the dispatch loop emits a state for, or depths.Length past the last.
@@ -2191,7 +2608,30 @@ namespace PortableCompiler
         internal static int Spill(int first, int maximum, int spillFlags, int type, int depth) =>
             type == NullValue ? first - 1 : first + SpillBank(type, spillFlags) * maximum + depth;
 
-        private static int ExtraSpillBanks(int flags) => (flags & LocationSpill) + (flags >> 1);
+        private static int ExtraSpillBanks(int flags) =>
+            (flags & 1) + (flags >> 1 & 1) + (flags >> 2 & 1) + (flags >> 3 & 1) + (flags >> 4 & 1) + (flags >> 5 & 1);
+
+        // The stack type of the extra bank at `index`: banks follow in the order location, span,
+        // vector, vector pair, each present only when some verified state needs it.
+        private static int ExtraBankType(int index, int flags)
+        {
+            int[] order = { ObjectLocation, ObjectSpan, SimdVectors.Tag(1, 0x08), SimdVectors.Pair(SimdVectors.Tag(4, 0x0a)),
+                WideTuples.Value, WideTuples.TupleArray };
+            for (int bit = 0; bit < 6; bit++)
+            {
+                if ((flags >> bit & 1) == 0) continue;
+                if (index-- == 0) return order[bit];
+            }
+            return ObjectSpan;
+        }
+
+        // The index of the extra bank `bit` among the present ones.
+        private static int ExtraBank(int bit, int flags)
+        {
+            int index = 0;
+            for (int i = 0; i < bit; i++) index += flags >> i & 1;
+            return index;
+        }
         // stind.* matching a field's ldind.* opcode.
         private static int StoreFor(int load) =>
             load <= 0x47 ? 0x52 : load <= 0x49 ? 0x53 : load <= 0x4b ? 0x54 : load == 0x4c ? 0x55 :
@@ -2202,7 +2642,7 @@ namespace PortableCompiler
         private static int SpillBank(int type, int flags) =>
             // NativeZero already spills as Native. Use its otherwise vacant bank
             // for native arrays without increasing the engine's local pressure.
-            type == ConstructorAddress ? I32 - 1 :
+            type == ConstructorAddress || FlatInlineArrays.IsLocation(type) ? I32 - 1 :
             PeLibrary.RuntimeTypeMetadata.IsStorage(type) || IsValueLocation(type) ? ObjectReference - 1 :
             // A base Delegate slot currently accepts EventHandler lists only.
             // Both types have the same physical storage but distinct CLI stack identities.
@@ -2212,7 +2652,11 @@ namespace PortableCompiler
             // ReinterpretManagedLocation is verifier-only. Both nominal
             // views keep the same reference in the shared location bank.
             IsManagedLocation(type) ? LastScalarBank :
-            IsSpan(type) ? LastScalarBank + (flags & LocationSpill) :
+            IsSpan(type) ? LastScalarBank + ExtraBank(1, flags) :
+            SimdVectors.IsVector(type) ? LastScalarBank + ExtraBank(2, flags) :
+            SimdVectors.IsPair(type) ? LastScalarBank + ExtraBank(3, flags) :
+            WideTuples.IsWide(type) ? LastScalarBank + ExtraBank(4, flags) :
+            type == WideTuples.TupleArray ? LastScalarBank + ExtraBank(5, flags) :
             type >= FirstClass ? LastScalarBank + ExtraSpillBanks(flags) + type - FirstClass :
                 (type == NativeZero ? Native : type == NativeVector ? NativeZero : type) - 1;
 

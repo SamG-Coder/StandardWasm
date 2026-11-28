@@ -106,6 +106,71 @@ namespace PortableCompiler
         internal const int CopyNativeConstructionString = 249; // [fresh String, pointer, count] -> []
         internal const int CoreVersionOutCall = 250; // Unlinked native-backed call to the original managed wrapper.
         internal const int ScalarBitCast = 251; // [integer or float] -> [equal-width bit reinterpretation]
+        // #326 (Claude): reserved high so parallel work does not collide. The operand is the CLI element
+        // type (8..11) of System.{Int32,UInt32,Int64,UInt64}::ToString() (decision 0104).
+        internal const int FormatPrimitive = 420; // [Int32Location or Int64Location] -> [String]
+        internal const int JoinStringArray = 421; // [String[]] -> [String] for String.Concat(string[])
+        // [String x arity] -> [String] for Concat(string, string, string[, string]); operand 3 is the arity.
+        internal const int JoinManyStrings = 422;
+        internal const int CharacterCall = 423; // [char] -> [Boolean]; the operand is a CharacterMembers id
+        // Stopwatch.GetTimestamp / Stopwatch.Frequency through kernel32 QueryPerformanceCounter /
+        // QueryPerformanceFrequency: [] -> [i64]. The operand becomes the native function index and
+        // operand 3 is the NativeMemory heap global whose control block holds the LARGE_INTEGER.
+        internal const int ReadTimestamp = 424, ReadFrequency = 436;
+        // Decision 0105: [T[]] -> [native address of a heap copy]; operand = the pinned local,
+        // operand 3 = the NativeMemory heap global. The following record stores the address.
+        internal const int PinArray = 437;
+        // Decision 0105: T[,]::Get(int32, int32): [array, i, j] -> [element]; the operand is the vector.
+        internal const int GetRankTwo = 438;
+        // Decision 0105: new ReadOnlySpan<byte>(byte[], int32 start, int32 length): [array, start, length] -> [span].
+        internal const int ReadOnlyByteArraySpan = 439;
+        // Decision 0105: an array-backed byte span pin: [span] -> [native address]; the operand is the pinned local.
+        internal const int PinByteSpan = 440;
+        // Decision 0105: ends an array-backed byte span pin: [] -> []; the operand is the pinned local.
+        internal const int UnpinByteSpan = 441;
+        // Decision 0105: Array.Fill<T> for a primitive T: [array, value(, start, count)] -> [] (ArrayFillPrimitive).
+        internal const int FillPrimitiveArray = 442;
+        // Decision 0105: Array.Resize<T>(ref r.F, n): [old F, n] -> [] (ArrayResizeField).
+        internal const int ResizeArrayField = 443;
+        // Decision 0105: new Span<T>(void*, n).Fill(V)/Clear(): [pointer, n(, V)] -> [] (PointerSpanFill).
+        internal const int NativeSpanFill = 444;
+        // Decision 0105: Environment.FailFast(string): [message] -> (no return); the operand is the exit-status global.
+        internal const int FailFast = 445;
+        // Decision 0105: element i of a flat inline-array field: [i] -> [FlatInlineLocation(E)] (FlatInlineArrays).
+        internal const int FlatIndex = 446;
+        // Decision 0105: Array.BinarySearch<T>(T[], T) for 32/64-bit integers: [array, value] -> [index].
+        internal const int BinarySearchPrimitiveArray = 447;
+        // Decision 0105: a Vector128/256/512 member; operand = SimdVectors member, aux = its vector tag.
+        internal const int SimdOp = 448;
+        // Decision 0105: callvirt Array::Clone() on a one-dimensional array: [array] -> [object] (ArrayClone).
+        internal const int CloneArray = 449;
+        // Decision 0105: a UInt128 / (UInt128, int) tuple member; the operand is the WideTuples member.
+        internal const int WideOp = 450;
+        // Decision 0105: an X86/Arm/Wasm intrinsic member that traps; operand = parameters, aux = result type.
+        internal const int PlatformUnsupported = 451;
+        // Decision 0105: new T[rows, cols] without an initializer: [rows, cols] -> [array]; T[,]::Set: [array, i, j, v] -> [].
+        internal const int NewRankTwo = 452, SetRankTwo = 453;
+        internal const int ExitProcess = 425; // [status] -> (traps); the operand is the exit-status global
+        // NativeMemory members (decision 0104); the operand is the member id and operand 3 becomes
+        // the alloc import index. [args...] -> [void*] or [].
+        internal const int NativeMemoryCall = 426;
+        // GC.Collect/WaitForPendingFinalizers ([] -> []) and GC.KeepAlive ([object] -> []).
+        internal const int GarbageCollectorCall = 427;
+        // (ulong)((UInt128)a * b / c) with UInt128 temporaries: [a, b, c] -> [uint64] (decision 0104).
+        internal const int MultiplyDivideUInt64 = 428;
+        // Unsafe.BitCast<TFrom, TTo> over equal-size primitives; operand and operand 3 are the element types.
+        internal const int PrimitiveBitCast = 429;
+        internal const int SortPrimitiveArray = 430; // [T[]] -> [] for Array.Sort<T>; the operand is T's element type
+        // MemoryMarshal.GetArrayDataReference<T>: [T[]] -> [location of element 0]; the operand is the vector.
+        internal const int ArrayDataReference = 431;
+        // Unsafe.Add<T>(ref T, int): [location, offset] -> [location]; the operand is the vector.
+        internal const int OffsetLocation = 432;
+        // Math.BigMul(ulong, ulong, out ulong low): [a, b, low location] -> [high].
+        internal const int MultiplyHighUInt64 = 433;
+        // IntPtr.Size and UIntPtr.MaxValue on wasm32: [] -> [native int constant operand].
+        internal const int NativeConstant = 434;
+        // BitOperations.LeadingZeroCount/TrailingZeroCount/PopCount: [value] -> [int32]; see BitOperationMembers.
+        internal const int BitCount = 435;
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

@@ -67,6 +67,62 @@ namespace PortableCompiler
             return 0;
         }
 
+        // Decision 0105: `ldc rows; ldc cols; newobj T[,]::.ctor(int32, int32); dup; ldtoken; call
+        // InitializeArray` builds the MdArrays layout from the module data segment: rows, cols, then
+        // the RVA elements. The two counts fold into one InitializedArray of rows * cols + 2 elements.
+        internal static int LowerRankTwo(byte[] image, int[] heaps, int[] methods, int[] records, int[] clauses,
+            byte[] data, int[] dataSize, int[] location)
+        {
+            for (int slot = 0; slot < records.Length; slot += Width)
+            {
+                if (records[slot] != Constant) continue;
+                int columns = records[slot + 2] * Width;
+                if (columns >= records.Length || records[columns] != Constant) continue;
+                int create = records[columns + 2] * Width;
+                if (create >= records.Length || records[create] != MemberCall || records[create + 3] != 0x73) continue;
+                int vector = MdArrays.MemberVector(image, heaps, methods, records[create + 1]);
+                if (vector == 0 || MdArrays.Member(image, heaps, methods, records[create + 1]) != 1) continue;
+                int dup = records[create + 2] * Width;
+                if (dup >= records.Length || records[dup] != Dup) continue;
+                int token = records[dup + 2] * Width;
+                if (token >= records.Length || records[token] != FieldToken) continue;
+                int call = records[token + 2] * Width;
+                if (call >= records.Length || records[call] != MemberCall || records[call + 3] != 0x28) continue;
+                if (location.Length != 0) location[2] = token / Width;
+                if (HasInteriorTarget(records, clauses, columns / Width, call / Width)) return -2;
+                int rows = records[slot + 1], cols = records[columns + 1];
+                int width = vector == Longs ? 8 : 4;
+                if (rows < 0 || cols < 0 || (long)rows * cols > (int.MaxValue - 2) / width) return -2;
+                int bytes = rows * cols * width;
+                int source = ArrayInitializerMetadata.FindData(image, heaps, methods, records[call + 1], records[token + 1], bytes);
+                if (source < 0) return source;
+                int destination = dataSize[0];
+                if (bytes + 2 * width > data.Length - destination) return -3;
+                Put(data, destination, rows, width);
+                Put(data, destination + width, cols, width);
+                for (int i = 0; i < bytes; i++) data[destination + 2 * width + i] = image[source + i];
+                dataSize[0] = destination + 2 * width + bytes;
+
+                records[slot] = Nop;
+                records[columns + 1] = rows * cols + 2;
+                records[create] = InitializedArray;
+                records[create + 1] = vector;
+                records[create + 2] = records[call + 2];
+                records[create + 3] = destination;
+                records[dup] = 0;
+                records[dup + 1] = 0; // no exact element: the vector's own heap type
+                records[token] = 0;
+                records[call] = 0;
+            }
+            return 0;
+        }
+
+        // A little-endian Int32 or Int64 element.
+        private static void Put(byte[] data, int at, int value, int width)
+        {
+            for (int i = 0; i < width; i++) data[at + i] = i < 4 ? unchecked((byte)(value >> (8 * i))) : (byte)(value < 0 ? 0xff : 0);
+        }
+
         private static bool HasInteriorTarget(int[] records, int[] clauses, int first, int last)
         {
             for (int clause = 0; clause < clauses.Length; clause += ExceptionClauses.Width)

@@ -28,6 +28,19 @@ namespace PortableCompiler
             return field[0] < 0 ? -1 : 0;
         }
 
+        // Decision 0105: 1 when `type` is a measurable explicit value whose instance fields occupy
+        // pairwise disjoint byte ranges, 0 when it is not, or a negative diagnostic. Disjoint fields
+        // never alias, so the managed registry can keep them in independent slots.
+        internal static int IsDisjointExplicit(BundleImages bundle, int owner, int type)
+        {
+            var measured = new int[2];
+            var disjoint = new int[2];
+            int status = Measure(bundle, owner, type, measured, 0, DisjointQuery, disjoint, false);
+            return status < 0 ? status : disjoint[0];
+        }
+
+        private const int DisjointQuery = -1;
+
         private static int Measure(BundleImages bundle, int owner, int type, int[] result, int depth, int target, int[] found, bool scopedFrame)
         {
             if (depth > MaxDepth) return -2;
@@ -61,6 +74,10 @@ namespace PortableCompiler
             int table = AssemblyReferences.FieldTable(image, heaps, layout);
             if (table < 0) return table;
             uint layoutKind = U32(image, definition) & 0x18;
+            if (target == DisjointQuery && layoutKind != 0x10) return 0;
+            if (layoutKind == 0x10)
+                return Explicit(bundle, image, layout, heaps, owner, type, table, first, end, inlineLength, depth,
+                    target, found, result);
             if (packing == -2)
                 return FixedBuffer(image, layout, heaps, counts, metadata, type, layoutKind, table, first, end,
                     inlineLength, target, found, result);
@@ -128,6 +145,79 @@ namespace PortableCompiler
             // The CLR lays out n elements of the one declared field back to back.
             if (inlineLength > 0) offset = (offset + align - 1) / align * align * inlineLength;
             result[0] = (offset + align - 1) / align * align;
+            result[1] = align;
+            return 0;
+        }
+
+        // Decision 0105: a blittable [StructLayout(LayoutKind.Explicit, Size = n)] value. Each instance
+        // field sits at its FieldLayout offset; fields may overlap, as only primitives and blittable
+        // values (fixed buffers included) are accepted. sizeof is the declared Size when it covers
+        // every field and is a multiple of the alignment, which is the CLR's result; any other
+        // declared size, and an explicit layout without one, stays diagnosed.
+        private static int Explicit(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner, int type,
+            int table, int first, int end, int inlineLength, int depth, int target, int[] found, int[] result)
+        {
+            if (inlineLength != 0) return -2;
+            var offsets = new int[end - first];
+            int extent = ExplicitValueLayouts.ReadNative(image, heaps, layout, type, first, offsets);
+            if (extent < 0) return extent;
+            var field = new int[3];
+            var nested = new int[3];
+            var starts = new int[end - first];
+            var sizes = new int[end - first];
+            int reach = 0, align = 1;
+            for (int row = first; row < end; row++)
+            {
+                AssemblyReferences.ReadField(image, layout, table, row, field);
+                if ((field[0] & 0x10) != 0) continue; // static
+                int offset = offsets[row - first] - 1;
+                if (offset < 0) return -1; // an explicit instance field needs its FieldLayout row
+                int blob = field[2];
+                if (blob <= 0 || blob >= heaps[1]) return -1;
+                int limit = heaps[0] + heaps[1];
+                var cursor = new int[1];
+                int length = CompressedUnsigned(image, heaps[0] + blob, limit, cursor);
+                int at = cursor[0];
+                if (length < 2 || image[at] != 0x06) return -1;
+                int element = image[at + 1];
+                int size, fieldAlign, load;
+                if (element == 0x11)
+                {
+                    int coded = CompressedUnsigned(image, at + 2, at + length, cursor);
+                    var identity = new int[2];
+                    int status = AssemblyBundle.ClassIdentity(bundle, image, layout, heaps, owner, coded, identity);
+                    if (status < 0) return status;
+                    nested[2] = 0;
+                    status = Measure(bundle, identity[0], identity[1], nested, depth + 1);
+                    if (status < 0) return status;
+                    size = nested[0];
+                    fieldAlign = nested[1];
+                    load = nested[2];
+                }
+                else
+                {
+                    size = PrimitiveSize(element);
+                    if (size < 0) return -2; // references and other non-blittable fields
+                    fieldAlign = size;
+                    load = LoadOpcode(element);
+                }
+                if (offset % fieldAlign != 0) return -2; // a misaligned field changes the CLR's packing rules
+                if (row == target) { found[0] = offset; found[1] = load; }
+                starts[row - first] = offset;
+                sizes[row - first] = size;
+                if (offset + size > reach) reach = offset + size;
+                if (fieldAlign > align) align = fieldAlign;
+            }
+            if (extent == 0 || extent < reach || extent % align != 0) return -2;
+            if (target == DisjointQuery)
+            {
+                found[0] = 1;
+                for (int a = 0; a < starts.Length; a++)
+                    for (int b = a + 1; b < starts.Length; b++)
+                        if (sizes[a] != 0 && sizes[b] != 0 &&
+                            starts[a] < starts[b] + sizes[b] && starts[b] < starts[a] + sizes[a]) found[0] = 0;
+            }
+            result[0] = extent;
             result[1] = align;
             return 0;
         }

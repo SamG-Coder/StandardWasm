@@ -16,7 +16,11 @@ namespace PortableCompiler
         private const int ObjectLocationHeap = ValueLocationHeap + 1;
         private const int ReadOnlySpanHeap = ObjectLocationHeap + 1;
         internal const int CharacterSpanThunkType = ReadOnlySpanHeap + 1;
-        private const int FirstClassHeap = CharacterSpanThunkType + 1;
+        // Decision 0105: the SIMD vector struct and the vector pair struct (SimdVectors).
+        internal const int VectorHeap = CharacterSpanThunkType + 1, VectorPairHeap = VectorHeap + 1;
+        // Decision 0105: the UInt128 / (UInt128, int) struct and its array (WideTuples).
+        internal const int WideValueHeap = VectorPairHeap + 1, WideTupleArrayHeap = WideValueHeap + 1;
+        private const int FirstClassHeap = WideTupleArrayHeap + 1;
 
         internal static int WriteModule(byte[] output, int[] arities, int[] offsets, int[] types, int[] sizes, int[] bodyOffsets, int functions, byte[] bodies,
             byte[] names, int[] entryOffsets, int[] exports, int[] objects, int[] thunks,
@@ -117,7 +121,7 @@ namespace PortableCompiler
             int delegateTypes = DelegateShapes.EntryCount(objects);
             typeEntries += delegateTypes;
             int prefix = UnsignedSize(typeEntries) + 72 + ManagedValueLocationWasm.TypeBytes(rootCount >= 0) +
-                ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + 7 + PrimitiveArrayWasm.BaseTypeOverhead +
+                ManagedLocationWasm.TypeBytes + SpanWasm.TypeBytes + 7 + SimdVectors.TypeBytes + WideTuples.TypeBytes + PrimitiveArrayWasm.BaseTypeOverhead +
                 primitiveArrays.TypeBytes +
                 (recursive ? 1 + UnsignedSize(objects[0]) : 0);
             if (hasRemainder) prefix += FloatRemainderWasm.TypeSize;
@@ -181,6 +185,9 @@ namespace PortableCompiler
                 (nullReference ? 1 : 0) + (invalidCast ? 1 : 0) + (argumentException ? 1 : 0) + (objectTag ? 1 : 0) +
                 (argumentNull ? 1 : 0) + (synchronizationLock ? 1 : 0) + (argumentOutOfRange ? 1 : 0);
             if (rootProbe) exportCount += RootStackWasm.ExportCount;
+            // Decision 0104: Environment.Exit publishes its status through an exported global.
+            int exitStatus = ProcessExit.StatusGlobal(globals);
+            if (exitStatus >= 0) exportCount++;
             int exportSize = UnsignedSize(exportCount) + (overflow ? ExceptionTagsWasm.OverflowExportSize : 0) +
                 (divide ? ExceptionTagsWasm.DivideExportSize : 0) + (bounds ? ExceptionTagsWasm.IndexExportSize : 0) +
                 (nullReference ? ExceptionTagsWasm.NullExportSize : 0) + (invalidCast ? ExceptionTagsWasm.InvalidCastExportSize : 0) +
@@ -190,6 +197,7 @@ namespace PortableCompiler
                 (argumentOutOfRange ? ExceptionTagsWasm.ArgumentOutOfRangeExportSize : 0);
             if (argumentArray != 0) exportSize += EntryArgumentsWasm.ExportBytes(builderIndex);
             if (rootProbe) exportSize += RootStackWasm.ExportSize(rootCount, rootWalker);
+            if (exitStatus >= 0) exportSize += ProcessExit.ExportBytes(exitStatus);
             int tagSize = 1 + (tagCount - (objectTag ? 1 : 0)) * (1 + UnsignedSize(tagType)) +
                 (objectTag ? 1 + UnsignedSize(objectTagType) : 0);
             for (int i = 0; i < exports.Length; i++)
@@ -351,6 +359,8 @@ namespace PortableCompiler
             cursor = ValueType(output, cursor, WritableCharacterSpan);
             output[cursor++] = 0x7f;
             output[cursor++] = 0;
+            cursor = SimdVectors.WriteTypes(output, cursor, VectorHeap);
+            cursor = WideTuples.WriteTypes(output, cursor, WideValueHeap);
             if (recursive)
             {
                 output[cursor++] = 0x4e;
@@ -537,6 +547,7 @@ namespace PortableCompiler
             if (argumentOutOfRange) cursor = ExceptionTagsWasm.WriteArgumentOutOfRangeExport(output, cursor);
             if (objectTag) cursor = ExceptionTagsWasm.WriteObjectExport(output, cursor);
             if (rootProbe) cursor = RootStackWasm.WriteExports(output, cursor, rootCount, rootWalker);
+            if (exitStatus >= 0) cursor = ProcessExit.WriteExport(output, cursor, exitStatus);
 
             if (elements)
             {
@@ -639,7 +650,8 @@ namespace PortableCompiler
         internal static int ValueType(byte[] output, int cursor, int slot)
         {
             int type = StackType(slot);
-            if (type == I32 || type == MethodPointer || IsNativeInteger(type) || type == ConsoleStorage.Writer)
+            if (type == I32 || type == MethodPointer || IsNativeInteger(type) || type == ConsoleStorage.Writer ||
+                FlatInlineArrays.IsLocation(type))
                 output[cursor++] = 0x7f; // Console writers store their host stream number.
             else if (type == NullPointer)
                 output[cursor++] = StackSpillWasm.NullRef; // Only the null pointer inhabits the browser storage type.
@@ -658,6 +670,8 @@ namespace PortableCompiler
         }
 
         internal static int HeapType(int type) =>
+            SimdVectors.IsVector(type) ? VectorHeap : SimdVectors.IsPair(type) ? VectorPairHeap :
+            WideTuples.IsWide(type) ? WideValueHeap : type == WideTuples.TupleArray ? WideTupleArrayHeap :
             IsValueLocation(type) ? ValueLocationHeap : (type == Delegate || type == CharacterSpanCallback) ? 3 : type == Chars ? 4 : type == String ? 5 : type == Longs ? WideArrayHeap :
                 type == EventArgsReference ? EventArgsHeap :
                 type == EventHandlerReference || type == DelegateReference || DelegateShapes.IsKey(type) ? EventHandlerHeap :

@@ -189,6 +189,24 @@ namespace PortableCompiler
         // a host feature, so re-emit with its function indices reserved.
         internal const int Reemit = -1000;
 
+        // The IL offset of the first live record that loads, stores or addresses a local whose
+        // type could not be laid out (decision 0104), or -1.
+        private static int UnresolvedLocalUse(int[] records, bool[] unresolved, int parameters)
+        {
+            if (unresolved == null) return -1;
+            bool any = false;
+            for (int i = 0; i < unresolved.Length; i++) any |= unresolved[i];
+            if (!any) return -1;
+            for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
+            {
+                int kind = records[slot];
+                if (kind != BranchIl.Load && kind != BranchIl.Store && kind != BranchIl.FrameAddress) continue;
+                int local = records[slot + 1] - parameters;
+                if (local >= 0 && local < unresolved.Length && unresolved[local]) return slot / BranchIl.Width;
+            }
+            return -1;
+        }
+
         private static int CompileProgram(BundleImages bundle, byte[] entries, byte[] output, int[] location,
             long hostFeatures, MissingAssemblyStubs stubs, bool rootProbe = false)
         {
@@ -198,15 +216,16 @@ namespace PortableCompiler
             var addressedFields = new AddressedFields();
             var typeCalls = new RuntimeTypeCalls();
             var readOnlyCharacters = new ReadOnlyCharacterCalls();
+            var reach = new CollectionReach();
             int status = Reemit;
             while (status == Reemit)
-                status = CompileProgramPass(bundle, entries, output, location, features, addressedFields, typeCalls, stubs, rootProbe, natives, readOnlyCharacters);
+                status = CompileProgramPass(bundle, entries, output, location, features, addressedFields, typeCalls, stubs, rootProbe, natives, readOnlyCharacters, reach);
             return status;
         }
 
         private static int CompileProgramPass(BundleImages bundle, byte[] entries, byte[] output, int[] location,
             long[] features, AddressedFields addressedFields, RuntimeTypeCalls typeCalls, MissingAssemblyStubs stubs, bool rootProbe, NativeImportTable natives,
-            ReadOnlyCharacterCalls readOnlyCharacters)
+            ReadOnlyCharacterCalls readOnlyCharacters, CollectionReach reach)
         {
             long hostFeatures = features[0];
             bool tracksFinalizers = features[1] != 0;
@@ -271,10 +290,12 @@ namespace PortableCompiler
             // One MethodDef can have a body per closed declaring instantiation.
             // Reserve as many specialized bodies as definitions; exceeding that
             // is a reported capacity failure, never a shared approximation.
-            if (symbols > int.MaxValue / 2 - 1) return -3;
-            int functionCapacity = symbols * 2;
+            if (symbols > int.MaxValue / 2 - 1 - FinalizerSuppressionWasm.End) return -3;
+            // Finalizer tracking also defines its heap walker, queue and suppression functions.
+            int functionCapacity = symbols * 2 + (tracksFinalizers ? FinalizerSuppressionWasm.End : 0);
             var owners = new int[functionCapacity];
             var rows = new int[functionCapacity];
+            reach.BeginPass(owners, rows);
             var contexts = new int[functionCapacity];
             var instantiations = new MethodInstantiations();
             var falseBooleans = new FalseBooleanSpecializations();
@@ -728,6 +749,7 @@ namespace PortableCompiler
                     if (IsNarrow(type)) narrowParameters++;
                 }
                 int locals = 0, localBlob = 0;
+                bool[] unresolvedLocals = null;
                 if (resourceOpen)
                 {
                     locals = ResourceOpenIl.Frame(frame, parameters);
@@ -738,7 +760,9 @@ namespace PortableCompiler
                     localBlob = StandaloneSignatures.BlobIndex(image, heaps, layout, count, body[3]);
                     if (localBlob < 0)
                         return -1;
-                    locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context, methodArguments, pinned, filters, localElements);
+                    unresolvedLocals = new bool[frame.Length];
+                    locals = SignatureTypes.Read(bundle, image, heaps, localBlob, frame, parameters, -1, layout, objects, owner, context, methodArguments, pinned, filters, localElements,
+                        unresolvedLocals);
                     if (locals < 0)
                         return locals;
                     // CorILMethod_InitLocals (body[4]) is deliberately not required. Without it
@@ -787,6 +811,45 @@ namespace PortableCompiler
                         location, catchRegion.Length != 0, filterEnds: filterEnds);
                     if (status < 0)
                         return status;
+                    // Decision 0104: constant-false hardware feature queries prune accelerated paths first.
+                    IsaFolding.Lower(image, layout, heaps, records, catchRegion, parameters);
+                    WideMultiplyDivide.Lower(image, layout, heaps, records, catchRegion);
+                    PlatformExceptionThrows.Lower(image, layout, heaps, records, catchRegion);
+                    UnsafeCalls.Lower(image, layout, heaps, records, catchRegion);
+                    SimdVectors.Lower(image, layout, heaps, records);
+                    ArrayClone.Lower(image, layout, heaps, records);
+                    WideTuples.Lower(image, layout, heaps, records, catchRegion);
+                    status = FlatInlineArrays.Lower(image, layout, heaps, owner, objects, records, catchRegion, frame,
+                        parameters, location);
+                    if (status < 0)
+                    {
+                        if (location.Length != 0) { location[0] = owner; location[1] = source; }
+                        return status;
+                    }
+                    ArraySortPrimitive.Lower(image, layout, heaps, records);
+                    ArrayBinarySearch.Lower(image, layout, heaps, records);
+                    ArrayFillPrimitive.Lower(image, layout, heaps, records);
+                    ArrayResizeField.Lower(image, layout, heaps, records, catchRegion);
+                    ArrayCopyElements.Lower(bundle, image, layout, heaps, records, catchRegion);
+                    PointerSpanFill.Lower(image, layout, heaps, records, catchRegion);
+                    // Decision 0105: proved alias-free pins of primitive arrays.
+                    if (pinned != null)
+                    {
+                        status = PinnedArrays.Lower(bundle, image, layout, heaps, owner, records, pinned, frame,
+                            parameters, locals, catchRegion, globals, location);
+                        if (status < 0)
+                        {
+                            if (location.Length != 0) { location[0] = owner; location[1] = source; }
+                            return status;
+                        }
+                    }
+                    // Decision 0104: a placeholder local must be unreachable after the folds above.
+                    int unresolvedUse = UnresolvedLocalUse(records, unresolvedLocals, parameters);
+                    if (unresolvedUse >= 0)
+                    {
+                        if (location.Length != 0) { location[0] = owner; location[1] = source; location[2] = unresolvedUse; }
+                        return -2;
+                    }
                     if (contexts[current] == CoreVersionByref.ContextKey)
                     {
                         status = CoreVersionByref.Lower(bundle, image, layout, heaps, owner, source, records, natives, nativeBase, current);
@@ -818,7 +881,8 @@ namespace PortableCompiler
                         records, catchRegion, frame, parameters, locals, body[2], objects, globals);
                     if (status < 0) return status;
                     byte[] frameRoots = null;
-                    if (tracksFinalizers)
+                    // Decision 0106: a function that cannot reach a collection publishes no roots.
+                    if (tracksFinalizers && reach.MayCollect(current))
                     {
                         if (location.Length != 0) location[2] = -1;
                         frameRoots = RootStackWasm.MapFrame(records, frame, parameters + locals, catchRegion.Length != 0, parameters, filters);
@@ -833,6 +897,8 @@ namespace PortableCompiler
                         objects, records, catchRegion, literals, literalSize, location);
                     if (status < 0)
                         return status;
+                    status = ArrayInitializers.LowerRankTwo(image, heaps, layout, records, catchRegion, literals, literalSize, location);
+                    if (status < 0) return status;
                     status = StaticByteSpans.Lower(bundle, image, layout, heaps, owner, context, methodArguments,
                         records, objects, catchRegion, literals, literalSize, location);
                     if (status < 0) return status;
@@ -908,6 +974,13 @@ namespace PortableCompiler
                             contexts, arities, offsets, signatures, objects, functions, pointers, location, natives, nativeBase);
                         if (functions < 0)
                             return functions;
+                        // Decision 0105: a resized field must be a plain class field of the array type.
+                        int resized = ArrayResizeField.Validate(records, objects, frameCells, inlineLocations);
+                        if (resized >= 0)
+                        {
+                            if (location.Length != 0) { location[0] = owner; location[1] = source; location[2] = resized; }
+                            return -2;
+                        }
                     }
 
                     if (ScopedCharacterPins.Lower(records, frame, pinned, parameters, locals, catchRegion, frameCells, natives, nativeBase) &&
@@ -1078,8 +1151,9 @@ namespace PortableCompiler
                     receiverDemand.ObserveCalls(records, depths, contexts);
                     if (location.Length != 0) location[2] = -1;
                     int capacity = body[1] * 64 + 32;
-                    // Grouped dispatch (BranchWasm.BeginGroup) opens a block per group of at least eight states.
-                    capacity += (body[1] / 8 + 1) * BranchWasm.GroupBytes;
+                    // Decision 0106: one leader block per state at most (2 bytes) and a br_table entry
+                    // of at most 3 bytes per IL offset.
+                    capacity += body[1] * 8 + 32;
                     if (tracksFinalizers)
                     {
                         var finalizerTarget = new int[2];
@@ -1387,6 +1461,109 @@ namespace PortableCompiler
                                 if (bytes < 0) return bytes;
                                 capacity += bytes;
                             }
+                            if (kind == BranchIl.MultiplyHighUInt64)
+                            {
+                                if (capacity > int.MaxValue - WideMultiplyDivide.Capacity) return -3;
+                                capacity += WideMultiplyDivide.Capacity;
+                            }
+                            if (kind == BranchIl.PinArray || kind == BranchIl.PinByteSpan || kind == BranchIl.Return ||
+                                kind == BranchIl.UnpinByteSpan || kind == BranchIl.Store && records[slot + 3] == PinnedLocals.Array)
+                            {
+                                // A pin copies in; every unpinning store and ret copies each pin back.
+                                int pinBytes = kind == BranchIl.PinArray || kind == BranchIl.PinByteSpan
+                                    ? PinnedArraysWasm.PinCapacity + 40 * PinnedArraysWasm.CountPins(records) :
+                                    PinnedArraysWasm.UnpinCapacity * PinnedArraysWasm.CountPins(records);
+                                if (capacity > int.MaxValue - pinBytes) return -3;
+                                capacity += pinBytes;
+                            }
+                            if (kind == BranchIl.GetRankTwo || kind == BranchIl.NewRankTwo || kind == BranchIl.SetRankTwo)
+                            {
+                                if (capacity > int.MaxValue - MdArrays.Capacity) return -3;
+                                capacity += MdArrays.Capacity;
+                            }
+                            if (kind == BranchIl.FlatIndex || kind == BranchIl.GetField || kind == BranchIl.SetField)
+                            {
+                                if (capacity > int.MaxValue - FlatInlineArrays.Capacity) return -3;
+                                capacity += FlatInlineArrays.Capacity;
+                            }
+                            if (kind == BranchIl.WideOp)
+                            {
+                                if (capacity > int.MaxValue - WideTuples.Capacity(operation)) return -3;
+                                capacity += WideTuples.Capacity(operation);
+                            }
+                            if (kind == BranchIl.CloneArray)
+                            {
+                                if (capacity > int.MaxValue - ArrayClone.Capacity) return -3;
+                                capacity += ArrayClone.Capacity;
+                            }
+                            if (kind == BranchIl.SimdOp)
+                            {
+                                int simdBytes = SimdVectors.Capacity(operation) + (slot == 0 ? SimdVectors.InitializeBytes(frame, parameters, locals) : 0);
+                                if (capacity > int.MaxValue - simdBytes) return -3;
+                                capacity += simdBytes;
+                            }
+                            if (kind == BranchIl.BinarySearchPrimitiveArray)
+                            {
+                                if (capacity > int.MaxValue - ArrayBinarySearch.Capacity) return -3;
+                                capacity += ArrayBinarySearch.Capacity;
+                            }
+                            if (kind == BranchIl.FailFast)
+                            {
+                                if (capacity > int.MaxValue - ProcessExit.FailFastCapacity) return -3;
+                                capacity += ProcessExit.FailFastCapacity;
+                            }
+                            if (kind == BranchIl.NativeSpanFill)
+                            {
+                                if (capacity > int.MaxValue - PointerSpanFill.Capacity) return -3;
+                                capacity += PointerSpanFill.Capacity;
+                                linearMemory = true;
+                            }
+                            if (kind == BranchIl.ResizeArrayField)
+                            {
+                                if (capacity > int.MaxValue - ArrayResizeField.Capacity) return -3;
+                                capacity += ArrayResizeField.Capacity;
+                            }
+                            if (kind == BranchIl.FillPrimitiveArray)
+                            {
+                                if (capacity > int.MaxValue - ArrayFillPrimitive.Capacity) return -3;
+                                capacity += ArrayFillPrimitive.Capacity;
+                            }
+                            if (kind == BranchIl.SortPrimitiveArray)
+                            {
+                                if (capacity > int.MaxValue - ArraySortPrimitive.Capacity) return -3;
+                                capacity += ArraySortPrimitive.Capacity;
+                            }
+                            if (kind == BranchIl.MultiplyDivideUInt64)
+                            {
+                                if (capacity > int.MaxValue - WideMultiplyDivide.Capacity) return -3;
+                                capacity += WideMultiplyDivide.Capacity;
+                            }
+                            if (kind == BranchIl.NativeMemoryCall)
+                            {
+                                if (capacity > int.MaxValue - NativeMemoryMembers.Capacity) return -3;
+                                capacity += NativeMemoryMembers.Capacity;
+                            }
+                            if (kind == BranchIl.ReadTimestamp || kind == BranchIl.ReadFrequency)
+                            {
+                                if (capacity > int.MaxValue - PlatformClock.Capacity) return -3;
+                                capacity += PlatformClock.Capacity;
+                            }
+                            if (kind == BranchIl.CharacterCall)
+                            {
+                                if (capacity > int.MaxValue - CharacterMembers.Capacity) return -3;
+                                capacity += CharacterMembers.Capacity;
+                            }
+                            if (kind == BranchIl.JoinManyStrings)
+                            {
+                                // One two-string join per extra operand (StringWasm.Copy, under 160 bytes).
+                                if (capacity > int.MaxValue - 480) return -3;
+                                capacity += 480;
+                            }
+                            if (kind == BranchIl.FormatPrimitive || kind == BranchIl.JoinStringArray)
+                            {
+                                if (capacity > int.MaxValue - EnumFormattingWasm.Capacity) return -3;
+                                capacity += EnumFormattingWasm.Capacity;
+                            }
                             if (kind == BranchIl.FormatEnum)
                             {
                                 int names = unchecked((int)PeLibrary.ImageBytes.U32(literals, (uint)operation));
@@ -1406,7 +1583,7 @@ namespace PortableCompiler
                             if (kind == BranchIl.CheckedInteger || kind == BranchIl.CheckedConversion || kind == BranchIl.NewArray ||
                                 (kind == BranchIl.MathCall && MathWasm.CanOverflow(operation)))
                                 tags = ExceptionTypes.Overflow;
-                            else if (kind == BranchIl.NewDelegate)
+                            else if (kind == BranchIl.NewDelegate || (kind == BranchIl.MathCall && MathWasm.ThrowsArgument(operation)))
                                 tags = ExceptionTypes.Argument;
                             else if (kind == BranchIl.LoadVirtualFunction)
                                 tags = ExceptionTypes.NullReference;
@@ -1417,7 +1594,7 @@ namespace PortableCompiler
                             else if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler)
                                 tags = ExceptionTypes.Argument; // decision 0092: mismatched nominal types
                             else if (kind == BranchIl.NativeCharacterSpan || kind == BranchIl.SpanSlice ||
-                                kind == BranchIl.WritableByteArraySpan ||
+                                kind == BranchIl.WritableByteArraySpan || kind == BranchIl.ReadOnlyByteArraySpan ||
                                 kind == BranchIl.StringAsSpan && operation != 0)
                                 tags = ExceptionTypes.ArgumentOutOfRange;
                             else if (kind == BranchIl.CopyCharacterSpan)
@@ -1450,8 +1627,41 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - ArrayCopyWasm.Capacity) return -3;
                                 capacity += ArrayCopyWasm.Capacity;
                             }
+                            else if (kind == BranchIl.JoinStringArray)
+                                tags = ExceptionTypes.ArgumentNull; // String.Concat(null)
+                            else if (kind == BranchIl.NativeMemoryCall)
+                                tags = ExceptionTypes.Argument | ExceptionTypes.ArgumentOutOfRange; // alignment; MemoryCopy size
+                            else if (kind == BranchIl.MultiplyDivideUInt64)
+                                tags = ExceptionTypes.DivideByZero; // UInt128 division by zero
+                            else if (kind == BranchIl.SortPrimitiveArray || kind == BranchIl.BinarySearchPrimitiveArray)
+                                tags = ExceptionTypes.ArgumentNull; // Array.Sort(null), Array.BinarySearch(null, v)
+                            else if (kind == BranchIl.FillPrimitiveArray)
+                                tags = ExceptionTypes.ArgumentNull | ExceptionTypes.ArgumentOutOfRange;
+                            else if (kind == BranchIl.ResizeArrayField)
+                                tags = ExceptionTypes.ArgumentOutOfRange | ExceptionTypes.NullReference;
+                            else if (kind == BranchIl.NativeSpanFill)
+                                tags = ExceptionTypes.ArgumentOutOfRange;
+                            else if (kind == BranchIl.CloneArray)
+                                tags = ExceptionTypes.NullReference;
+                            else if (kind == BranchIl.WideOp)
+                                tags = operation == WideTuples.SortRange
+                                    ? ExceptionTypes.ArgumentNull | ExceptionTypes.ArgumentOutOfRange | ExceptionTypes.Argument
+                                    : operation == WideTuples.NewTupleArray ? ExceptionTypes.Overflow
+                                    : operation == WideTuples.StoreElement || operation == WideTuples.ElementItem2
+                                        ? ExceptionTypes.NullReference | ExceptionTypes.IndexOutOfRange : 0;
+                            else if (kind == BranchIl.SimdOp && operation == SimdVectors.GetElement)
+                                tags = ExceptionTypes.ArgumentOutOfRange;
+                            else if (kind == BranchIl.GetRankTwo || kind == BranchIl.SetRankTwo)
+                                tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
+                            else if (kind == BranchIl.NewRankTwo)
+                                tags = ExceptionTypes.Overflow;
+                            else if (kind == BranchIl.ArrayDataReference)
+                                tags = ExceptionTypes.NullReference; // GetArrayDataReference(null)
                             else if (kind == BranchIl.ThrowFrameworkArgument)
-                                tags = operation == ExceptionTagsWasm.ArgumentNullTag
+                                tags = operation == PlatformExceptionThrows.Trap ? 0 :
+                                    operation == ExceptionTagsWasm.ArgumentTag ? ExceptionTypes.Argument :
+                                    operation == ExceptionTagsWasm.InvalidCastTag ? ExceptionTypes.InvalidCast :
+                                    operation == ExceptionTagsWasm.ArgumentNullTag
                                     ? ExceptionTypes.ArgumentNull : ExceptionTypes.ArgumentOutOfRange;
                             else if (kind == BranchIl.StringFromSpan)
                                 tags = (hostFeatures & WasmImports.NativeCharacterViews) != 0 ? ExceptionTypes.NullReference : 0;
@@ -1533,23 +1743,38 @@ namespace PortableCompiler
                     for (int slot = 0; slot < records.Length; slot += BranchIl.Width)
                     {
                         int kind = records[slot];
-                        if (kind == BranchIl.JoinStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
+                        // Decision 0104: the clock is a typed kernel32 entry; registering a new entry
+                        // grows the native table, which re-emits every body below.
+                        if (kind == BranchIl.ReadTimestamp || kind == BranchIl.ReadFrequency)
+                            records[slot + 1] = nativeBase + PlatformClock.Register(natives, kind == BranchIl.ReadFrequency);
+                        if (kind == BranchIl.JoinStrings || kind == BranchIl.JoinManyStrings || kind == BranchIl.StringFromChars || kind == BranchIl.StringEquals || kind == BranchIl.StringRange ||
                             kind == BranchIl.StringContainsCodeUnit || kind == BranchIl.StringFromSpan || kind == BranchIl.ConsoleWrite ||
                             kind == BranchIl.NativeUtf16Length || kind == BranchIl.CopyNativeConstructionString ||
                             kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine || kind == BranchIl.CopyCharacterSpan ||
                             kind == BranchIl.FindCharacterInSpan || kind == BranchIl.CopyConstructionString) frameShape[5] |= 1;
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
-                        if (kind == BranchIl.FormatEnum) frameShape[5] |= 5;
+                        if (kind == BranchIl.FormatEnum || kind == BranchIl.FormatPrimitive ||
+                            kind == BranchIl.JoinStringArray || kind == BranchIl.MultiplyDivideUInt64 ||
+                            kind == BranchIl.SortPrimitiveArray || kind == BranchIl.MultiplyHighUInt64 ||
+                            kind == BranchIl.NativeMemoryCall || kind == BranchIl.PinArray || kind == BranchIl.PinByteSpan) frameShape[5] |= 5;
+                        if (kind == BranchIl.NativeSpanFill || kind == BranchIl.FailFast) frameShape[5] |= 1; // string scratch
+                        if (kind == BranchIl.SimdOp || kind == BranchIl.WideOp) { frameShape[5] |= 4; frameShape[6] = 1; } // i64 and i32 scratch
+                        // Five i32 loop counters: Array.Sort, the NativeMemory heap and array pins.
+                        if (kind == BranchIl.SortPrimitiveArray || kind == BranchIl.NativeMemoryCall || kind == BranchIl.BinarySearchPrimitiveArray ||
+                            kind == BranchIl.PinArray || kind == BranchIl.PinByteSpan) frameShape[6] = 1;
                         if (kind == BranchIl.PinScopedValue) frameShape[5] |= 2 | ScopedValuePins.FrameFlag;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler || kind == BranchIl.DelegateEquality ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
                             frameShape[6] = 1;
                     }
                     code = new byte[capacity];
+                    if (tracksFinalizers)
+                        reach.Record(current, records, initializers.FieldInitializers, frameShape[12] != 0);
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
                         arities, code, remainderFixup, catchRegion, outgoingNulls, outgoingReferences, objects, initializers.FieldInitializers,
                         reflection, inlineLocations, nativePlans.Plans, filters, frameCells, pointers, rootCount, frameRoots,
-                        tracksFinalizers ? finalizers : null, wrapsFailure ? failure : null, primitiveArrays, projections, literals);
+                        tracksFinalizers ? finalizers : null, wrapsFailure ? failure : null, primitiveArrays, projections, literals,
+                        tracksFinalizers ? reach : null);
                 }
 
                 if (used < 0) return used;
@@ -1786,6 +2011,8 @@ namespace PortableCompiler
                 rootWalker = hostImports + functions;
                 WasmIndexFixups.Resolve(moduleCode, finalizers.RegistrationFixups[0], rootWalker + FinalizerQueueWasm.Register);
                 WasmIndexFixups.Resolve(moduleCode, finalizers.SuppressionFixups[0], rootWalker + FinalizerSuppressionWasm.Suppress);
+                WasmIndexFixups.Resolve(moduleCode, finalizers.DiscoverFixups[0], rootWalker + FinalizerQueueWasm.Discover);
+                WasmIndexFixups.Resolve(moduleCode, finalizers.RunNextFixups[0], rootWalker + FinalizerQueueWasm.RunNext);
                 for (int entry = 0; entry < FinalizerSuppressionWasm.End; entry++)
                 {
                     bool read = entry == 1;
@@ -1818,9 +2045,15 @@ namespace PortableCompiler
             }
             CompileLocation.Clear(location);
             if (linearMemory) hostFeatures |= WasmImports.Memory;
-            return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
+            // Decision 0106: compile again once the exact set of collecting functions is known.
+            if (tracksFinalizers && reach.Settle(functions)) return Reemit;
+            int written = WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
                 moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0], pointers, rootCount, rootWalker, rootProbe, natives,
                 primitiveArrays, delegateTypeFixups);
+            // Opt-in profiling names; off by default so modules stay byte-identical.
+            if (written > 0 && FunctionNames.EmitNames && bundle.Length != 0)
+                written = FunctionNames.Append(output, written, bundle, owners, rows, functions, WasmImports.FunctionCount(hostFeatures, natives));
+            return written;
         }
 
         private static bool IsExported(int[] exports, int target)
@@ -2113,9 +2346,20 @@ namespace PortableCompiler
                     {
                         int coded = records[slot + 1];
                         int primitive = ArrayTypeRefs.PrimitiveElement(image, heaps, layout, coded);
-                        if (primitive == 8)
+                        // int/uint and long/ulong elements share the Int32 and Int64 managed cells
+                        // (signedness belongs to the loads and stores through the address).
+                        if (primitive >= 8 && primitive <= 11)
                         {
-                            records[slot + 1] = Ints;
+                            records[slot + 1] = primitive <= 9 ? Ints : Longs;
+                            continue;
+                        }
+                        // byte[] elements use the packed byte location. Decision 0105: so do bool[]
+                        // elements. The location admits only ldind.u1 and stind.i1, which are the CLR's
+                        // bool& accesses, and the element is the same byte either way. sbyte[] needs
+                        // ldind.i1 sign extension, so it stays diagnosed.
+                        if (primitive == 5 || primitive == 2)
+                        {
+                            records[slot + 1] = Bytes;
                             continue;
                         }
                         int type = ArrayAllocations.TokenIdentity(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);
@@ -2146,6 +2390,16 @@ namespace PortableCompiler
                         : PlatformTypeReferences.IsString(image, heaps, layout, coded) ? String :
                             BundleLayouts.RegisterReference(bundle, image, layout, heaps, owner, coded, objects);
                     if (type < 0) return type;
+                    // Decision 0105: castclass/isinst T[] for int/uint, long/ulong, float and double. The CLR
+                    // treats int[] and uint[] (and long[] and ulong[]) as the same array type for casts, as
+                    // their shared vector does. bool[]/byte[]/sbyte[] and char[]/short[]/ushort[] also share
+                    // a vector but are not all cast-compatible on the CLR, so they stay diagnosed.
+                    if (GenericScalar.IsVector(type))
+                    {
+                        int vector = GenericScalar.Storage(type);
+                        if (vector != Ints && vector != Longs && vector != Singles && vector != Doubles) return -2;
+                        type = vector;
+                    }
                     if (ObjectLayouts.IsValueType(objects, type)) return -2;
                     if (type == EventHandlerReference || DelegateShapes.IsKey(type))
                     {
@@ -2168,7 +2422,8 @@ namespace PortableCompiler
                             records[slot + 3] = ReferenceCastWasm.CheckedInterface;
                         }
                     }
-                    else if (type != String && (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0] ||
+                    else if (type != String && type != Ints && type != Longs && type != Singles && type != Doubles &&
+                        (type < ObjectLayouts.FirstClass || type - ObjectLayouts.FirstClass >= objects[0] ||
                         ObjectLayouts.ArrayElement(objects, type) != 0)) return -2;
                     records[slot + 1] = type;
                     continue;
@@ -2211,6 +2466,13 @@ namespace PortableCompiler
                     int next = records[slot + 2] * BranchIl.Width;
                     if (type == I32 && PrimitiveHashCalls.LowerFrame(bundle, image, layout, heaps, owner,
                         context, methodArguments, objects, records, clauses, slot)) continue;
+                    // #326: ldloca x; call {Int32,UInt32,Int64,UInt64}::ToString() formats the loaded value.
+                    if ((type == I32 || type == I64 || IsNarrow(type)) &&
+                        PrimitiveFormatting.FoldValueReceiver(image, heaps, layout, records, next, clauses, type))
+                    {
+                        records[slot] = BranchIl.Load;
+                        continue;
+                    }
                     int enumFormatting = EnumFormatting.LowerFrame(bundle, image, layout, heaps, owner,
                         context, methodArguments, objects, records, clauses, slot, type, globals, literals, literalSize);
                     if (enumFormatting != 0)
@@ -2748,6 +3010,13 @@ namespace PortableCompiler
                     {
                         int next = records[slot + 2];
                         int fieldOwner = FieldAccess.Owner(descriptor), fieldStorage = FieldAccess.Storage(descriptor);
+                        // #326: ldflda F; call {Int32,UInt32,Int64,UInt64}::ToString() only reads F.
+                        if (PrimitiveFormatting.FoldValueReceiver(image, heaps, layout, records, next * BranchIl.Width,
+                            clauses, fieldStorage))
+                        {
+                            records[slot] = BranchIl.GetField;
+                            continue;
+                        }
                         if (ObjectLayouts.IsValueType(objects, fieldOwner) &&
                             (fieldStorage == Character || fieldStorage == Unsigned16) &&
                             nextSlot < records.Length && records[nextSlot] == BranchIl.LoadIndirect &&
@@ -2852,6 +3121,24 @@ namespace PortableCompiler
                     {
                         records[slot] = BranchIl.Constant;
                         records[slot + 1] = 1; // Wasm native data is little-endian.
+                        continue;
+                    }
+                    int platformField = !write && linked ? PlatformClock.StaticField(image, heaps, layout, field) : 0;
+                    if (platformField == PlatformClock.Frequency)
+                    {
+                        int heapGlobal = StaticFields.Register(globals, NativeMemoryMembers.HeapOwner, 0, I32);
+                        if (heapGlobal < 0) return heapGlobal;
+                        records[slot] = BranchIl.ReadFrequency;
+                        records[slot + 1] = 0;
+                        records[slot + 3] = heapGlobal;
+                        hostUse[0] = hostUse[0] | WasmImports.Memory;
+                        continue;
+                    }
+                    if (platformField != 0)
+                    {
+                        // Stopwatch.IsHighResolution and BitConverter.IsLittleEndian are true on this target.
+                        records[slot] = BranchIl.Constant;
+                        records[slot + 1] = 1;
                         continue;
                     }
                     if (!write && linked && EventMetadata.Member(image, heaps, layout, field) == EventMetadata.Empty)
@@ -3198,7 +3485,7 @@ namespace PortableCompiler
                             hostUse[0] = hostUse[0] | WasmImports.NativeCharacterViews;
                             continue;
                         }
-                        if (span == BranchIl.WritableByteArraySpan && opcode == 0x73)
+                        if ((span == BranchIl.WritableByteArraySpan || span == BranchIl.ReadOnlyByteArraySpan) && opcode == 0x73)
                         {
                             records[slot] = span;
                             records[slot + 1] = 2; // start and count following the owner array
@@ -3305,6 +3592,103 @@ namespace PortableCompiler
                         continue;
                     }
                     // Exact System.Math intrinsics, identified by platform assembly and signature (decision 0003).
+                    // Decision 0104: `base.Finalize()` in a finalizer calls the platform System.Object.Finalize,
+                    // whose body is empty: [receiver] -> [].
+                    if (opcode == 0x28 && !addressed && GarbageCollectorMembers.IsObjectFinalize(image, heaps, layout, member))
+                    {
+                        records[slot] = BranchIl.Pop;
+                        continue;
+                    }
+                    int collector = opcode == 0x28 && !addressed ? GarbageCollectorMembers.Identify(image, heaps, layout, member) : 0;
+                    if (collector != 0)
+                    {
+                        // Collect and WaitForPendingFinalizers discover and run finalizers, which
+                        // needs the module's finalizer tracking (root stacks and registration).
+                        if (collector != GarbageCollectorMembers.KeepAlive && !tracksFinalizers) return Reemit;
+                        records[slot] = BranchIl.GarbageCollectorCall;
+                        records[slot + 1] = collector;
+                        continue;
+                    }
+                    int nativeMemory = opcode == 0x28 && !addressed ? NativeMemoryMembers.Identify(image, heaps, layout, member) : 0;
+                    if (nativeMemory != 0)
+                    {
+                        records[slot] = BranchIl.NativeMemoryCall;
+                        records[slot + 1] = nativeMemory;
+                        int heapGlobal = StaticFields.Register(globals, NativeMemoryMembers.HeapOwner, 0, I32);
+                        if (heapGlobal < 0) return heapGlobal;
+                        records[slot + 3] = heapGlobal;
+                        hostUse[0] = hostUse[0] | WasmImports.Memory;
+                        continue;
+                    }
+                    if (opcode == 0x28 && !addressed && ProcessExit.IsFailFast(image, heaps, layout, member))
+                    {
+                        int status = StaticFields.Register(globals, ProcessExit.StatusOwner, 0, I64);
+                        if (status < 0) return status;
+                        records[slot] = BranchIl.FailFast;
+                        records[slot + 1] = status;
+                        hostUse[0] = hostUse[0] | WasmImports.Console;
+                        continue;
+                    }
+                    if (opcode == 0x28 && !addressed && ProcessExit.IsExit(image, heaps, layout, member))
+                    {
+                        int status = StaticFields.Register(globals, ProcessExit.StatusOwner, 0, I64);
+                        if (status < 0) return status;
+                        records[slot] = BranchIl.ExitProcess;
+                        records[slot + 1] = status;
+                        continue;
+                    }
+                    if (opcode == 0x28 && !addressed && PlatformClock.IsGetTimestamp(image, heaps, layout, member))
+                    {
+                        int heapGlobal = StaticFields.Register(globals, NativeMemoryMembers.HeapOwner, 0, I32);
+                        if (heapGlobal < 0) return heapGlobal;
+                        records[slot] = BranchIl.ReadTimestamp;
+                        records[slot + 1] = 0;
+                        records[slot + 3] = heapGlobal;
+                        hostUse[0] = hostUse[0] | WasmImports.Memory;
+                        continue;
+                    }
+                    // Decision 0105: T T[,]::Get(int32, int32) on a rank-2 Int32/Int64 array (MdArrays).
+                    int rankTwo = (opcode == 0x28 || opcode == 0x73) && !addressed ? MdArrays.MemberVector(image, heaps, layout, member) : 0;
+                    int rankMember = rankTwo != 0 ? MdArrays.Member(image, heaps, layout, member) : 0;
+                    // `Address(i, j)` read only by a primitive ToString() (#326 fold) is the same element read.
+                    if (rankMember == 3 && PrimitiveFormatting.FoldValueReceiver(image, heaps, layout, records,
+                        records[slot + 2] * BranchIl.Width, clauses, rankTwo == Longs ? I64 : I32)) rankMember = 2;
+                    if (rankMember == 2 && opcode == 0x28 || rankMember == 1 && opcode == 0x73 || rankMember == 4 && opcode == 0x28)
+                    {
+                        records[slot] = rankMember == 2 ? BranchIl.GetRankTwo : rankMember == 1 ? BranchIl.NewRankTwo : BranchIl.SetRankTwo;
+                        records[slot + 1] = rankTwo;
+                        records[slot + 3] = 0;
+                        continue;
+                    }
+                    int characterMember = opcode == 0x28 && !addressed ? CharacterMembers.Identify(image, heaps, layout, member) : 0;
+                    if (characterMember != 0)
+                    {
+                        records[slot] = BranchIl.CharacterCall;
+                        records[slot + 1] = characterMember;
+                        continue;
+                    }
+                    int bitCount = opcode == 0x28 && !addressed ? BitOperationMembers.Identify(image, heaps, layout, member) : 0;
+                    if (bitCount != 0)
+                    {
+                        records[slot] = BranchIl.BitCount;
+                        records[slot + 1] = bitCount;
+                        continue;
+                    }
+                    int wordMember = opcode == 0x28 && !addressed ? NativeWordMembers.Identify(image, heaps, layout, member) : 0;
+                    if (wordMember == NativeWordMembers.BigMul)
+                    {
+                        records[slot] = BranchIl.MultiplyHighUInt64;
+                        records[slot + 1] = 0;
+                        continue;
+                    }
+                    if (wordMember != 0)
+                    {
+                        // IntPtr.Size is an int32; UIntPtr.MaxValue a native unsigned int (decision 0027).
+                        records[slot] = wordMember == NativeWordMembers.PointerSize ? BranchIl.Constant : BranchIl.NativeConstant;
+                        records[slot + 1] = wordMember == NativeWordMembers.PointerSize ? 4 : -1;
+                        records[slot + 3] = 0;
+                        continue;
+                    }
                     int intrinsic = opcode == 0x28 && !addressed ? PlatformMembers.MathIntrinsic(image, heaps, layout, member) : 0;
                     if (intrinsic != 0)
                     {
@@ -3399,10 +3783,39 @@ namespace PortableCompiler
                         records[slot] = opcode == 0x73 ? BranchIl.NewRootObject : BranchIl.BaseCtor;
                         continue;
                     }
-                    int stringMember = addressed ? 0 : StringMetadata.Member(image, heaps, layout, member);
-                    if (stringMember == StringMetadata.OrdinalEquals && opcode == 0x28)
+                    int primitiveFormat = !addressed && opcode == 0x28 ? PrimitiveFormatting.Identify(image, heaps, layout, member) : 0;
+                    if (primitiveFormat != 0)
                     {
+                        records[slot] = BranchIl.FormatPrimitive;
+                        records[slot + 1] = primitiveFormat;
+                        continue;
+                    }
+                    int stringMember = addressed ? 0 : StringMetadata.Member(image, heaps, layout, member);
+                    if ((stringMember == StringMetadata.OrdinalEquals || stringMember == StringMetadata.OrdinalUnequal) &&
+                        opcode == 0x28)
+                    {
+                        // The operand selects op_Inequality, which negates the ordinal result.
                         records[slot] = BranchIl.StringEquals;
+                        records[slot + 1] = stringMember == StringMetadata.OrdinalUnequal ? 1 : 0;
+                        continue;
+                    }
+                    if (stringMember == StringMetadata.ConcatArray && opcode == 0x28)
+                    {
+                        int empty = StringLiterals.Empty(globals);
+                        if (empty < 0) return empty;
+                        int vector = ObjectLayouts.RegisterArray(objects, String);
+                        if (vector < 0) return vector;
+                        records[slot] = BranchIl.JoinStringArray;
+                        records[slot + 1] = empty;
+                        continue;
+                    }
+                    if ((stringMember == StringMetadata.ConcatThree || stringMember == StringMetadata.ConcatFour) && opcode == 0x28)
+                    {
+                        int empty = StringLiterals.Empty(globals);
+                        if (empty < 0) return empty;
+                        records[slot] = BranchIl.JoinManyStrings;
+                        records[slot + 1] = empty;
+                        records[slot + 3] = stringMember == StringMetadata.ConcatThree ? 3 : 4;
                         continue;
                     }
                     bool joinStrings = stringMember == StringMetadata.Concat && opcode == 0x28;

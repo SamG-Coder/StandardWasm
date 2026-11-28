@@ -11,7 +11,9 @@ namespace PeLibrary
         internal const int Unsupported = -1, StandardOutput = 1, StandardError = 2,
             Write = 3, WriteLine = 4, WriteEmptyLine = 5,
             // static string Console.ReadLine() (Stage 151, decision 0079).
-            ReadLine = 6;
+            ReadLine = 6,
+            // instance void TextWriter.Flush() on a console writer (decision 0104).
+            Flush = 7;
 
         internal static int Member(byte[] image, int[] streams, int[] methods, int row)
         {
@@ -58,6 +60,10 @@ namespace PeLibrary
                 return output ? StandardOutput : StandardError;
             }
 
+            // instance void Flush()
+            if (PlatformTypeReferences.Named(image, heap, heapSize, name, 5, 0x73756c46, 0x68, 0))
+                return size == 3 && image[signature] == 0x20 && image[signature + 1] == 0 && image[signature + 2] == 1
+                    ? Flush : Unsupported;
             // instance void Write(string) / WriteLine(string) / WriteLine()
             bool write = PlatformTypeReferences.Named(image, heap, heapSize, name, 5, 0x74697257, 0x65, 0);
             bool line = PlatformTypeReferences.Named(image, heap, heapSize, name, 9, 0x74697257, 0x6e694c65, 0x65);

@@ -8,12 +8,14 @@ namespace PortableCompiler
     {
         internal const int Capacity = 384;
 
-        internal static int Vector(int[] objects, int source, int destination)
+        // `exact`: ArrayCopyElements proved both arrays have the same CLI element type.
+        internal static int Vector(int[] objects, int source, int destination, bool exact = false)
         {
             if (source != NullValue && destination != NullValue && source != destination) return 0;
             int vector = source != NullValue ? source : destination;
             int element = ArrayElement(objects, vector);
             if (element != 0) return vector;
+            if (exact && source == destination && (vector == Bytes || vector == Chars)) return vector;
             // Some packed heaps erase CLI distinctions (e.g. bool and byte).
             // Require a known simple-copy pair or an exact nominal vector.
             return vector == Ints || vector == Longs || vector == NativeVector ||

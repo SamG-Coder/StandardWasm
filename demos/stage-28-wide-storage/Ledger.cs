@@ -46,5 +46,20 @@ namespace WideStorageLibrary
         private static long Read(long[] values, int index) => values[index];
         private static void Store(long[] values, int index, long value) => values[index] = value;
         private static long Increment(ref long value) => ++value;
+
+        // Decision 0105: ldelema bool shares the packed byte location (ldind.u1 / stind.i1).
+        // Compound assignments read and write the element through that address. A bool[]
+        // element passed as a ref bool argument is still diagnosed.
+        public static int BoolRefUpdate(int size, int index, int set)
+        {
+            bool[] flags = new bool[size];
+            flags[index] |= set != 0;
+            flags[index] ^= true;
+            flags[0] &= set == 0;
+            flags[index] ^= true;
+            int count = 0;
+            for (int i = 0; i < flags.Length; i++) if (flags[i]) count += i + 1;
+            return count;
+        }
     }
 }

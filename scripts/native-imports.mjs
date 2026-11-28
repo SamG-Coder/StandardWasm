@@ -206,6 +206,21 @@ function mulDiv(number, numerator, denominator) {
     return result < -2147483648n || result > 2147483647n ? -1 : Number(result);
 }
 
+// Decision 0104: the kernel32 clock behind Stopwatch. Both write a LARGE_INTEGER through the pointer
+// into memory 0 and return TRUE. The counter is monotonic nanoseconds (Node's hrtime, or a browser's
+// performance.now at its own resolution), so the frequency is 1e9.
+const hrtime = globalThis.process?.hrtime?.bigint;
+const nanoseconds = hrtime ? () => hrtime() : () => BigInt(Math.round(performance.now() * 1e6));
+function writeLargeInteger(state, address, value) {
+    const bytes = nativeBytes(state, address, 8);
+    new DataView(bytes.buffer).setBigInt64(address >>> 0, value, true);
+    return 1;
+}
+export const windowsClock = Object.freeze({
+    "kernel32!QueryPerformanceCounter": (state, address) => writeLargeInteger(state, address, nanoseconds()),
+    "kernel32!QueryPerformanceFrequency": (state, address) => writeLargeInteger(state, address, 1000000000n),
+});
+
 // Scalar Windows entries the Stage 156 fixture uses, with the C semantics of x86 kernel32 and
 // ucrtbase, plus the CoreLib InternalCalls behind Marshal.GetLastWin32Error.
 export const windowsScalars = Object.freeze({

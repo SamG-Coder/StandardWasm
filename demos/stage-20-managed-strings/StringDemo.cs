@@ -17,10 +17,20 @@ namespace StringLibrary
             if (choice == 0) return "A\0\u03a9\ud83d\ude80";
             if (choice == 1) return "";
             if (choice == 2) return "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
-            return "\ud800x";
+            if (choice == 3) return "\ud800x";
+            if (choice == 4) return "\ud800y";
+            return null;
         }
 
         public static int Length(int choice) => Literal(choice).Length;
         public static int CodeUnit(int choice, int index) => Literal(choice)[index];
+
+        // String.op_Equality and String.op_Inequality compare ordinally; a
+        // choice outside 0..4 selects null. Bit 0 is ==, bit 1 is !=.
+        public static int Equality(int left, int right)
+        {
+            string a = Literal(left), b = Literal(right);
+            return (a == b ? 1 : 0) | (a != b ? 2 : 0);
+        }
     }
 }

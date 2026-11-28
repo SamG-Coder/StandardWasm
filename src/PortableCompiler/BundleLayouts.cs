@@ -158,7 +158,14 @@ namespace PortableCompiler
             }
             int[] offsets = new int[overlay ? fields : 0];
             int limit = overlay ? ExplicitValueLayouts.Read(image, heaps, layout, ObjectLayouts.TypeDef(objects, type), first, offsets) : 0;
-            if (limit == -2)
+            if (limit == -2 && NativeValueLayouts.IsDisjointExplicit(bundle, ObjectLayouts.AssemblyOf(objects, type), ObjectLayouts.TypeDef(objects, type)) == 1)
+            {
+                ObjectLayouts.MarkDisjointExplicit(objects, type);
+                overlay = false;
+                limit = 0;
+                offsets = new int[0];
+            }
+            else if (limit == -2)
                 return ExplicitSlotLayouts.Bind(bundle, image, layout, heaps, owner, type, objects);
             if (limit < 0) return limit;
             for (int offset = 0; offset < fields; offset++)
@@ -232,9 +239,17 @@ namespace PortableCompiler
                     reference[0], objects, valueType);
                 // A value-type field needs its layout, so it keeps the -4 (CLR probe 3).
                 if (storage == -4 && !valueType && bundle.DeferMissing) storage = ObjectLayouts.ObjectReference;
+                // Decision 0105: a class field of a flat inline array is one primitive vector.
+                if (valueType && storage > 0 && !staticField && receiver > 0 && !ObjectLayouts.IsValueType(objects, receiver))
+                {
+                    int flat = FlatInlineArrays.Storage(objects, storage);
+                    if (flat != 0) return flat;
+                }
             }
             if (SignatureTypes.IsSpan(storage))
                 return !staticField && ObjectLayouts.IsByRefLikeValue(objects, receiver) ? storage : -2;
+            if (SimdVectors.IsSimd(storage)) return -2; // decision 0105: vector fields are not lowered
+            if (WideTuples.IsWide(storage) || storage == WideTuples.TupleArray) return -2;
             return ObjectLayouts.IsByRefLikeValue(objects, storage) ? -2 : storage;
         }
 

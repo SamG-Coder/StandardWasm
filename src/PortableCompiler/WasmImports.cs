@@ -72,7 +72,8 @@ namespace PortableCompiler
         private static int ConsoleFunctions(long features) => (features & Console) != 0 ? ConsoleWasm.ImportCount : 0;
 
         // Resource calls and native indirection share one memory index.
-        private static bool HasMemory(long features) => (features & (Resources | Memory | NativeMemoryFeatures | NativeCharacterViews)) != 0;
+        private static bool HasMemory(long features) =>
+            (features & (Resources | Memory | NativeMemoryFeatures | NativeCharacterViews)) != 0;
 
         private static int EntryCount(long features, NativeImportTable natives) =>
             FunctionCount(features, natives) + (HasMemory(features) ? 1 : 0);

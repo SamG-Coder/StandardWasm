@@ -24,6 +24,9 @@ internal static class Program
         Console.Out.WriteLine(missing);
         Console.Out.WriteLine();
         Console.Error.WriteLine(args.Length == 0 ? "no arguments" : "first: " + args[0]);
+        // Flush has no observable effect on either stream (decision 0104).
+        Console.Out.Flush();
+        Console.Error.Flush();
         return args.Length + 10 * units;
     }
 }

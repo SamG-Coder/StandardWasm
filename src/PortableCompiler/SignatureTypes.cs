@@ -182,7 +182,8 @@ namespace PortableCompiler
         // write only their slots. Stack values normalize CLI small integers to i32.
         // context is the closed declaring layout that supplies VAR arguments,
         // or zero when the declaring type is not generic.
-        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context, int[] methodArguments = null, int[] pinned = null, int[] filters = null, byte[] localElements = null)
+        internal static int Read(BundleImages bundle, byte[] image, int[] heap, int index, int[] types, int offset, int receiver, int[] methods, int[] objects, int assembly, int context, int[] methodArguments = null, int[] pinned = null, int[] filters = null, byte[] localElements = null,
+            bool[] unresolvedLocals = null)
         {
             if (index <= 0 || index >= heap[1])
                 return -2;
@@ -257,6 +258,16 @@ namespace PortableCompiler
                         pinned[i] = PinnedLocals.StaticPointer;
                         cursor = next[0];
                         types[target] = Native;
+                        continue;
+                    }
+                    if (kind == 0 && locals && pinned != null && end - cursor >= 2 && image[cursor] == 0x1d &&
+                        PinnedArrays.Vector(image[cursor + 1]) != 0)
+                    {
+                        // Decision 0105: a pinned primitive array keeps its array storage; PinnedArrays
+                        // gives its address a proved alias-free copy in the module heap.
+                        pinned[i] = PinnedLocals.Array;
+                        types[target] = PinnedArrays.Vector(image[cursor + 1]);
+                        cursor += 2;
                         continue;
                     }
                     if (kind == 0) return -2;
@@ -337,6 +348,21 @@ namespace PortableCompiler
                         next[0] = cursor - 1;
                         int type = ManagedReferenceSignatures.ReadStorage(bundle, image, methods, heap,
                             assembly, next, end, context, objects, methodArguments);
+                        // -4: the type's assembly is not in the bundle (decision 0080), such as
+                        // System.Runtime.Intrinsics for a console publish without framework packs.
+                        if ((type == -2 || type == -4) && locals && unresolvedLocals != null)
+                        {
+                            // Decision 0104: a generic local this target cannot lay out (such as a
+                            // Vector512<T> in a pruned accelerated path) gets an i32 placeholder. The
+                            // caller rejects any live instruction that still reads, writes or
+                            // addresses it, so the placeholder is never observed.
+                            int after = PeLibrary.SignatureExtents.Type(image, cursor - 1, end);
+                            if (after < 0) return -2;
+                            cursor = after;
+                            types[target] = I32;
+                            unresolvedLocals[i] = true;
+                            continue;
+                        }
                         if (type < 0) return type;
                         cursor = next[0];
                         types[target] = type;

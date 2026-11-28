@@ -80,7 +80,9 @@ namespace PortableCompiler
                 }
                 if (kind == ThrowFrameworkArgument)
                 {
-                    if (!Match(stack, depth, I32)) return -1;
+                    // A lowered `newobj <platform exception>; throw` leaves the constructor's
+                    // arguments, which the throw discards (decision 0104).
+                    if (records[slot + 3] != PlatformExceptionThrows.DiscardsArguments && !Match(stack, depth, I32)) return -1;
                     continue;
                 }
                 if (kind == Rethrow || kind == EndFinally) continue; // Unwinding drops the evaluation stack.
@@ -351,13 +353,14 @@ namespace PortableCompiler
             if (kind == NewObjectSpan)
                 return depth >= 2 && stack[depth - 2] == operand && stack[depth - 1] == I32
                     ? Push(stack, allocated, depth - 2, ObjectSpan) : -2;
-            if (kind == StringAsSpan || kind == WritableByteArraySpan)
+            if (kind == StringAsSpan || kind == WritableByteArraySpan || kind == ReadOnlyByteArraySpan)
             {
-                bool bytes = kind == WritableByteArraySpan;
+                bool bytes = kind != StringAsSpan;
                 if (!Match(stack, depth - operand, bytes ? Bytes : String)) return -2;
                 for (int argument = 0; argument < operand; argument++)
                     if (!Match(stack, depth - argument, I32)) return -2;
-                return Push(stack, allocated, depth - operand - 1, bytes ? WritableByteSpan : CharacterSpan);
+                return Push(stack, allocated, depth - operand - 1, kind == ReadOnlyByteArraySpan ? ReadOnlyByteSpan :
+                    bytes ? WritableByteSpan : CharacterSpan);
             }
             if (kind == CharacterArrayAsSpan || kind == ByteArrayAsSpan)
             {
@@ -388,7 +391,8 @@ namespace PortableCompiler
                 int start = depth - operand;
                 if (start < 0 || !Match(stack, depth, I32)) return -1;
                 if (operand == 5 && (stack[start + 1] != I32 || stack[start + 3] != I32)) return -1;
-                int vector = ArrayCopyWasm.Vector(objects, stack[start], stack[start + (operand == 3 ? 1 : 2)]);
+                int vector = ArrayCopyWasm.Vector(objects, stack[start], stack[start + (operand == 3 ? 1 : 2)],
+                    (extra & ArrayCopyElements.Exact) != 0);
                 return vector == 0 ? -2 : start;
             }
             if (kind == SpanSlice)
@@ -403,7 +407,8 @@ namespace PortableCompiler
                 if (depth < 2 || !ArrayIndex(stack, depth)) return -1;
                 int array = stack[depth - 2];
                 if (array != operand && array != NullValue) return -2;
-                int location = extra >= FirstClass ? ValueLocation(extra) : operand == Ints ? Int32Location : ObjectLocation;
+                int location = extra >= FirstClass ? ValueLocation(extra) : operand == Ints ? Int32Location :
+                    operand == Longs ? Int64Location : operand == Bytes ? WritableByteLocation : ObjectLocation;
                 return Push(stack, allocated, depth - 2, location);
             }
             if (kind == LoadObjectIndirect)
@@ -451,6 +456,21 @@ namespace PortableCompiler
             if (kind == EnumHasFlag)
                 return depth >= 2 && Match(stack, depth, operand) && Match(stack, depth - 1, operand)
                     ? Push(stack, allocated, depth - 2, I32) : -2;
+            if (kind == JoinManyStrings)
+            {
+                for (int i = 0; i < extra; i++)
+                    if (!Match(stack, depth - i, String)) return -1;
+                return Push(stack, allocated, depth - extra, String);
+            }
+            if (kind == JoinStringArray)
+            {
+                int vector = PeLibrary.ObjectLayouts.FindArray(objects, String);
+                return vector != 0 && Match(stack, depth, vector) ? Push(stack, allocated, depth - 1, String) : -2;
+            }
+            if (kind == FormatPrimitive)
+                return Match(stack, depth, extra == PrimitiveFormatting.ValueReceiver
+                    ? PrimitiveFormatting.ReceiverValue(operand) : PrimitiveFormatting.ReceiverLocation(operand))
+                    ? Push(stack, allocated, depth - 1, String) : -2;
             if (kind == FormatEnum)
                 return Match(stack, depth, EnumFormatting.StackStorage(extra))
                     ? Push(stack, allocated, depth - 1, String) : -2;
@@ -474,7 +494,8 @@ namespace PortableCompiler
                 return CallShape(stack, allocated, depth, signatures, offsets[operand], arities[operand], 0, objects);
             if (kind == ConsoleWrite)
             {
-                int writer = operand == PeLibrary.ConsoleMetadata.WriteEmptyLine ? depth - 1 : depth - 2;
+                int writer = operand == PeLibrary.ConsoleMetadata.WriteEmptyLine || operand == PeLibrary.ConsoleMetadata.Flush
+                    ? depth - 1 : depth - 2;
                 if (writer < 0 || stack[writer] != PeLibrary.ConsoleStorage.Writer) return -1;
                 return writer == depth - 1 || Match(stack, depth, String) ? writer : -1;
             }
@@ -789,12 +810,88 @@ namespace PortableCompiler
                 int remaining = depth - needed;
                 return kind == Binary ? Push(stack, allocated, remaining, IsComparison(operand) ? I32 : type) : remaining;
             }
+            if (kind == ReadTimestamp || kind == ReadFrequency) return Push(stack, allocated, depth, I64);
+            if (kind == NativeConstant) return Push(stack, allocated, depth, Native);
+            if (kind == BitCount)
+            {
+                int argument = BitOperationMembers.ArgumentType(operand);
+                bool valid = argument == Native ? depth > 0 && (stack[depth - 1] == I32 || IsNativeInteger(stack[depth - 1]))
+                    : Match(stack, depth, argument);
+                return valid ? Push(stack, allocated, depth - 1, I32) : -2;
+            }
+            if (kind == MultiplyHighUInt64)
+                return Match(stack, depth, Int64Location) && Match(stack, depth - 1, I64) && Match(stack, depth - 2, I64)
+                    ? Push(stack, allocated, depth - 3, I64) : -2;
+            if (kind == ArrayDataReference)
+                return Match(stack, depth, operand) ? Push(stack, allocated, depth - 1, UnsafeCalls.ElementLocation(operand)) : -2;
+            if (kind == OffsetLocation)
+                return depth >= 2 && ArrayIndex(stack, depth) && Match(stack, depth - 1, UnsafeCalls.ElementLocation(operand))
+                    ? Push(stack, allocated, depth - 2, UnsafeCalls.ElementLocation(operand)) : -2;
+            if (kind == NewRankTwo)
+                return Match(stack, depth, I32) && Match(stack, depth - 1, I32) ? Push(stack, allocated, depth - 2, operand) : -2;
+            if (kind == SetRankTwo)
+                return Match(stack, depth, operand == Longs ? I64 : I32) && Match(stack, depth - 1, I32) &&
+                    Match(stack, depth - 2, I32) && Match(stack, depth - 3, operand) ? depth - 4 : -2;
+            if (kind == GetRankTwo)
+                return Match(stack, depth, I32) && Match(stack, depth - 1, I32) && Match(stack, depth - 2, operand)
+                    ? Push(stack, allocated, depth - 3, operand == Longs ? I64 : I32) : -2;
+            if (kind == PinArray || kind == PinByteSpan)
+                return Match(stack, depth, frame[operand]) ? Push(stack, allocated, depth - 1, Native) : -2;
+            if (kind == UnpinByteSpan) return depth;
+            if (kind == SortPrimitiveArray)
+                return Match(stack, depth, ArraySortPrimitive.Vector(operand)) ? depth - 1 : -2;
+            if (kind == BinarySearchPrimitiveArray)
+                return Match(stack, depth - 1, ArrayBinarySearch.Vector(operand)) && Match(stack, depth, ArrayBinarySearch.ValueType(operand))
+                    ? Push(stack, allocated, depth - 2, I32) : -2;
+            if (kind == NativeSpanFill)
+            {
+                int arity = PointerSpanFill.Arity(operand), at = depth - arity + 1;
+                if (depth < arity || !IsNativeInteger(stack[at - 1]) && stack[at - 1] != I32 || !Match(stack, at + 1, I32)) return -2;
+                return arity == 2 || Match(stack, depth, PointerSpanFill.ValueType(operand)) ? depth - arity : -2;
+            }
+            if (kind == ResizeArrayField)
+                return Match(stack, depth, I32) && Match(stack, depth - 1, ArrayResizeField.Vector(extra)) ? depth - 2 : -2;
+            if (kind == FillPrimitiveArray)
+            {
+                int arity = ArrayFillPrimitive.Arity(operand);
+                int at = depth - arity + 1;
+                if (!Match(stack, at, ArrayFillPrimitive.Vector(operand)) ||
+                    !Match(stack, at + 1, ArrayFillPrimitive.ValueType(operand))) return -2;
+                if (arity == 4 && (!Match(stack, at + 2, I32) || !Match(stack, at + 3, I32))) return -2;
+                return depth - arity;
+            }
+            if (kind == PrimitiveBitCast)
+                return Match(stack, depth, UnsafeCalls.StackType(operand))
+                    ? Push(stack, allocated, depth - 1, UnsafeCalls.StackType(extra)) : -1;
+            if (kind == MultiplyDivideUInt64)
+                return Match(stack, depth, I64) && Match(stack, depth - 1, I64) && Match(stack, depth - 2, I64)
+                    ? Push(stack, allocated, depth - 3, I64) : -1;
+            if (kind == GarbageCollectorCall)
+            {
+                if (operand != GarbageCollectorMembers.KeepAlive) return depth;
+                return depth > 0 && (IsReference(stack[depth - 1]) || stack[depth - 1] == NullValue) ? depth - 1 : -2;
+            }
+            if (kind == NativeMemoryCall)
+            {
+                // void* and nuint operands are wasm32 native ints; Fill's byte value is an int32.
+                int arity = NativeMemoryMembers.Arity(operand);
+                if (depth < arity) return -1;
+                for (int i = depth - arity; i < depth; i++)
+                    if (NativeMemoryMembers.WideOperand(operand, i - depth + arity) ? stack[i] != I64 :
+                        stack[i] != I32 && !IsNativeInteger(stack[i])) return -2;
+                return NativeMemoryMembers.Returns(operand) ? Push(stack, allocated, depth - arity, Native) : depth - arity;
+            }
+            if (kind == ExitProcess) return Match(stack, depth, I32) ? depth - 1 : -1;
+            if (kind == FailFast) return Match(stack, depth, String) ? depth - 1 : -2;
+            if (kind == CharacterCall)
+                return Match(stack, depth, I32) ? Push(stack, allocated, depth - 1, I32) : -1;
             if (kind == MathCall)
             {
                 // Every mapped overload is T(T) or T(T, T) over one numeric stack type.
                 byte type = MathWasm.Type(operand);
                 int arity = MathWasm.Arity(operand);
-                if (!Match(stack, depth, type) || (arity == 2 && !Match(stack, depth - 1, type))) return -1;
+                if (!Match(stack, depth, type) || (arity >= 2 && !Match(stack, depth - 1, type)) ||
+                    (arity == 3 && !Match(stack, depth - 2, type))) return -1;
                 return Push(stack, allocated, depth - arity, type);
             }
             if (kind == Call || kind == NewObject)
@@ -851,6 +948,40 @@ namespace PortableCompiler
             }
             if (kind == LoadConstructorAddress)
                 return Push(stack, allocated, depth, ConstructorAddress);
+            if (kind == PlatformUnsupported)
+                return depth < operand ? -1 : extra == Void ? depth - operand : Push(stack, allocated, depth - operand, extra);
+            if (kind == WideOp)
+            {
+                int arity = WideTuples.Arity(operand), first = depth - arity;
+                if (first < 0) return -1;
+                for (int i = 0; i < arity; i++)
+                    if (stack[first + i] != WideTuples.Input(operand, i)) return -2;
+                int result = WideTuples.Result(operand);
+                return result == Void ? first : Push(stack, allocated, first, result);
+            }
+            if (kind == CloneArray)
+                return depth > 0 && IsArray(stack[depth - 1]) ? Push(stack, allocated, depth - 1, ObjectReference) : -2;
+            if (kind == SimdOp)
+            {
+                int arity = SimdVectors.Arity(operand, extra), first = depth - arity;
+                if (first < 0) return -1;
+                for (int i = 0; i < arity; i++)
+                {
+                    int expected = SimdVectors.Input(operand, extra, i), actual = stack[first + i];
+                    if (expected == Native ? !IsNativeInteger(actual) && actual != I32 : actual != expected) return -2;
+                }
+                int result = SimdVectors.Result(operand, extra);
+                return result == Void ? first : Push(stack, allocated, first, result);
+            }
+            if (kind == FlatIndex)
+                return Match(stack, depth, I32) ? Push(stack, allocated, depth - 1,
+                    FlatInlineArrays.Location(FlatInlineArrays.IndexElement(extra))) : -2;
+            if (kind == GetField && depth > 0 && FlatInlineArrays.IsLocation(stack[depth - 1]))
+                return FlatInlineArrays.Element(stack[depth - 1]) == FieldAccess.Owner(extra)
+                    ? Push(stack, allocated, depth - 1, StackType(FieldAccess.Storage(extra))) : -2;
+            if (kind == SetField && depth >= 2 && FlatInlineArrays.IsLocation(stack[depth - 2]))
+                return FlatInlineArrays.Element(stack[depth - 2]) == FieldAccess.Owner(extra) &&
+                    Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 2 : -2;
             if (kind == GetField || kind == GetReferenceField)
             {
                 if (depth == 0) return -1;

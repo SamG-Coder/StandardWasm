@@ -80,6 +80,18 @@ namespace ScalarOverlayDemo
         }
 
         public static int RejectLarge(LargeFrame frame) => frame == null ? 0 : 1;
+
+        // Decision 0105: an explicit value whose fields never overlap (here one int in a
+        // 16-byte layout) keeps ordinary managed fields; copies stay independent.
+        public static int LargeCopy(int initial)
+        {
+            var frame = new LargeFrame();
+            frame.Value.Value = initial;
+            Large copy = frame.Value;
+            copy.Value += 5;
+            frame.Value.Value *= 3;
+            return frame.Value.Value * 1000 + copy.Value;
+        }
         public static int RejectNested(NestedFrame frame) => frame == null ? 0 : 1;
         public static int RejectWidePartial(WidePartialFrame frame) => frame == null ? 0 : 1;
 

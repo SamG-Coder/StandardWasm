@@ -148,7 +148,9 @@ export function createConsoleHost({ encoding = "utf-8", newLine = "\r\n", input 
             return line.length;
         });
     }
-    const imports = { [consoleImportModule]: consoleImports };
+    const imports = {
+        [consoleImportModule]: consoleImports
+    };
     return {
         imports,
         encoding,

@@ -29,7 +29,6 @@ internal static class StringVectorCases
         Type unsupported = typeof(Unsupported);
         Reject(nameof(Unsupported.StaticWriteLine), At(unsupported, nameof(Unsupported.StaticWriteLine), OpCodes.Call));
         Reject(nameof(Unsupported.Read), At(unsupported, nameof(Unsupported.Read), OpCodes.Call));
-        Reject(nameof(Unsupported.Flush), At(unsupported, nameof(Unsupported.Flush), OpCodes.Callvirt));
         Reject(nameof(Unsupported.WriteCharacter), At(unsupported, nameof(Unsupported.WriteCharacter), OpCodes.Callvirt));
         // A TextWriter local reaches the ordinary class linker, which has no
         // TextWriter layout. The failure belongs to the local signature.
@@ -44,6 +43,10 @@ internal static class StringVectorCases
             throw new InvalidOperationException($"Console write did not import the host contract: {supported}");
         if (emitted.Contains("\u0008readLine"))
             throw new InvalidOperationException("A module that only writes imported Console.ReadLine.");
+        // #326 (decision 0104): Console.Out.Flush() compiles to no code and imports the write contract.
+        int flushed = CompilerExports.Compile(image, Row(unsupported.GetMethod(nameof(Unsupported.Flush))!), output);
+        if (flushed <= 0 || !Encoding.Latin1.GetString(output, 0, flushed).Contains("standardwasm:consolewrite"))
+            throw new InvalidOperationException($"Console.Out.Flush did not compile against the host contract: {flushed}");
         // Stage 151 (decision 0079): Console.ReadLine imports the separate input pair.
         int reads = CompilerExports.Compile(image, Row(unsupported.GetMethod(nameof(Unsupported.ReadLine))!), output);
         string input = Encoding.Latin1.GetString(output, 0, Math.Max(reads, 0));

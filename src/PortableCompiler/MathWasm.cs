@@ -14,26 +14,54 @@ namespace PortableCompiler
         internal static byte Type(int intrinsic)
         {
             if (intrinsic == AbsF32 || intrinsic == MaxF32 || intrinsic == MinF32) return F32;
-            if (intrinsic >= MaxI32 && intrinsic <= MinU32 || intrinsic == AbsI32) return I32;
-            if (intrinsic >= MaxI64 && intrinsic <= MinU64 || intrinsic == AbsI64) return I64;
+            if (intrinsic >= MaxI32 && intrinsic <= MinU32 || intrinsic == AbsI32 || intrinsic == ClampI32 || intrinsic == ClampU32) return I32;
+            if (intrinsic >= MaxI64 && intrinsic <= MinU64 || intrinsic == AbsI64 || intrinsic == ClampI64 || intrinsic == ClampU64) return I64;
             return F64;
         }
 
-        internal static int Arity(int intrinsic) => intrinsic >= MaxF64 && intrinsic <= MinU64 ? 2 : 1;
+        internal static int Arity(int intrinsic) =>
+            intrinsic >= ClampI32 && intrinsic <= ClampU64 ? 3 : intrinsic >= MaxF64 && intrinsic <= MinU64 ? 2 : 1;
 
         internal static bool CanOverflow(int intrinsic) => intrinsic == AbsI32 || intrinsic == AbsI64;
+
+        // Clamp raises ArgumentException when min > max, as Math.ThrowMinMaxException does.
+        internal static bool ThrowsArgument(int intrinsic) => intrinsic >= ClampI32 && intrinsic <= ClampU64;
 
         internal static int WriteBody(byte[] code, int used, int intrinsic)
         {
             code[used++] = 0; // no additional locals
-            used = Emit(code, used, intrinsic, 0, 1);
+            used = Emit(code, used, intrinsic, 0, 1, 2);
             code[used++] = 0x0b;
             return used;
         }
 
-        // left and right are the spill locals holding the operands. A unary intrinsic ignores right.
-        internal static int Emit(byte[] code, int used, int intrinsic, int left, int right)
+        // left, right and upper are the spill locals holding the operands. A unary intrinsic ignores
+        // right; only Clamp reads upper (value = left, min = right, max = upper).
+        internal static int Emit(byte[] code, int used, int intrinsic, int left, int right, int upper)
         {
+            if (ThrowsArgument(intrinsic))
+            {
+                bool wide = intrinsic == ClampI64 || intrinsic == ClampU64;
+                bool signed = intrinsic == ClampI32 || intrinsic == ClampI64;
+                // min > max -> ArgumentException
+                used = BranchWasm.Local(code, used, 0x20, right);
+                used = BranchWasm.Local(code, used, 0x20, upper);
+                code[used++] = wide ? (signed ? (byte)0x55 : (byte)0x56) : (signed ? (byte)0x4a : (byte)0x4b); // gt
+                used = ExceptionTagsWasm.ThrowIf(code, used, ExceptionTagsWasm.ArgumentTag);
+                // value < min ? min : (value > max ? max : value)
+                used = BranchWasm.Local(code, used, 0x20, right);
+                used = BranchWasm.Local(code, used, 0x20, upper);
+                used = BranchWasm.Local(code, used, 0x20, left);
+                used = BranchWasm.Local(code, used, 0x20, left);
+                used = BranchWasm.Local(code, used, 0x20, upper);
+                code[used++] = wide ? (signed ? (byte)0x55 : (byte)0x56) : (signed ? (byte)0x4a : (byte)0x4b); // gt
+                code[used++] = 0x1b;
+                used = BranchWasm.Local(code, used, 0x20, left);
+                used = BranchWasm.Local(code, used, 0x20, right);
+                code[used++] = wide ? (signed ? (byte)0x53 : (byte)0x54) : (signed ? (byte)0x48 : (byte)0x49); // lt
+                code[used++] = 0x1b;
+                return used;
+            }
             if (CanOverflow(intrinsic))
             {
                 bool wide = intrinsic == AbsI64;

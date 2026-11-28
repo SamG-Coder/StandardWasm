@@ -300,7 +300,7 @@ namespace PeLibrary
             // Decision 0078: a function-pointer field is a native int, whatever its signature.
             if (element == 0x1b)
                 return SignatureExtents.Method(image, blob + 2, end) == end ? NativeStorage.Scalar : -2;
-            if (element == 0x15 || element == 0x13 || element == 0x1d || element == PointerStorage.Element)
+            if (element == 0x15 || element == 0x13 || element == 0x1d || element == 0x14 || element == PointerStorage.Element)
             {
                 reference[0] = -blob - 1;
                 reference[1] = end;
@@ -510,6 +510,11 @@ namespace PeLibrary
             type >= FirstClass && type - FirstClass < registry[0] && (registry[Slot(type) + ShapeFlags] & ValueShape) != 0;
         internal static bool IsByRefLikeValue(int[] registry, int type) =>
             IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & ByRefLikeShape) != 0;
+
+        // Decision 0105: an explicit value proved to have pairwise disjoint fields keeps managed
+        // sequential slots; its byte layout stays with the native layout reader.
+        internal static void MarkDisjointExplicit(int[] registry, int type) =>
+            registry[Slot(type) + ShapeFlags] = (registry[Slot(type) + ShapeFlags] & ~0x18) | 0x08;
 
         internal static bool IsExplicitValue(int[] registry, int type) =>
             IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & 0x18) == 0x10;
