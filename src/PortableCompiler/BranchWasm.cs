@@ -1208,6 +1208,17 @@ namespace PortableCompiler
                     else if (backing != 0)
                         used = InlineObjectStorageWasm.Store(code, used, type, backing, target, temporary, FieldCount(objects, type));
                 }
+                else if (kind == MultiplyDivideUInt64)
+                {
+                    int a = Spill(spills, maximum, spillFlags, I64, top - 2);
+                    used = WideMultiplyDivide.Emit(code, used, a, Spill(spills, maximum, spillFlags, I64, top - 1),
+                        Spill(spills, maximum, spillFlags, I64, top), enumLocals, enumLocals + 1, scratch + 3);
+                }
+                else if (kind == GarbageCollectorCall)
+                {
+                    // Nothing to emit: KeepAlive's argument stays in its spill slot and is dropped
+                    // with the stack depth; Collect/WaitForPendingFinalizers run no finalizer.
+                }
                 else if (kind == NativeMemoryCall)
                 {
                     int arity = NativeMemoryMembers.Arity(operand), first = top - arity + 1;

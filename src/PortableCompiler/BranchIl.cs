@@ -118,6 +118,10 @@ namespace PortableCompiler
         // NativeMemory members (decision 0104); the operand is the member id and operand 3 becomes
         // the alloc import index. [args...] -> [void*] or [].
         internal const int NativeMemoryCall = 426;
+        // GC.Collect/WaitForPendingFinalizers ([] -> []) and GC.KeepAlive ([object] -> []).
+        internal const int GarbageCollectorCall = 427;
+        // (ulong)((UInt128)a * b / c) with UInt128 temporaries: [a, b, c] -> [uint64] (decision 0104).
+        internal const int MultiplyDivideUInt64 = 428;
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;

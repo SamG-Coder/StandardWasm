@@ -806,6 +806,14 @@ namespace PortableCompiler
                 return kind == Binary ? Push(stack, allocated, remaining, IsComparison(operand) ? I32 : type) : remaining;
             }
             if (kind == ReadTimestamp) return Push(stack, allocated, depth, I64);
+            if (kind == MultiplyDivideUInt64)
+                return Match(stack, depth, I64) && Match(stack, depth - 1, I64) && Match(stack, depth - 2, I64)
+                    ? Push(stack, allocated, depth - 3, I64) : -1;
+            if (kind == GarbageCollectorCall)
+            {
+                if (operand != GarbageCollectorMembers.KeepAlive) return depth;
+                return depth > 0 && (IsReference(stack[depth - 1]) || stack[depth - 1] == NullValue) ? depth - 1 : -2;
+            }
             if (kind == NativeMemoryCall)
             {
                 // void* and nuint operands are wasm32 native ints; Fill's byte value is an int32.

@@ -787,6 +787,9 @@ namespace PortableCompiler
                         location, catchRegion.Length != 0, filterEnds: filterEnds);
                     if (status < 0)
                         return status;
+                    // Decision 0104: constant-false hardware feature queries prune accelerated paths first.
+                    IsaFolding.Lower(image, layout, heaps, records, catchRegion);
+                    WideMultiplyDivide.Lower(image, layout, heaps, records, catchRegion);
                     if (contexts[current] == CoreVersionByref.ContextKey)
                     {
                         status = CoreVersionByref.Lower(bundle, image, layout, heaps, owner, source, records, natives, nativeBase, current);
@@ -1387,6 +1390,11 @@ namespace PortableCompiler
                                 if (bytes < 0) return bytes;
                                 capacity += bytes;
                             }
+                            if (kind == BranchIl.MultiplyDivideUInt64)
+                            {
+                                if (capacity > int.MaxValue - WideMultiplyDivide.Capacity) return -3;
+                                capacity += WideMultiplyDivide.Capacity;
+                            }
                             if (kind == BranchIl.NativeMemoryCall)
                             {
                                 if (capacity > int.MaxValue - NativeMemoryMembers.Capacity) return -3;
@@ -1475,6 +1483,8 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.ArgumentNull; // String.Concat(null)
                             else if (kind == BranchIl.NativeMemoryCall)
                                 tags = ExceptionTypes.Argument; // AlignedAlloc/AlignedRealloc alignment
+                            else if (kind == BranchIl.MultiplyDivideUInt64)
+                                tags = ExceptionTypes.DivideByZero; // UInt128 division by zero
                             else if (kind == BranchIl.ThrowFrameworkArgument)
                                 tags = operation == ExceptionTagsWasm.ArgumentNullTag
                                     ? ExceptionTypes.ArgumentNull : ExceptionTypes.ArgumentOutOfRange;
@@ -1568,7 +1578,7 @@ namespace PortableCompiler
                             kind == BranchIl.FindCharacterInSpan || kind == BranchIl.CopyConstructionString) frameShape[5] |= 1;
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
                         if (kind == BranchIl.FormatEnum || kind == BranchIl.FormatPrimitive ||
-                            kind == BranchIl.JoinStringArray) frameShape[5] |= 5;
+                            kind == BranchIl.JoinStringArray || kind == BranchIl.MultiplyDivideUInt64) frameShape[5] |= 5;
                         if (kind == BranchIl.PinScopedValue) frameShape[5] |= 2 | ScopedValuePins.FrameFlag;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler || kind == BranchIl.DelegateEquality ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
@@ -3363,6 +3373,13 @@ namespace PortableCompiler
                         continue;
                     }
                     // Exact System.Math intrinsics, identified by platform assembly and signature (decision 0003).
+                    int collector = opcode == 0x28 && !addressed ? GarbageCollectorMembers.Identify(image, heaps, layout, member) : 0;
+                    if (collector != 0)
+                    {
+                        records[slot] = BranchIl.GarbageCollectorCall;
+                        records[slot + 1] = collector;
+                        continue;
+                    }
                     int nativeMemory = opcode == 0x28 && !addressed ? NativeMemoryMembers.Identify(image, heaps, layout, member) : 0;
                     if (nativeMemory != 0)
                     {
