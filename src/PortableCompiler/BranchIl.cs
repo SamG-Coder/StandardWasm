@@ -122,6 +122,20 @@ namespace PortableCompiler
         internal const int PinArray = 437;
         // Decision 0105: T[,]::Get(int32, int32): [array, i, j] -> [element]; the operand is the vector.
         internal const int GetRankTwo = 438;
+        // Decision 0105: new ReadOnlySpan<byte>(byte[], int32 start, int32 length): [array, start, length] -> [span].
+        internal const int ReadOnlyByteArraySpan = 439;
+        // Decision 0105: an array-backed byte span pin: [span] -> [native address]; the operand is the pinned local.
+        internal const int PinByteSpan = 440;
+        // Decision 0105: ends an array-backed byte span pin: [] -> []; the operand is the pinned local.
+        internal const int UnpinByteSpan = 441;
+        // Decision 0105: Array.Fill<T> for a primitive T: [array, value(, start, count)] -> [] (ArrayFillPrimitive).
+        internal const int FillPrimitiveArray = 442;
+        // Decision 0105: Array.Resize<T>(ref r.F, n): [old F, n] -> [] (ArrayResizeField).
+        internal const int ResizeArrayField = 443;
+        // Decision 0105: new Span<T>(void*, n).Fill(V)/Clear(): [pointer, n(, V)] -> [] (PointerSpanFill).
+        internal const int NativeSpanFill = 444;
+        // Decision 0105: Environment.FailFast(string): [message] -> (no return); the operand is the exit-status global.
+        internal const int FailFast = 445;
         internal const int ExitProcess = 425; // [status] -> (traps); the operand is the exit-status global
         // NativeMemory members (decision 0104); the operand is the member id and operand 3 becomes
         // the alloc import index. [args...] -> [void*] or [].

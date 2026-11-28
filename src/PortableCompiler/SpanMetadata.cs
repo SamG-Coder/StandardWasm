@@ -133,9 +133,10 @@ namespace PortableCompiler
             if (constructor)
             {
                 // instance void .ctor(!0[], int32, int32).
-                if (type == WritableByteSpan)
-                    return size == 8 && U32(image, (uint)start) == 0x1d010320 &&
-                        U32(image, (uint)(start + 4)) == 0x08080013 ? BranchIl.WritableByteArraySpan : 0;
+                bool ranged = size == 8 && U32(image, (uint)start) == 0x1d010320 &&
+                    U32(image, (uint)(start + 4)) == 0x08080013;
+                if (type == WritableByteSpan) return ranged ? BranchIl.WritableByteArraySpan : 0;
+                if (type == ReadOnlyByteSpan && ranged) return BranchIl.ReadOnlyByteArraySpan;
                 // instance void .ctor(void*, int).
                 if (type == WritableCharacterSpan && size == 6 && U32(image, (uint)start) == 0x0f010220 &&
                     U16(image, (uint)(start + 4)) == 0x0801) return BranchIl.NativeCharacterSpan;

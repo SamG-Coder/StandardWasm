@@ -41,6 +41,9 @@ namespace PortableCompiler
             }
         }
 
+        // Decision 0105: PinnedArrays leaves module-data-backed span pins to this immutable path.
+        internal static int FindStaticBacking(int[] records, int address, int[] clauses) => FindBacking(records, address, clauses);
+
         private static int FindBacking(int[] records, int address, int[] clauses)
         {
             int view = records[address + 1], store = -1;

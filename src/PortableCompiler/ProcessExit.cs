@@ -29,6 +29,47 @@ namespace PortableCompiler
                 "System", "Environment");
         }
 
+        // Decision 0105: static void System.Environment::FailFast(string).
+        internal static bool IsFailFast(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            var reference = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference) < 0 ||
+                reference[AssemblyReferences.Depth] != 0 ||
+                !MatchesAscii(image, heaps, (uint)reference[4], "FailFast")) return false;
+            int blob = reference[5];
+            // Length 4: default static, one parameter, returns void, takes String.
+            if (blob < 1 || !Fits((uint)blob, 5, (uint)heaps[1]) ||
+                U32(image, (uint)(heaps[0] + blob)) != 0x01010004 || image[heaps[0] + blob + 4] != 0x0e) return false;
+            return SpanMetadata.IsPlatformType(image, layout, heaps, reference[AssemblyReferences.ParentType],
+                "System", "Environment");
+        }
+
+        // COR_E_FAILFAST, the exit code of a .NET process ended by Environment.FailFast on Windows.
+        internal const int FailFastStatus = unchecked((int)0x80131623);
+        private const string FailFastPrefix = "Process terminated. ";
+        internal const int FailFastCapacity = ConsoleWasm.WriteCapacity + 20 * 8 + 48;
+
+        // [message] -> (no return). Like the CLR, the message goes to standard error after
+        // "Process terminated. " and the process ends with COR_E_FAILFAST; no finally block runs.
+        // The CLR's stack trace lines that follow are not reproduced (decision 0105).
+        internal static int EmitFailFast(byte[] code, int used, int message, int writer, int characters,
+            int index, int length, int global)
+        {
+            used = BranchWasm.Const(code, used, ConsoleWasm.Stream(ConsoleMetadata.StandardError));
+            used = BranchWasm.Local(code, used, 0x21, writer);
+            for (int i = 0; i < FailFastPrefix.Length; i++)
+            {
+                used = BranchWasm.Local(code, used, 0x20, writer);
+                used = BranchWasm.Const(code, used, FailFastPrefix[i]);
+                code[used++] = 0x10; // call
+                code[used++] = ConsoleWasm.WriteFunction;
+            }
+            used = ConsoleWasm.Write(code, used, ConsoleMetadata.WriteLine, writer, message, characters, index, length);
+            used = BranchWasm.Const(code, used, FailFastStatus);
+            used = BranchWasm.Local(code, used, 0x21, writer);
+            return Emit(code, used, writer, global);
+        }
+
         // The registry index of the exit-status global, or -1 when no reachable code exits.
         internal static int StatusGlobal(int[] globals)
         {

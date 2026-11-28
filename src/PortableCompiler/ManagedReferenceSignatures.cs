@@ -20,6 +20,14 @@ namespace PortableCompiler
             int at = next[0];
             if (at >= end) return -1;
             int element = image[at];
+            // Decision 0105: a T*& cell holds a wasm32 address, the same carrier as native int&.
+            if (element == PointerStorage.Element)
+            {
+                int after = SignatureExtents.Type(image, at, end);
+                if (after < 0) return -2;
+                next[0] = after;
+                return NativeIntLocation;
+            }
             if (element != 2 && element != 3 && element != 5 && element != 6 && element != 8 && element != 9 &&
                 element != 0x0a && element != 0x0b && element != 0x0e && element != 0x1c &&
                 element != 0x11 && element != 0x12 && element != 0x13 && element != 0x15 && element != 0x18 && element != 0x1e) return -2;

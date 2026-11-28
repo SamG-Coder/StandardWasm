@@ -815,6 +815,10 @@ namespace PortableCompiler
                     PlatformExceptionThrows.Lower(image, layout, heaps, records, catchRegion);
                     UnsafeCalls.Lower(image, layout, heaps, records, catchRegion);
                     ArraySortPrimitive.Lower(image, layout, heaps, records);
+                    ArrayFillPrimitive.Lower(image, layout, heaps, records);
+                    ArrayResizeField.Lower(image, layout, heaps, records, catchRegion);
+                    ArrayCopyElements.Lower(bundle, image, layout, heaps, records, catchRegion);
+                    PointerSpanFill.Lower(image, layout, heaps, records, catchRegion);
                     // Decision 0105: proved alias-free pins of primitive arrays.
                     if (pinned != null)
                     {
@@ -956,6 +960,13 @@ namespace PortableCompiler
                             contexts, arities, offsets, signatures, objects, functions, pointers, location, natives, nativeBase);
                         if (functions < 0)
                             return functions;
+                        // Decision 0105: a resized field must be a plain class field of the array type.
+                        int resized = ArrayResizeField.Validate(records, objects, frameCells, inlineLocations);
+                        if (resized >= 0)
+                        {
+                            if (location.Length != 0) { location[0] = owner; location[1] = source; location[2] = resized; }
+                            return -2;
+                        }
                     }
 
                     if (ScopedCharacterPins.Lower(records, frame, pinned, parameters, locals, catchRegion, frameCells, natives, nativeBase) &&
@@ -1440,11 +1451,12 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - WideMultiplyDivide.Capacity) return -3;
                                 capacity += WideMultiplyDivide.Capacity;
                             }
-                            if (kind == BranchIl.PinArray || kind == BranchIl.Return ||
-                                kind == BranchIl.Store && records[slot + 3] == PinnedLocals.Array)
+                            if (kind == BranchIl.PinArray || kind == BranchIl.PinByteSpan || kind == BranchIl.Return ||
+                                kind == BranchIl.UnpinByteSpan || kind == BranchIl.Store && records[slot + 3] == PinnedLocals.Array)
                             {
                                 // A pin copies in; every unpinning store and ret copies each pin back.
-                                int pinBytes = kind == BranchIl.PinArray ? PinnedArraysWasm.PinCapacity :
+                                int pinBytes = kind == BranchIl.PinArray || kind == BranchIl.PinByteSpan
+                                    ? PinnedArraysWasm.PinCapacity + 40 * PinnedArraysWasm.CountPins(records) :
                                     PinnedArraysWasm.UnpinCapacity * PinnedArraysWasm.CountPins(records);
                                 if (capacity > int.MaxValue - pinBytes) return -3;
                                 capacity += pinBytes;
@@ -1453,6 +1465,27 @@ namespace PortableCompiler
                             {
                                 if (capacity > int.MaxValue - MdArrays.Capacity) return -3;
                                 capacity += MdArrays.Capacity;
+                            }
+                            if (kind == BranchIl.FailFast)
+                            {
+                                if (capacity > int.MaxValue - ProcessExit.FailFastCapacity) return -3;
+                                capacity += ProcessExit.FailFastCapacity;
+                            }
+                            if (kind == BranchIl.NativeSpanFill)
+                            {
+                                if (capacity > int.MaxValue - PointerSpanFill.Capacity) return -3;
+                                capacity += PointerSpanFill.Capacity;
+                                linearMemory = true;
+                            }
+                            if (kind == BranchIl.ResizeArrayField)
+                            {
+                                if (capacity > int.MaxValue - ArrayResizeField.Capacity) return -3;
+                                capacity += ArrayResizeField.Capacity;
+                            }
+                            if (kind == BranchIl.FillPrimitiveArray)
+                            {
+                                if (capacity > int.MaxValue - ArrayFillPrimitive.Capacity) return -3;
+                                capacity += ArrayFillPrimitive.Capacity;
                             }
                             if (kind == BranchIl.SortPrimitiveArray)
                             {
@@ -1520,7 +1553,7 @@ namespace PortableCompiler
                             else if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler)
                                 tags = ExceptionTypes.Argument; // decision 0092: mismatched nominal types
                             else if (kind == BranchIl.NativeCharacterSpan || kind == BranchIl.SpanSlice ||
-                                kind == BranchIl.WritableByteArraySpan ||
+                                kind == BranchIl.WritableByteArraySpan || kind == BranchIl.ReadOnlyByteArraySpan ||
                                 kind == BranchIl.StringAsSpan && operation != 0)
                                 tags = ExceptionTypes.ArgumentOutOfRange;
                             else if (kind == BranchIl.CopyCharacterSpan)
@@ -1561,6 +1594,12 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.DivideByZero; // UInt128 division by zero
                             else if (kind == BranchIl.SortPrimitiveArray)
                                 tags = ExceptionTypes.ArgumentNull; // Array.Sort(null)
+                            else if (kind == BranchIl.FillPrimitiveArray)
+                                tags = ExceptionTypes.ArgumentNull | ExceptionTypes.ArgumentOutOfRange;
+                            else if (kind == BranchIl.ResizeArrayField)
+                                tags = ExceptionTypes.ArgumentOutOfRange | ExceptionTypes.NullReference;
+                            else if (kind == BranchIl.NativeSpanFill)
+                                tags = ExceptionTypes.ArgumentOutOfRange;
                             else if (kind == BranchIl.GetRankTwo)
                                 tags = ExceptionTypes.IndexOutOfRange | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.ArrayDataReference)
@@ -1663,10 +1702,11 @@ namespace PortableCompiler
                         if (kind == BranchIl.FormatEnum || kind == BranchIl.FormatPrimitive ||
                             kind == BranchIl.JoinStringArray || kind == BranchIl.MultiplyDivideUInt64 ||
                             kind == BranchIl.SortPrimitiveArray || kind == BranchIl.MultiplyHighUInt64 ||
-                            kind == BranchIl.NativeMemoryCall || kind == BranchIl.PinArray) frameShape[5] |= 5;
+                            kind == BranchIl.NativeMemoryCall || kind == BranchIl.PinArray || kind == BranchIl.PinByteSpan) frameShape[5] |= 5;
+                        if (kind == BranchIl.NativeSpanFill || kind == BranchIl.FailFast) frameShape[5] |= 1; // string scratch
                         // Five i32 loop counters: Array.Sort, the NativeMemory heap and array pins.
                         if (kind == BranchIl.SortPrimitiveArray || kind == BranchIl.NativeMemoryCall ||
-                            kind == BranchIl.PinArray) frameShape[6] = 1;
+                            kind == BranchIl.PinArray || kind == BranchIl.PinByteSpan) frameShape[6] = 1;
                         if (kind == BranchIl.PinScopedValue) frameShape[5] |= 2 | ScopedValuePins.FrameFlag;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler || kind == BranchIl.DelegateEquality ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
@@ -3368,7 +3408,7 @@ namespace PortableCompiler
                             hostUse[0] = hostUse[0] | WasmImports.NativeCharacterViews;
                             continue;
                         }
-                        if (span == BranchIl.WritableByteArraySpan && opcode == 0x73)
+                        if ((span == BranchIl.WritableByteArraySpan || span == BranchIl.ReadOnlyByteArraySpan) && opcode == 0x73)
                         {
                             records[slot] = span;
                             records[slot + 1] = 2; // start and count following the owner array
@@ -3501,6 +3541,15 @@ namespace PortableCompiler
                         if (heapGlobal < 0) return heapGlobal;
                         records[slot + 3] = heapGlobal;
                         hostUse[0] = hostUse[0] | WasmImports.Memory;
+                        continue;
+                    }
+                    if (opcode == 0x28 && !addressed && ProcessExit.IsFailFast(image, heaps, layout, member))
+                    {
+                        int status = StaticFields.Register(globals, ProcessExit.StatusOwner, 0, I64);
+                        if (status < 0) return status;
+                        records[slot] = BranchIl.FailFast;
+                        records[slot + 1] = status;
+                        hostUse[0] = hostUse[0] | WasmImports.Console;
                         continue;
                     }
                     if (opcode == 0x28 && !addressed && ProcessExit.IsExit(image, heaps, layout, member))

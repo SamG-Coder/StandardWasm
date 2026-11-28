@@ -353,13 +353,14 @@ namespace PortableCompiler
             if (kind == NewObjectSpan)
                 return depth >= 2 && stack[depth - 2] == operand && stack[depth - 1] == I32
                     ? Push(stack, allocated, depth - 2, ObjectSpan) : -2;
-            if (kind == StringAsSpan || kind == WritableByteArraySpan)
+            if (kind == StringAsSpan || kind == WritableByteArraySpan || kind == ReadOnlyByteArraySpan)
             {
-                bool bytes = kind == WritableByteArraySpan;
+                bool bytes = kind != StringAsSpan;
                 if (!Match(stack, depth - operand, bytes ? Bytes : String)) return -2;
                 for (int argument = 0; argument < operand; argument++)
                     if (!Match(stack, depth - argument, I32)) return -2;
-                return Push(stack, allocated, depth - operand - 1, bytes ? WritableByteSpan : CharacterSpan);
+                return Push(stack, allocated, depth - operand - 1, kind == ReadOnlyByteArraySpan ? ReadOnlyByteSpan :
+                    bytes ? WritableByteSpan : CharacterSpan);
             }
             if (kind == CharacterArrayAsSpan || kind == ByteArrayAsSpan)
             {
@@ -390,7 +391,8 @@ namespace PortableCompiler
                 int start = depth - operand;
                 if (start < 0 || !Match(stack, depth, I32)) return -1;
                 if (operand == 5 && (stack[start + 1] != I32 || stack[start + 3] != I32)) return -1;
-                int vector = ArrayCopyWasm.Vector(objects, stack[start], stack[start + (operand == 3 ? 1 : 2)]);
+                int vector = ArrayCopyWasm.Vector(objects, stack[start], stack[start + (operand == 3 ? 1 : 2)],
+                    (extra & ArrayCopyElements.Exact) != 0);
                 return vector == 0 ? -2 : start;
             }
             if (kind == SpanSlice)
@@ -828,10 +830,28 @@ namespace PortableCompiler
             if (kind == GetRankTwo)
                 return Match(stack, depth, I32) && Match(stack, depth - 1, I32) && Match(stack, depth - 2, operand)
                     ? Push(stack, allocated, depth - 3, operand == Longs ? I64 : I32) : -2;
-            if (kind == PinArray)
+            if (kind == PinArray || kind == PinByteSpan)
                 return Match(stack, depth, frame[operand]) ? Push(stack, allocated, depth - 1, Native) : -2;
+            if (kind == UnpinByteSpan) return depth;
             if (kind == SortPrimitiveArray)
                 return Match(stack, depth, ArraySortPrimitive.Vector(operand)) ? depth - 1 : -2;
+            if (kind == NativeSpanFill)
+            {
+                int arity = PointerSpanFill.Arity(operand), at = depth - arity + 1;
+                if (depth < arity || !IsNativeInteger(stack[at - 1]) && stack[at - 1] != I32 || !Match(stack, at + 1, I32)) return -2;
+                return arity == 2 || Match(stack, depth, PointerSpanFill.ValueType(operand)) ? depth - arity : -2;
+            }
+            if (kind == ResizeArrayField)
+                return Match(stack, depth, I32) && Match(stack, depth - 1, ArrayResizeField.Vector(extra)) ? depth - 2 : -2;
+            if (kind == FillPrimitiveArray)
+            {
+                int arity = ArrayFillPrimitive.Arity(operand);
+                int at = depth - arity + 1;
+                if (!Match(stack, at, ArrayFillPrimitive.Vector(operand)) ||
+                    !Match(stack, at + 1, ArrayFillPrimitive.ValueType(operand))) return -2;
+                if (arity == 4 && (!Match(stack, at + 2, I32) || !Match(stack, at + 3, I32))) return -2;
+                return depth - arity;
+            }
             if (kind == PrimitiveBitCast)
                 return Match(stack, depth, UnsafeCalls.StackType(operand))
                     ? Push(stack, allocated, depth - 1, UnsafeCalls.StackType(extra)) : -1;
@@ -854,6 +874,7 @@ namespace PortableCompiler
                 return NativeMemoryMembers.Returns(operand) ? Push(stack, allocated, depth - arity, Native) : depth - arity;
             }
             if (kind == ExitProcess) return Match(stack, depth, I32) ? depth - 1 : -1;
+            if (kind == FailFast) return Match(stack, depth, String) ? depth - 1 : -2;
             if (kind == CharacterCall)
                 return Match(stack, depth, I32) ? Push(stack, allocated, depth - 1, I32) : -1;
             if (kind == MathCall)

@@ -72,8 +72,9 @@ namespace PortableCompiler
             int enumLocals = scratch + (stringScratch ? 5 : 0);
             int eventLocals = enumLocals + (enumScratch ? 2 : 0);
             int scopedPinLocals = eventLocals + (eventScratch ? 6 : 0);
-            // Decision 0105: proved alias-free array pins and the heap scratch they share.
-            int[] arrayPins = PinnedArrays.Pins(records, frame);
+            // Decision 0105: proved alias-free pins, their per-site block locals (declared last) and
+            // the heap scratch they share.
+            int pinSites = PinnedArraysWasm.CountPins(records);
             var pinScratch = new int[NativeHeapWasm.ScratchCount];
             for (int i = 0; i < 5; i++) pinScratch[i] = eventLocals + i;
             pinScratch[5] = scratch + 3;
@@ -86,12 +87,14 @@ namespace PortableCompiler
             int used = WasmBinary.Unsigned(code, 0, locals + classes + (hasNull ? 1 : 0) + (maximum == 0 ? 1 : 1 + spillKinds) +
                 (stringScratch ? 2 : 0) + (enumScratch ? 1 : 0) + (eventScratch ? 2 : 0) + (scopedPinScratch ? 2 : 0) + (resourceFunction >= 0 ? 3 : 0) + (exceptionLocals != 0 ? 1 : 0) +
                 (continuations != 0 ? 1 : 0) + (exceptionLocals != 0 ? 1 : 0) + (stackPointer >= 0 ? 1 : 0) +
-                (staticRegion >= 0 ? 1 : 0) + cellCount + (tracksRoots ? 1 : 0) + (failure != null ? 1 : 0));
+                (staticRegion >= 0 ? 1 : 0) + cellCount + (tracksRoots ? 1 : 0) + (failure != null ? 1 : 0) +
+                (pinSites != 0 ? 1 : 0));
             // The saved shadow-stack pointer follows every other local.
             int stackFrame = objectBase + exceptionLocals, pinFrame = stackFrame + 1;
             int staticAddress = stackFrame + (stackPointer >= 0 ? 1 : 0) + (pins >= 0 ? 1 : 0);
             int rootFrame = staticAddress + (staticRegion >= 0 ? 1 : 0) + cellCount;
             if (failure != null) failure[TypeInitializerWasm.FailureInner] = rootFrame + (tracksRoots ? 1 : 0);
+            int[] arrayPins = PinnedArrays.Pins(records, frame, rootFrame + (tracksRoots ? 1 : 0) + (failure != null ? 1 : 0));
             // Keep declared locals in CLI order, then allocate one bank per spill type.
             for (int i = arguments; i < arguments + locals; i++)
             {
@@ -204,6 +207,11 @@ namespace PortableCompiler
             {
                 code[used++] = 1;
                 code[used++] = 0x6d; // eqref: the escaped managed object
+            }
+            if (arrayPins != null)
+            {
+                used = WasmBinary.Unsigned(code, used, arrayPins.Length / 4);
+                code[used++] = 0x7f; // one live heap block per pin site (decision 0105)
             }
             int[] cellLocals = null;
             if (cellCount != 0)
@@ -1272,13 +1280,42 @@ namespace PortableCompiler
                         Spill(spills, maximum, spillFlags, I32, top));
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, operand == Longs ? I64 : I32, top - 2));
                 }
-                else if (kind == PinArray)
+                else if (kind == PinArray || kind == PinByteSpan)
                 {
-                    int site = 0;
-                    for (int at = 0; at < slot; at += Width) if (records[at] == PinArray) site++;
-                    used = PinnedArraysWasm.Pin(code, used, arrayPins, site,
+                    used = PinnedArraysWasm.Pin(code, used, arrayPins, PinnedArrays.Site(records, slot),
                         Spill(spills, maximum, spillFlags, states[state + top], top),
                         Spill(spills, maximum, spillFlags, Native, top), pinScratch);
+                }
+                else if (kind == UnpinByteSpan)
+                {
+                    for (int site = 0; site < arrayPins.Length / 4; site++)
+                        if (arrayPins[site * 4] == operand)
+                            used = PinnedArraysWasm.Unpin(code, used, arrayPins, site, pinScratch, true);
+                }
+                else if (kind == NativeSpanFill)
+                {
+                    int arity = PointerSpanFill.Arity(operand), first = top - arity + 1;
+                    used = PointerSpanFill.Emit(code, used, operand, Spill(spills, maximum, spillFlags, states[state + first], first),
+                        Spill(spills, maximum, spillFlags, I32, first + 1),
+                        arity == 3 ? Spill(spills, maximum, spillFlags, PointerSpanFill.ValueType(operand), top) : -1,
+                        scratch + 3, records[slot + 3] - 1);
+                }
+                else if (kind == ResizeArrayField)
+                {
+                    int field = operand * Width, aux = records[slot + 3];
+                    int vector = ArrayResizeField.Vector(aux);
+                    used = ArrayResizeField.Emit(code, used, vector, Spill(spills, maximum, spillFlags, vector, top - 1),
+                        Spill(spills, maximum, spillFlags, I32, top), ArrayResizeField.Receiver(aux),
+                        FieldAccess.Owner(records[field + 3]), records[field + 1], Spill(spills, maximum, spillFlags, vector, top));
+                }
+                else if (kind == FillPrimitiveArray)
+                {
+                    int arity = ArrayFillPrimitive.Arity(operand), first = top - arity + 1;
+                    used = ArrayFillPrimitive.Emit(code, used, operand,
+                        Spill(spills, maximum, spillFlags, states[state + first], first),
+                        Spill(spills, maximum, spillFlags, ArrayFillPrimitive.ValueType(operand), first + 1),
+                        arity == 4 ? Spill(spills, maximum, spillFlags, I32, first + 2) : -1,
+                        arity == 4 ? Spill(spills, maximum, spillFlags, I32, top) : -1);
                 }
                 else if (kind == SortPrimitiveArray)
                 {
@@ -1334,6 +1371,9 @@ namespace PortableCompiler
                     used = NativeMemoryMembers.Emit(code, used, operand, operands,
                         Spill(spills, maximum, spillFlags, Native, first), records[slot + 3], heapScratch);
                 }
+                else if (kind == FailFast)
+                    used = ProcessExit.EmitFailFast(code, used, Spill(spills, maximum, spillFlags, states[state + top], top),
+                        Spill(spills, maximum, spillFlags, I32, top), scratch, scratch + 3, scratch + 4, operand);
                 else if (kind == ExitProcess)
                     used = ProcessExit.Emit(code, used, Spill(spills, maximum, spillFlags, I32, top), operand);
                 else if (kind == ReadTimestamp || kind == ReadFrequency)
@@ -1558,9 +1598,9 @@ namespace PortableCompiler
                     int resultSpill = Spill(spills, maximum, spillFlags, ObjectSpan, top - 1);
                     used = SpanWasm.Create(code, used, vector, count, resultSpill);
                 }
-                else if (kind == StringAsSpan || kind == WritableByteArraySpan)
+                else if (kind == StringAsSpan || kind == WritableByteArraySpan || kind == ReadOnlyByteArraySpan)
                 {
-                    int type = kind == StringAsSpan ? CharacterSpan : WritableByteSpan;
+                    int type = kind == StringAsSpan ? CharacterSpan : kind == ReadOnlyByteArraySpan ? ReadOnlyByteSpan : WritableByteSpan;
                     int first = top - operand;
                     int source = Spill(spills, maximum, spillFlags, states[state + first], first);
                     int view = Spill(spills, maximum, spillFlags, type, first);
@@ -1651,12 +1691,12 @@ namespace PortableCompiler
                     int destination = Spill(spills, maximum, spillFlags, targetType, target);
                     int sourceIndex = operand == 3 ? -1 : Spill(spills, maximum, spillFlags, I32, first + 1);
                     int destinationIndex = operand == 3 ? -1 : Spill(spills, maximum, spillFlags, I32, target + 1);
-                    int vector = ArrayCopyWasm.Vector(objects, sourceType, targetType);
+                    int vector = ArrayCopyWasm.Vector(objects, sourceType, targetType, (records[slot + 3] & ArrayCopyElements.Exact) != 0);
                     // The array operands do not use their i32 positions, and the length
                     // does not use its eqref position. These slots are dead after Copy.
                     used = ArrayCopyWasm.Emit(code, used, vector, source, sourceIndex, destination, destinationIndex,
                         Spill(spills, maximum, spillFlags, I32, top), IsValueType(objects, ArrayElement(objects, vector)),
-                        records[slot + 3] != 0, tracksRoots, Spill(spills, maximum, spillFlags, I32, first),
+                        (records[slot + 3] & 1) != 0, tracksRoots, Spill(spills, maximum, spillFlags, I32, first),
                         Spill(spills, maximum, spillFlags, I32, target), Spill(spills, maximum, spillFlags, ObjectReference, top));
                 }
                 else if (kind == SpanRead)

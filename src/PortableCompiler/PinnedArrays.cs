@@ -41,12 +41,28 @@ namespace PortableCompiler
             int[] location)
         {
             bool any = false;
-            for (int i = 0; i < locals; i++) any |= pinned[i] == PinnedLocals.Array;
+            for (int i = 0; i < locals; i++) any |= pinned[i] == PinnedLocals.Array || pinned[i] == PinnedLocals.Byte;
             if (!any) return 0;
             int heap = -1;
+            int bytePins = 0, spanPins = 0;
             for (int i = 0; i < locals; i++)
             {
+                if (pinned[i] == PinnedLocals.Byte)
+                {
+                    if (heap < 0)
+                    {
+                        heap = StaticFields.Register(globals, NativeMemoryMembers.HeapOwner, 0, I32);
+                        if (heap < 0) return heap;
+                    }
+                    int lowered = LowerSpan(bundle, image, layout, heaps, owner, records, frame, parameters + i,
+                        clauses, location, heap);
+                    if (lowered < 0) return lowered;
+                    spanPins += lowered;
+                    bytePins += lowered;
+                    continue;
+                }
                 if (pinned[i] != PinnedLocals.Array) continue;
+                if (frame[parameters + i] == Bytes) bytePins++;
                 int local = parameters + i, vector = frame[local];
                 for (int slot = 0; slot < records.Length; slot += Width)
                 {
@@ -59,7 +75,8 @@ namespace PortableCompiler
                         records[convert + 1] != 0xe0 || records[store] != Store) continue;
                     int pointer = records[store + 1];
                     if (pointer < parameters || frame[pointer] != Native) continue;
-                    if (!AliasFree(bundle, image, layout, heaps, owner, records, vector, 0, new int[64]))
+                    if (!AliasFree(bundle, image, layout, heaps, owner, records, vector, 0, new int[64],
+                        Live(records, clauses, store / Width, local)))
                     {
                         if (location.Length != 0) location[2] = slot / Width;
                         return -2;
@@ -79,28 +96,201 @@ namespace PortableCompiler
                 for (int slot = 0; slot < records.Length; slot += Width)
                     if (records[slot] == Store && records[slot + 1] == local) records[slot + 3] = PinnedLocals.Array;
             }
+            // Two different pinned locals could view overlapping byte ranges of one array; their
+            // separate copies would not alias, so a span pin must be the frame's only byte pin local.
+            if (spanPins != 0 && bytePins > 1) return -2;
             return 0;
         }
 
-        // The pins of a frame: [pinned local, pointer local, vector, heap global] per PinArray record.
-        internal static int[] Pins(int[] records, int[] frame)
+        // The pins of a frame: [pinned local, block local, pinned type, heap global] per PinArray or
+        // PinByteSpan record. `blocks` is the first of the per-site i32 block locals.
+        internal static int[] Pins(int[] records, int[] frame, int blocks)
         {
-            int count = 0;
-            for (int slot = 0; slot < records.Length; slot += Width) if (records[slot] == PinArray) count++;
+            int count = PinnedArraysWasm.CountPins(records);
             if (count == 0) return null;
             var pins = new int[count * 4];
             int at = 0;
             for (int slot = 0; slot < records.Length; slot += Width)
             {
-                if (records[slot] != PinArray) continue;
+                if (records[slot] != PinArray && records[slot] != PinByteSpan) continue;
                 int local = records[slot + 1];
                 pins[at] = local;
-                pins[at + 1] = records[records[slot + 2] * Width + 1];
+                pins[at + 1] = blocks + at / 4;
                 pins[at + 2] = frame[local];
                 pins[at + 3] = records[slot + 3];
                 at += 4;
             }
             return pins;
+        }
+
+        // The ordinal of the pin site at `slot` among the frame's pin records.
+        internal static int Site(int[] records, int slot)
+        {
+            int site = 0;
+            for (int at = 0; at < slot; at += Width) if (records[at] == PinArray || records[at] == PinByteSpan) site++;
+            return site;
+        }
+
+        // `fixed (byte* p = span)` over an array-backed ReadOnlySpan<byte> or Span<byte>:
+        //   ldloca/ldarga S; call !0& GetPinnableReference(); stloc P (pinned uint8&)
+        //   ...; ldloc P; conv.u            (the pinned address)
+        //   ...; ldc.i4.0; conv.u; stloc P  (the unpin)
+        // P is retyped to the span: it holds the pinned view, and the conv.u becomes PinByteSpan.
+        // Spans backed by module data keep PinnedByteSpans' immutable path. Returns 1 when P was
+        // lowered, 0 when the shape is not this one, or -2 (located) when it cannot be proved.
+        private static int LowerSpan(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
+            int[] records, int[] frame, int local, int[] clauses, int[] location, int heap)
+        {
+            int spanType = 0;
+            for (int slot = 0; slot < records.Length; slot += Width)
+            {
+                if (records[slot] != Store || records[slot + 1] != local) continue;
+                int previous = Previous(records, slot);
+                if (previous < 0) return 0;
+                if (records[previous] == ConvertInteger && records[previous + 1] == 0xe0)
+                {
+                    int zero = Previous(records, previous);
+                    if (zero < 0 || records[zero] != Constant || records[zero + 1] != 0) return 0;
+                    continue; // the unpin
+                }
+                int address = Previous(records, previous);
+                if (records[previous] != MemberCall || records[previous + 3] != 0x28 || address < 0 ||
+                    records[address] != FrameAddress) return 0;
+                int type = frame[records[address + 1]];
+                if (type != ReadOnlyByteSpan && type != WritableByteSpan || spanType != 0 && spanType != type) return 0;
+                if (!IsPinnableReference(image, layout, heaps, records[previous + 1])) return 0;
+                if (PinnedByteSpans.FindStaticBacking(records, address, clauses) >= 0) return 0;
+                spanType = type;
+            }
+            if (spanType == 0) return 0;
+            // Every read of P is the pinned address.
+            for (int slot = 0; slot < records.Length; slot += Width)
+            {
+                if (records[slot] != Load || records[slot + 1] != local) continue;
+                int convert = Next(records, slot, clauses);
+                if (convert < 0 || records[convert] != ConvertInteger || records[convert + 1] != 0xe0)
+                {
+                    if (location.Length != 0) location[2] = slot / Width;
+                    return -2;
+                }
+            }
+            var live = new bool[records.Length / Width];
+            for (int slot = 0; slot < records.Length && live != null; slot += Width)
+                if (records[slot] == Load && records[slot + 1] == local)
+                    live = Union(live, Live(records, clauses, slot / Width, local));
+            if (!AliasFree(bundle, image, layout, heaps, owner, records, Bytes, 0, new int[64], live))
+            {
+                for (int slot = 0; slot < records.Length; slot += Width)
+                    if (records[slot] == Load && records[slot + 1] == local && location.Length != 0) { location[2] = slot / Width; break; }
+                return -2;
+            }
+            frame[local] = spanType;
+            for (int slot = 0; slot < records.Length; slot += Width)
+            {
+                if (records[slot] == Store && records[slot + 1] == local)
+                {
+                    int previous = Previous(records, slot);
+                    if (records[previous] == ConvertInteger)
+                    {
+                        // ldc.i4.0; conv.u; stloc P: copy back, free and clear the pinned view.
+                        records[Previous(records, previous)] = Nop;
+                        records[previous] = Nop;
+                        records[slot] = UnpinByteSpan;
+                        records[slot + 3] = 0;
+                    }
+                    else
+                    {
+                        int address = Previous(records, previous);
+                        records[address] = Load;
+                        records[address + 3] = 0;
+                        records[previous] = Nop;
+                        records[slot + 3] = PinnedLocals.Array; // a re-pin ends the previous pin first
+                    }
+                }
+                else if (records[slot] == Load && records[slot + 1] == local)
+                {
+                    int convert = records[slot + 2] * Width;
+                    records[convert] = PinByteSpan;
+                    records[convert + 1] = local;
+                    records[convert + 3] = heap;
+                }
+            }
+            return 1;
+        }
+
+        // The records that can run while the pin taken at record `start` is live: everything reachable
+        // from it before a store to (or span unpin of) the pinned local or a ret. A throw, and any
+        // record inside a protected region, conservatively reaches every handler of the method.
+        private static bool[] Live(int[] records, int[] clauses, int start, int local)
+        {
+            int count = records.Length / Width;
+            var live = new bool[count];
+            var work = new int[4 * count + 64];
+            int top = 0;
+            work[top++] = start;
+            bool handlers = false;
+            while (top > 0)
+            {
+                int index = work[--top];
+                if (index < 0 || index >= count || live[index]) continue;
+                live[index] = true;
+                int slot = index * Width, kind = records[slot];
+                if (index != start && ((kind == Store || kind == UnpinByteSpan) && records[slot + 1] == local || kind == Return))
+                    continue;
+                if (!handlers && clauses.Length != 0)
+                {
+                    handlers = true;
+                    for (int clause = 0; clause < clauses.Length; clause += ExceptionClauses.Width)
+                        if (top < work.Length) work[top++] = clauses[clause + 3];
+                }
+                if (kind == Rethrow || kind == ThrowNull || kind == EndFinally) continue;
+                if (kind == Branch || kind == Conditional || kind == Leave)
+                {
+                    if (top >= work.Length) return null;
+                    work[top++] = records[slot + 1];
+                }
+                if (kind == Switch)
+                    for (int i = 0; i < records[slot + 3]; i++)
+                    {
+                        if (top >= work.Length) return null;
+                        work[top++] = SwitchTarget(records, records[slot + 1], i);
+                    }
+                if (kind != Branch && kind != Leave)
+                {
+                    if (top >= work.Length) return null;
+                    work[top++] = records[slot + 2];
+                }
+            }
+            return live;
+        }
+
+        // null (everything) absorbs; otherwise the element-wise union into `left`.
+        private static bool[] Union(bool[] left, bool[] right)
+        {
+            if (left == null || right == null) return null;
+            for (int i = 0; i < left.Length; i++) left[i] |= right[i];
+            return left;
+        }
+
+        // The record whose fall-through successor is `slot` (straight-line predecessor), or -1.
+        private static int Previous(int[] records, int slot)
+        {
+            int found = -1;
+            for (int at = 0; at < records.Length; at += Width)
+                if (records[at] != 0 && records[at + 2] * Width == slot)
+                {
+                    if (found >= 0) return -1;
+                    found = at;
+                }
+            return found;
+        }
+
+        private static bool IsPinnableReference(byte[] image, int[] layout, int[] heaps, int member)
+        {
+            var reference = new int[AssemblyReferences.SymbolWidth];
+            return AssemblyReferences.ReadMember(image, heaps, layout, member, reference, allowClosedParent: true) >= 0 &&
+                reference[AssemblyReferences.GenericParent] != 0 &&
+                MatchesAscii(image, heaps, (uint)reference[4], "GetPinnableReference");
         }
 
         private static int Next(int[] records, int slot, int[] clauses)
@@ -113,10 +303,11 @@ namespace PortableCompiler
         // Proves that no managed access to an array of `vector` storage can run in this method's
         // decoded records (other than its own pin sequences) or in anything it calls.
         private static bool AliasFree(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
-            int[] records, int vector, int depth, int[] visited)
+            int[] records, int vector, int depth, int[] visited, bool[] live)
         {
             for (int slot = 0; slot < records.Length; slot += Width)
             {
+                if (live != null && !live[slot / Width]) continue;
                 int kind = records[slot];
                 if (kind == ObjectElementAddress)
                 {
@@ -139,8 +330,8 @@ namespace PortableCompiler
                 }
                 if (kind == MethodSpecCall)
                 {
-                    if (records[slot + 3] != 0) return false;
-                    if (!SafeMethodSpec(image, layout, heaps, records[slot + 1], vector)) return false;
+                    if ((records[slot + 3] & MethodSpecCallvirt) != 0) return false; // bit 1 only marks a branch target
+                    if (!SafeMethodSpec(bundle, image, layout, heaps, owner, records[slot + 1], vector, depth, visited)) return false;
                     continue;
                 }
                 if (kind == Call || kind == NewObject)
@@ -182,9 +373,15 @@ namespace PortableCompiler
         private static bool SafeIl(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner,
             int start, int length, int vector, int depth, int[] visited)
         {
-            int pc = 0;
+            int[] pointerSpans = PointerSpanLocals(image, layout, heaps, start, length);
+            if (pointerSpans == null) return false;
+            // last and last2: the starts of the one and two instructions before the current one.
+            int pc = 0, current = -1, last = -1, last2 = -1;
             while (pc < length)
             {
+                last2 = last;
+                last = current;
+                current = pc;
                 int op = image[start + pc++];
                 if (op == 0xfe)
                 {
@@ -216,11 +413,23 @@ namespace PortableCompiler
                     }
                     else if (table == 0x0a)
                     {
+                        // A span over native memory never views an array: its constructor, and
+                        // Fill(constant)/Clear() through `ldloca S` of a local only ever assigned one.
+                        int spanMember = PointerSpanMember(image, layout, heaps, row);
+                        if (spanMember == 1 && op == 0x73) continue;
+                        if (spanMember > 1 && op == 0x28)
+                        {
+                            int receiver = spanMember == 2 ? last2 : last;
+                            if (spanMember == 2 && (last < 0 || !IsConstant(image, start + last))) return false;
+                            int span = AddressedLocal(image, receiver < 0 ? -1 : start + receiver);
+                            if (span < 0 || span >= pointerSpans.Length || pointerSpans[span] != 1) return false;
+                            continue;
+                        }
                         if (!SafeMember(image, layout, heaps, row, vector)) return false;
                     }
                     else if (table == 0x2b)
                     {
-                        if (!SafeMethodSpec(image, layout, heaps, row, vector)) return false;
+                        if (!SafeMethodSpec(bundle, image, layout, heaps, owner, row, vector, depth, visited)) return false;
                     }
                     else return false;
                     continue;
@@ -237,6 +446,106 @@ namespace PortableCompiler
                 pc += operand;
             }
             return pc == length;
+        }
+
+        // Per local of a method body: 1 when every store to it is `newobj Span<T>::.ctor(void*, int32);
+        // stloc`, 2 when some other store reaches it, 0 when it is never stored. null on malformed IL.
+        private static int[] PointerSpanLocals(byte[] image, int[] layout, int[] heaps, int start, int length)
+        {
+            var kinds = new int[65536];
+            int pc = 0, previous = -1;
+            while (pc < length)
+            {
+                int at = pc, op = image[start + pc++];
+                int stored = op >= 0x0a && op <= 0x0d ? op - 0x0a : op == 0x13 && pc < length ? image[start + pc] : -1;
+                if (op == 0xfe)
+                {
+                    if (pc >= length) return null;
+                    int extended = image[start + pc++];
+                    if (extended == 0x0e && pc + 2 <= length) stored = (int)U16(image, (uint)(start + pc));
+                    pc += ExtendedOperand(extended);
+                }
+                else
+                {
+                    int operand = Operand(op);
+                    if (operand < 0)
+                    {
+                        if (pc + 4 > length) return null;
+                        pc += 4 + 4 * (int)U32(image, (uint)(start + pc));
+                    }
+                    else pc += operand;
+                }
+                if (stored >= 0)
+                {
+                    bool pointer = previous >= 0 && image[start + previous] == 0x73 &&
+                        U32(image, (uint)(start + previous + 1)) >> 24 == 0x0a &&
+                        PointerSpanMember(image, layout, heaps, (int)(U32(image, (uint)(start + previous + 1)) & 0xffffff)) == 1;
+                    kinds[stored] = pointer && kinds[stored] != 2 ? 1 : 2;
+                }
+                previous = at;
+            }
+            return pc == length ? kinds : null;
+        }
+
+        // The local of `ldloca.s n` or `ldloca n` at `at`, or -1.
+        private static int AddressedLocal(byte[] image, int at)
+        {
+            if (at < 0) return -1;
+            if (image[at] == 0x12) return image[at + 1];
+            if (image[at] == 0xfe && image[at + 1] == 0x0d) return (int)U16(image, (uint)(at + 2));
+            return -1;
+        }
+
+        // ldc.i4.m1 .. ldc.i4.8, ldc.i4.s, ldc.i4, ldc.i8, ldc.r4 or ldc.r8 at `at`.
+        private static bool IsConstant(byte[] image, int at) => at >= 0 && image[at] >= 0x15 && image[at] <= 0x23;
+
+        // 1 for Span<T>::.ctor(void*, int32), 2 for Span<T>::Fill(!0), 3 for Span<T>::Clear(), with T
+        // a primitive; otherwise 0.
+        // The primitive T of a Span<T> MemberRef recognized by PointerSpanMember.
+        internal static int PointerSpanLane(byte[] image, int[] layout, int[] heaps, int row)
+        {
+            int parent = AssemblyReferences.MemberParent(image, heaps, layout, row);
+            int blob = AssemblyReferences.TypeSpecBlob(image, heaps, layout, parent >> 3);
+            var next = new int[1];
+            int size = CompressedUnsigned(image, heaps[0] + blob, heaps[0] + heaps[1], next);
+            return image[next[0] + size - 1];
+        }
+
+        internal static int PointerSpanMember(byte[] image, int[] layout, int[] heaps, int row)
+        {
+            int parent = AssemblyReferences.MemberParent(image, heaps, layout, row);
+            if (parent < 0 || (parent & 7) != 4) return 0; // MemberRefParent tag 4: TypeSpec
+            int blob = AssemblyReferences.TypeSpecBlob(image, heaps, layout, parent >> 3);
+            if (blob <= 0) return 0;
+            var next = new int[1];
+            int limit = heaps[0] + heaps[1];
+            int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
+            int at = next[0];
+            if (size < 5 || size > limit - at || image[at] != 0x15 || image[at + 1] != 0x11) return 0;
+            int coded = CompressedUnsigned(image, at + 2, at + size, next);
+            if (coded < 0 || (coded & 3) != 1 || next[0] + 2 != at + size || image[next[0]] != 1) return 0;
+            int lane = image[next[0] + 1];
+            if (lane < 0x02 || lane > 0x0d) return 0;
+            var type = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadType(image, heaps, layout, coded >> 2, type) < 0 ||
+                !MatchesAscii(image, heaps, (uint)type[3], "System") || !MatchesAscii(image, heaps, (uint)type[2], "Span`1"))
+                return 0;
+            var reference = new int[AssemblyReferences.SymbolWidth];
+            if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference, allowClosedParent: true) < 0) return 0;
+            uint name = (uint)reference[4];
+            int signature = reference[5];
+            if (signature < 1 || signature + 6 > heaps[1]) return 0;
+            uint s = (uint)(heaps[0] + signature);
+            // instance void .ctor(void*, int32): 06 20 02 01 0f 01 08
+            if (MatchesAscii(image, heaps, name, ".ctor"))
+                return image[s] == 6 && U32(image, s + 1) == 0x0f010220 && U16(image, s + 5) == 0x0801 ? 1 : 0;
+            // instance void Fill(!0): 05 20 01 01 13 00
+            if (MatchesAscii(image, heaps, name, "Fill"))
+                return image[s] == 5 && U32(image, s + 1) == 0x13010120 && image[s + 5] == 0 ? 2 : 0;
+            // instance void Clear(): 03 20 00 01
+            if (MatchesAscii(image, heaps, name, "Clear"))
+                return image[s] == 3 && image[s + 1] == 0x20 && image[s + 2] == 0 && image[s + 3] == 1 ? 3 : 0;
+            return 0;
         }
 
         // Operand size of a one-byte opcode (ECMA-335 III); -1 for switch.
@@ -259,12 +568,15 @@ namespace PortableCompiler
 
         private static bool SafeMember(byte[] image, int[] layout, int[] heaps, int row, int vector)
         {
+            // GC.Collect/WaitForPendingFinalizers/KeepAlive never read or write array elements.
+            if (GarbageCollectorMembers.Identify(image, heaps, layout, row) != 0) return true;
             var reference = new int[AssemblyReferences.SymbolWidth];
             if (AssemblyReferences.ReadMember(image, heaps, layout, row, reference, allowClosedParent: true) < 0) return false;
             return SafeSignature(image, layout, heaps, reference[5]);
         }
 
-        private static bool SafeMethodSpec(byte[] image, int[] layout, int[] heaps, int row, int vector)
+        private static bool SafeMethodSpec(BundleImages bundle, byte[] image, int[] layout, int[] heaps, int owner, int row,
+            int vector, int depth, int[] visited)
         {
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return false;
@@ -281,7 +593,8 @@ namespace PortableCompiler
                 at = cursor[0];
             }
             int target = spec[MethodSpecifications.Target];
-            if ((target & 1) == 0) return false;
+            // A generic method of this module, instantiated as above: its IL is scanned like any other.
+            if ((target & 1) == 0) return SafeDefinition(bundle, image, layout, heaps, owner, target >> 1, vector, depth, visited);
             return SafeMember(image, layout, heaps, target >> 1, vector);
         }
 
