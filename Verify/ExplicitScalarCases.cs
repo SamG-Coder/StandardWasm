@@ -46,7 +46,8 @@ internal static class ExplicitScalarCases
         if (Kernels.RejectLarge(new LargeFrame()) != 1 || Kernels.RejectNested(new NestedFrame()) != 1 ||
             Kernels.RejectWidePartial(new WidePartialFrame()) != 1)
             throw new InvalidOperationException("CLR did not accept the explicit layout fixture types.");
-        Reject(nameof(Kernels.RejectLarge));
+        foreach (int initial in new[] { 0, 1, -7, 123 })
+            Check(nameof(Kernels.LargeCopy), [initial], Kernels.LargeCopy(initial));
         Reject(nameof(Kernels.RejectNested));
         Reject(nameof(Kernels.RejectWidePartial));
 

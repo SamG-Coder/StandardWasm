@@ -21,7 +21,7 @@ namespace PortableCompiler
         internal const int Capacity = 120;
 
         // The vector of an ELEMENT_TYPE_ARRAY signature at next[0] (just after 0x14), or < 0.
-        internal static int ReadArray(byte[] image, int[] next, int end)
+        internal static int ReadArraySignature(byte[] image, int[] next, int end)
         {
             int at = next[0];
             if (at >= end) return -1;
@@ -53,7 +53,7 @@ namespace PortableCompiler
             if (size < 2 || size > limit - next[0] || image[next[0]] != 0x14) return 0;
             int end = next[0] + size;
             next[0]++;
-            int vector = ReadArray(image, next, end);
+            int vector = ReadArraySignature(image, next, end);
             return vector > 0 && next[0] == end ? vector : 0;
         }
 
