@@ -42,8 +42,9 @@ namespace PeLibrary
             return low == 0xd785ec7c && high == 0x8e79a7be && IsCoreLibName(image, n, name, size);
         }
 
-        // A named .NET reference assembly with the framework public key token b03f5f7f11d50a3a
-        // and neutral culture, such as System.Runtime.InteropServices (decision 0104).
+        // A named .NET reference assembly with neutral culture and one of the two framework public
+        // key tokens, b03f5f7f11d50a3a (System.Runtime.InteropServices, System.Numerics.Vectors) or
+        // cc7b13ffcd2ddd51 (System.Runtime.Intrinsics), as in decision 0104.
         internal static bool IsFrameworkAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row, string expected)
         {
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 35);
@@ -54,7 +55,9 @@ namespace PeLibrary
             uint key = Index(image, at + 12, blobs);
             if (key == 0 || !Fits(key, 9, (uint)heaps[1])) return false;
             uint blob = (uint)heaps[0] + key;
-            if (image[blob] != 8 || U32(image, blob + 1) != 0x7f5f3fb0 || U32(image, blob + 5) != 0x3a0ad511) return false;
+            if (image[blob] != 8) return false;
+            uint low = U32(image, blob + 1), high = U32(image, blob + 5);
+            if (!(low == 0x7f5f3fb0 && high == 0x3a0ad511) && !(low == 0xff137bcc && high == 0x51dd2dcd)) return false;
             uint name = Index(image, at + (uint)(12 + blobs), strings);
             return name != 0 && MatchesAscii(image, heaps, name, expected);
         }

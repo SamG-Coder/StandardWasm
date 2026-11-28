@@ -2152,9 +2152,11 @@ namespace PortableCompiler
                     {
                         int coded = records[slot + 1];
                         int primitive = ArrayTypeRefs.PrimitiveElement(image, heaps, layout, coded);
-                        if (primitive == 8)
+                        // int/uint and long/ulong elements share the Int32 and Int64 managed cells
+                        // (signedness belongs to the loads and stores through the address).
+                        if (primitive >= 8 && primitive <= 11)
                         {
-                            records[slot + 1] = Ints;
+                            records[slot + 1] = primitive <= 9 ? Ints : Longs;
                             continue;
                         }
                         int type = ArrayAllocations.TokenIdentity(bundle, image, layout, heaps, owner, context, methodArguments, objects, coded);

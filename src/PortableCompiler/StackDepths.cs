@@ -403,7 +403,8 @@ namespace PortableCompiler
                 if (depth < 2 || !ArrayIndex(stack, depth)) return -1;
                 int array = stack[depth - 2];
                 if (array != operand && array != NullValue) return -2;
-                int location = extra >= FirstClass ? ValueLocation(extra) : operand == Ints ? Int32Location : ObjectLocation;
+                int location = extra >= FirstClass ? ValueLocation(extra) : operand == Ints ? Int32Location :
+                    operand == Longs ? Int64Location : ObjectLocation;
                 return Push(stack, allocated, depth - 2, location);
             }
             if (kind == LoadObjectIndirect)

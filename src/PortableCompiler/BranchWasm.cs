@@ -1569,7 +1569,7 @@ namespace PortableCompiler
                     int array = Spill(spills, maximum, spillFlags, states[state + top - 1], top - 1);
                     int index = Spill(spills, maximum, spillFlags, states[state + top], top);
                     int resultSpill = Spill(spills, maximum, spillFlags, records[slot + 3] >= FirstClass ? ValueLocation(records[slot + 3]) :
-                        operand == Ints ? Int32Location : ObjectLocation, top - 1);
+                        operand == Ints ? Int32Location : operand == Longs ? Int64Location : ObjectLocation, top - 1);
                     if (records[slot + 3] >= FirstClass)
                     {
                         used = GuardNull(code, used, array);
