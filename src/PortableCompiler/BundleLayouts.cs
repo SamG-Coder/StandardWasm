@@ -239,6 +239,12 @@ namespace PortableCompiler
                     reference[0], objects, valueType);
                 // A value-type field needs its layout, so it keeps the -4 (CLR probe 3).
                 if (storage == -4 && !valueType && bundle.DeferMissing) storage = ObjectLayouts.ObjectReference;
+                // Decision 0105: a class field of a flat inline array is one primitive vector.
+                if (valueType && storage > 0 && !staticField && receiver > 0 && !ObjectLayouts.IsValueType(objects, receiver))
+                {
+                    int flat = FlatInlineArrays.Storage(objects, storage);
+                    if (flat != 0) return flat;
+                }
             }
             if (SignatureTypes.IsSpan(storage))
                 return !staticField && ObjectLayouts.IsByRefLikeValue(objects, receiver) ? storage : -2;

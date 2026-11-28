@@ -65,7 +65,7 @@ namespace PortableCompiler
 
         // The records strictly between `field` and `call` push exactly one value and never consume
         // a value from below their own start (the ldflda's byref).
-        private static bool Balanced(int[] records, int field, int call)
+        internal static bool Balanced(int[] records, int field, int call)
         {
             int depth = 0;
             for (int at = records[field + 2] * Width; at != call; at = records[at + 2] * Width)

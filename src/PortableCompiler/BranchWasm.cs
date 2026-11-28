@@ -1955,6 +1955,21 @@ namespace PortableCompiler
                     used = ValueFieldsWasm.ClearAtLocation(code, used, objects, operand, FieldAccess.Owner(records[slot + 3]),
                         Spill(spills, maximum, spillFlags, states[state + top], top), temporaries,
                         states[state + top] == ConstructorAddress, projections, frameShape[7]);
+                else if ((kind == GetField || kind == SetField) &&
+                    FlatInlineArrays.IsLocation(states[state + (kind == GetField ? top : top - 1)]))
+                {
+                    // Decision 0105: E field `operand` of a flat inline-array element.
+                    int receiver = kind == GetField ? top : top - 1;
+                    int flatField = FlatInlineArrays.Field(records), storage = FieldAccess.Storage(records[slot + 3]);
+                    int baseIndex = Spill(spills, maximum, spillFlags, states[state + receiver], receiver);
+                    used = FlatInlineArrays.EmitAccess(code, used, objects, frame[0], flatField, operand, baseIndex,
+                        kind == SetField ? Spill(spills, maximum, spillFlags, states[state + top], top) : -1, kind == SetField, storage);
+                    if (kind == GetField) used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, StackType(storage), top));
+                }
+                else if (kind == FlatIndex)
+                    used = FlatInlineArrays.EmitIndex(code, used, objects, frame[0], operand, records[slot + 3] & 0xffff,
+                        Spill(spills, maximum, spillFlags, I32, top),
+                        Spill(spills, maximum, spillFlags, FlatInlineArrays.Location(FlatInlineArrays.IndexElement(records[slot + 3])), top));
                 else if (kind == GetField || kind == SetField)
                 {
                     int descriptor = records[slot + 3];
@@ -2439,7 +2454,7 @@ namespace PortableCompiler
         private static int SpillBank(int type, int flags) =>
             // NativeZero already spills as Native. Use its otherwise vacant bank
             // for native arrays without increasing the engine's local pressure.
-            type == ConstructorAddress ? I32 - 1 :
+            type == ConstructorAddress || FlatInlineArrays.IsLocation(type) ? I32 - 1 :
             PeLibrary.RuntimeTypeMetadata.IsStorage(type) || IsValueLocation(type) ? ObjectReference - 1 :
             // A base Delegate slot currently accepts EventHandler lists only.
             // Both types have the same physical storage but distinct CLI stack identities.

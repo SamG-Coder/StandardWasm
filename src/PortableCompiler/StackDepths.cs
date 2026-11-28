@@ -940,6 +940,15 @@ namespace PortableCompiler
             }
             if (kind == LoadConstructorAddress)
                 return Push(stack, allocated, depth, ConstructorAddress);
+            if (kind == FlatIndex)
+                return Match(stack, depth, I32) ? Push(stack, allocated, depth - 1,
+                    FlatInlineArrays.Location(FlatInlineArrays.IndexElement(extra))) : -2;
+            if (kind == GetField && depth > 0 && FlatInlineArrays.IsLocation(stack[depth - 1]))
+                return FlatInlineArrays.Element(stack[depth - 1]) == FieldAccess.Owner(extra)
+                    ? Push(stack, allocated, depth - 1, StackType(FieldAccess.Storage(extra))) : -2;
+            if (kind == SetField && depth >= 2 && FlatInlineArrays.IsLocation(stack[depth - 2]))
+                return FlatInlineArrays.Element(stack[depth - 2]) == FieldAccess.Owner(extra) &&
+                    Assignable(stack[depth - 1], FieldAccess.Storage(extra), objects) ? depth - 2 : -2;
             if (kind == GetField || kind == GetReferenceField)
             {
                 if (depth == 0) return -1;

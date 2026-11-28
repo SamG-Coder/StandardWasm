@@ -644,7 +644,8 @@ namespace PortableCompiler
         internal static int ValueType(byte[] output, int cursor, int slot)
         {
             int type = StackType(slot);
-            if (type == I32 || type == MethodPointer || IsNativeInteger(type) || type == ConsoleStorage.Writer)
+            if (type == I32 || type == MethodPointer || IsNativeInteger(type) || type == ConsoleStorage.Writer ||
+                FlatInlineArrays.IsLocation(type))
                 output[cursor++] = 0x7f; // Console writers store their host stream number.
             else if (type == NullPointer)
                 output[cursor++] = StackSpillWasm.NullRef; // Only the null pointer inhabits the browser storage type.

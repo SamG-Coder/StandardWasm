@@ -814,6 +814,13 @@ namespace PortableCompiler
                     WideMultiplyDivide.Lower(image, layout, heaps, records, catchRegion);
                     PlatformExceptionThrows.Lower(image, layout, heaps, records, catchRegion);
                     UnsafeCalls.Lower(image, layout, heaps, records, catchRegion);
+                    status = FlatInlineArrays.Lower(image, layout, heaps, owner, objects, records, catchRegion, frame,
+                        parameters, location);
+                    if (status < 0)
+                    {
+                        if (location.Length != 0) { location[0] = owner; location[1] = source; }
+                        return status;
+                    }
                     ArraySortPrimitive.Lower(image, layout, heaps, records);
                     ArrayFillPrimitive.Lower(image, layout, heaps, records);
                     ArrayResizeField.Lower(image, layout, heaps, records, catchRegion);
@@ -1465,6 +1472,11 @@ namespace PortableCompiler
                             {
                                 if (capacity > int.MaxValue - MdArrays.Capacity) return -3;
                                 capacity += MdArrays.Capacity;
+                            }
+                            if (kind == BranchIl.FlatIndex || kind == BranchIl.GetField || kind == BranchIl.SetField)
+                            {
+                                if (capacity > int.MaxValue - FlatInlineArrays.Capacity) return -3;
+                                capacity += FlatInlineArrays.Capacity;
                             }
                             if (kind == BranchIl.FailFast)
                             {

@@ -136,6 +136,8 @@ namespace PortableCompiler
         internal const int NativeSpanFill = 444;
         // Decision 0105: Environment.FailFast(string): [message] -> (no return); the operand is the exit-status global.
         internal const int FailFast = 445;
+        // Decision 0105: element i of a flat inline-array field: [i] -> [FlatInlineLocation(E)] (FlatInlineArrays).
+        internal const int FlatIndex = 446;
         internal const int ExitProcess = 425; // [status] -> (traps); the operand is the exit-status global
         // NativeMemory members (decision 0104); the operand is the member id and operand 3 becomes
         // the alloc import index. [args...] -> [void*] or [].
