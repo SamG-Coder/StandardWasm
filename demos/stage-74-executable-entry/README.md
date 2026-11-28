@@ -12,9 +12,6 @@ After building the compiler, run `node demos/stage-74-executable-entry/run.mjs -
 Open the printed local URL. Add the publish output or the original single-file
 executable and select **Run managed entry**. Edge compiles and runs in a worker.
 The existing intake page remains available without the run feature.
-The launch worker retries a compiler workspace exhaustion result with a
-larger buffer, from 1 MiB up to 8 MiB. It reuses the original uploaded
-assemblies and reports the diagnostic from the final attempt.
 
 If the compiler exhausts its workspace, the launcher retries with the same
 uploaded assemblies and increases the buffer from 1 MiB to at most 8 MiB.
@@ -229,6 +226,19 @@ filesystem adapter for the original Windows file operations.
 Run `node demos/stage-74-executable-entry/verify-temp-path-host.mjs` on
 Windows with both Kernel32 exports, matching x86 and default-host .NET 10
 runtimes, Node and Edge. Results go under `artifacts/temp-path-host/`.
+
+## Virtual long-path lookup
+
+GetLongPathNameW resolves names within the launch's explicit virtual filesystem
+mount. An embedder supplies the root, current directory and file or directory
+entries through platform.win32FileSystem. The mount supports optional DOS aliases,
+in-place UTF-16 expansion and short-buffer retries. See the
+[Stage 254 provider contract](../stage-254-virtual-long-paths/README.md).
+
+`DeleteFileW` uses the same launch-local file entries. Deleting a file removes
+its long name and any DOS alias from subsequent lookup. An embedder can mark a
+file entry `readOnly: true`. See the
+[Stage 325 verification](../stage-325-virtual-file-deletion/README.md).
 
 ### Dynamic export lookup
 

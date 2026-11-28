@@ -1,7 +1,8 @@
 import { comImportModule, isNativeImportModule, nativeImports, nativeIndirectImportModule, windowsScalars } from "../../scripts/native-imports.mjs";
-import { comDispatchSignature, createComHost } from "./com-host.mjs";
+import { comActivationName, createComHost, isComDispatchSignature } from "./com-host.mjs";
 import { createDynamicLibraryHost, createNativeIndirectDispatch, nativeIndirectSignature, scopedUtf16Signature } from "./dynamic-library-host.mjs";
 import { createNativeSymbolLookup, createWin32Host, win32ImportModule, win32ImportNames, win32MemoryImports } from "./win32-host.mjs";
+import { createWindowsVersionHost, windowsVersionModule } from "./windows-version.mjs";
 
 export const resourceImportModule = "standardwasm:resources";
 
@@ -87,6 +88,8 @@ export function createResourceHost(compiler, images) {
 
 const threadingModule = "standardwasm:threading";
 const runtimeModule = "standardwasm:runtime";
+const fatalImportModule = "standardwasm:fatal";
+const fatalImportNames = new Set(["write", "terminate"]);
 
 export function createMonitorHost() {
     // Compiled managed execution is synchronous on one Wasm agent. Identity
@@ -109,15 +112,23 @@ const resourceImportKinds = new Map([
 ]);
 
 export function instantiateManagedModule(module, compiler, assets, runtimeImports = {}, executablePath, windows, configureCom, platform = {}) {
+    const requestedFatal = new Set();
     const requestedResources = new Set();
     const requestedWin32 = new Set();
     let wantsMonitor = false;
     let wantsDebugger = false;
+    let wantsWindowsVersion = false;
     let wantsNative = false;
-    let wantsCom = false;
+    const requestedCom = new Set();
     let wantsNativeSymbol = false;
     const nativeIndirectRequests = new Set();
     for (const { module: owner, name, kind } of WebAssembly.Module.imports(module)) {
+        if (owner === fatalImportModule) {
+            if (kind !== "function" || !fatalImportNames.has(name) || requestedFatal.has(name))
+                throw Error("The generated module requests an invalid fatal runtime import.");
+            requestedFatal.add(name);
+            continue;
+        }
         if (owner === resourceImportModule) {
             if (resourceImportKinds.get(name) !== kind || requestedResources.has(name))
                 throw Error("The generated module requests an invalid resource import.");
@@ -142,10 +153,16 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
             requestedWin32.add(name);
             continue;
         }
+        if (owner === windowsVersionModule) {
+            if (kind !== "function" || name !== "rtlGetVersion" || wantsWindowsVersion)
+                throw Error("The generated module requests an invalid Windows version import.");
+            wantsWindowsVersion = true;
+            continue;
+        }
         if (owner === comImportModule) {
-            if (kind !== "function" || name !== comDispatchSignature || wantsCom)
+            if (kind !== "function" || (name !== comActivationName && !isComDispatchSignature(name)) || requestedCom.has(name))
                 throw Error("The generated module requests an invalid COM dispatch import.");
-            wantsCom = true;
+            requestedCom.add(name);
             continue;
         }
         if (owner === nativeIndirectImportModule) {
@@ -171,7 +188,9 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     }
     if ([...requestedWin32].some(name => win32MemoryImports.has(name)) && !requestedResources.has("memory"))
         throw Error("The requested Win32 functions require the StandardWasm memory import.");
-    if (wantsCom && !requestedResources.has("memory"))
+    if (wantsWindowsVersion && !requestedResources.has("memory"))
+        throw Error("Windows version queries require the StandardWasm memory import.");
+    if (requestedCom.size && !requestedResources.has("memory"))
         throw Error("COM dispatch requires the StandardWasm memory import.");
     const wantsNativeIndirect = nativeIndirectRequests.size !== 0;
     if (wantsNativeSymbol && !requestedResources.has("memory"))
@@ -200,7 +219,7 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     let dynamicLibraries;
     const requestedLibrary = requestedWin32.has("loadLibraryExW") || requestedWin32.has("getProcAddress") ||
         requestedWin32.has("callWindowProcW") || requestedWin32.has("registerClassW") || requestedWin32.has("createWindowExW") ||
-        requestedWin32.has("setWindowLongW") || requestedWin32.has("setWindowLongPtrW") ||
+        requestedWin32.has("setWindowLongW") || requestedWin32.has("setWindowLongPtrW") || requestedWin32.has("setClassLongW") ||
         requestedWin32.has("getModuleHandleW") &&
         (platform?.win32Desktop === true || typeof platform?.configureNativeLibraries === "function");
     if (wantsNativeIndirect || wantsNativeSymbol || requestedLibrary) {
@@ -224,17 +243,20 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
     }
     if (requestedWin32.size) {
         const usesModules = requestedWin32.has("getModuleHandleW") || requestedWin32.has("createActCtxW");
-        const filesystem = requestedWin32.has("getFullPathNameW") ? platform?.win32FileSystem : undefined;
+        const usesFileSystem = requestedWin32.has("getFullPathNameW") || requestedWin32.has("getLongPathNameW") ||
+            requestedWin32.has("deleteFileW");
+        const filesystem = usesFileSystem ? platform?.win32FileSystem : undefined;
         imports[win32ImportModule] = createWin32Host(memory, executablePath, usesModules ? assets : [], windows, errors, dynamicLibraries,
-            platform?.windowCreationMetrics, filesystem, platform?.win32Desktop === true);
+            platform?.windowCreationMetrics, filesystem, platform?.win32Desktop === true, platform?.displayCapabilities, platform?.onWinEvent);
     }
-    if (wantsCom) {
-        const { imports: dispatch, registerInterface } = createComHost(memory);
-        // The platform host is the sole registrar. Managed imports only
-        // receive the dispatch entry point.
-        configureCom?.({ registerInterface });
+    if (requestedCom.size) {
+        const { imports: dispatch, registerInterface, registerClass } = createComHost(memory);
+        // Only the platform can register browser implementations for this launch.
+        const configure = configureCom ?? platform?.configureCom;
+        configure?.({ memory, registerInterface, registerClass });
         imports[comImportModule] = dispatch;
     }
+    if (wantsWindowsVersion) imports[windowsVersionModule] = createWindowsVersionHost(memory, platform?.windowsVersion);
     if (wantsMonitor) imports[threadingModule] = createMonitorHost();
     if (wantsDebugger) {
         const debuggerHost = Object.hasOwn(runtimeImports, runtimeModule) ? runtimeImports[runtimeModule] : undefined;
@@ -242,6 +264,15 @@ export function instantiateManagedModule(module, compiler, assets, runtimeImport
         imports[runtimeModule] = {
             isDebuggerAttached: () => typeof debuggerHost?.isDebuggerAttached === "function" && debuggerHost.isDebuggerAttached() ? 1 : 0
         };
+    }
+    if (requestedFatal.size) {
+        if (requestedFatal.size !== fatalImportNames.size)
+            throw Error("The generated module requires the complete fatal runtime contract.");
+        return import("./fatal-host.mjs").then(({ createFatalHost }) => {
+            const fatal = createFatalHost();
+            imports[fatalImportModule] = fatal.imports;
+            return fatal.instantiate(module, imports);
+        });
     }
     return WebAssembly.instantiate(module, imports);
 }

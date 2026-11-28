@@ -155,7 +155,7 @@ namespace PortableCompiler
 
             int accessor = SpanMetadata.Accessor(bundle, image, layout, heaps, owner,
                 records[call + 1], context, methodArguments, spanType, objects);
-            int element = spanType == SignatureTypes.WritableCharacterSpan ? SpanAddress : SpanRead;
+            int element = SignatureTypes.IsWritableSpan(spanType) ? SpanAddress : SpanRead;
             if (indexed ? accessor != element : accessor != SpanLength && accessor != SpanIsEmpty) return 0;
 
             if (accessor == SpanRead)
@@ -165,11 +165,13 @@ namespace PortableCompiler
                 int load = Next(records, call, clauses);
                 if (load < 0) return 0;
                 int indirect = spanType == SignatureTypes.CharacterSpan ? 0x49 :
-                    spanType == SignatureTypes.ReadOnlyByteSpan ? 0x47 : 0;
+                    spanType == SignatureTypes.ReadOnlyByteSpan ? 0x47 :
+                    spanType == SignatureTypes.ReadOnlyInt32Span ? 0x4a : 0;
                 if (indirect != 0 ? records[load] != LoadIndirect || records[load + 1] != indirect :
                     records[load] != LoadObjectIndirect) return 0;
                 int vector = spanType == SignatureTypes.CharacterSpan ? SignatureTypes.Chars :
                     spanType == SignatureTypes.ReadOnlyByteSpan ? SignatureTypes.Bytes :
+                    spanType == SignatureTypes.ReadOnlyInt32Span ? SignatureTypes.Ints :
                     ObjectLayouts.RegisterArray(objects, ObjectLayouts.ObjectReference);
                 if (vector < 0) return vector;
                 records[call + 1] = vector;
@@ -249,7 +251,7 @@ namespace PortableCompiler
                 int kind = records[slot], operand = records[slot + 1];
                 if (kind == Load || kind == Constant) depth++;
                 else if (kind == Binary && depth >= 2 &&
-                    (operand == 0x6a || operand == 0x6b || operand >= 0x71 && operand <= 0x76))
+                    (operand >= 0x6a && operand <= 0x6c || operand >= 0x71 && operand <= 0x76))
                     depth--;
                 else if (kind != LoadIndirect || operand != 0x47 || depth < 1)
                     return depth == 1 && IsDirectMemberCall(records, slot) ? slot : -1;

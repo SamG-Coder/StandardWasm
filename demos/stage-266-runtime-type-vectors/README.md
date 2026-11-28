@@ -1,0 +1,5 @@
+# Stage 266 · Runtime Type vectors
+
+A fresh, authenticated `System.Type[]` built with canonical descriptor initializers uses a managed vector whose cells hold those descriptors. The compiler proves the initial writes along one fall-through path and can retain the array in a local with a single write and no address use. Array length, element reads and bounds checks use the normal vector operations. The specialized vector and the existing nominal vector share the CLR `System.Type[]` identity.
+
+Run `npm run demo -- stage-266-runtime-type-vectors`. Set `STANDARDWASM_COMPILER_PATH` to verify a frozen compiler. The same ordinary C# DLL runs on Windows x86 CLR, Node and Edge. It covers descriptors, default null, bounds, shared identity through `object` and an ordinary nominal array. The runner records the unsupported mixed and addressed-local flows. `Type.MakeGenericType` and arbitrary array escapes require separate handling. Evidence goes to `artifacts/stage-266-runtime-type-vectors/results.json`.

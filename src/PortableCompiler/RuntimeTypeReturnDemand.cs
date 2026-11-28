@@ -5,9 +5,9 @@ namespace PortableCompiler
 {
     internal static class RuntimeTypeReturnDemand
     {
-        // Find the direct call that produced one operand at a descriptor
-        // comparison. Follow only a fallthrough stack segment. A local must
-        // have one direct-call definition, with any other writes being null.
+        // Find the producer at a descriptor comparison along a fallthrough
+        // stack segment. A field load is encoded as -2 minus its record slot.
+        // A local must have one direct-call definition, apart from null writes.
         internal static int Find(int[] records, int pc, int index, int[] depths, int[] arities,
             int[] frame, int[] clauses, int type, int[] signatures, int[] offsets)
         {
@@ -24,6 +24,11 @@ namespace PortableCompiler
                     int start = before - arities[operand];
                     if (index >= start)
                         return index == start && signatures[offsets[operand]] == type ? operand : -1;
+                }
+                else if (kind == GetField)
+                {
+                    if (index >= before - 1)
+                        return index == before - 1 && FieldAccess.Storage(records[previous + 3]) == type ? -2 - previous : -1;
                 }
                 else if (kind == Load)
                 {

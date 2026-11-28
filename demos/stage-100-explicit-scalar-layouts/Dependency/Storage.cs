@@ -31,6 +31,49 @@ namespace ScalarOverlayDependency
         public Overlay Value;
     }
 
+    [StructLayout(LayoutKind.Explicit)]
+    public struct ManagedOverlay
+    {
+        [FieldOffset(0)] public int Prefix;
+        [FieldOffset(8)] public int EditIndex;
+        [FieldOffset(8)] public int MoveIndex;
+        [FieldOffset(16)] public string Name;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    public struct WidePartialOverlay
+    {
+        [FieldOffset(8)] public long Whole;
+        [FieldOffset(12)] public long Crossing;
+        [FieldOffset(24)] public string Name;
+    }
+
+    public sealed class WidePartialFrame
+    {
+        public WidePartialOverlay Value;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Pack = 4)]
+    public struct FrameSlots
+    {
+        [FieldOffset(0)] public int Sequence;
+        [FieldOffset(4)] public short Kind;
+        [FieldOffset(6)] public ushort Flags;
+        [FieldOffset(8)] public long Handler;
+        [FieldOffset(8)] public int Length;
+        [FieldOffset(12)] public int Component;
+        [FieldOffset(16)] public string Text;
+        [FieldOffset(16)] public object Value;
+        [FieldOffset(24)] public string Label;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    public struct ShortReferenceAlias
+    {
+        [FieldOffset(0)] public string Text;
+        [FieldOffset(0)] public object Value;
+    }
+
     [StructLayout(LayoutKind.Explicit, Size = 16)]
     public struct Large
     {

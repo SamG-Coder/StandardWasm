@@ -7,6 +7,59 @@ namespace PortableCompiler
 {
     internal static class ExplicitValueWasm
     {
+        internal static int LoadSlot(byte[] code, int used, int[] objects, int type, int projection, int storage)
+        {
+            int slot = projection / ExplicitSlotWidth;
+            int physical = LayoutFieldType(objects, type, slot);
+            used = ReadField(code, used, type, slot, physical);
+            if (physical == ObjectReference)
+                return ManagedLocationWasm.CastCellValue(code, used, Representation(objects, storage));
+            if (physical == I64 && storage != I64)
+            {
+                used = MoveBits(code, used, projection % ExplicitSlotWidth, 0x88);
+                return DecodeScalar(code, used, storage);
+            }
+            return used;
+        }
+
+        internal static int UpdateSlot(byte[] code, int used, int[] objects, int type, int local,
+            int temporary, int projection, int storage, int replacement, int replacementType)
+        {
+            int target = projection / ExplicitSlotWidth, offset = projection % ExplicitSlotWidth;
+            int fields = LayoutFieldCount(objects, type);
+            used = ValueFieldsWasm.Materialize(code, used, type, local);
+            used = Local(code, used, 0x21, temporary);
+            for (int slot = 0; slot < fields; slot++)
+            {
+                int physical = LayoutFieldType(objects, type, slot);
+                if (slot != target)
+                {
+                    used = Local(code, used, 0x20, temporary);
+                    used = ReadField(code, used, type, slot, physical);
+                }
+                else if (physical == I64 && storage != I64)
+                {
+                    int width = ExplicitValueLayouts.Width(storage);
+                    if (width != ExplicitSlotWidth)
+                    {
+                        used = Local(code, used, 0x20, temporary);
+                        used = ReadField(code, used, type, slot, physical);
+                        used = KeepOtherBytes(code, used, offset, width);
+                        code[used++] = 0x83; // i64.and
+                    }
+                    used = LoadOperand(code, used, replacement, replacementType, storage);
+                    used = EncodeScalar(code, used, storage);
+                    used = MoveBits(code, used, offset, 0x86);
+                    if (width != ExplicitSlotWidth) code[used++] = 0x84; // i64.or
+                }
+                else
+                    used = LoadOperand(code, used, replacement, replacementType, storage);
+            }
+            // Copies retain the prior scalar bits and traced reference slots.
+            used = Gc(code, used, 0, type);
+            return Local(code, used, 0x21, local);
+        }
+
         // The receiver is already materialized, including for default values.
         internal static int Load(byte[] code, int used, int[] objects, int type, int offset, int storage, int scratch)
         {

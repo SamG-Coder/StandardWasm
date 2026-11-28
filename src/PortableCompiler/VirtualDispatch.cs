@@ -19,7 +19,7 @@ namespace PortableCompiler
         private int[] cases = new int[0];
         private int allocationsCount, sitesUsed, casesUsed = CaseWidth, boxes;
         private int primitiveArrays;
-        private bool typeDescriptors, unsupportedRootReceiver;
+        private bool typeDescriptors, unsupportedRootReceiver, enumBoxes;
 
         internal VirtualDispatch(int capacity, RuntimeTypeCalls typeCalls)
         {
@@ -51,7 +51,11 @@ namespace PortableCompiler
             allocations[allocationsCount++] = type;
         }
 
-        internal void AddBox(int element) => boxes |= 1 << element;
+        internal void AddBox(int element)
+        {
+            if (BoxedEnums.IsTag(element)) enumBoxes = true;
+            else boxes |= 1 << element;
+        }
         internal void AddPrimitiveArray(int element) => primitiveArrays |= 1 << element;
 
         // Every produced evaluation-stack value is at the top on an incoming
@@ -94,7 +98,8 @@ namespace PortableCompiler
         }
 
         internal int Expand(BundleImages bundle, int[] objects, int[] owners, int[] rows, int[] contexts, int[] bases,
-            int[] indices, int[] arities, int[] offsets, int[] signatures, int functions, int[] location)
+            int[] indices, int[] arities, int[] offsets, int[] signatures, int functions, int[] location,
+            MethodInstantiations instantiations)
         {
             for (int site = 0; site < sitesUsed; site += SiteWidth)
             {
@@ -102,7 +107,7 @@ namespace PortableCompiler
                 if (receiver == ObjectReference)
                 {
                     CompileLocation.Set(location, sites[site + CallerOwner], sites[site + CallerRow], sites[site + CallerOffset]);
-                    if (unsupportedRootReceiver) return -2;
+                    if (unsupportedRootReceiver || enumBoxes) return -2;
                     if (sites[site + RootTarget] == 0)
                     {
                         int root = MethodCompiler.BindVirtualBody(bundle, objects, ObjectReference, true, ObjectReference,
@@ -119,16 +124,30 @@ namespace PortableCompiler
                         if (added < 0) return added;
                     }
                 }
+                if (enumBoxes)
+                {
+                    // A boxed enum is not a boxed copy of its backing integer.
+                    // An unsupported slot gets a located diagnostic before any
+                    // primitive or root Object fallback can be selected.
+                    int implements = BoxedEnums.Implements(bundle, objects, sites[site + Declared]);
+                    if (implements != 0)
+                    {
+                        CompileLocation.Set(location, sites[site + CallerOwner], sites[site + CallerRow], sites[site + CallerOffset]);
+                        return implements < 0 ? implements : -2;
+                    }
+                }
                 for (int index = sites[site + Scanned]; index < allocationsCount; index++)
                 {
                     int type = allocations[index];
-                    if (receiver != ObjectReference && ArrayElementKey(objects, type) != 0) continue;
+                    if (receiver != ObjectReference && ArrayElementKey(objects, type) != 0 &&
+                        !IsExactArrayEnumerable(objects, type, sites[site + Declared]) &&
+                        !IsExactArrayList(objects, type, sites[site + Declared])) continue;
                     if (!SignatureTypes.Assignable(type, receiver, objects)) continue;
                     CompileLocation.Set(location, sites[site + CallerOwner], sites[site + CallerRow], sites[site + CallerOffset]);
                     int shape = offsets[dispatcher];
                     int target = MethodCompiler.BindVirtualBody(bundle, objects, type, true, sites[site + Declared],
                         sites[site + Owner], sites[site + Row], owners, rows, contexts, bases, indices,
-                        arities, offsets, signatures, functions);
+                        arities, offsets, signatures, functions, instantiations);
                     if (target < 0) return target;
                     int signatureStatus = BindShape(bundle, objects, signatures, shape, arities[dispatcher], signatures, offsets,
                         owners, rows, contexts, target);
@@ -262,8 +281,9 @@ namespace PortableCompiler
                     int element = cases[entry + BoxElement], armBytes = element == 0 ? 26 : 96;
                     if (code.Length - length < 2 || arity > (code.Length - length - 2) / 6 ||
                         code.Length - length - 2 - arity * 6 < armBytes) return -3;
+                    int receiver = Representation(objects, signatures[offsets[target] + 1]);
                     length = element == 0
-                        ? VirtualDispatchWasm.Arm(code, length, type, signatures[offsets[target] + 1], hostImports + target, arity)
+                        ? VirtualDispatchWasm.Arm(code, length, type, receiver, hostImports + target, arity)
                         : VirtualDispatchWasm.BoxArm(code, length, boxLayout, element, type, hostImports + target, arity);
                 }
 

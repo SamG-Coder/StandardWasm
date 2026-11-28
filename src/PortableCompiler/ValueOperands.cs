@@ -86,7 +86,7 @@ namespace PortableCompiler
             return LowerAddressUse(image, layout, heaps, methodCount, records, slot, 0, clauses, readOnly);
         }
 
-        private static bool PrimitiveLoadMatches(int storage, int opcode)
+        internal static bool PrimitiveLoadMatches(int storage, int opcode)
         {
             if (storage == I32) return opcode == 0x4a || opcode == 0x4b;
             if (storage == I64) return opcode == 0x4c;
@@ -256,6 +256,15 @@ namespace PortableCompiler
                 {
                     if (depth < 2) return -2;
                     depth--;
+                }
+                else if (kind == FieldAddress && depth > 0)
+                {
+                    // A nested field read can use a temporary receiver above
+                    // the pending destination. Its address must be consumed
+                    // immediately so no call can observe or retain it.
+                    int read = records[next + 2] * Width;
+                    if (read >= records.Length || records[read] != GetField ||
+                        Entry(records, read / Width, clauses)) return -2;
                 }
                 // A field read of an operand above the address (for example
                 // this.X = this.Y) observes the location's current contents.

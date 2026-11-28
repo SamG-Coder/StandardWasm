@@ -1,0 +1,7 @@
+<linker>
+  <assembly fullname="System.Private.CoreLib">
+    <type fullname="System.IntPtr">
+      <method name="get_Size" />
+    </type>
+  </assembly>
+</linker>

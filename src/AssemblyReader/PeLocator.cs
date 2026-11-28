@@ -40,6 +40,20 @@ namespace PeLibrary
             return 0;
         }
 
+        internal static int ReadManagedEntryToken(byte[] image)
+        {
+            if (WebcilLocator.HasSignature(image)) return WebcilLocator.ReadEntryToken(image);
+            int pe = ReadPeStart(image);
+            return pe < 0 ? -1 : ReadCliEntryToken(image, LocatePeCli(image, (uint)pe));
+        }
+
+        internal static int ReadCliEntryToken(byte[] image, int cli)
+        {
+            if (cli < 0 || (U32(image, (uint)cli + 16) & 0x10) != 0) return -1;
+            uint token = U32(image, (uint)cli + 20);
+            return token > 0x06000000 && token <= 0x06ffffff ? (int)token : -1;
+        }
+
         // A resource directory is a file-backed range in the CLI image,
         // separate from the metadata tables that name its individual entries.
         internal static int LocateResources(byte[] image, int[] location)

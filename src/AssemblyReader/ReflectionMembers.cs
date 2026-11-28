@@ -6,7 +6,75 @@ namespace PeLibrary
     internal static class ReflectionMembers
     {
         internal const int TypeModule = 1, TypeAssembly = 2, ModuleAssembly = 3, ModuleName = 4,
-            ResourceStream = 5, ExecutingAssembly = 6, TypeName = 7, TypeNamespace = 8;
+            ResourceStream = 5, ExecutingAssembly = 6, TypeName = 7, TypeNamespace = 8, AssemblyGetType = 9;
+
+        internal const int EntryGetter = 1, EntrySetter = 2, MonoEntryLeaf = 3;
+
+        internal static bool IsCoreAssemblyEqualityCall(byte[] image, int[] heaps, int[] layout, int caller, int target)
+        {
+            if ((MethodDefinitions.ReadColumn(image, layout, caller, 2) & 0x2057) != 0x16 ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, caller, 3), "op_Equality") ||
+                (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x2057) != 0x46 ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, target, 3), "Equals")) return false;
+            var counts = new int[45];
+            if (CoreGetter(image, heaps, layout, caller, counts, "System.Reflection", "Assembly") < 0) return false;
+            int assembly = ObjectLayouts.Owner(image, heaps, layout, caller, false);
+            int root = ObjectLayouts.Owner(image, heaps, layout, target, false);
+            if (root < 1 || !ObjectLayouts.IsCoreObjectType(image, heaps, layout, root << 2)) return false;
+
+            var cursor = new int[1];
+            int callerEnd = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, layout, caller, 4), 2, cursor);
+            if (callerEnd < 0 || !SignatureReader.TakeElement(image, cursor, callerEnd, SignatureReader.Boolean) ||
+                SignatureReader.ReadClass(image, cursor, callerEnd) != assembly << 2 ||
+                SignatureReader.ReadClass(image, cursor, callerEnd) != assembly << 2 || cursor[0] != callerEnd) return false;
+            int targetEnd = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, target, 4), 1, cursor);
+            return targetEnd >= 0 && SignatureReader.TakeElement(image, cursor, targetEnd, SignatureReader.Boolean) &&
+                SignatureReader.TakeElement(image, cursor, targetEnd, 0x1c) && cursor[0] == targetEnd;
+        }
+
+        internal static int CoreEntryAssemblyMember(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            int flags = MethodDefinitions.ReadColumn(image, layout, row, 2);
+            if ((flags & 0x2050) != 0x10) return 0;
+            uint name = (uint)MethodDefinitions.ReadColumn(image, layout, row, 3);
+            int kind = MatchesAscii(image, heaps, name, "GetEntryAssembly") ? EntryGetter :
+                MatchesAscii(image, heaps, name, "SetEntryAssembly") ? EntrySetter :
+                MatchesAscii(image, heaps, name, "GetEntryAssemblyNative") ? MonoEntryLeaf : 0;
+            if (kind == 0) return 0;
+            int impl = MethodDefinitions.ReadColumn(image, layout, row, 1);
+            int rva = MethodDefinitions.ReadColumn(image, layout, row, 0);
+            if (kind == MonoEntryLeaf ? impl != 0x1000 || rva != 0 : impl != 0 || rva == 0) return 0;
+            var counts = new int[45];
+            int first = CoreGetter(image, heaps, layout, row, counts, "System.Reflection", "Assembly");
+            if (first < 0) return 0;
+            var cursor = new int[1];
+            bool setter = kind == EntrySetter;
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4),
+                setter ? 1 : 0, cursor);
+            if (end < 0 || setter && !SignatureReader.TakeElement(image, cursor, end, 1)) return 0;
+            int type = SignatureReader.ReadClass(image, cursor, end);
+            return cursor[0] == end && (type & 3) == 0 && type >> 2 == ObjectLayouts.Owner(image, heaps, layout, row, false)
+                ? kind : 0;
+        }
+
+        internal static bool IsCoreAssemblyGetType(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x57) != 0x46 ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "GetType"))
+                return false;
+            var counts = new int[45];
+            int first = CoreGetter(image, heaps, layout, row, counts, "System.Reflection", "Assembly");
+            if (first < 0) return false;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), 3, cursor);
+            int type = end < 0 ? -1 : SignatureReader.ReadClass(image, cursor, end);
+            return type > 0 && (type & 3) == 0 &&
+                ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, type >> 2, "System", "Type") &&
+                TypeLookupFlags(image, cursor[0], end);
+        }
+
+        private static bool TypeLookupFlags(byte[] image, int start, int end) =>
+            end - start == 3 && image[start] == 0x0e && image[start + 1] == 2 && image[start + 2] == 2;
 
         internal static bool IsTypeText(int member) => member == TypeName || member == TypeNamespace;
 
@@ -76,9 +144,17 @@ namespace PeLibrary
             }
             else if (owner == Assembly)
             {
-                if (!MatchesAscii(image, heaps, name, "GetManifestResourceStream")) return 0;
-                kind = ResourceStream;
-                result = Stream;
+                if (MatchesAscii(image, heaps, name, "GetManifestResourceStream"))
+                {
+                    kind = ResourceStream;
+                    result = Stream;
+                }
+                else if (MatchesAscii(image, heaps, name, "GetType"))
+                {
+                    kind = AssemblyGetType;
+                    result = Type;
+                }
+                else return 0;
             }
             else if (owner == Type && Named(image, heap, length, name, 10, 0x5f746567, 0x75646f4d, 0x656c)) // get_Module
             {
@@ -112,7 +188,7 @@ namespace PeLibrary
             var next = new int[1];
             int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
             int start = next[0];
-            int parameters = kind == ResourceStream ? 1 : 0;
+            int parameters = kind == AssemblyGetType ? 3 : kind == ResourceStream ? 1 : 0;
             int convention = staticCall ? 0 : 0x20;
             if (size < 3 || size > limit - start || image[start] != convention || image[start + 1] != parameters) return 0;
             if (result == String) return size == 3 && image[start + 2] == 0x0e ? kind : 0;
@@ -120,7 +196,8 @@ namespace PeLibrary
             int end = start + size;
             int type = CompressedUnsigned(image, start + 3, end, next);
             int tail = next[0];
-            if (end - tail != parameters || (parameters == 1 && image[tail] != 0x0e)) return 0;
+            if (kind == AssemblyGetType ? !TypeLookupFlags(image, tail, end) :
+                end - tail != parameters || (parameters == 1 && image[tail] != 0x0e)) return 0;
             return type > 0 && (type & 3) == 1 &&
                 PlatformTypeReferences.Identify(image, heaps, layout, counts, first, type >> 2) == result ? kind : 0;
         }

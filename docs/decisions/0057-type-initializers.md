@@ -129,9 +129,19 @@ native-vector recursive group (`RootObjectHeap`). Each allocation has its own
 reference identity, and no class's nominal test accepts it. Calls to
 `GetHashCode`, `ToString`, and `Equals` stay located diagnostics.
 
+## Explicit triggers
+
+Stage 222 links authentic `RuntimeHelpers.RunClassConstructor` calls on a
+proven type token to the same guarded initializer. It verifies that the
+producer and call sequence has a single entry before replacing the temporary
+descriptor with a direct managed call. Explicit triggers run BeforeFieldInit
+initializers immediately and keep a separate guard for each closed generic
+type. Open generic definitions, array types and types without an initializer
+need no call. Unproved handles produce a
+located unsupported diagnostic.
+
 ## Still diagnosed
 
 - instance methods of precise value types, which also trigger
-- `RuntimeHelpers.RunClassConstructor`
 - module initializers beyond the empty and trivial-call forms
 - static field addresses (`ldsflda`) on closed generic types

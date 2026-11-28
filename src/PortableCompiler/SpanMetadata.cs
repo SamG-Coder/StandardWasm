@@ -121,7 +121,7 @@ namespace PortableCompiler
             if (!MatchesAscii(image, heaps, (uint)reference[4], constructor ? ".ctor" : "op_Implicit")) return 0;
             int type = ManagedReferenceSignatures.ReadInstantiation(bundle, image, layout, heaps,
                 owner, parent, objects, context, methodArguments);
-            if (type != WritableCharacterSpan && type != ReadOnlyByteSpan) return 0;
+            if (!IsWritableSpan(type) && type != ReadOnlyByteSpan) return 0;
 
             int blob = reference[5];
             if (blob < 1 || blob >= heaps[1]) return 0;
@@ -132,6 +132,10 @@ namespace PortableCompiler
             if (size < 3 || size > limit - start) return 0;
             if (constructor)
             {
+                // instance void .ctor(!0[], int32, int32).
+                if (type == WritableByteSpan)
+                    return size == 8 && U32(image, (uint)start) == 0x1d010320 &&
+                        U32(image, (uint)(start + 4)) == 0x08080013 ? BranchIl.WritableByteArraySpan : 0;
                 // instance void .ctor(void*, int).
                 if (type == WritableCharacterSpan && size == 6 && U32(image, (uint)start) == 0x0f010220 &&
                     U16(image, (uint)(start + 4)) == 0x0801) return BranchIl.NativeCharacterSpan;
@@ -143,16 +147,17 @@ namespace PortableCompiler
 
             if (image[start] != 0 || image[start + 1] != 1) return 0;
             int end = start + size;
-            int arrayParameter = OpenSpan(image, layout, heaps, start + 2, end, next, type == WritableCharacterSpan);
+            int arrayParameter = OpenSpan(image, layout, heaps, start + 2, end, next, IsWritableSpan(type));
             if (arrayParameter >= 0 && end - arrayParameter == 3 && image[arrayParameter] == 0x1d &&
                 image[arrayParameter + 1] == 0x13 && image[arrayParameter + 2] == 0)
-                return type == ReadOnlyByteSpan ? BranchIl.ByteArrayAsSpan : BranchIl.CharacterArrayAsSpan;
+                return type == ReadOnlyByteSpan ? BranchIl.ByteArrayAsSpan :
+                    type == WritableCharacterSpan ? BranchIl.CharacterArrayAsSpan : 0;
             if (type == ReadOnlyByteSpan) return 0;
 
             int parameter = OpenSpan(image, layout, heaps, start + 2, end, next, false);
             if (parameter < 0) return 0;
             return OpenSpan(image, layout, heaps, parameter, end, next, true) == end
-                ? BranchIl.SpanAsReadOnly : 0;
+                ? type == WritableByteSpan ? BranchIl.ByteSpanAsReadOnly : BranchIl.SpanAsReadOnly : 0;
         }
 
         // The MemberRef signature uses the declaring Span<T> argument. Its
@@ -299,7 +304,7 @@ namespace PortableCompiler
             int end = SignatureReader.ReadInstance(image, heaps, reference[5], arity, cursor);
             if (end < 0) return false;
             int result = SignatureReader.ReadGenericValue(image, cursor, end, parameter: 0);
-            if (result < 1 || !IsDefinition(image, layout, heaps, result, spanType == WritableCharacterSpan))
+            if (result < 1 || !IsDefinition(image, layout, heaps, result, IsWritableSpan(spanType)))
                 return false;
             for (int argument = 0; argument < arity; argument++)
                 if (!SignatureReader.TakeElement(image, cursor, end, SignatureReader.Int32)) return false;
@@ -349,7 +354,7 @@ namespace PortableCompiler
             int size = CompressedUnsigned(image, heaps[0] + blob, limit, next);
             int at = next[0];
             if (size < 3 || size > limit - at || image[at] != 0x20) return 0;
-            if (spanType == WritableCharacterSpan)
+            if (IsWritableSpan(spanType))
                 return size == 6 && U32(image, (uint)at) == 0x13100120 &&
                     U16(image, (uint)(at + 4)) == 0x0800 ? BranchIl.SpanAddress : 0;
             if (image[at + 1] != 1 || image[at + 2] != 0x1f) return 0;

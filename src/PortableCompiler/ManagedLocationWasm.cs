@@ -44,12 +44,13 @@ namespace PortableCompiler
             used = Const(code, used, 0);
             bool packed = vector == Bytes || vector == Chars;
             used = Gc(code, used, packed ? 0x0d : 0x0b, vector);
-            return packed || vector == Ints || vector == NativeVector ? used : CastCellValue(code, used, type);
+            return packed || vector == Ints || vector == Longs || vector == NativeVector ? used : CastCellValue(code, used, type);
         }
 
         internal static int CastCellValue(byte[] code, int used, int representation)
         {
-            if (representation == PeLibrary.ObjectLayouts.ObjectReference) return used;
+            if (representation == PeLibrary.ObjectLayouts.ObjectReference || PeLibrary.RuntimeTypeMetadata.IsStorage(representation))
+                return used;
             code[used++] = 0xfb;
             code[used++] = 0x17; // Restore the typed reference from eqref.
             return WasmBinary.Signed(code, used, WasmBinary.HeapType(representation));
@@ -76,6 +77,39 @@ namespace PortableCompiler
             used = Local(code, used, 0x20, offset);
             code[used++] = 0x6a; // native-width byte offset
             used = Gc(code, used, 0, StaticByteLocation);
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        internal static int OffsetCharacterElements(byte[] code, int used, int location, int offset)
+        {
+            used = Local(code, used, 0x20, offset);
+            code[used++] = 0x45;
+            code[used++] = 0x04;
+            used = WasmBinary.ValueType(code, used, CharacterLocation);
+            used = Local(code, used, 0x20, location);
+            code[used++] = 0x05;
+
+            // Keep an adjusted location inside its managed owner, including
+            // the one-past position. The wider sum rules out index wrap.
+            used = LoadField(code, used, location, 1);
+            code[used++] = 0xac; // i64.extend_i32_s
+            used = Local(code, used, 0x20, offset);
+            code[used++] = 0xac;
+            code[used++] = 0x7c;
+            used = LoadField(code, used, location, 0);
+            used = Gc(code, used, 23, Chars); // array ref.cast
+            code[used++] = 0xfb; code[used++] = 0x0f;
+            code[used++] = 0xad; // i64.extend_i32_u
+            code[used++] = 0x56; // i64.gt_u (also rejects a negative sum)
+            code[used++] = 0x04; code[used++] = 0x40;
+            code[used++] = 0x00; code[used++] = 0x0b;
+
+            used = LoadField(code, used, location, 0);
+            used = LoadField(code, used, location, 1);
+            used = Local(code, used, 0x20, offset);
+            code[used++] = 0x6a;
+            used = Gc(code, used, 0, CharacterLocation);
             code[used++] = 0x0b;
             return used;
         }

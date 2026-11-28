@@ -9,10 +9,13 @@ namespace PeLibrary
         // Keep layout IDs above primitive, packed storage and generic scalar keys.
         internal const int FirstClass = 0x400, MaxClasses = 4096, MaxTypeDepth = 236;
         // Header: type count, occupied field and auxiliary slots, enum list head, delegate list head.
-        private const int Header = 5, Width = 13, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
+        private const int Header = 5, Width = 14, Assembly = 0, TypeRow = 1, FirstField = 2, Fields = 3, Storage = 4;
         private const int Base = 5, ShapeFlags = 6, FieldTable = 7, Filling = 8, Interfaces = 9;
-        private const int Arguments = 10, Arity = 11, Element = 12;
+        private const int Arguments = 10, Arity = 11, Element = 12, ExplicitSlots = 13;
         private const int ValueShape = 0x40000000, NullableShape = 0x20000000, InlineArrayShape = 0x10000000, ByRefLikeShape = 0x08000000;
+        private const int ArrayEnumerableShape = 0x04000000;
+        private const int ArrayListShape = 0x02000000;
+        internal const int ExplicitSlotWidth = 8;
         private const int FieldStorageBits = 16, FieldStorageMask = (1 << FieldStorageBits) - 1;
         private const int EnumHead = 3, EnumKeyBase = 0x100000;
         internal const int DelegateHead = 4; // Stage 204: DelegateShapes entries
@@ -22,11 +25,8 @@ namespace PeLibrary
         // and the enum identity list head. Field and auxiliary data grow inward.
         internal static int RegisterEnum(int[] registry, int assembly, int row, int storage)
         {
-            for (int entry = registry[EnumHead]; entry != 0; entry = registry[entry + 3])
-            {
-                if (registry[entry] != assembly || registry[entry + 1] != row) continue;
-                return entry + EnumKeyBase;
-            }
+            int known = FindEnum(registry, assembly, row);
+            if (known != 0) return known;
 
             int start = registry.Length - registry[2] - 4;
             if (start < FieldMapStart + registry[1]) return -3;
@@ -37,6 +37,14 @@ namespace PeLibrary
             registry[EnumHead] = start;
             registry[2] = registry[2] + 4;
             return start + EnumKeyBase;
+        }
+
+        internal static int FindEnum(int[] registry, int assembly, int row)
+        {
+            for (int entry = registry[EnumHead]; entry != 0; entry = registry[entry + 3])
+                if (registry[entry] == assembly && registry[entry + 1] == row)
+                    return entry + EnumKeyBase;
+            return 0;
         }
 
         // Enum keys never become heap types or evaluation-stack tags. Their
@@ -70,7 +78,8 @@ namespace PeLibrary
 
         // Aggregate shapes fill the descriptor. An enum instead returns its
         // scalar storage tag and never reserves a GC aggregate.
-        internal static int ReadShape(byte[] image, int[] streams, int[] methods, int row, int[] shape, bool valueType = false)
+        internal static int ReadShape(byte[] image, int[] streams, int[] methods, int row, int[] shape,
+            bool valueType = false, bool allowFixedBuffer = true)
         {
             var counts = new int[45];
             int start = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
@@ -95,8 +104,13 @@ namespace PeLibrary
             if (first < 1 || end < first || end > (uint)(counts[4] + 1)) return -1;
             int fields = defs + counts[2] * defWidth;
             if (valueBase == 2)
-                return valueType && (flags & 0x138) == 0x100
-                    ? EnumStorage.Read(image, streams, methods, fields, (int)first, (int)end) : -2;
+            {
+                if (!valueType || (flags & 0x138) != 0x100) return -2;
+                shape[0] = fields;
+                shape[1] = (int)first;
+                shape[2] = (int)(end - first);
+                return EnumStorage.Read(image, streams, methods, fields, (int)first, (int)end);
+            }
             // LayoutMask: 0 auto, 0x08 sequential, 0x10 explicit, 0x18 reserved.
             uint layout = flags & 0x18;
             // A class may be auto or sequential. Sequential order only matters
@@ -132,6 +146,19 @@ namespace PeLibrary
                     if (attributed < 0) return attributed;
                     inlineLength = attributed;
                 }
+                if (layout != 0x10)
+                {
+                    int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]),
+                        layout == 0x08 ? fields : 0, first, end);
+                    if (supported < 0)
+                    {
+                        if (!allowFixedBuffer || supported != -2 || layout != 0x08 || end - first != 1 ||
+                            inlineLength != 0 || (flags & ByRefLikeShape) != 0) return supported;
+                        inlineLength = FixedBufferMetadata.ManagedLength(image, methods, streams, counts, start,
+                            row, fields, (int)first);
+                        if (inlineLength < 0) return inlineLength;
+                    }
+                }
                 if (inlineLength != 0)
                 {
                     // Supported V8 engines accept at most 10,000 fields in
@@ -143,12 +170,6 @@ namespace PeLibrary
                     if ((U16(image, (uint)(fields + ((int)first - 1) * fieldWidth)) & 0x10) != 0)
                         return -2;
                     flags |= InlineArrayShape;
-                }
-                if (layout != 0x10)
-                {
-                    int supported = DefaultPacking(image, streams, methods, counts, row, IndexWidth(counts[2]),
-                        layout == 0x08 ? fields : 0, first, end);
-                    if (supported < 0) return supported;
                 }
                 baseType = 0;
                 flags |= ValueShape;
@@ -195,16 +216,25 @@ namespace PeLibrary
             return FirstClass + index;
         }
 
+        internal static int DeclaredShapeFieldCount(int[] shape) => (shape[4] & InlineArrayShape) != 0 ? 1 : shape[2];
+
         internal static int RegisterArray(int[] registry, int element)
         {
             if (IsByRefLikeValue(registry, element)) return -2;
-            for (int i = 0; i < registry[0]; i++)
-                if (registry[Slot(FirstClass + i) + Element] == element) return FirstClass + i;
+            int existing = FindArray(registry, element);
+            if (existing != 0) return existing;
             if (registry[0] >= MaxClasses) return -2;
             int type = FirstClass + registry[0];
             registry[0] = registry[0] + 1;
             registry[Slot(type) + Element] = element;
             return type;
+        }
+
+        internal static int FindArray(int[] registry, int element)
+        {
+            for (int i = 0; i < registry[0]; i++)
+                if (registry[Slot(FirstClass + i) + Element] == element) return FirstClass + i;
+            return 0;
         }
 
         // Key the vector by the enum's defining identity and lower its cells
@@ -404,6 +434,25 @@ namespace PeLibrary
             return 0;
         }
 
+        // Raw TypeDef.Extends retains the exact base token for reflection.
+        // ReadShape discards the ValueType/Enum edge after choosing storage.
+        internal static int TypeDefinitionBase(byte[] image, int[] streams, int[] methods, int row)
+        {
+            var counts = new int[45];
+            int start = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
+            if (start < 0 || row < 2 || row > counts[2]) return -1;
+            int strings = methods[2];
+            int refs = TypeRefStart(image, streams, counts, start, strings);
+            int defs = refs + counts[1] * (ResolutionWidth(counts) + 2 * strings);
+            int extends = CodedWidth(counts[2], counts[1], counts[27]);
+            int column = 4 + 2 * strings;
+            int width = column + extends + IndexWidth(counts[4]) + IndexWidth(counts[6]);
+            uint value = ReadIndex(image, (uint)(defs + (row - 1) * width + column), extends);
+            if (value == 0) return 0;
+            int target = (int)(value >> 2), tag = (int)(value & 3);
+            return target > 0 && tag < 3 && target <= counts[tag == 0 ? 2 : tag == 1 ? 1 : 27] ? (int)value : -1;
+        }
+
         // The TypeDef row of a top-level type named ns.name in this image, or 0 (issue #299 uses it
         // to bind CoreLib's System.IO.FileNotFoundException). Nested types are not searched.
         internal static int FindTypeDefinition(byte[] image, int[] streams, int[] methods, string ns, string name)
@@ -464,6 +513,23 @@ namespace PeLibrary
 
         internal static bool IsExplicitValue(int[] registry, int type) =>
             IsValueType(registry, type) && (registry[Slot(type) + ShapeFlags] & 0x18) == 0x10;
+
+        internal static bool HasExplicitSlots(int[] registry, int type) =>
+            IsExplicitValue(registry, type) && registry[Slot(type) + ExplicitSlots] != 0;
+
+        internal static bool UsesPackedExplicitValue(int[] registry, int type) =>
+            IsExplicitValue(registry, type) && !HasExplicitSlots(registry, type);
+
+        internal static bool SetExplicitSlots(int[] registry, int type, int[] physical, int count)
+        {
+            int entry = registry.Length - registry[2] - count - 1;
+            if (entry < FieldMapStart + registry[1]) return false;
+            registry[entry] = count;
+            for (int index = 0; index < count; index++) registry[entry + 1 + index] = physical[index];
+            registry[Slot(type) + ExplicitSlots] = entry;
+            registry[2] += count + 1;
+            return true;
+        }
 
         // A sequential class outside the platform CoreLib needs a parent with
         // layout. CoreCLR throws TypeLoadException for a sequential class
@@ -527,10 +593,46 @@ namespace PeLibrary
             return false;
         }
 
+        internal static int DeclaredInterfaceCount(int[] registry, int source)
+        {
+            int count = 0;
+            for (int edge = registry[Slot(source) + Interfaces]; edge != 0; edge = registry[edge + 1])
+                count++;
+            return count;
+        }
+
+        internal static void MarkArrayEnumerable(int[] registry, int type) =>
+            registry[Slot(type) + ShapeFlags] |= ArrayEnumerableShape;
+
+        internal static void MarkArrayList(int[] registry, int type) =>
+            registry[Slot(type) + ShapeFlags] |= ArrayListShape;
+
+        internal static bool IsExactArrayList(int[] registry, int source, int target)
+        {
+            if (!IsInterface(registry, target) || (registry[Slot(target) + ShapeFlags] & ArrayListShape) == 0)
+                return false;
+            // The VM supplies the interface on the SZ array object, so the
+            // caller passes the original reference and retains array identity.
+            int element = ArrayElementKey(registry, source);
+            return element >= FirstClass && element - FirstClass < registry[0] &&
+                element == Argument(registry, target, 0);
+        }
+
+        internal static bool IsExactArrayEnumerable(int[] registry, int source, int target)
+        {
+            if (!IsInterface(registry, target) || (registry[Slot(target) + ShapeFlags] & ArrayEnumerableShape) == 0)
+                return false;
+            int element = ArrayElementKey(registry, source);
+            return element >= FirstClass && element - FirstClass < registry[0] &&
+                ArrayElementKey(registry, element) == 0 && !IsInterface(registry, element) && !IsValueType(registry, element) &&
+                element == Argument(registry, target, 0);
+        }
+
         internal static bool Implements(int[] registry, int source, int target)
         {
             if (source < FirstClass || !IsInterface(registry, target)) return false;
-            return FindInterface(registry, source, target, new byte[registry[0]]);
+            return IsExactArrayEnumerable(registry, source, target) || IsExactArrayList(registry, source, target) ||
+                FindInterface(registry, source, target, new byte[registry[0]]);
         }
 
         private static bool FindInterface(int[] registry, int source, int target, byte[] seen)
@@ -553,7 +655,8 @@ namespace PeLibrary
 
         internal static int LayoutFieldCount(int[] registry, int type)
         {
-            if (IsExplicitValue(registry, type)) return 1;
+            if (UsesPackedExplicitValue(registry, type)) return 1;
+            if (HasExplicitSlots(registry, type)) return registry[registry[Slot(type) + ExplicitSlots]];
             int count = 0;
             for (int current = type; current != 0; current = Parent(registry, current))
                 count += FieldCount(registry, current);
@@ -570,7 +673,8 @@ namespace PeLibrary
         {
             // The GC type stores shared bytes in one immutable i64. Its CLI
             // field metadata and bit offsets remain independently addressable.
-            if (IsExplicitValue(registry, type)) return WideStorage.Scalar;
+            if (UsesPackedExplicitValue(registry, type)) return WideStorage.Scalar;
+            if (HasExplicitSlots(registry, type)) return registry[registry[Slot(type) + ExplicitSlots] + 1 + index];
             // Base fields are the prefix required by Wasm struct subtyping.
             int current = type;
             while (true)
@@ -609,7 +713,7 @@ namespace PeLibrary
         }
 
         internal static int FieldType(int[] registry, int type, int row) =>
-            FieldTypeAt(registry, type, row - registry[Slot(type) + FirstField]);
+            registry[registry[Slot(type) + Storage] + row - FirstRow(registry, type)] & FieldStorageMask;
 
         internal static int FieldOrdinal(int[] registry, int type, int field)
         {
@@ -618,13 +722,13 @@ namespace PeLibrary
             if (index < 0 || index >= DeclaredFieldCount(registry, type) || registry[storage + index] == 0)
                 return -1;
             if (IsExplicitValue(registry, type))
-                return (registry[storage + index] >> FieldStorageBits) - 1;
+                return (int)((uint)registry[storage + index] >> FieldStorageBits) - 1;
             int ordinal = 0;
             for (int parent = Parent(registry, type); parent != 0; parent = Parent(registry, parent))
                 for (int i = 0; i < FieldCount(registry, parent); i++)
                     if (FieldTypeAt(registry, parent, i) != 0) ordinal++;
             for (int i = 0; i < index; i++)
-                if (registry[storage + i] != 0) ordinal++;
+                if (FieldTypeAt(registry, type, i) != 0) ordinal++;
             return ordinal;
         }
 
@@ -814,7 +918,7 @@ namespace PeLibrary
 
         // Zero for an ordinary value type, the element count for a valid [InlineArray(n)],
         // and a diagnostic for other layout-changing attributes (IsByRefLike).
-        internal static int CheckValueAttributes(byte[] image, int[] streams, int[] methods, int row)
+        internal static int CheckValueAttributes(byte[] image, int[] streams, int[] methods, int row, bool allowByRefLike = false)
         {
             var counts = new int[45];
             int start = MetadataTableRows.ReadCounts(image, streams[4], streams[5], counts);
@@ -825,7 +929,7 @@ namespace PeLibrary
             int defs = refs + counts[1] * refWidth;
             int defWidth = 4 + 2 * strings + CodedWidth(counts[2], counts[1], counts[27]) +
                 IndexWidth(counts[4]) + IndexWidth(counts[6]);
-            return ValueTypeAttributes.ReadInlineArrayLength(image, streams, methods, counts, row, refs, refWidth, defs, defWidth);
+            return ValueTypeAttributes.ReadInlineArrayLength(image, streams, methods, counts, row, refs, refWidth, defs, defWidth, allowByRefLike);
         }
 
         // Zero when the type has no ClassLayout packing or size, otherwise -2. Byte-level

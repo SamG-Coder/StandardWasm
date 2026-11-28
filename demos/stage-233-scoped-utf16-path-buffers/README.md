@@ -1,0 +1,9 @@
+# Stage 233 · Scoped UTF-16 path buffers
+
+The compiler shares the bounded marshalling used by the managed `GetFullPathNameW` wrapper with the original CoreLib `GetLongPathNameW(ref char, ref char, uint)` wrapper. It verifies the managed signature, both pinned local declarations, native call order, exact import metadata, and the managed last-error transfer before lowering the body.
+
+The latter wrapper and its native leaf import `standardwasm:win32/getLongPathNameW` with Wasm signature `(i32 source, i32 destination, i32 capacity) -> i32`. The pointers are byte offsets in the imported linear memory, and capacity and return values count UTF-16 code units. The capacity includes space for a terminator. A successful call returns the path length excluding the terminator. A short buffer or a size query returns the required capacity without writing the destination. Missing files and missing directories return zero and set the raw system error. Only the managed wrapper transfers the raw system error into the saved P/Invoke slot.
+
+Managed character buffers are borrowed for the duration of the synchronous call. Native-backed spans keep their linear address. Managed output is copied back before control returns to the caller. The fixture covers an in-place call and uses a test provider limited to the fixture paths. A browser host without a binding rejects modules requiring this import during resolution.
+
+Run `npm run demo -- stage-233-scoped-utf16-path-buffers` with the generated compiler from `npm test`, or set `STANDARDWASM_COMPILER_PATH` to a frozen compiler artifact. The runner builds a normal .NET 10 fixture, runs the same DLL on Windows x86 CLR, Node and Edge, and writes versioned results with the fixture and compiler hashes to `artifacts/stage-233-scoped-utf16-path-buffers/results.json`.

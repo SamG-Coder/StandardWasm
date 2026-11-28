@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../stage-315-thread-message-queue/Fixture/Guest.cs" Link="ThreadQueueGuest.cs" />
+  </ItemGroup>
+</Project>

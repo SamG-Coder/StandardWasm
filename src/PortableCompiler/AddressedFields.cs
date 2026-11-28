@@ -1,10 +1,11 @@
 namespace PortableCompiler
 {
     // An addressed field keeps its backing choice across emission retries.
-    // Aggregate addresses use linear memory. Int32 and reference byrefs use traced cells.
+    // Native aggregates and borrowed pointer words use linear memory. Managed aggregates,
+    // Int32 and references use cells.
     internal sealed class AddressedFields
     {
-        internal const int Int32Cell = -2, ReferenceCell = -3;
+        internal const int Int32Cell = -2, ReferenceCell = -3, ValueCell = -4;
         private const int PageBytes = 65536, FieldWidth = 3;
         private int[] fields = new int[12];
         internal int Count;
@@ -33,6 +34,8 @@ namespace PortableCompiler
 
         internal void AddReferenceCell(int owner, int row) => Record(owner, row, ReferenceCell);
 
+        internal void AddValueCell(int owner, int row) => Record(owner, row, ValueCell);
+
         // FieldDef row IDs are positive. Negative keys keep the instance-cell
         // entries distinct from the static backing map.
         internal bool HasInstanceReference(int owner, int row) => Find(owner, -row) == ReferenceCell;
@@ -60,6 +63,29 @@ namespace PortableCompiler
 
     internal static class NativeStaticWasm
     {
+        // A zero plan denotes a wasm32 pointer word. Aggregate plan indices start at one.
+        internal const int PointerWordPlan = 0, PointerWordBytes = 4;
+
+        internal static int LoadData(byte[] code, int used, int region, int pages, int cache,
+            int offset, int literal, int count, int address)
+        {
+            code[used++] = 0x23; // global.get cache
+            used = WasmBinary.Unsigned(code, used, cache);
+            code[used++] = 0x45; // i32.eqz
+            code[used++] = 0x04; code[used++] = 0x40;
+            used = Address(code, used, region, pages, offset, address);
+            used = BranchWasm.Local(code, used, 0x20, address);
+            used = BranchWasm.Const(code, used, literal);
+            used = BranchWasm.Const(code, used, count);
+            code[used++] = 0xfc; code[used++] = 8; code[used++] = 0; code[used++] = 0; // memory.init 0 0
+            used = BranchWasm.Local(code, used, 0x20, address);
+            code[used++] = 0x24; // global.set cache
+            used = WasmBinary.Unsigned(code, used, cache);
+            code[used++] = 0x0b;
+            code[used++] = 0x23;
+            return WasmBinary.Unsigned(code, used, cache);
+        }
+
         internal static int Address(byte[] code, int used, int region, int pages, int offset, int address)
         {
             code[used++] = 0x23; // global.get region

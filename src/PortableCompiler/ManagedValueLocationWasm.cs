@@ -102,6 +102,16 @@ namespace PortableCompiler
             return CellInstruction(code, used, 0); // struct.new
         }
 
+        internal static int DefaultCellSize(bool tracksRoots) =>
+            4 + WasmBinary.UnsignedSize(WasmBinary.ValueLocationHeap) + (tracksRoots ? 2 : 0);
+
+        internal static int CreateDefaultCell(byte[] code, int used, bool tracksRoots)
+        {
+            code[used++] = 0xd0; // ref.null eq is the default snapshot
+            code[used++] = 0x6d;
+            return CreateCell(code, used, tracksRoots);
+        }
+
         internal static int ClearFrameCell(byte[] code, int used, int cell)
         {
             used = Local(code, used, 0x20, cell);

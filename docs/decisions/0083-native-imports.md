@@ -87,6 +87,49 @@ These stay a -2 at the native method (`location` names its MethodDef):
 Pointer and struct marshalling need decision 0025's linear-memory model (#275, #132) and come in a
 later step.
 
+## Signatures (step 2)
+
+Stage 365 (#275) admits unmanaged pointers (`ELEMENT_TYPE_PTR`) as parameters and results. This
+unblocks the WebGPU `webgpu.h` descriptor entries (#313, #314). By-value structs and UTF-8 strings
+(Stage 366) and function-pointer callbacks (Stage 367) are separate steps.
+
+| Element type | Wasm |
+| --- | --- |
+| `T*`, `void*`, `T**` | i32: the wasm32 address in memory 0, unchanged |
+
+- **No marshalling.** The CLR doesn't marshal a `T*` either. It hands the callee the address the
+  caller computed. The thunk forwards the i32 as is. There is no copy, no new pinning and no
+  lifetime rule beyond the caller's own. Addresses come from the forms the compiler already
+  places in memory 0: `&` of native-frame locals (Stage 132), `fixed` strings (Stage 149),
+  fixed-size buffers through a pointer (decision 0095) and `stackalloc` (Stage 137).
+- **The pointee must have a reproducible layout.** The callee reads the pointee with the CLR's
+  layout, so it must match ours. Admitted pointees:
+  - `void`
+  - the integer and floating-point primitives, `IntPtr` and `UIntPtr`
+  - another pointer
+  - a value type defined in the same assembly that `NativeValueLayouts.Measure` accepts: sequential
+    layout with default packing, measured as on the x86 CLR (decision 0071)
+- **Still a located -2 at the import:**
+  - `ref`, `out` and `in` byrefs (the CLR pins and passes them, which is a separate contract)
+  - strings, arrays, delegates, and by-value `bool`, `char` and structs
+  - `bool*` and `char*`. The raw address would be faithful, but Win32 declarations usually mean a
+    4-byte `BOOL*` or a wide string there. They wait for a consumer that pins down the intent.
+  - pointers to structs with `Pack`/`Size`, auto layout, a TypeRef (another assembly) or a
+    generic instance, and pointers with custom modifiers or to function pointers
+- **The host lends memory.** A module that forms such an address imports
+  `standardwasm:resources.memory`. A registry entry that dereferences a pointer reads
+  `state.memory`, the same `WebAssembly.Memory` the host lent, through a fresh view per call. A
+  null or out-of-range address throws a host `Error`. On Windows it would be an access violation
+  that ends the process, and neither case can be caught by managed code.
+- **Registry.** `windowsPointers` implements `kernel32!FileTimeToSystemTime` and
+  `SystemTimeToFileTime` (with their `ERROR_INVALID_PARAMETER` failures, leaving the output
+  untouched), plus `ucrtbase!strlen` and `memcpy` (zero bytes touch neither pointer). A host
+  combines it with `windowsScalars`.
+
+`npm run demo -- stage-365-native-pointer-arguments` compares 22 values from the x86 CLR against
+the real DLLs with Node and Edge, and asserts the 12 diagnostics above. Stage 156's scalar fixture
+is unchanged and still passes.
+
 ## Host registry
 
 `scripts/native-imports.mjs` builds the import object from a module's own import list:

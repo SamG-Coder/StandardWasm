@@ -13,19 +13,22 @@ namespace PortableCompiler
 
         // result[0] = size, result[1] = alignment. Returns 0, or a negative diagnostic.
         internal static int Measure(BundleImages bundle, int owner, int type, int[] result, int depth = 0) =>
-            Measure(bundle, owner, type, result, depth, 0, null);
+            Measure(bundle, owner, type, result, depth, 0, null, false);
+
+        internal static int MeasureFrame(BundleImages bundle, int owner, int type, int[] result) =>
+            Measure(bundle, owner, type, result, 0, 0, null, true);
 
         // field[0] = byte offset, field[1] = ldind opcode for its element (0 for a nested struct).
-        internal static int Field(BundleImages bundle, int owner, int type, int row, int[] field)
+        internal static int Field(BundleImages bundle, int owner, int type, int row, int[] field, bool scopedFrame = false)
         {
             var measured = new int[2];
             field[0] = -1;
-            int status = Measure(bundle, owner, type, measured, 0, row, field);
+            int status = Measure(bundle, owner, type, measured, 0, row, field, scopedFrame);
             if (status < 0) return status;
             return field[0] < 0 ? -1 : 0;
         }
 
-        private static int Measure(BundleImages bundle, int owner, int type, int[] result, int depth, int target, int[] found)
+        private static int Measure(BundleImages bundle, int owner, int type, int[] result, int depth, int target, int[] found, bool scopedFrame)
         {
             if (depth > MaxDepth) return -2;
             byte[] image = bundle.Get(owner);
@@ -33,15 +36,17 @@ namespace PortableCompiler
             var heaps = new int[8];
             if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
             var counts = new int[45];
-            if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0 || type < 1 || type > counts[2]) return -1;
-            // [InlineArray(n)] repeats its single declared field n times (Stage 138); ref structs
-            // hold byrefs and stay diagnosed (decision 0071).
-            int inlineLength = ObjectLayouts.CheckValueAttributes(image, heaps, layout, type);
+            int metadata = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (metadata < 0 || type < 1 || type > counts[2]) return -1;
+            // Only the address-taking frame path can opt into a ref struct.
+            // Every field must still pass the native layout check below.
+            int inlineLength = ObjectLayouts.CheckValueAttributes(image, heaps, layout, type, scopedFrame);
+            if (scopedFrame && inlineLength == ValueTypeAttributes.ByRefLike) inlineLength = 0;
             if (inlineLength < 0) return inlineLength;
             // [StructLayout(Pack = n)] and Size change the CLR's byte layout (Codex review of
             // #294: Pack=1 {byte, int} is 5 on the x86 CLR). They stay diagnosed.
             int packing = ObjectLayouts.CheckDefaultPacking(image, heaps, layout, type);
-            if (packing < 0) return packing;
+            if (packing < 0 && packing != -2) return packing;
 
             int strings = layout[2];
             int fieldIndex = counts[4] < 65536 ? 2 : 4;
@@ -56,6 +61,9 @@ namespace PortableCompiler
             int table = AssemblyReferences.FieldTable(image, heaps, layout);
             if (table < 0) return table;
             uint layoutKind = U32(image, definition) & 0x18;
+            if (packing == -2)
+                return FixedBuffer(image, layout, heaps, counts, metadata, type, layoutKind, table, first, end,
+                    inlineLength, target, found, result);
             if (layoutKind == 0)
             {
                 // Auto layout has no CLR-defined order, except for an enum: one value__ field.
@@ -121,6 +129,24 @@ namespace PortableCompiler
             if (inlineLength > 0) offset = (offset + align - 1) / align * align * inlineLength;
             result[0] = (offset + align - 1) / align * align;
             result[1] = align;
+            return 0;
+        }
+
+        private static int FixedBuffer(byte[] image, int[] layout, int[] heaps, int[] counts,
+            int metadata, int type, uint layoutKind, int table, int first, int end, int inlineLength,
+            int target, int[] found, int[] result)
+        {
+            if (layoutKind != 0x08 || inlineLength != 0 || end - first != 1) return -2;
+            var element = new int[2];
+            int extent = FixedBufferMetadata.Read(image, layout, heaps, counts, metadata, type, table, first, element);
+            if (extent < 0) return extent;
+            result[0] = extent;
+            result[1] = element[1];
+            if (target == first)
+            {
+                found[0] = 0;
+                found[1] = LoadOpcode(element[0]);
+            }
             return 0;
         }
 

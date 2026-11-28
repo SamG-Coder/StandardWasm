@@ -35,7 +35,7 @@ namespace PortableCompiler
                 if (form == Namespace && end == start)
                 {
                     code[used++] = 0xd0; // ref.null
-                    code[used++] = NullSpillWasm.NullRef;
+                    code[used++] = StackSpillWasm.NullRef;
                     code[used++] = 0x0f;
                     code[used++] = 0x0b;
                     continue;
@@ -188,7 +188,7 @@ namespace PortableCompiler
             return Text(data, used, "]");
         }
 
-        private static int AppendNested(byte[] image, int[] layout, int[] heaps, int[] counts,
+        internal static int AppendNested(byte[] image, int[] layout, int[] heaps, int[] counts,
             int row, byte[] data, int used, int depth)
         {
             if (depth >= ObjectLayouts.MaxTypeDepth) return -2;

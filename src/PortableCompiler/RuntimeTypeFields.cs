@@ -3,8 +3,69 @@ using static PortableCompiler.BranchIl;
 
 namespace PortableCompiler
 {
-    internal static class RuntimeTypeFields
+    internal sealed class RuntimeTypeFields
     {
+        private int[] fields = new int[8];
+        private int used;
+
+        internal bool UsesDescriptor(int owner, int row)
+        {
+            for (int index = 0; index < used; index += 2)
+                if (fields[index] == owner && fields[index + 1] == row) return true;
+            return false;
+        }
+
+        internal static bool IsDeclaringConstructor(byte[] image, int[] heaps, int[] layout,
+            int owner, int caller, int[] objects, int declaring) =>
+            ObjectLayouts.AssemblyOf(objects, declaring) == owner &&
+            (MethodDefinitions.ReadColumn(image, layout, caller, 2) & 0x1850) == 0x1800 &&
+            ObjectLayouts.IsConstructor(image, heaps, layout, caller) &&
+            ObjectLayouts.Owner(image, heaps, layout, caller, false) == ObjectLayouts.TypeDef(objects, declaring);
+
+        internal bool RequireInstance(BundleImages bundle, byte[] image, int[] heaps, int[] layout,
+            int owner, int caller, int[] objects, int descriptor, int ordinal, bool reading)
+        {
+            int declaring = FieldAccess.Owner(descriptor);
+            if (ObjectLayouts.IsExplicitValue(objects, declaring) || ObjectLayouts.IsInlineArray(objects, declaring) ||
+                !RuntimeTypeLocals.IsLinkedSystemType(bundle, objects, FieldAccess.Storage(descriptor)) ||
+                !reading && !IsDeclaringConstructor(image, heaps, layout, owner, caller, objects, declaring)) return false;
+            int declaringOwner = ObjectLayouts.AssemblyOf(objects, declaring);
+            if (declaringOwner != owner)
+            {
+                image = bundle.Get(declaringOwner);
+                heaps = new int[8];
+                layout = new int[4];
+                if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return false;
+            }
+            int first = ObjectLayouts.FirstRow(objects, declaring);
+            int end = first + ObjectLayouts.DeclaredFieldCount(objects, declaring);
+            var field = new int[3];
+            for (int row = first; row < end; row++)
+            {
+                if (ObjectLayouts.FieldOrdinal(objects, declaring, row) != ordinal) continue;
+                AssemblyReferences.ReadField(image, layout, ObjectLayouts.TableOf(objects, declaring), row, field);
+                if ((field[0] & 0x30) != 0x20 || UsesDescriptor(declaringOwner, row)) return false;
+                var reference = new int[2];
+                int storage = ObjectLayouts.ReadStorage(image, heaps, layout,
+                    ObjectLayouts.TableOf(objects, declaring), row, reference, false);
+                if (storage < 0 || reference[0] <= 0 || reference[1] == 1 ||
+                    RuntimeTypeMetadata.Storage(image, heaps, layout, reference[0], false) != RuntimeTypeMetadata.Type) return false;
+                // Layouts are recreated on re-emission. A stable FieldDef key
+                // gives every reachable constructor and reader the same storage.
+                // The verifier checks all generated stores against that type.
+                if (used == fields.Length)
+                {
+                    var grown = new int[fields.Length * 2];
+                    for (int index = 0; index < used; index++) grown[index] = fields[index];
+                    fields = grown;
+                }
+                fields[used++] = declaringOwner;
+                fields[used++] = row;
+                return true;
+            }
+            return false;
+        }
+
         // An initonly static can only be written by its declaring initializer.
         // A straight-line ldtoken / GetTypeFromHandle / stsfld proves the
         // slot holds a canonical descriptor or the initial null. The normal

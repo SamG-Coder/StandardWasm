@@ -35,10 +35,10 @@ namespace PortableCompiler
                 !StringMetadata.IsFirstCodeUnitDefinition(image, heaps, layout, fieldRow) ||
                 length >> 24 != 6 || !CoreStringRange.IsMethod(image, layout, heaps, counts, first,
                     (int)(length & 0xffffff), "System", "String", "get_Length", new byte[] { 0x20, 0, 8 }, false) ||
-                !IsClosedMethod(image, layout, heaps, counts, first, U32(image, (uint)(start + 7)),
+                !CoreStringRange.IsClosedMethod(image, layout, heaps, counts, first, U32(image, (uint)(start + 7)),
                     "System.Runtime.CompilerServices", "Unsafe", "As", new byte[] { 3, 6 },
                     new byte[] { 0x10, 2, 1, 0x10, 0x1e, 1, 0x10, 0x1e, 0 }) ||
-                !IsClosedMethod(image, layout, heaps, counts, first, U32(image, (uint)(start + 20)),
+                !CoreStringRange.IsClosedMethod(image, layout, heaps, counts, first, U32(image, (uint)(start + 20)),
                     "System", "SpanHelpers", "ContainsValueType", new byte[] { 6 },
                     new byte[] { 0x10, 1, 3, 2, 0x10, 0x1e, 0, 0x1e, 0, 8 }))
                 return false;
@@ -48,22 +48,6 @@ namespace PortableCompiler
             Record(records, 19, StringContainsCodeUnit, 0, 24);
             Record(records, 24, Return, 0, 25);
             return true;
-        }
-
-        private static bool IsClosedMethod(byte[] image, int[] layout, int[] heaps, int[] counts, int first,
-            uint token, string space, string type, string name, byte[] arguments, byte[] signature)
-        {
-            if (token >> 24 != 0x2b) return false;
-            var spec = new int[MethodSpecifications.Width];
-            if (MethodSpecifications.Read(image, heaps, layout, counts, (int)(token & 0xffffff), spec) < 0)
-                return false;
-            int target = spec[MethodSpecifications.Target], start = spec[MethodSpecifications.Arguments];
-            if ((target & 1) != 0 || spec[MethodSpecifications.Arity] != arguments.Length ||
-                spec[MethodSpecifications.End] - start != arguments.Length)
-                return false;
-            for (int i = 0; i < arguments.Length; i++)
-                if (image[start + i] != arguments[i]) return false;
-            return CoreStringRange.IsMethod(image, layout, heaps, counts, first, target >> 1, space, type, name, signature, true);
         }
 
         private static void Record(int[] records, int offset, int kind, int operand, int next)

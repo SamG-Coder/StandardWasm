@@ -20,7 +20,8 @@ namespace PortableCompiler
             int at = next[0];
             if (at >= end) return -1;
             int element = image[at];
-            if (element != 2 && element != 3 && element != 5 && element != 6 && element != 8 && element != 0x0e && element != 0x1c &&
+            if (element != 2 && element != 3 && element != 5 && element != 6 && element != 8 && element != 9 &&
+                element != 0x0a && element != 0x0b && element != 0x0e && element != 0x1c &&
                 element != 0x11 && element != 0x12 && element != 0x13 && element != 0x15 && element != 0x18 && element != 0x1e) return -2;
             int type = Read(bundle, image, layout, heaps, owner, next, end, context, objects, 0,
                 methodArguments: methodArguments);
@@ -32,9 +33,11 @@ namespace PortableCompiler
         internal static int ElementLocation(int[] objects, int type)
         {
             int location = LocationFromIdentity(objects, type);
-            // A managed out enum with 32-bit storage uses the existing scalar cell.
-            if (location == 0 && ObjectLayouts.IsEnumKey(type) && ObjectLayouts.SignatureStorage(objects, type) == I32)
-                location = Int32Location;
+            if (location == 0 && ObjectLayouts.IsEnumKey(type))
+            {
+                int storage = ObjectLayouts.SignatureStorage(objects, type);
+                location = storage == I32 ? Int32Location : storage == I64 ? Int64Location : 0;
+            }
             return location;
         }
 
@@ -43,7 +46,7 @@ namespace PortableCompiler
         {
             int type = TypeSpecIdentity(bundle, image, layout, heaps, owner, row, context, objects, methodArguments);
             if (type < 0) return type;
-            int location = LocationFromIdentity(objects, type);
+            int location = ElementLocation(objects, type);
             return location != 0 ? location : -2;
         }
 
@@ -133,10 +136,13 @@ namespace PortableCompiler
             {
                 int type = arguments[0] == ObjectLayouts.ObjectReference ? ObjectSpan :
                     arguments[0] == GenericScalar.Key(3) ? CharacterSpan :
-                    arguments[0] == GenericScalar.Key(5) ? ReadOnlyByteSpan : 0;
+                    arguments[0] == GenericScalar.Key(5) ? ReadOnlyByteSpan :
+                    arguments[0] == GenericScalar.Key(8) ? ReadOnlyInt32Span : 0;
                 if (type != 0 && SpanMetadata.IsDefinition(image, layout, heaps, head[0])) return type;
                 if (type == CharacterSpan && SpanMetadata.IsDefinition(image, layout, heaps, head[0], writable: true))
                     return WritableCharacterSpan;
+                if (type == ReadOnlyByteSpan && SpanMetadata.IsDefinition(image, layout, heaps, head[0], writable: true))
+                    return WritableByteSpan;
             }
             if (head[1] == 0x12 && count == 2 && arguments[0] == GenericScalar.Key(3) &&
                 arguments[1] == GenericScalar.Key(0x18) &&

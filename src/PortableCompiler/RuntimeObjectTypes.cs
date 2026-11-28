@@ -11,6 +11,10 @@ namespace PortableCompiler
         private byte[] receivers;
         private bool anyClass, stringReceiver, interfaceReceiver;
         private int boxedElements, primitiveArrays, primitiveReceivers;
+        private int[] enumTags;
+        private int enumCount;
+
+        internal bool HasEnumBoxes => enumCount != 0;
 
         internal void Include(int[] objects, int type)
         {
@@ -23,7 +27,20 @@ namespace PortableCompiler
             receivers[type - FirstClass] = 1;
         }
 
-        internal void IncludeBox(int element) => boxedElements |= 1 << element;
+        internal int IncludeBox(int tag)
+        {
+            if (!BoxedEnums.IsTag(tag))
+            {
+                boxedElements |= 1 << tag;
+                return 0;
+            }
+            if (enumTags == null) enumTags = new int[MaxClasses];
+            for (int i = 0; i < enumCount; i++)
+                if (enumTags[i] == tag) return 0;
+            if (enumCount == enumTags.Length) return -3;
+            enumTags[enumCount++] = tag;
+            return 0;
+        }
         internal void IncludePrimitiveArray(int element) => primitiveArrays |= 1 << element;
 
         internal int Write(BundleImages bundle, byte[] code, int position, int[] objects, int[] globals,
@@ -68,6 +85,11 @@ namespace PortableCompiler
                     if (position < 0) return position;
                 }
             }
+            if ((anyClass || interfaceReceiver) && enumCount != 0)
+            {
+                position = WriteEnumTypes(code, position, objects);
+                if (position < 0) return position;
+            }
             if ((anyClass || interfaceReceiver) && aggregateBoxes.Count != 0)
             {
                 position = WriteAggregateTypes(code, position, objects, aggregateBoxes);
@@ -86,6 +108,24 @@ namespace PortableCompiler
             // Representations without exact runtime type identity must fail
             // rather than substituting the static Object type.
             code[position++] = 0x00;
+            code[position++] = 0x0b;
+            return position;
+        }
+
+        private int WriteEnumTypes(byte[] code, int position, int[] objects)
+        {
+            if (code.Length - position < 14) return -3;
+            int layout = PrimitiveBoxing.FindLayout(objects);
+            position = PrimitiveBoxing.TestType(code, position, 0, layout);
+            code[position++] = 0x04;
+            code[position++] = 0x40;
+            for (int i = 0; i < enumCount; i++)
+            {
+                if (code.Length - position < 40) return -3;
+                int tag = enumTags[i];
+                position = PrimitiveBoxing.TestElement(code, position, 0, layout, tag);
+                position = ReturnCase(code, position, BoxedEnums.Descriptor(tag));
+            }
             code[position++] = 0x0b;
             return position;
         }

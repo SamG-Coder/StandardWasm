@@ -37,7 +37,7 @@ export async function verifyManagedDemo(stageName) {
         const output = tool.CreateBytes(2 << 20);
         const diagnostic = tool.CreateDiagnostic();
         const outcomes = [];
-        for (const { name, row, expected, memory, monitor } of cases) {
+        for (const { name, row, expected, memory, monitor, referenceIdentity, trap } of cases) {
             const manifest = Uint8Array.from([0, 0, 0, 0, 3, 0, 0, 0, 114, 117, 110]);
             new DataView(manifest.buffer).setUint32(0, row, true);
             const length = tool.CompileBundleDetailed(input, upload(manifest), output, diagnostic);
@@ -64,7 +64,22 @@ export async function verifyManagedDemo(stageName) {
             if (requested.length !== allowed.length || requested.some((item, index) => item !== allowed[index]))
                 throw Error(name + " has unexpected host imports");
             const instance = await WebAssembly.instantiate(module, imports);
-            outcomes.push({ name, expected, result: instance.exports.run() });
+            let value;
+            try {
+                value = instance.exports.run();
+            } catch (error) {
+                if (!trap || !(error instanceof WebAssembly.RuntimeError)) throw error;
+                outcomes.push({ name, expected, trapped: true });
+                continue;
+            }
+            // GC references cross the engine boundary as opaque identity-bearing values.
+            if (referenceIdentity) {
+                const other = await WebAssembly.instantiate(module, imports);
+                const isolated = value !== null && value === instance.exports.run() && value !== other.exports.run();
+                outcomes.push({ name, expected, result: isolated ? 1 : 0 });
+            } else {
+                outcomes.push({ name, expected, result: value });
+            }
         }
         return outcomes;
     }
@@ -99,6 +114,8 @@ export async function verifyManagedDemo(stageName) {
             if (rejection) {
                 assert.equal(test.status, rejection.status, JSON.stringify(test));
                 assert.deepEqual(test.location, rejection.location, JSON.stringify(test));
+            } else if (oracle.cases[index].trap) {
+                assert.equal(test.trapped, true, JSON.stringify(test));
             } else {
                 assert.equal(test.result, test.expected, JSON.stringify(test));
             }

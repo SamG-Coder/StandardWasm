@@ -35,14 +35,59 @@ namespace PeLibrary
 
         // CoreLib signatures can name either Assembly declaration by TypeDef.
         // Runtime-created instances share the canonical Assembly descriptor.
-        internal static bool IsAssemblyDefinition(byte[] image, int[] heaps, int[] layout, int coded)
+        internal static bool IsAssemblyDefinition(byte[] image, int[] heaps, int[] layout, int coded, bool includeRuntimeAssembly = true)
         {
             if ((coded & 3) != 0) return false;
             var counts = new int[45];
             int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
             return first >= 0 && PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts) &&
                 (ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2, "System.Reflection", "Assembly") ||
-                    ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2, "System.Reflection", "RuntimeAssembly"));
+                    includeRuntimeAssembly && ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2,
+                        "System.Reflection", "RuntimeAssembly"));
+        }
+
+        internal static bool IsRuntimeTypeDefinition(byte[] image, int[] heaps, int[] layout, int coded)
+        {
+            if ((coded & 3) != 0) return false;
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            return first >= 0 && PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts) &&
+                ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, coded >> 2, "System", "RuntimeType");
+        }
+
+        internal const int GenericKind = 1, GenericDefinition = 2, GenericArguments = 3, EnumKind = 4, ValueKind = 5;
+
+        internal static bool IsValueKindCandidate(int flags) => (flags & 0x2857) == 0x0806;
+
+        internal static int CoreTypeDescriptorOperation(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            int flags = MethodDefinitions.ReadColumn(image, layout, row, 2);
+            int access = flags & 0x2057;
+            uint name = (uint)MethodDefinitions.ReadColumn(image, layout, row, 3);
+            int operation;
+            if (IsValueKindCandidate(flags) && MatchesAscii(image, heaps, name, "get_IsValueType"))
+                operation = ValueKind;
+            else if (access != 0x0046) return 0;
+            else if ((flags & 0x0800) != 0)
+                operation = MatchesAscii(image, heaps, name, "get_IsGenericType") ? GenericKind :
+                    MatchesAscii(image, heaps, name, "get_IsEnum") ? EnumKind : 0;
+            else operation = MatchesAscii(image, heaps, name, "GetGenericTypeDefinition") ? GenericDefinition :
+                MatchesAscii(image, heaps, name, "GetGenericArguments") ? GenericArguments : 0;
+            if (operation == 0) return 0;
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return 0;
+            int declaring = ObjectLayouts.Owner(image, heaps, layout, row, false);
+            if (!ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, declaring, "System", "Type")) return 0;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), 0, cursor);
+            if (end < 0) return 0;
+            if (operation == GenericArguments && !SignatureReader.TakeElement(image, cursor, end, 0x1d)) return 0;
+            bool result = operation == GenericKind || operation == EnumKind || operation == ValueKind ?
+                SignatureReader.TakeElement(image, cursor, end, SignatureReader.Boolean) :
+                SignatureReader.ReadClass(image, cursor, end) == declaring << 2;
+            return result && cursor[0] == end &&
+                (operation != ValueKind || IsValueKindWrapper(image, layout, heaps, counts, declaring, row)) ? operation : 0;
         }
 
         internal static bool ValidDefinition(byte[] image, int[] heaps, int row)
@@ -96,6 +141,30 @@ namespace PeLibrary
                 cursor = next[0];
             }
             return cursor != end ? 0 : getType ? 1 : equality ? 2 : 3;
+        }
+
+        // CoreLib calls its own Type operators by MethodDef. Match the same
+        // canonical type signature as the MemberRef path.
+        internal static int CoreTypeComparison(byte[] image, int[] heaps, int[] layout, int row)
+        {
+            if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x2450) != 0x10) return 0;
+            uint name = (uint)MethodDefinitions.ReadColumn(image, layout, row, 3);
+            bool equal = MatchesAscii(image, heaps, name, "op_Equality");
+            if (!equal && !MatchesAscii(image, heaps, name, "op_Inequality")) return 0;
+
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0 || !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return 0;
+            int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+            if (owner < 1 || !ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, owner, "System", "Type")) return 0;
+
+            var cursor = new int[1];
+            int blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
+            int end = SignatureReader.ReadStatic(image, heaps, blob, 2, cursor);
+            if (end < 0 || !SignatureReader.TakeElement(image, cursor, end, SignatureReader.Boolean)) return 0;
+            for (int argument = 0; argument < 2; argument++)
+                if (SignatureReader.ReadClass(image, cursor, end) != owner << 2) return 0;
+            return cursor[0] == end ? equal ? 2 : 3 : 0;
         }
 
         // Runtime descriptors dispatch ToString through the canonical Object slot.
@@ -188,6 +257,153 @@ namespace PeLibrary
             return parameter > 0 && (parameter & 3) == 0 && next[0] == end &&
                 ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, parameter >> 2, "System", "RuntimeTypeHandle");
         }
+        internal static bool IsMakeGenericType(byte[] image, int[] heaps, int[] layout, int row, bool definition)
+        {
+            int signature, declaring;
+            if (definition)
+            {
+                if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x2050) != 0x40 ||
+                    !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "MakeGenericType"))
+                    return false;
+                declaring = ObjectLayouts.Owner(image, heaps, layout, row, false);
+                signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
+            }
+            else
+            {
+                var member = new int[AssemblyReferences.SymbolWidth];
+                if (AssemblyReferences.ReadMember(image, heaps, layout, row, member) < 0 ||
+                    member[AssemblyReferences.Depth] != 0 ||
+                    !MatchesAscii(image, heaps, (uint)member[4], "MakeGenericType")) return false;
+                declaring = member[AssemblyReferences.Leaf];
+                signature = member[5];
+            }
+
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, signature, 1, cursor);
+            int result = end < 0 ? -1 : SignatureReader.ReadClass(image, cursor, end);
+            if (declaring < 1 || result < 1 ||
+                !SignatureReader.TakeElement(image, cursor, end, 0x1d)) return false;
+            int element = SignatureReader.ReadClass(image, cursor, end);
+            int tag = definition ? 0 : 1;
+            int declaringToken = declaring << 2 | tag;
+            if (result != declaringToken || element != declaringToken || cursor[0] != end) return false;
+
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0) return false;
+            return definition
+                ? PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts) &&
+                    ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, declaring, "System", "Type")
+                : PlatformTypeReferences.Identify(image, heaps, layout, counts, first, declaring) == PlatformTypeReferences.Type;
+        }
+
+        internal static bool IsTypeAssignableFrom(byte[] image, int[] heaps, int[] layout, int row, bool definition) =>
+            IsTypeAssignability(image, heaps, layout, row, definition, false);
+
+        internal static bool IsTypeAssignableTo(byte[] image, int[] heaps, int[] layout, int row, bool definition) =>
+            IsTypeAssignability(image, heaps, layout, row, definition, true);
+
+        private static bool IsTypeAssignability(byte[] image, int[] heaps, int[] layout, int row, bool definition, bool to)
+        {
+            int signature, declaring;
+            string name = to ? "IsAssignableTo" : "IsAssignableFrom";
+            if (definition)
+            {
+                if ((MethodDefinitions.ReadColumn(image, layout, row, 2) & (to ? 0x2450 : 0x2050)) != (to ? 0 : 0x40) ||
+                    !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), name))
+                    return false;
+                declaring = ObjectLayouts.Owner(image, heaps, layout, row, false);
+                signature = MethodDefinitions.ReadColumn(image, layout, row, 4);
+            }
+            else
+            {
+                var member = new int[AssemblyReferences.SymbolWidth];
+                if (AssemblyReferences.ReadMember(image, heaps, layout, row, member) < 0 ||
+                    member[AssemblyReferences.Depth] != 0 ||
+                    !MatchesAscii(image, heaps, (uint)member[4], name)) return false;
+                declaring = member[AssemblyReferences.Leaf];
+                signature = member[5];
+            }
+
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, signature, 1, cursor);
+            if (declaring < 1 || end < 0 ||
+                !SignatureReader.TakeElement(image, cursor, end, SignatureReader.Boolean)) return false;
+            int argument = SignatureReader.ReadClass(image, cursor, end);
+            if (argument < 1 || cursor[0] != end) return false;
+
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0) return false;
+            if (definition)
+                return argument == declaring << 2 && PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts) &&
+                    ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, declaring, "System", "Type");
+            return (argument & 3) == 1 &&
+                PlatformTypeReferences.Identify(image, heaps, layout, counts, first, declaring) == PlatformTypeReferences.Type &&
+                PlatformTypeReferences.Identify(image, heaps, layout, counts, first, argument >> 2) == PlatformTypeReferences.Type;
+        }
+
+        internal static bool IsTypeHandleGetter(byte[] image, int[] heaps, int[] layout, int row, bool definition)
+        {
+            var counts = new int[45];
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0) return false;
+            int blob;
+            if (definition)
+            {
+                if (row < 1 || row > counts[6] ||
+                    (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x2050) != 0x40 ||
+                    !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "get_TypeHandle") ||
+                    !PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return false;
+                int owner = ObjectLayouts.Owner(image, heaps, layout, row, false);
+                if (owner < 1 || !ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, owner, "System", "Type"))
+                    return false;
+                blob = MethodDefinitions.ReadColumn(image, layout, row, 4);
+            }
+            else
+            {
+                var member = new int[AssemblyReferences.SymbolWidth];
+                if (AssemblyReferences.ReadMember(image, heaps, layout, row, member) < 0 ||
+                    member[AssemblyReferences.Depth] != 0 ||
+                    !MatchesAscii(image, heaps, (uint)member[4], "get_TypeHandle") ||
+                    PlatformTypeReferences.Identify(image, heaps, layout, counts, first, member[AssemblyReferences.Leaf]) !=
+                        PlatformTypeReferences.Type) return false;
+                blob = member[5];
+            }
+
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, blob, 0, cursor);
+            if (end < 0 || !SignatureReader.TakeElement(image, cursor, end, 0x11)) return false;
+            int result = CompressedUnsigned(image, cursor[0], end, cursor);
+            if (result <= 0 || cursor[0] != end) return false;
+            int handle = result >> 2;
+            return definition
+                ? (result & 3) == 0 && handle <= counts[2] &&
+                    ObjectLayouts.NamedDefinition(image, heaps, layout, counts, first, handle, "System", "RuntimeTypeHandle")
+                : (result & 3) == 1 &&
+                    PlatformTypeReferences.Identify(image, heaps, layout, counts, first, handle) == PlatformTypeReferences.TypeHandle;
+        }
+
+        private static bool IsValueKindWrapper(byte[] image, int[] layout, int[] heaps, int[] counts, int type, int method)
+        {
+            // The original nonvirtual getter is only a call to its protected virtual slot.
+            var body = new int[6];
+            uint rva = (uint)MethodDefinitions.ReadColumn(image, layout, method, 0);
+            if (MethodBodies.Read(image, rva, body) != 0 || body[1] != 7 || body[3] != 0 || body[5] != 0) return false;
+            int at = body[0];
+            if (U16(image, (uint)at) != 0x6f02 || image[at + 6] != 0x2a) return false;
+            uint token = U32(image, (uint)(at + 2));
+            int row = (int)(token & 0xffffff);
+            if ((token >> 24) != 6 || row < 1 || row > counts[6] ||
+                ObjectLayouts.Owner(image, heaps, layout, row, false) != type ||
+                (MethodDefinitions.ReadColumn(image, layout, row, 2) & 0x2057) != 0x0044 ||
+                !MatchesAscii(image, heaps, (uint)MethodDefinitions.ReadColumn(image, layout, row, 3), "IsValueTypeImpl"))
+                return false;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadInstance(image, heaps, MethodDefinitions.ReadColumn(image, layout, row, 4), 0, cursor);
+            return end >= 0 && SignatureReader.TakeElement(image, cursor, end, SignatureReader.Boolean) && cursor[0] == end;
+        }
+
         internal const int ValueTypeProperty = 1, EnumProperty = 2;
 
         internal static int ClosedTypeProperty(byte[] image, int[] heaps, int[] layout, int row, bool definition)

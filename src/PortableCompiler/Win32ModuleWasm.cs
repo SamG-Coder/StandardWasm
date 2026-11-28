@@ -9,7 +9,7 @@ namespace PortableCompiler
         internal const int DpiQueryBodyCapacity = 112;
 
         internal static int BodyCapacity(int member) => member == Win32ModuleBinding.CreateWindow ? 160 :
-            member == Win32ModuleBinding.CallWindowProcedure ? 96 : 64;
+            member == Win32ModuleBinding.DuplicateHandle ? 112 : member == Win32ModuleBinding.CallWindowProcedure ? 96 : 64;
 
         private static int ResultCount(int member) => member == Win32ModuleBinding.ReleaseContext ? 0 :
             member == Win32ModuleBinding.GetProcessAwareness ? 2 : 1;
@@ -43,7 +43,7 @@ namespace PortableCompiler
         }
 
         internal static int WriteBody(byte[] code, int used, int[] types, int shape, int member, int import,
-            int hostImports, int initializer, int errorBase, ValueFieldProjections projections)
+            int hostImports, int initializer, int errorBase, ValueFieldProjections projections, bool capture = false)
         {
             if (member == Win32ModuleBinding.GetProcessAwareness)
                 return WriteDpiQuery(code, used, types, shape, import, hostImports, initializer, projections);
@@ -53,7 +53,7 @@ namespace PortableCompiler
                 code[used++] = 0x10;
                 used = WasmBinary.Unsigned(code, used, hostImports + initializer);
             }
-            if (Win32ModuleBinding.UsesLastError(member))
+            if (capture)
             {
                 used = Const(code, used, 0);
                 used = ErrorCall(code, used, errorBase, MarshalErrorMetadata.SetSystem);
@@ -73,7 +73,7 @@ namespace PortableCompiler
             }
             code[used++] = 0x10;
             used = WasmBinary.Unsigned(code, used, import);
-            if (Win32ModuleBinding.UsesLastError(member))
+            if (capture)
             {
                 // The native return value stays below the error value on the stack.
                 used = ErrorCall(code, used, errorBase, MarshalErrorMetadata.GetSystem);

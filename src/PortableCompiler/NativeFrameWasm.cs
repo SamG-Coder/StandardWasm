@@ -4,7 +4,7 @@ using static PortableCompiler.SignatureTypes;
 
 namespace PortableCompiler
 {
-    // Address-taken native words and blittable locals have one slot for the whole frame.
+    // Address-taken words and blittable locals have one slot for the whole frame.
     // The CLI local and every unmanaged pointer to it must observe the same bytes.
     internal static class NativeFrameWasm
     {
@@ -15,17 +15,25 @@ namespace PortableCompiler
         internal static bool IsCell(int storage) => storage == Native || storage < 0;
 
         internal static int BindAddresses(BundleImages bundle, int[] objects, NativeAggregatePlans plans,
-            int[] records, int[] clauses, int[] frame, int parameters, int[] cells, int[] location)
+            int[] records, int[] clauses, int[] frame, int parameters, byte[] localElements, int[] cells, int[] location,
+            int[] scopedCalls)
         {
             for (int at = 0; at < records.Length; at += BranchIl.Width)
             {
-                if (records[at] != BranchIl.FrameAddress || !ConvertsToPointer(records, at, clauses)) continue;
+                if (records[at] != BranchIl.FrameAddress) continue;
+                bool scopedCall = ScopedCall(records, at, scopedCalls);
+                if (!scopedCall && !ConvertsToPointer(records, at, clauses)) continue;
                 int local = records[at + 1], type = frame[local];
                 if (cells[local] != 0) continue;
-                if (type == Native) cells[local] = Native;
+                int element = local >= parameters ? localElements[local - parameters] : 0;
+                // Native and explicit int32/uint32 use the same four-byte cell.
+                // An I32 evaluation value alone could also come from a Boolean.
+                if (type == Native || type == I32 && (element == 8 || element == 9)) cells[local] = Native;
                 else if (local >= parameters && ObjectLayouts.IsValueType(objects, type))
                 {
-                    int plan = NativeAggregates.Plan(bundle, objects, type, plans);
+                    int next = records[at + 2] * BranchIl.Width;
+                    bool scopedFrame = scopedCall || records[next] == BranchIl.NativeFieldPointer;
+                    int plan = NativeAggregates.Plan(bundle, objects, type, plans, scopedFrame: scopedFrame);
                     if (plan < 0) return At(location, at, plan);
                     if (NativeAggregates.Size(plans.Plans, plan) <= 0) return At(location, at, -2);
                     cells[local] = -plan;
@@ -37,7 +45,8 @@ namespace PortableCompiler
                 // Immediate initialization and field reads name the local
                 // without exposing a managed carrier. The ordinary lowerer
                 // still verifies the operand and folds the address.
-                if (!ConvertsToPointer(records, at, clauses))
+                bool scopedCall = ScopedCall(records, at, scopedCalls);
+                if (!scopedCall && !ConvertsToPointer(records, at, clauses))
                 {
                     int next = records[at + 2] * BranchIl.Width;
                     if (cells[records[at + 1]] < 0 && next < records.Length &&
@@ -45,19 +54,29 @@ namespace PortableCompiler
                         !ValueOperands.Entry(records, next / BranchIl.Width, clauses)) continue;
                     return At(location, at, -2);
                 }
+                int conversion = records[at + 2] * BranchIl.Width;
+                // A general conv.u may not expose the entire scoped frame value.
+                if (!scopedCall && records[conversion] != BranchIl.NativeFieldPointer &&
+                    ObjectLayouts.IsByRefLikeValue(objects, frame[records[at + 1]])) return At(location, at, -2);
                 records[at] = BranchIl.LoadFrameLocation;
                 records[at + 3] = Native;
-                records[records[at + 2] * BranchIl.Width] = BranchIl.Nop;
+                if (records[conversion] == BranchIl.ConvertInteger) records[conversion] = BranchIl.Nop;
             }
             return 0;
+        }
+
+        internal static bool ScopedCall(int[] records, int at, int[] calls)
+        {
+            int next = records[at + 2];
+            return calls != null && next < calls.Length && calls[next] == records[at + 1] + 1;
         }
 
         private static bool ConvertsToPointer(int[] records, int at, int[] clauses)
         {
             int next = records[at + 2] * BranchIl.Width;
-            return next < records.Length && records[next] == BranchIl.ConvertInteger &&
-                (records[next + 1] == 0xe0 || records[next + 1] == 0xd3) &&
-                !ValueOperands.Entry(records, next / BranchIl.Width, clauses);
+            return next < records.Length && !ValueOperands.Entry(records, next / BranchIl.Width, clauses) &&
+                (records[next] == BranchIl.NativeFieldPointer || records[next] == BranchIl.ConvertInteger &&
+                (records[next + 1] == 0xe0 || records[next + 1] == 0xd3));
         }
 
         private static int At(int[] location, int record, int status)

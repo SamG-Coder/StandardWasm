@@ -1,9 +1,40 @@
 import { packEntry, readManagedCompanions } from "./companions.mjs";
 import { frameworkInventory, frameworkMissingExitCode, frameworkMissingMessage, resolveFrameworks } from "./frameworks.mjs";
+import { validName } from "./long-path-host.mjs";
 import { instantiateManagedModule } from "./resource-host.mjs";
+import { foldWin32Name } from "./win32-upcase.mjs";
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
-const defaultFileSystem = Object.freeze({ currentDirectory: "C:\\StandardWasm\\App" });
+// Stage 198: the virtual directory that holds the dropped executable.
+export const virtualExecutableDirectory = "C:\\StandardWasm\\App";
+
+// Issue #275: the launch directory as Win32 path APIs see it. The mount lists
+// exactly the files the user dropped, at their publish-relative paths. Files
+// extracted from a single-file bundle and supplied framework assets are not on
+// disk beside a Windows apphost, so they are left out. The virtual volume has no
+// 8.3 names, as on a volume with short-name creation disabled. The running
+// executable and entry assembly are mapped images, so deleting them is refused.
+export function launchFileSystem(selection, directory = virtualExecutableDirectory) {
+    const entries = [], kinds = new Map();
+    const inUse = new Set([selection.executablePath, selection.entry?.path].filter(Boolean));
+    for (const asset of selection.assets?.values?.() ?? []) {
+        if (asset.loadedFromBytes || typeof asset.path !== "string") continue;
+        const names = asset.path.replaceAll("\\", "/").split("/");
+        // Windows cannot hold a name the mount rejects, so it is not on the volume.
+        if (!names.every(validName)) continue;
+        const keys = names.map((_, depth) => names.slice(0, depth + 1).map(foldWin32Name).join("/"));
+        // A file and a folder cannot share one name in a directory; the first dropped one wins.
+        if (kinds.has(keys.at(-1)) || keys.slice(0, -1).some(key => kinds.get(key) === "file")) continue;
+        keys.forEach((key, depth) => {
+            const kind = depth === keys.length - 1 ? "file" : "directory";
+            if (kinds.has(key)) return;
+            kinds.set(key, kind);
+            entries.push({ path: names.slice(0, depth + 1).join("/"), kind,
+                ...(kind === "file" && inUse.has(asset.path) ? { readOnly: true } : {}) });
+        });
+    }
+    return { currentDirectory: directory, longPathMount: { root: directory, entries } };
+}
 
 function readManifest(asset) {
     if (!asset) throw Error("Provide the original .NET deployment manifests.");
@@ -80,7 +111,7 @@ export async function runManagedEntry(compilerBytes, selection, platform) {
     const isDesktop = framework => framework?.name === "Microsoft.WindowsDesktop.App";
     const win32Desktop = frameworks.frameworks.some(isDesktop) ||
         (Array.isArray(includedFrameworks) && includedFrameworks.some(isDesktop));
-    const services = { win32FileSystem: defaultFileSystem, win32Desktop, ...platform };
+    const services = { win32FileSystem: launchFileSystem(selection), win32Desktop, ...platform };
     const { exports } = await instantiateManagedModule(module, compiler, [selection.entry, ...companions],
         {}, selection.executablePath, undefined, undefined, services);
     if (typeof exports.run !== "function" || exports.run.length !== 0)

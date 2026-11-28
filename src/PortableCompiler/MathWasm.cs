@@ -23,6 +23,14 @@ namespace PortableCompiler
 
         internal static bool CanOverflow(int intrinsic) => intrinsic == AbsI32 || intrinsic == AbsI64;
 
+        internal static int WriteBody(byte[] code, int used, int intrinsic)
+        {
+            code[used++] = 0; // no additional locals
+            used = Emit(code, used, intrinsic, 0, 1);
+            code[used++] = 0x0b;
+            return used;
+        }
+
         // left and right are the spill locals holding the operands. A unary intrinsic ignores right.
         internal static int Emit(byte[] code, int used, int intrinsic, int left, int right)
         {

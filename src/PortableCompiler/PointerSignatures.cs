@@ -47,8 +47,14 @@ namespace PortableCompiler
             }
             int pointee = PointerStorage.ReadPointee(image, position, end, next);
             if (pointee < 0) return pointee;
-            if (pointee == 0 && image[position] == PointerStorage.Element)
-                return SignatureTypes.Native; // e.g. void** passed to a native slot-clearing helper.
+            if (image[position] == PointerStorage.Element)
+            {
+                // The first indirection reaches a native pointer word. A deeper
+                // named pointee still has to bind, but its layout is unnecessary.
+                int status = pointee == 0 ? 0 : AssemblyBundle.ClassIdentity(bundle, image, layout, heaps,
+                    owner, pointee, new int[2]);
+                return status < 0 ? status : SignatureTypes.Native;
+            }
             if (pointee > 0 && image[position] == 0x11)
             {
                 // Stage 143 (decision 0071): a single-level pointer to a blittable sequential struct is an address.

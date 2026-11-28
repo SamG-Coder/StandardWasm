@@ -7,7 +7,8 @@ namespace PeLibrary
         private const uint Variance = 3, Reference = 4, NonNullableValue = 8,
             DefaultConstructor = 0x10, AllowByRefLike = 0x20;
 
-        internal static int Check(byte[] image, int[] heaps, int[] methods, int typeRow, int[] arguments, int[] objects, int[] deferred, bool method = false)
+        internal static int Check(byte[] image, int[] heaps, int[] methods, int typeRow, int[] arguments, int[] objects,
+            int[] deferred, bool method = false, bool invariant = false, int[] constructors = null)
         {
             int arity = arguments.Length;
             var counts = new int[45];
@@ -37,10 +38,16 @@ namespace PeLibrary
                 // Permission widens the CLR's allowed argument set. The compiler
                 // keeps scoped value layouts out of generic specialization for now.
                 if (ObjectLayouts.IsByRefLikeValue(objects, arguments[low - first])) return -2;
-                if ((flags & ~(Variance | Reference | NonNullableValue | DefaultConstructor | AllowByRefLike)) != 0)
+                if ((flags & ~(Variance | Reference | NonNullableValue | DefaultConstructor | AllowByRefLike)) != 0 ||
+                    invariant && (flags & Variance) != 0)
                     return -2;
                 bool requiresValue = (flags & NonNullableValue) != 0;
-                if ((flags & DefaultConstructor) != 0 && !requiresValue) return -2;
+                if ((flags & DefaultConstructor) != 0 && !requiresValue)
+                {
+                    if (constructors == null || low - first >= constructors.Length) return -2;
+                    // The linker checks the nominal argument's actual constructor metadata.
+                    constructors[low - first] = 1;
+                }
                 if ((flags & Reference) != 0 || requiresValue)
                 {
                     int argument = arguments[low - first];
@@ -85,7 +92,8 @@ namespace PeLibrary
             return 1;
         }
 
-        internal static int[] TypeParameterNames(byte[] image, int[] heaps, int[] methods, int[] counts, int typeRow)
+        internal static int[] TypeParameterNames(byte[] image, int[] heaps, int[] methods, int[] counts, int typeRow,
+            int[] variance = null)
         {
             if (counts[42] == 0) return new int[0];
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 42);
@@ -102,11 +110,13 @@ namespace PeLibrary
             }
             while (end < counts[42] && Index(image, (uint)(table + end * width + 4), ownerWidth) == owner) end++;
             var names = new int[end - first];
+            if (variance != null && variance.Length != names.Length) return null;
             for (int i = 0; i < names.Length; i++)
             {
                 uint at = (uint)(table + (first + i) * width);
                 if (U16(image, at) != i) return null;
                 names[i] = Index(image, at + (uint)(4 + ownerWidth), methods[2]);
+                if (variance != null) variance[i] = (int)(U16(image, at + 2) & Variance);
             }
             return names;
         }

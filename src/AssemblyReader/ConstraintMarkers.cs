@@ -11,6 +11,15 @@ namespace PeLibrary
             return start >= 0 && ObjectLayouts.IsPlatformValueType(image, heaps, layout, counts, start, coded);
         }
 
+        internal static bool IsCoreEnumDefinition(byte[] image, int[] layout, int[] heaps, int coded)
+        {
+            if ((coded & 3) != 0) return false;
+            var counts = new int[45];
+            int start = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            return start >= 0 && ObjectLayouts.NamedDefinition(image, heaps, layout, counts, start,
+                coded >> 2, "System", "Enum") && PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts);
+        }
+
         internal static bool IsUnmanaged(byte[] image, int[] layout, int[] heaps, int coded)
         {
             if ((coded & 3) == 0)

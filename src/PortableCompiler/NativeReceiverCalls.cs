@@ -9,17 +9,18 @@ namespace PortableCompiler
     {
         private const int KeyBase = ObjectLayouts.FirstClass + ObjectLayouts.MaxClasses;
 
-        internal static bool IsNativeKey(int key) => key >= KeyBase;
+        internal static bool IsNativeKey(int key) => key >= KeyBase && key != CoreVersionByref.ContextKey;
 
         internal static int DeclaringContext(int key) =>
-            IsNativeKey(key) ? key - KeyBase : key < 0 ? ~key : key;
+            key == CoreVersionByref.ContextKey ? 0 : IsNativeKey(key) ? key - KeyBase : key < 0 ? ~key : key;
 
         internal static bool UsesNativeReceiver(int key, int[] stack, int start) =>
             key < 0 && start >= 0 && IsNativeInteger(stack[start]);
 
         internal static int Bind(BundleImages bundle, int[] records, int[] depths, int[] states, int maximum,
             int[] owners, int[] rows, int[] contexts, int[] bases, int[] indices, int[] arities, int[] offsets,
-            int[] signatures, int[] objects, int functions, int[] location, MethodInstantiations instantiations)
+            int[] signatures, int[] objects, int functions, int[] location, MethodInstantiations instantiations,
+            int[] scopedCalls)
         {
             for (int pc = 0; pc < depths.Length; pc++)
             {
@@ -29,6 +30,8 @@ namespace PortableCompiler
                 if (start < 0 || !UsesNativeReceiver(contexts[target], states, pc * maximum + start)) continue;
                 if (location.Length != 0) location[2] = pc;
                 int type = LocatedValue(signatures[offsets[target] + 1]);
+                bool scoped = ObjectLayouts.IsByRefLikeValue(objects, type);
+                if (scoped && (scopedCalls == null || scopedCalls[pc] == 0)) return -2;
                 int owner = owners[target], row = rows[target], key = KeyBase + ~contexts[target];
                 int[] methodArguments = instantiations.Arguments(target);
                 int native = methodArguments == null
@@ -36,8 +39,11 @@ namespace PortableCompiler
                     : instantiations.Find(owners, rows, contexts, functions, owner, row, key, methodArguments);
                 if (native < 0)
                 {
-                    int measured = NativeValueLayouts.Measure(bundle, ObjectLayouts.AssemblyOf(objects, type),
-                        ObjectLayouts.TypeDef(objects, type), new int[2]);
+                    int definingAssembly = ObjectLayouts.AssemblyOf(objects, type);
+                    int definition = ObjectLayouts.TypeDef(objects, type);
+                    var size = new int[2];
+                    int measured = scoped ? NativeValueLayouts.MeasureFrame(bundle, definingAssembly, definition, size) :
+                        NativeValueLayouts.Measure(bundle, definingAssembly, definition, size);
                     if (measured < 0) return measured;
                     byte[] image = bundle.Get(owner);
                     var layout = new int[4];

@@ -167,7 +167,7 @@ namespace PeLibrary
                 return 0;
             uint version = (uint)reference[0];
             if ((U32(candidate, row + 4) != U32(source, version) || U32(candidate, row + 8) != U32(source, version + 4)) &&
-                !FrameworkFacadeVersions.AllowsNetStandard(source, sourceHeaps, sourceMethods, reference,
+                !FrameworkFacadeVersions.Allows(source, sourceHeaps, sourceMethods, reference,
                     candidate, row, counts))
                 return 0;
             uint flags = U32(candidate, row + 12);

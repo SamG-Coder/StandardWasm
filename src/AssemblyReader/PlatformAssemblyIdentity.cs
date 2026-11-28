@@ -96,6 +96,10 @@ namespace PeLibrary
             IsPlatformAssembly(image, heaps, methods, counts, row, includeRuntimeExtensions: false) ||
             MatchesAscii(image, heaps, MicrosoftFacadeName(image, heaps, methods, counts, row), "System.Runtime.InteropServices");
 
+        internal static bool IsUnsafeAssembly(byte[] image, int[] heaps, int[] methods, int[] counts, int row) =>
+            IsPlatformAssembly(image, heaps, methods, counts, row, includeRuntimeExtensions: false) ||
+            MatchesAscii(image, heaps, MicrosoftFacadeName(image, heaps, methods, counts, row), "System.Runtime.CompilerServices.Unsafe");
+
         private static uint MicrosoftFacadeName(byte[] image, int[] heaps, int[] methods, int[] counts, int row)
         {
             int table = MetadataTableRows.TableStart(heaps, methods, counts, 35);

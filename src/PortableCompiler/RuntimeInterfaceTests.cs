@@ -7,49 +7,86 @@ namespace PortableCompiler
 {
     internal sealed class RuntimeInterfaceTests
     {
-        private const int BoundPrimitivePlan = 1;
-        private int[] heads, boxMatches;
+        private const int BoundPlan = 1, StringMatch = 2;
+        internal const int RequiresExactStackType = 1;
+        private int[] heads, interfaceMatches;
 
         internal int Bind(BundleImages bundle, int[] objects, int type)
         {
             int owner = AssemblyOf(objects, type);
             if (owner < 0 || owner >= bundle.Count) return -2;
             int index = type - FirstClass;
-            if (boxMatches != null && boxMatches[index] != 0) return 0;
+            if (interfaceMatches != null && interfaceMatches[index] != 0) return 0;
             byte[] image = bundle.Get(owner);
             var layout = new int[4];
             var heaps = new int[8];
             var counts = new int[45];
-            if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0 ||
-                MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return -1;
+            if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+            int first = MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts);
+            if (first < 0) return -1;
             if (!PlatformAssemblyIdentity.IsCoreLibDefinition(image, heaps, layout, counts)) return 0;
-            if (HasArguments(objects, type)) return -2;
 
             int row = TypeDef(objects, type);
-            if (!InterfaceImplementations.HasDefinitionReference(image, heaps, layout, row)) return 0;
-            var required = new[] { owner, row };
-            // These references use dedicated Wasm layouts. Until each has an
-            // interface matcher, preserve the diagnostic if it could match.
-            if (BundleConstraints.ImplementsCoreReference(bundle, objects, required, "String", "System") != 0 ||
+            int arity = ArgumentCount(objects, type);
+            if (arity == 0 && !InterfaceImplementations.HasDefinitionReference(image, heaps, layout, row)) return 0;
+            var required = new int[2 + arity];
+            required[0] = owner;
+            required[1] = row;
+            for (int argument = 0; argument < arity; argument++) required[argument + 2] = Argument(objects, type, argument);
+            if (arity != 0 && !HasExactMembership(image, layout, heaps, counts, first, row, objects, required))
+                return RequiresExactStackType;
+            int stringMatch = BundleConstraints.ImplementsCoreReference(bundle, objects, required, "String", "System");
+            // These other dedicated reference layouts still require their own matchers.
+            if (stringMatch < 0 ||
                 BundleConstraints.ImplementsCoreReference(bundle, objects, required, "Array", "System") != 0 ||
                 BundleConstraints.ImplementsCoreReference(bundle, objects, required, "MulticastDelegate", "System") != 0 ||
                 BundleConstraints.ImplementsCoreReference(bundle, objects, required, "RuntimeType", "System") != 0 ||
                 BundleConstraints.ImplementsCoreReference(bundle, objects, required, "RuntimeAssembly", "System.Reflection") != 0 ||
                 BundleConstraints.ImplementsCoreReference(bundle, objects, required, "RuntimeModule", "System.Reflection") != 0)
-                return -2;
+                return arity == 0 ? -2 : RequiresExactStackType;
 
-            int matches = BoundPrimitivePlan;
+            // Bits zero and one are reserved; primitive element keys start at two.
+            int matches = BoundPlan | (stringMatch == 0 ? 0 : StringMatch);
             for (int element = 2; element < 32; element++)
             {
                 int primitive = GenericScalar.Key(element);
                 if (primitive == 0) continue;
                 int result = BundleConstraints.Implements(bundle, objects, primitive, required, 0);
-                if (result < 0) return result;
+                if (result < 0) return arity != 0 && result == -2 ? RequiresExactStackType : result;
                 if (result != 0) matches |= 1 << element;
             }
-            if (boxMatches == null) boxMatches = new int[MaxClasses];
-            boxMatches[index] = matches;
+            if (interfaceMatches == null) interfaceMatches = new int[MaxClasses];
+            interfaceMatches[index] = matches;
             return 0;
+        }
+
+        private static bool HasExactMembership(byte[] image, int[] layout, int[] heaps, int[] counts, int first, int row,
+            int[] objects, int[] required)
+        {
+            if (IsSynthesizedVectorInterface(image, layout, heaps, counts, first, row)) return false;
+            var variance = new int[required.Length - 2];
+            if (GenericParameters.TypeParameterNames(image, heaps, layout, counts, row, variance) == null) return false;
+            for (int index = 0; index < variance.Length; index++)
+            {
+                int argument = required[index + 2];
+                // Boxing and scalar conversion do not participate in generic
+                // variance. In a contravariant slot Object has no wider type.
+                if (variance[index] == 0 || variance[index] == 2 && argument == ObjectReference ||
+                    variance[index] != 3 && (GenericScalar.IsScalar(argument) || IsEnumKey(argument) ||
+                        IsValueType(objects, argument))) continue;
+                return false;
+            }
+            return true;
+        }
+
+        private static bool IsSynthesizedVectorInterface(byte[] image, int[] layout, int[] heaps, int[] counts, int first, int row)
+        {
+            const string space = "System.Collections.Generic";
+            return NamedDefinition(image, heaps, layout, counts, first, row, space, "IEnumerable`1") ||
+                NamedDefinition(image, heaps, layout, counts, first, row, space, "ICollection`1") ||
+                NamedDefinition(image, heaps, layout, counts, first, row, space, "IList`1") ||
+                NamedDefinition(image, heaps, layout, counts, first, row, space, "IReadOnlyCollection`1") ||
+                NamedDefinition(image, heaps, layout, counts, first, row, space, "IReadOnlyList`1");
         }
 
         internal int Call(byte[] code, int used, int bodyStart, int type)
@@ -59,7 +96,8 @@ namespace PortableCompiler
             return WasmIndexFixups.WriteAt(code, used, bodyStart, heads, type - FirstClass);
         }
 
-        internal int Write(BundleImages bundle, byte[] code, int[] position, int[] objects, AggregateBoxPlan aggregateBoxes, int[] offsets, int[] signatures,
+        internal int Write(BundleImages bundle, byte[] code, int[] position, int[] objects, AggregateBoxPlan aggregateBoxes,
+            bool enumBoxes, int[] offsets, int[] signatures,
             int[] sizes, int[] bodyOffsets, int[] arities, int functions, int hostImports)
         {
             if (heads == null) return functions;
@@ -75,8 +113,8 @@ namespace PortableCompiler
                 offsets[functions] = signature;
                 arities[functions] = 1;
                 bodyOffsets[functions] = used;
-                int matches = boxMatches == null ? 0 : boxMatches[index] & ~BoundPrimitivePlan;
-                int end = WriteTest(bundle, code, used, objects, FirstClass + index, matches, aggregateBoxes);
+                int matches = interfaceMatches == null ? 0 : interfaceMatches[index];
+                int end = WriteTest(bundle, code, used, objects, FirstClass + index, matches, aggregateBoxes, enumBoxes);
                 if (end < 0) return end;
                 WasmIndexFixups.Resolve(code, heads[index], hostImports + functions);
                 sizes[functions++] = end - used;
@@ -87,7 +125,7 @@ namespace PortableCompiler
         }
 
         private static int WriteTest(BundleImages bundle, byte[] code, int used, int[] objects,
-            int target, int boxElements, AggregateBoxPlan aggregateBoxes)
+            int target, int matches, AggregateBoxPlan aggregateBoxes, bool enumBoxes)
         {
             if (code.Length - used < 5) return -3;
             code[used++] = 0; // no additional locals
@@ -101,6 +139,12 @@ namespace PortableCompiler
                 used = WriteHeapMatch(code, used, type);
                 if (used < 0) return used;
             }
+            if ((matches & StringMatch) != 0)
+            {
+                used = WriteHeapMatch(code, used, String);
+                if (used < 0) return used;
+            }
+            int boxElements = matches & ~(BoundPlan | StringMatch);
             if (boxElements != 0)
             {
                 int layout = PrimitiveBoxing.FindLayout(objects);
@@ -115,10 +159,36 @@ namespace PortableCompiler
                 used = WriteAggregateBoxTest(bundle, code, used, objects, target, aggregateBoxes);
                 if (used < 0) return used;
             }
+            if (enumBoxes)
+            {
+                int implements = BoxedEnums.Implements(bundle, objects, target);
+                if (implements < 0) return implements;
+                if (implements != 0)
+                {
+                    used = WriteEnumTest(code, used, PrimitiveBoxing.FindLayout(objects));
+                    if (used < 0) return used;
+                }
+            }
             // Null succeeds for castclass and remains null for isinst.
             if (code.Length - used < 4) return -3;
             used = Local(code, used, 0x20, 0);
             code[used++] = 0xd1;
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        private static int WriteEnumTest(byte[] code, int used, int layout)
+        {
+            if (code.Length - used < 32) return -3;
+            used = PrimitiveBoxing.TestType(code, used, 0, layout);
+            code[used++] = 0x04;
+            code[used++] = 0x40;
+            used = PrimitiveBoxing.TestEnum(code, used, 0, layout);
+            code[used++] = 0x04;
+            code[used++] = 0x40;
+            used = Const(code, used, 1);
+            code[used++] = 0x0f;
+            code[used++] = 0x0b;
             code[used++] = 0x0b;
             return used;
         }

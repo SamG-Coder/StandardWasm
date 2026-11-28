@@ -7,13 +7,43 @@ namespace PortableCompiler
     internal sealed class RuntimeReflectionPlan
     {
         internal const int Module = 0, Assembly = 1, NameOffset = 2, NameLength = 3, Width = 4;
-        private const int ModuleRow = -1, AssemblyRow = -2;
+        private const int ModuleRow = -1;
+        internal const int AssemblyRow = -2;
         private const string UnknownName = "<Unknown>";
 
         internal readonly int[] TypeNameFixups = new int[1];
         internal readonly int[] TypeSimpleNameFixups = new int[1];
         internal readonly int[] TypeNamespaceFixups = new int[1];
+        internal readonly int[] TypeGenericKindFixups = new int[1];
+        internal readonly int[] TypeEnumKindFixups = new int[1];
+        internal readonly int[] TypeValueKindFixups = new int[1];
+
+        internal int[] TypePredicateFixups(int operation) => operation == BranchIl.RuntimeTypeIsGeneric ? TypeGenericKindFixups :
+            operation == BranchIl.RuntimeTypeIsEnum ? TypeEnumKindFixups : TypeValueKindFixups;
+        internal readonly RuntimeGenericArguments GenericArguments = new RuntimeGenericArguments();
+        internal readonly RuntimeGenericDefinitions GenericDefinitions = new RuntimeGenericDefinitions();
         internal readonly int[] HeapFixups = new int[1];
+        internal readonly int[] RuntimeTypeCastFixups = new int[1];
+        internal readonly RuntimeGenericTypes GenericTypes = new RuntimeGenericTypes();
+        internal RuntimeGenericActivation[] Activations = new RuntimeGenericActivation[4];
+        internal int ActivationCount;
+
+        internal void AddActivation(RuntimeGenericActivation activation)
+        {
+            if (ActivationCount == Activations.Length)
+            {
+                var grown = new RuntimeGenericActivation[ActivationCount * 2];
+                for (int i = 0; i < ActivationCount; i++) grown[i] = Activations[i];
+                Activations = grown;
+            }
+            Activations[ActivationCount++] = activation;
+        }
+        internal readonly RuntimeTypeRelations TypeRelations = new RuntimeTypeRelations();
+        internal readonly AssemblyTypeLookup AssemblyTypes = new AssemblyTypeLookup();
+        internal readonly RuntimeAssemblyMetadata AssemblyMetadata = new RuntimeAssemblyMetadata(false,
+            "System.Reflection", "AssemblyMetadataAttribute", 2);
+        internal readonly RuntimeAssemblyMetadata NeutralResources = new RuntimeAssemblyMetadata(true,
+            "System.Resources", "NeutralResourcesLanguageAttribute", 1);
         internal readonly RuntimeObjectTypes ObjectTypes = new RuntimeObjectTypes();
         internal readonly RuntimeInterfaceTests InterfaceTests = new RuntimeInterfaceTests();
         internal readonly AggregateBoxPlan AggregateBoxes = new AggregateBoxPlan();

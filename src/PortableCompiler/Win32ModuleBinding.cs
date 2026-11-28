@@ -13,7 +13,13 @@ namespace PortableCompiler
             BCryptGenRandom = 19, GetProcessAwareness = 20, LoadLibrary = 21, GetProcedure = 22,
             CallWindowProcedure = 23, RegisterClass = 24, GetClassInfo = 25,
             SetWindowLong = 26, SetWindowLongPtr = 27, CreateWindow = 28,
-            GetFullPathName = 29, RedrawWindow = 30, Count = RedrawWindow;
+            GetFullPathName = 29, RedrawWindow = 30, RegisterWindowMessage = 31,
+            GetWindowThreadProcessId = 32, GetCurrentProcess = 33, GetCurrentThread = 34, GetCurrentThreadId = 35,
+            DuplicateHandle = 36, GetExitCodeThread = 37, CloseHandle = 38,
+            GetProcessWindowStation = 39, GetUserObjectInformation = 40,
+            GetLongPathName = 41, SetClassLong = 42, GetDeviceCaps = 43,
+            GetDC = 44, ReleaseDC = 45, InvalidateRect = 46, AdjustWindowRectForDpi = 47, IsWindow = 48,
+            GetActiveWindow = 49, SetActiveWindow = 50, GetFocus = 51, SetFocus = 52, Count = SetFocus;
 
         internal static string EntryName(int member) => member == Module ? "GetModuleHandleW" :
             member == CreateContext ? "CreateActCtxW" : member == CurrentContext ? "GetCurrentActCtx" :
@@ -31,39 +37,249 @@ namespace PortableCompiler
             member == GetClassInfo ? "GetClassInfoW" : member == SetWindowLong ? "SetWindowLongW" :
             member == SetWindowLongPtr ? "SetWindowLongPtrW" :
             member == CreateWindow ? "CreateWindowExW" :
-            member == GetFullPathName ? "GetFullPathNameW" : member == RedrawWindow ? "RedrawWindow" : "BCryptGenRandom";
+            member == GetFullPathName ? "GetFullPathNameW" : member == RedrawWindow ? "RedrawWindow" :
+            member == RegisterWindowMessage ? "RegisterWindowMessageW" :
+            member == GetWindowThreadProcessId ? "GetWindowThreadProcessId" :
+            member == GetCurrentProcess ? "GetCurrentProcess" : member == GetCurrentThread ? "GetCurrentThread" :
+            member == GetCurrentThreadId ? "GetCurrentThreadId" : member == DuplicateHandle ? "DuplicateHandle" :
+            member == GetExitCodeThread ? "GetExitCodeThread" : member == CloseHandle ? "CloseHandle" :
+            member == GetProcessWindowStation ? "GetProcessWindowStation" :
+            member == GetUserObjectInformation ? "GetUserObjectInformationW" :
+            member == GetLongPathName ? "GetLongPathNameW" :
+            member == SetClassLong ? "SetClassLongW" : member == GetDeviceCaps ? "GetDeviceCaps" :
+            member == GetDC ? "GetDC" : member == ReleaseDC ? "ReleaseDC" :
+            member == InvalidateRect ? "InvalidateRect" :
+            member == AdjustWindowRectForDpi ? "AdjustWindowRectExForDpi" :
+            member == IsWindow ? "IsWindow" : member == GetActiveWindow ? "GetActiveWindow" :
+            member == SetActiveWindow ? "SetActiveWindow" : member == GetFocus ? "GetFocus" :
+            member == SetFocus ? "SetFocus" : "BCryptGenRandom";
 
-        private static string Library(int member) => member == LoadLibrary || member == GetFullPathName ? "kernel32.dll" :
-            member <= ReleaseContext || member == GetProcedure ? "KERNEL32.dll" :
+        private static string Library(int member) => member == LoadLibrary || member == GetFullPathName ||
+            member == GetLongPathName ? "kernel32.dll" :
+            member == SetClassLong ? "user32.dll" : member == GetDeviceCaps ? "GDI32.dll" :
+            member <= ReleaseContext || member == GetProcedure || IsThreadImport(member) ? "KERNEL32.dll" :
             member == SetProcessAwareness ? "api-ms-win-shcore-scaling-l1-1-1.dll" :
             member == BCryptGenRandom ? "BCrypt.dll" : "USER32.dll";
 
         internal static int Arity(int member) =>
-            member == CreateWindow ? 12 : member == CallWindowProcedure ? 5 :
+            member > Count ? Win32NamedBinding.Arity(member) :
+            IsWindowQueueHandle(member) ? (member == GetActiveWindow || member == GetFocus ? 0 : 1) :
+            member == CreateWindow ? 12 : member == DuplicateHandle ? 7 :
+            member == CallWindowProcedure || member == GetUserObjectInformation || member == AdjustWindowRectForDpi ? 5 :
             member == BCryptGenRandom || member == GetFullPathName || member == RedrawWindow ? 4 :
-            member == LoadLibrary || member == GetClassInfo || IsWindowLongSetter(member) ? 3 :
-            member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ? 0 :
-            member == GetProcedure || member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts || member == EnableWindow ||
+            member == LoadLibrary || member == GetClassInfo || member == GetLongPathName ||
+            member == SetClassLong || member == InvalidateRect || IsWindowLongSetter(member) ? 3 :
+            member == SetLegacyDpi || member == GetThreadDpiContext || member == IsProcessDpiAware ||
+            member == GetCurrentProcess || member == GetCurrentThread || member == GetCurrentThreadId ||
+            member == GetProcessWindowStation ? 0 :
+            member == GetProcedure || member == ActivateContext || member == DeactivateContext || member == EqualDpiContexts ||
+            member == EnableWindow || member == GetWindowThreadProcessId || member == GetExitCodeThread ||
+            member == GetDeviceCaps || member == ReleaseDC ||
             UsesLastError(member) ? 2 : 1;
 
         internal static bool UsesLastError(int member) =>
-            member == GetWindowLong || member == GetWindowLongPtr || IsWindowLongSetter(member);
+            member == SetActiveWindow || member == SetFocus || member == GetWindowLong || member == GetWindowLongPtr || IsWindowLongSetter(member);
+
+        private static bool IsWindowQueueHandle(int member) => member >= GetActiveWindow && member <= SetFocus;
+
+        private static bool IsThreadImport(int member) => member >= GetCurrentProcess && member <= CloseHandle;
+
+        private static bool IsWindowStationImport(int member) =>
+            member == GetProcessWindowStation || member == GetUserObjectInformation;
 
         private static bool IsWindowLongSetter(int member) => member == SetWindowLong || member == SetWindowLongPtr;
 
-        internal static int FindImport(byte[] image, int[] heaps, int[] methods, int row, int implementation)
+        internal static int FindImport(byte[] image, int[] heaps, int[] methods, int row, int implementation,
+            BundleImages bundle = null, int owner = 0)
         {
             if (implementation != 0x80) return 0; // PreserveSig
             var counts = new int[45];
             if (MetadataTableRows.ReadCounts(image, heaps[4], heaps[5], counts) < 0) return 0;
+            int namedMember = Win32NamedBinding.Find(bundle, image, heaps, methods, counts, owner, row);
+            if (namedMember != 0) return namedMember;
             for (int member = 1; member <= Count; member++)
-                if (member != GetProcessAwareness && (UsesLastError(member) ? IsWindowLongImport(image, heaps, methods, counts, row, member) :
-                    NativeImports.Find(image, heaps, methods, counts, Library(member), EntryName(member), row, 0x101) == row))
+                if (member != GetProcessAwareness && (UsesLastError(member) ? IsErrorCapturingWindowImport(image, heaps, methods, counts, row, member) :
+                    NativeImports.Find(image, heaps, methods, counts, Library(member), EntryName(member), row,
+                        member == SetClassLong ? 0x100 : 0x101) == row ||
+                    // The original wrapper contains both architecture branches.
+                    // wasm32 uses one procedure-word ABI for both raw names.
+                    member == SetClassLong &&
+                    NativeImports.Find(image, heaps, methods, counts, "user32.dll", "SetClassLongPtrW", row, 0x100) == row ||
+                    member == GetDeviceCaps &&
+                    NativeImports.Find(image, heaps, methods, counts, "gdi32.dll", "GetDeviceCaps", row, 0x101) == row ||
+                    (member == GetDC || member == ReleaseDC) &&
+                    NativeImports.Find(image, heaps, methods, counts, "user32.dll", EntryName(member), row, 0x101) == row ||
+                    IsWindowStationImport(member) &&
+                    NativeImports.Find(image, heaps, methods, counts, "user32.dll", EntryName(member), row, 0x101) == row))
+                {
+                    if (member == GetWindowThreadProcessId && !IsWindowOwnerSignature(image, heaps, methods, row)) return 0;
+                    if (member == GetUserObjectInformation && !IsUserObjectInformationSignature(image, heaps, methods, row)) return 0;
+                    if (member == GetLongPathName && !ScopedPathBinding.MatchesSignature(image, methods, heaps, row, 0x0f, false))
+                        return 0;
+                    if ((member == DuplicateHandle || member == GetExitCodeThread) &&
+                        !MatchesThreadOutputPointer(image, heaps, methods, row, member)) return 0;
+                    if (member >= GetDeviceCaps && member <= ReleaseDC && !MatchesDisplaySignature(image, heaps, methods, row, member))
+                        return 0;
+                    if (member == InvalidateRect && !MatchesInvalidateRect(bundle, image, heaps, methods, owner, row)) return 0;
+                    if (member == AdjustWindowRectForDpi && !MatchesAdjustWindowRect(bundle, image, heaps, methods, owner, row)) return 0;
+                    if (member == IsWindow && !MatchesIsWindow(image, heaps, methods, row)) return 0;
+                    if (IsWindowQueueHandle(member) &&
+                        !MatchesWindowQueueHandle(image, heaps, methods, row, Arity(member))) return 0;
                     return member;
+                }
             return 0;
         }
 
-        private static bool IsWindowLongImport(byte[] image, int[] heaps, int[] methods, int[] counts, int row, int member)
+        internal static bool MatchesIsWindow(byte[] image, int[] heaps, int[] methods, int row)
+        {
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4), 1, cursor);
+            // BOOL is a signed word and HWND is a native word. Check the raw
+            // signature before both become Wasm i32. The layout check verifies SDK wrappers.
+            return end >= 0 && ReadAbiWord(image, cursor, end, 0x08) >= 0 &&
+                ReadAbiWord(image, cursor, end, 0x18) >= 0 && cursor[0] == end;
+        }
+
+        private static bool MatchesWindowQueueHandle(byte[] image, int[] heaps, int[] methods, int row, int arity)
+        {
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4),
+                arity, cursor);
+            return end >= 0 && ReadAbiWord(image, cursor, end, 0x18) >= 0 &&
+                (arity == 0 || ReadAbiWord(image, cursor, end, 0x18) >= 0) && cursor[0] == end;
+        }
+
+        private static bool MatchesInvalidateRect(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int owner, int row)
+        {
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4), 3, cursor);
+            if (bundle == null || end < 0 || ReadAbiWord(image, cursor, end, 0x08) < 0 ||
+                ReadAbiWord(image, cursor, end, 0x18) < 0 || !SignatureReader.TakeElement(image, cursor, end, 0x0f) ||
+                !SignatureReader.TakeElement(image, cursor, end, 0x11)) return false;
+            int pointee = ImageBytes.CompressedUnsigned(image, cursor[0], end, cursor);
+            if (pointee < 1 || ReadAbiWord(image, cursor, end, 0x08) < 0 || cursor[0] != end) return false;
+
+            return MatchesRect(bundle, image, heaps, methods, owner, pointee);
+        }
+
+        private static bool MatchesAdjustWindowRect(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int owner, int row)
+        {
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4), 5, cursor);
+            if (bundle == null || end < 0 || ReadAbiWord(image, cursor, end, 0x08) < 0 ||
+                !SignatureReader.TakeElement(image, cursor, end, 0x0f) ||
+                !SignatureReader.TakeElement(image, cursor, end, 0x11)) return false;
+            int pointee = ImageBytes.CompressedUnsigned(image, cursor[0], end, cursor);
+            return pointee > 0 && ReadAbiWord(image, cursor, end, 0x09) >= 0 &&
+                ReadAbiWord(image, cursor, end, 0x08) >= 0 && ReadAbiWord(image, cursor, end, 0x09) >= 0 &&
+                SignatureReader.TakeElement(image, cursor, end, 0x09) && cursor[0] == end &&
+                MatchesRect(bundle, image, heaps, methods, owner, pointee);
+        }
+
+        internal static bool MatchesRect(BundleImages bundle, byte[] image, int[] heaps, int[] methods, int owner, int pointee)
+        {
+            // A native stack tag erases the difference between RECT* and int*.
+            // Validate the resolved Win32 declaration and its byte extent.
+            var identity = new int[2];
+            if (bundle == null || AssemblyBundle.ClassIdentity(bundle, image, methods, heaps, owner, pointee, identity) < 0)
+                return false;
+            byte[] target = bundle.Get(identity[0]);
+            var layout = new int[4];
+            var targetHeaps = new int[8];
+            var names = new int[2];
+            if (CompressedTables.FindWithHeaps(target, layout, targetHeaps) < 0 ||
+                ObjectLayouts.TypeDefinitionNames(target, targetHeaps, layout, identity[1], names) < 0 ||
+                !ImageBytes.MatchesAscii(target, targetHeaps, (uint)names[0], "RECT") ||
+                !ImageBytes.MatchesAscii(target, targetHeaps, (uint)names[1], "Windows.Win32.Foundation"))
+                return false;
+            var size = new int[2];
+            if (NativeValueLayouts.Measure(bundle, identity[0], identity[1], size) != 0 || size[0] != 16 || size[1] != 4)
+                return false;
+            var shape = new int[6];
+            if (ObjectLayouts.ReadShape(target, targetHeaps, layout, identity[1], shape, true) != 0 || shape[2] != 4)
+                return false;
+            var field = new int[2];
+            for (int index = 0; index < 4; index++)
+                if (NativeValueLayouts.Field(bundle, identity[0], identity[1], shape[1] + index, field) != 0 ||
+                    field[0] != index * 4 || field[1] != 0x4a) return false; // four successive signed LONG fields
+            return true;
+        }
+
+        private static bool IsWindowOwnerSignature(byte[] image, int[] heaps, int[] methods, int row)
+        {
+            const int unsignedInt32 = 0x09, valueType = 0x11, pointer = 0x0f;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4), 2, cursor);
+            // Signature storage reduces native addresses and signed/unsigned
+            // i32 values. Confirm the SDK's DWORD and DWORD* before reduction.
+            return end >= 0 && SignatureReader.TakeElement(image, cursor, end, unsignedInt32) &&
+                SignatureReader.TakeElement(image, cursor, end, valueType) &&
+                ImageBytes.CompressedUnsigned(image, cursor[0], end, cursor) > 0 &&
+                SignatureReader.TakeElement(image, cursor, end, pointer) &&
+                SignatureReader.TakeElement(image, cursor, end, unsignedInt32) && cursor[0] == end;
+        }
+
+        private static bool IsUserObjectInformationSignature(byte[] image, int[] heaps, int[] methods, int row)
+        {
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4), 5, cursor);
+            // Wasm reduces pointer element types and signedness. Confirm void*,
+            // DWORD size and optional DWORD* before accepting the native ABI.
+            return end >= 0 && ReadAbiWord(image, cursor, end, 0x08) >= 0 &&
+                ReadAbiWord(image, cursor, end, 0x18) >= 0 && ReadAbiWord(image, cursor, end, 0x08) >= 0 &&
+                SignatureReader.TakeElement(image, cursor, end, 0x0f) &&
+                SignatureReader.TakeElement(image, cursor, end, 0x01) &&
+                SignatureReader.TakeElement(image, cursor, end, 0x09) &&
+                SignatureReader.TakeElement(image, cursor, end, 0x0f) &&
+                SignatureReader.TakeElement(image, cursor, end, 0x09) && cursor[0] == end;
+        }
+
+        private static bool MatchesThreadOutputPointer(byte[] image, int[] heaps, int[] methods, int row, int member)
+        {
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4),
+                Arity(member), cursor);
+            if (end < 0 || ReadAbiWord(image, cursor, end, 0x08) < 0) return false;
+            int handle = ReadAbiWord(image, cursor, end, 0x18);
+            if (handle < 0) return false;
+            if (member == GetExitCodeThread)
+                return SignatureReader.TakeElement(image, cursor, end, 0x0f) &&
+                    SignatureReader.TakeElement(image, cursor, end, 0x09) && cursor[0] == end;
+
+            // The duplicate output points to the same HANDLE type as the
+            // source process argument. A smaller pointer target cannot hold it.
+            return ReadAbiWord(image, cursor, end, 0x18) >= 0 &&
+                ReadAbiWord(image, cursor, end, 0x18) >= 0 &&
+                SignatureReader.TakeElement(image, cursor, end, 0x0f) &&
+                ReadAbiWord(image, cursor, end, 0x18) == handle;
+        }
+
+        internal static int ReadAbiWord(byte[] image, int[] cursor, int end, int scalar)
+        {
+            if (SignatureReader.TakeElement(image, cursor, end, scalar)) return 0;
+            if (!SignatureReader.TakeElement(image, cursor, end, 0x11)) return -1;
+            int token = ImageBytes.CompressedUnsigned(image, cursor[0], end, cursor);
+            return token > 0 ? token : -1;
+        }
+
+        private static bool MatchesDisplaySignature(byte[] image, int[] heaps, int[] methods, int row, int member)
+        {
+            const int signedInt = 0x08, nativeInt = 0x18;
+            var cursor = new int[1];
+            int end = SignatureReader.ReadStatic(image, heaps, MethodDefinitions.ReadColumn(image, methods, row, 4), Arity(member), cursor);
+            if (end < 0) return false;
+            // Verify the raw storage before Wasm erases integer signedness.
+            // MatchesSignature checks the nominal SDK handle types.
+            if (member == GetDC)
+                return ReadAbiWord(image, cursor, end, nativeInt) >= 0 &&
+                    ReadAbiWord(image, cursor, end, nativeInt) >= 0 && cursor[0] == end;
+            if (!SignatureReader.TakeElement(image, cursor, end, signedInt) ||
+                ReadAbiWord(image, cursor, end, nativeInt) < 0) return false;
+            return (member == GetDeviceCaps ? SignatureReader.TakeElement(image, cursor, end, signedInt) :
+                ReadAbiWord(image, cursor, end, nativeInt) >= 0) && cursor[0] == end;
+        }
+
+        private static bool IsErrorCapturingWindowImport(byte[] image, int[] heaps, int[] methods, int[] counts, int row, int member)
         {
             // WinForms' generated declarations and ordinary exact-spelling P/Invokes
             // use the same API and SetLastError ABI.
@@ -81,6 +297,26 @@ namespace PortableCompiler
                 return arity == 2 && IsAbiShape(bundle, objects, types[offset + 1], Native, "HANDLE") &&
                     types[offset + 2] == Int32Location && IsAbiShape(bundle, objects, result, I32, "HRESULT");
             if (arity != Arity(member)) return false;
+            if (member > Count) return Win32NamedBinding.MatchesSignature(bundle, objects, member, types, offset);
+            if (IsWindowQueueHandle(member))
+                return IsAbiShape(bundle, objects, result, Native, "HWND") &&
+                    (arity == 0 || IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND"));
+            if (member == GetDeviceCaps)
+                return result == I32 && IsDisplayContext(bundle, objects, types[offset + 1]) && types[offset + 2] == I32;
+            if (member == GetDC)
+                return IsDisplayContext(bundle, objects, result) &&
+                    IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND");
+            if (member == ReleaseDC)
+                return result == I32 && IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
+                    IsDisplayContext(bundle, objects, types[offset + 2]);
+            if (IsThreadImport(member)) return MatchesThreadSignature(bundle, objects, member, types, offset);
+            if (member == GetProcessWindowStation)
+                return IsAbiShape(bundle, objects, result, Native, "HWINSTA", "Windows.Win32.System.StationsAndDesktops");
+            if (member == GetUserObjectInformation)
+                return IsAbiShape(bundle, objects, result, I32, "BOOL") &&
+                    IsAbiShape(bundle, objects, types[offset + 1], Native, "HANDLE") &&
+                    types[offset + 2] == I32 && types[offset + 3] == Native &&
+                    types[offset + 4] == I32 && types[offset + 5] == Native;
             // CoreLib's generated P/Invoke is the raw UTF-16 form. Its
             // managed wrapper pins the string and captures last error.
             if (member == LoadLibrary)
@@ -112,13 +348,30 @@ namespace PortableCompiler
             if (member == GetFullPathName)
                 return result == I32 && types[offset + 1] == Native && types[offset + 2] == I32 &&
                     types[offset + 3] == Native && types[offset + 4] == Native;
+            if (member == GetLongPathName)
+                return result == I32 && types[offset + 1] == Native && types[offset + 2] == Native && types[offset + 3] == I32;
+            if (member == RegisterWindowMessage)
+                return result == I32 && IsAbiShape(bundle, objects, types[offset + 1], Native, "PCWSTR");
+            if (member == GetWindowThreadProcessId)
+                return result == I32 && IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
+                    types[offset + 2] == Native;
+            if (member == InvalidateRect)
+                return IsAbiShape(bundle, objects, result, I32, "BOOL") &&
+                    IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") && types[offset + 2] == Native &&
+                    IsAbiShape(bundle, objects, types[offset + 3], I32, "BOOL");
+            if (member == AdjustWindowRectForDpi)
+                return IsAbiShape(bundle, objects, result, I32, "BOOL") && types[offset + 1] == Native &&
+                    types[offset + 2] == I32 && IsAbiShape(bundle, objects, types[offset + 3], I32, "BOOL") &&
+                    types[offset + 4] == I32 && types[offset + 5] == I32;
             if (member == RedrawWindow)
                 return IsAbiShape(bundle, objects, result, I32, "BOOL") &&
                     IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
                     types[offset + 2] == Native &&
                     IsAbiShape(bundle, objects, types[offset + 3], Native, "HRGN", "Windows.Win32.Graphics.Gdi") &&
                     types[offset + 4] == I32;
-            if (IsWindowLongSetter(member))
+            // The window and class setters share the x86 procedure-word shape.
+            // Only the window declarations request automatic error capture.
+            if (IsWindowLongSetter(member) || member == SetClassLong)
                 return IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
                     types[offset + 2] == I32 && types[offset + 3] == Native && result == Native;
             if (member == BCryptGenRandom)
@@ -127,10 +380,10 @@ namespace PortableCompiler
             if (UsesLastError(member))
                 return IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
                     types[offset + 2] == I32 && (result == Native || member == GetWindowLong && result == I32);
-            if (member == IsWindowEnabled || member == EnableWindow)
+            if (member == IsWindow || member == IsWindowEnabled || member == EnableWindow)
                 return IsAbiShape(bundle, objects, types[offset + 1], Native, "HWND") &&
                     IsAbiShape(bundle, objects, result, I32, "BOOL") &&
-                    (member == IsWindowEnabled || IsAbiShape(bundle, objects, types[offset + 2], I32, "BOOL"));
+                    (member != EnableWindow || IsAbiShape(bundle, objects, types[offset + 2], I32, "BOOL"));
             if (member >= IsValidDpiContext) return MatchesDpiSignature(bundle, objects, member, types, offset, arity);
             int input = types[offset + 1];
             if (member == Module)
@@ -144,6 +397,22 @@ namespace PortableCompiler
             if (member == CurrentContext) return input == Native;
             if (types[offset + 2] != Native) return false;
             return member == ActivateContext ? IsAbiShape(bundle, objects, input, Native, "HANDLE") : input == I32;
+        }
+
+        private static bool MatchesThreadSignature(BundleImages bundle, int[] objects, int member, int[] types, int offset)
+        {
+            int result = types[offset];
+            if (member == GetCurrentProcess || member == GetCurrentThread)
+                return IsAbiShape(bundle, objects, result, Native, "HANDLE");
+            if (member == GetCurrentThreadId) return result == I32;
+            if (!IsAbiShape(bundle, objects, result, I32, "BOOL") ||
+                !IsAbiShape(bundle, objects, types[offset + 1], Native, "HANDLE")) return false;
+            if (member == CloseHandle) return true;
+            if (member == GetExitCodeThread) return types[offset + 2] == Native;
+            return IsAbiShape(bundle, objects, types[offset + 2], Native, "HANDLE") &&
+                IsAbiShape(bundle, objects, types[offset + 3], Native, "HANDLE") &&
+                types[offset + 4] == Native && types[offset + 5] == I32 &&
+                IsAbiShape(bundle, objects, types[offset + 6], I32, "BOOL") && types[offset + 7] == I32;
         }
 
         private static bool MatchesCreateWindowSignature(BundleImages bundle, int[] objects, int[] types, int offset)
@@ -179,7 +448,10 @@ namespace PortableCompiler
         private static bool IsDpiContext(BundleImages bundle, int[] objects, int type) =>
             IsAbiShape(bundle, objects, type, Native, "DPI_AWARENESS_CONTEXT", "Windows.Win32.UI.HiDpi");
 
-        private static bool IsAbiShape(BundleImages bundle, int[] objects, int type, int field, string name,
+        private static bool IsDisplayContext(BundleImages bundle, int[] objects, int type) =>
+            IsAbiShape(bundle, objects, type, Native, "HDC", "Windows.Win32.Graphics.Gdi");
+
+        internal static bool IsAbiShape(BundleImages bundle, int[] objects, int type, int field, string name,
             string space = "Windows.Win32.Foundation")
         {
             if (type == field) return true;

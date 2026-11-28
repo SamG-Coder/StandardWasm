@@ -58,7 +58,20 @@ namespace PortableCompiler
         {
             var measured = new int[2];
             int status = NativeValueLayouts.Measure(bundle, owner, row, measured);
-            return status < 0 ? status : measured[0];
+            if (status != -2) return status < 0 ? status : measured[0];
+
+            // A fieldless explicit value exposes its declared extent to sizeof.
+            // NativeValueLayouts still diagnoses byte-addressed access to it.
+            byte[] image = bundle.Get(owner);
+            var layout = new int[4];
+            var heaps = new int[8];
+            if (CompressedTables.FindWithHeaps(image, layout, heaps) < 0) return -1;
+            var shape = new int[5];
+            int read = ObjectLayouts.ReadShape(image, heaps, layout, row, shape, valueType: true);
+            if (read < 0) return read;
+            if (read != 0 || (shape[4] & 0x18) != 0x10) return status;
+            int size = ExplicitValueLayouts.ReadFieldlessSize(image, heaps, layout, row, shape[0], shape[1], shape[2]);
+            return size != 0 ? size : status;
         }
     }
 }

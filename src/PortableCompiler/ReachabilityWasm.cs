@@ -9,10 +9,11 @@ namespace PortableCompiler
         internal const int GlobalKey = int.MinValue + 18;
         internal const int Mark = 2, Contains = 3, Clear = 4, Add = 5, End = 6;
 
-        internal static int Write(byte[] code, int used, int entry, int first, int roots, int marks, int pending, int pins, int[] globals)
+        internal static int Write(byte[] code, int used, int entry, int first, int roots, int marks, int pending, int pins,
+            int handles, int[] globals)
         {
             if (code.Length - used < 384 || globals[0] > (code.Length - used - 384) / 24) return -3;
-            if (entry == Mark) used = Walk(code, used, first, roots, marks, pending, pins, globals);
+            if (entry == Mark) used = Walk(code, used, first, roots, marks, pending, pins, handles, globals);
             else if (entry == Contains) used = Find(code, used, marks);
             else if (entry == Clear) used = Reset(code, used, marks);
             else used = Append(code, used, marks, first + Contains);
@@ -20,7 +21,8 @@ namespace PortableCompiler
             return used;
         }
 
-        private static int Walk(byte[] code, int used, int first, int roots, int marks, int pending, int pins, int[] globals)
+        private static int Walk(byte[] code, int used, int first, int roots, int marks, int pending, int pins,
+            int handles, int[] globals)
         {
             // Locals cursor, edge and limit are i32; the current receiver is eqref.
             code[used++] = 2; code[used++] = 3; code[used++] = 0x7f;
@@ -28,11 +30,11 @@ namespace PortableCompiler
             used = Call(code, used, first + Clear);
             for (int index = 0; index < globals[0]; index++)
             {
-                // CLI statics and cached type-initialization failures both keep their payloads alive.
+                // CLI statics, cached initialization failures and the runtime current thread are roots.
                 int owner = StaticFields.Owner(globals, index), row = StaticFields.Row(globals, index);
                 int storage = StaticFields.Storage(globals, index);
-                if (owner < 0 || (row <= 0 && !InitializerFailures.IsCacheRow(owner, row)) ||
-                    (!IsObjectReference(storage) && !StaticFields.IsReferenceCell(storage))) continue;
+                if (owner < 0 || (row <= 0 && row != CurrentThreadWasm.RootKey && !InitializerFailures.IsCacheRow(owner, row)) ||
+                    (!IsObjectReference(storage) && !StaticFields.IsReferenceCell(storage) && !IsValueLocation(storage))) continue;
                 used = Index(code, used, 0x23, index);
                 if (StaticFields.IsReferenceCell(storage))
                 {
@@ -41,6 +43,8 @@ namespace PortableCompiler
                     used = Const(code, used, 0);
                     used = Gc(code, used, 0x0b, StaticFields.CellVector(storage));
                 }
+                else if (IsValueLocation(storage))
+                    used = ManagedValueLocationWasm.ReadRawSnapshot(code, used);
                 used = Call(code, used, first + Add);
             }
 
@@ -48,6 +52,8 @@ namespace PortableCompiler
             used = Seed(code, used, FinalizerQueueWasm.PendingTable, pending, first + Add, 1);
             // Live pins are [managed owner, encoded native address] pairs.
             if (pins >= 0) used = Seed(code, used, PinRegistryWasm.Table, pins, first + Add, 2);
+            // Strong handles contribute their target, not their occupancy marker.
+            if (handles >= 0) used = Seed(code, used, GcHandleWasm.Table, handles, first + Add, 2);
 
             used = Const(code, used, 0);
             used = Local(code, used, 0x21, 0);

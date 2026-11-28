@@ -1,21 +1,37 @@
 import { readPeResource } from "../stage-73-executable-intake/loader/pe.mjs";
 import { createActivationContexts } from "./activation-context.mjs";
 import { createDpiAwareness, dpiImportNames } from "./dpi-awareness.mjs";
+import { createDisplayContexts, displayContextImportNames } from "./display-context.mjs";
 import { createFullPathHost } from "./full-path-host.mjs";
-import { createDefaultWindowProcedure, createWindowClassState, createWindowCreation, createRedrawWindow, createWindowState, windowImportNames } from "./window-state.mjs";
+import { createFilePathHost } from "./long-path-host.mjs";
+import { createAdjustWindowRectExForDpi } from "./window-rect.mjs";
+import { createThreadMessageQueue, createWindowMessageRegistration } from "./window-messages.mjs";
+import { createWindowEventPublisher } from "./window-events.mjs";
+import { createWindowSender } from "./window-send.mjs";
+import { createWindowPaint, paintImportNames } from "./window-paint.mjs";
+import { createThreadHandleHost } from "./thread-handle-host.mjs";
+import { createWindowStationHost } from "./window-station-host.mjs";
+import { createDefaultWindowProcedure, createWindowClassState, createWindowCreation, createRedrawWindow,
+    createWindowRectQueries, createWindowState, windowImportNames } from "./window-state.mjs";
 
 export const win32ImportModule = "standardwasm:win32";
 export const win32MemoryImports = new Set([
     "getModuleHandleW", "loadLibraryExW", "getProcAddress", "createActCtxW", "getCurrentActCtx", "activateActCtx", "bCryptGenRandom",
-    "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "redrawWindow"
+    "registerClassW", "getClassInfoW", "createWindowExW", "getFullPathNameW", "getLongPathNameW", "redrawWindow", "invalidateRect", "registerWindowMessageW",
+    "adjustWindowRectExForDpi", "getWindowThreadProcessId", "duplicateHandle", "getExitCodeThread", "getUserObjectInformationW",
+    "peekMessageW", "getWindowRect", "getClientRect", "deleteFileW", "sendMessageTimeoutW", ...paintImportNames
 ]);
 export const win32ImportNames = new Set([
-    ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, "callWindowProcW", "deactivateActCtx", "releaseActCtx",
-    "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError"
+    ...win32MemoryImports, ...dpiImportNames, ...windowImportNames, ...displayContextImportNames,
+    "callWindowProcW", "setClassLongW", "deactivateActCtx", "releaseActCtx",
+    "getCurrentProcess", "getCurrentThread", "getCurrentThreadId", "closeHandle", "getProcessWindowStation",
+    "getLastSystemError", "setLastSystemError", "getLastPInvokeError", "setLastPInvokeError", "postThreadMessageW", "postMessageW",
+    "notifyWinEvent", "enumThreadWindows"
 ]);
 
 const moduleNotFound = 126;
 const noAccess = 998;
+const invalidWindowHandle = 1400;
 const invalidWin32Parameter = 87;
 const invalidParameter = 0xc000000d | 0, invalidHandle = 0xc0000008 | 0, unsuccessful = 0xc0000001 | 0;
 const executableHandle = 1;
@@ -47,7 +63,8 @@ export function createNativeSymbolLookup(memory, libraries, errors) {
 }
 
 export function createWin32Host(memory, executablePath, assets = [], windows = createWindowState(),
-    errors = { system: 0, pinvoke: 0 }, dynamicLibraries, windowCreationMetrics, win32FileSystem, desktop = false) {
+    errors = { system: 0, pinvoke: 0 }, dynamicLibraries, windowCreationMetrics, win32FileSystem, desktop = false,
+    displayCapabilities, onWinEvent) {
     if (desktop && dynamicLibraries && !dynamicLibraries.hasLibrary("user32.dll")) {
         dynamicLibraries.registerLibrary("user32.dll", new Map([["DefWindowProcW", {
             signature: windowProcedureSignature,
@@ -76,11 +93,30 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
     }
 
     const setError = value => { errors.system = value; };
+    function getWindowThreadProcessId(handle, processPointer) {
+        const owner = windows.getWindowOwner(handle);
+        if (!owner) {
+            setError(invalidWindowHandle);
+            return 0;
+        }
+        const address = processPointer >>> 0;
+        if (address !== 0) {
+            const view = new DataView(memory.buffer);
+            if (address > view.byteLength - 4) {
+                setError(noAccess);
+                return 0;
+            }
+            view.setUint32(address, owner.processId, true);
+        }
+        return owner.threadId;
+    }
     const isProcedure = token => dynamicLibraries?.hasTarget(token, windowProcedureSignature);
     const classes = createWindowClassState(memory, isProcedure, setError);
     const bindProcedure = token => isProcedure(token)
         ? (handle, message, wparam, lparam) => dynamicLibraries.invoke(token, windowProcedureSignature, handle, message, wparam, lparam)
         : undefined;
+    const displayContexts = createDisplayContexts(windows, hwnd => classes.style(windows.getWindowClass(hwnd)), displayCapabilities);
+    const paint = createWindowPaint(memory, windows, displayContexts, setError);
     const getWindowLong = (handle, index) => windows.getWindowLong(handle, index, setError);
     function setWindowLong(handle, index, token) {
         return windows.setWindowProcedure(handle, index, token, procedure => {
@@ -169,26 +205,60 @@ export function createWin32Host(memory, executablePath, assets = [], windows = c
         loadLibraryExW,
         getProcAddress,
         getFullPathNameW: createFullPathHost(memory, win32FileSystem, errors),
+        ...createFilePathHost(memory, win32FileSystem, errors),
         // Only this registry's explicitly bound WNDPROC tokens are callable.
         callWindowProcW(token, hwnd, message, wparam, lparam) {
             return dynamicLibraries.invoke(token, windowProcedureSignature, hwnd, message, wparam, lparam);
         },
         ...createActivationContexts(memory, findManifest, value => { errors.system = value; }),
         ...createDpiAwareness(value => { errors.system = value; }),
+        ...displayContexts,
+        isWindow: handle => windows.hasWindow(handle) ? 1 : 0,
+        isWindowVisible: handle => windows.isWindowVisible(handle) ? 1 : 0,
+        getActiveWindow: () => windows.getActiveWindow(),
+        setActiveWindow: handle => windows.setActiveWindow(handle, setError),
+        getFocus: () => windows.getFocus(),
+        setFocus: handle => windows.setFocus(handle, setError),
         isWindowEnabled: handle => windows.isWindowEnabled(handle),
         enableWindow: (handle, enable) => windows.enableWindow(handle, enable),
         getWindowLongW: getWindowLong,
         getWindowLongPtrW: getWindowLong,
+        getWindowThreadProcessId,
         setWindowLongW: setWindowLong,
         setWindowLongPtrW: setWindowLong,
+        setClassLongW: (hwnd, index, procedure) => classes.setClassProcedure(windows.getWindowClass(hwnd), index, procedure),
         registerClassW: classes.registerClassW,
         getClassInfoW: classes.getClassInfoW,
         createWindowExW: createWindowCreation(memory, windows, classes, bindProcedure, setError, windowCreationMetrics),
+        ...createWindowRectQueries(memory, windows, setError),
         redrawWindow: createRedrawWindow(memory, windows, setError),
+        ...paint.imports,
+        adjustWindowRectExForDpi: createAdjustWindowRectExForDpi(memory, setError),
+        ...createThreadHandleHost(memory, () => windows.getCurrentThreadId(), setError),
+        ...createThreadMessageQueue(memory, windows, setError, paint.nextPaint),
+        notifyWinEvent: createWindowEventPublisher(windows, onWinEvent),
+        enumThreadWindows: createThreadWindowEnumerator(windows),
+        sendMessageTimeoutW: createWindowSender(memory, windows, setError),
+        ...createWindowStationHost(memory, desktop, setError),
+        registerWindowMessageW: createWindowMessageRegistration(memory, setError),
         bCryptGenRandom,
         getLastSystemError: () => errors.system,
         setLastSystemError: value => { errors.system = value | 0; },
         getLastPInvokeError: () => errors.pinvoke,
         setLastPInvokeError: value => { errors.pinvoke = value | 0; }
+    };
+}
+
+// Stage 361: EnumThreadWindows. The callback arrives as a decision 0098 token: the
+// guest's table-2 target slot and the compiled entry for its signature. The entry is
+// called synchronously, before this import returns, so the token is never retained.
+function createThreadWindowEnumerator(windows) {
+    return (thread, target, entry, payload) => {
+        const next = windows.openThreadWindows(thread);
+        // WNDENUMPROC returns BOOL: zero stops the enumeration, and the API then
+        // reports FALSE. The tested Windows build reports TRUE for an empty thread.
+        for (let window = next(); window !== 0; window = next())
+            if (entry(target, window, payload) === 0) return 0;
+        return 1;
     };
 }

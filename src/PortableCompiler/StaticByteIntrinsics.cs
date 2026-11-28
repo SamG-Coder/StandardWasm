@@ -6,6 +6,8 @@ namespace PortableCompiler
 {
     internal static class StaticByteIntrinsics
     {
+        internal const int CharacterElementOffset = 1, AddCharacterElements = -OffsetCharacterLocation;
+
         internal static bool IsLittleEndian(byte[] image, int[] layout, int[] heaps, int row)
         {
             int table = AssemblyReferences.FieldTable(image, heaps, layout);
@@ -83,6 +85,10 @@ namespace PortableCompiler
             }
 
             if (!unsafeType) return 0;
+            // static T& Add<T>(T&, int) on the verified Char location ABI.
+            if (key == 3 && size == 10 && MatchesAscii(image, heaps, (uint)name, "Add") &&
+                U32(image, (uint)start) == 0x10020110 && U32(image, (uint)(start + 4)) == 0x1e10001e &&
+                image[start + 8] == 0 && image[start + 9] == 8) return AddCharacterElements;
             // static T& AddByteOffset<T>(T&, nint/nuint)
             if ((key == 3 || key == 5) && size == 10 && MatchesAscii(image, heaps, (uint)name, "AddByteOffset") &&
                 U32(image, (uint)start) == 0x10020110 && U32(image, (uint)(start + 4)) == 0x1e10001e &&

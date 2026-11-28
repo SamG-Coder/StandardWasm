@@ -47,6 +47,41 @@ namespace PortableCompiler
             return used;
         }
 
+        // Trusted runtime assembly slots store an object or the CLR's null
+        // override sentinel. Both Type and Module use the descriptor heap too.
+        internal static int TestAssembly(byte[] code, int used, int bodyStart, int source, int target,
+            RuntimeReflectionPlan plan)
+        {
+            used = Local(code, used, 0x20, source);
+            code[used++] = 0xfb; code[used++] = 20; // ref.test non-null
+            used = WasmIndexFixups.Write(code, used, bodyStart, plan.HeapFixups);
+            code[used++] = 0x04; code[used++] = 0x40; // if (void)
+            used = Local(code, used, 0x20, source);
+            code[used++] = 0xfb; code[used++] = 22; // ref.cast non-null
+            used = WasmIndexFixups.Write(code, used, bodyStart, plan.HeapFixups);
+            code[used++] = 0xfb; code[used++] = 2; // struct.get descriptor row
+            used = WasmIndexFixups.Write(code, used, bodyStart, plan.HeapFixups);
+            code[used++] = 1;
+            used = Const(code, used, RuntimeReflectionPlan.AssemblyRow);
+            code[used++] = 0x46; // i32.eq
+            code[used++] = 0x04; code[used++] = 0x40;
+            used = Local(code, used, 0x20, source);
+            used = Local(code, used, 0x21, target);
+            code[used++] = 0x05; // else
+            used = ClearAssembly(code, used, target);
+            code[used++] = 0x0b;
+            code[used++] = 0x05; // else
+            used = ClearAssembly(code, used, target);
+            code[used++] = 0x0b;
+            return used;
+        }
+
+        private static int ClearAssembly(byte[] code, int used, int target)
+        {
+            code[used++] = 0xd0; code[used++] = 0x6d; // ref.null eq
+            return Local(code, used, 0x21, target);
+        }
+
         internal static int ModuleSlot(byte[] code, int used, int bodyStart, int receiver, RuntimeReflectionPlan plan)
         {
             used = Local(code, used, 0x20, receiver);

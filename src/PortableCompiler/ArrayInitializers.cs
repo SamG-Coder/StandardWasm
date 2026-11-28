@@ -20,8 +20,15 @@ namespace PortableCompiler
                 int token = records[dup + 2] * Width;
                 if (token >= records.Length || records[token] != FieldToken) continue;
                 int call = records[token + 2] * Width;
-                if (call >= records.Length || records[call] != MemberCall || records[call + 3] != 0x28)
-                    continue;
+                if (call >= records.Length) continue;
+                int initializer = records[call + 1];
+                // Within CoreLib the same helper is called by MethodDef instead of MemberRef.
+                bool definition = records[call] == Call && records[call + 3] == 0;
+                if (definition)
+                {
+                    if (!ArrayInitializerMetadata.IsInitializeArrayDefinition(image, heaps, methods, initializer)) continue;
+                }
+                else if (records[call] != MemberCall || records[call + 3] != 0x28) continue;
 
                 if (location.Length != 0) location[2] = token / Width;
                 // Only the leading count can be an external branch target.
@@ -39,7 +46,9 @@ namespace PortableCompiler
                 if (width == 0) return -2;
                 if (length <= 0 || length > int.MaxValue / width) return -2;
                 int bytes = length * width;
-                int source = ArrayInitializerMetadata.FindData(image, heaps, methods, records[call + 1], records[token + 1], bytes);
+                int source = definition ?
+                    ArrayInitializerMetadata.FindStaticData(image, heaps, methods, records[token + 1], bytes, null) :
+                    ArrayInitializerMetadata.FindData(image, heaps, methods, initializer, records[token + 1], bytes);
                 if (source < 0) return source;
                 int destination = dataSize[0];
                 if (bytes > data.Length - destination) return -3;

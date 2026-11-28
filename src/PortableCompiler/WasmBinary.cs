@@ -203,12 +203,15 @@ namespace PortableCompiler
             // Tables: 0 delegate thunks, 1 the pin registry (decision 0077), 2 function-pointer
             // targets (decision 0078). A lower table is emitted, possibly empty, when a higher
             // one exists, so the indices stay fixed.
-            bool pointerTable = pointers.TargetCount != 0 || pointers.CarrierCount != 0 || rootCount >= 0;
+            int lastReferenceTable = GcHandleWasm.Present(globals) ? GcHandleWasm.Table :
+                rootCount >= 0 ? FinalizerSuppressionWasm.Table : RootStackWasm.Table - 1;
+            bool pointerTable = pointers.TargetCount != 0 || pointers.CarrierCount != 0 ||
+                lastReferenceTable >= RootStackWasm.Table;
             bool pinTable = PinRegistryWasm.Present(globals) || pointerTable;
             bool tables = thunks[0] != 0 || pinTable;
             int tableSize = 3 + UnsignedSize(thunks[0]) + (pinTable ? 3 : 0) +
                 (pointerTable ? 2 + UnsignedSize(pointers.TargetCount + 1) : 0) +
-                (rootCount >= 0 ? (FinalizerSuppressionWasm.Table - RootStackWasm.Table + 1) * 3 : 0);
+                (lastReferenceTable - RootStackWasm.Table + 1) * 3;
             bool elements = thunks[0] != 0 || pointers.TargetCount != 0;
             int elementSize = 5 + UnsignedSize(thunks[0]);
             for (int i = 0; i < thunks[0]; i++)
@@ -216,11 +219,12 @@ namespace PortableCompiler
                 int function = thunks[i + 1];
                 bool open = ThunkOpen(thunks, i, arities[function]);
                 int receiver = open ? 0 : Representation(objects, types[offsets[function] + 1]);
-                int thunkSize = ThunkSize(receiver, hostImports + function, arities[function], open);
-                if (1 + thunkSize > output.Length - codeSize ||
+                bool general = GeneralDelegates.ThunkKey(thunks, i) != 0;
+                int thunkSize = ThunkSize(receiver, hostImports + function, arities[function], open, general, objects, types, offsets[function]);
+                if (UnsignedSize(thunkSize) + thunkSize > output.Length - codeSize ||
                     UnsignedSize(hostImports + functions + i) > output.Length - elementSize)
                     return -3;
-                codeSize += 1 + thunkSize;
+                codeSize += UnsignedSize(thunkSize) + thunkSize;
                 elementSize += UnsignedSize(hostImports + functions + i);
             }
             if (pointers.TargetCount != 0)
@@ -241,7 +245,7 @@ namespace PortableCompiler
                 remaining = Reserve(remaining, tableSize);
             if (tagCount != 0)
                 remaining = Reserve(remaining, tagSize);
-            int globalSize = WasmGlobals.Size(globals, objects, descriptorHeap);
+            int globalSize = WasmGlobals.Size(globals, objects, descriptorHeap, rootCount >= 0);
             if (globalSize != 0)
                 remaining = Reserve(remaining, globalSize);
             remaining = Reserve(remaining, exportSize);
@@ -468,7 +472,7 @@ namespace PortableCompiler
                 // Table 0 holds delegate thunks (possibly none); table 1 is the
                 // live-pin registry of decision 0077, which starts empty and grows.
                 cursor = Section(output, cursor, 4, tableSize);
-                output[cursor++] = (byte)(rootCount >= 0 ? FinalizerSuppressionWasm.Table + 1 : pointerTable ? 3 : pinTable ? 2 : 1);
+                output[cursor++] = (byte)(pointerTable ? lastReferenceTable + 1 : pinTable ? 2 : 1);
                 output[cursor++] = 0x70;
                 output[cursor++] = 0;
                 cursor = Unsigned(output, cursor, thunks[0]);
@@ -484,15 +488,12 @@ namespace PortableCompiler
                     output[cursor++] = 0;
                     cursor = Unsigned(output, cursor, pointers.TargetCount + 1);
                 }
-                if (rootCount >= 0)
+                for (int table = RootStackWasm.Table; table <= lastReferenceTable; table++)
                 {
-                    // Frame roots, mark worklist, registered receivers, pending receivers and suppression markers.
-                    for (int table = RootStackWasm.Table; table <= FinalizerSuppressionWasm.Table; table++)
-                    {
-                        output[cursor++] = 0x6d;
-                        output[cursor++] = 0;
-                        output[cursor++] = 0;
-                    }
+                    // Frame roots, mark worklist, finalization queues and strong handles.
+                    output[cursor++] = 0x6d;
+                    output[cursor++] = 0;
+                    output[cursor++] = 0;
                 }
             }
             if (tagCount != 0)
@@ -510,7 +511,7 @@ namespace PortableCompiler
             if (globalSize != 0)
             {
                 cursor = Section(output, cursor, 6, globalSize);
-                cursor = WasmGlobals.Write(output, cursor, globals, objects, descriptorHeap);
+                cursor = WasmGlobals.Write(output, cursor, globals, objects, descriptorHeap, rootCount >= 0);
             }
             cursor = Section(output, cursor, 7, exportSize);
             cursor = Unsigned(output, cursor, exportCount);
@@ -583,7 +584,9 @@ namespace PortableCompiler
                 int function = thunks[i + 1], arity = arities[function];
                 bool open = ThunkOpen(thunks, i, arity);
                 int receiver = open ? 0 : Representation(objects, types[offsets[function] + 1]);
-                cursor = Unsigned(output, cursor, ThunkSize(receiver, hostImports + function, arity, open));
+                bool general = GeneralDelegates.ThunkKey(thunks, i) != 0;
+                int shape = offsets[function];
+                cursor = Unsigned(output, cursor, ThunkSize(receiver, hostImports + function, arity, open, general, objects, types, shape));
                 output[cursor++] = 0; // local declarations
                 if (!open)
                 {
@@ -603,6 +606,8 @@ namespace PortableCompiler
                 {
                     output[cursor++] = 0x20;
                     output[cursor++] = (byte)argument;
+                    if (general)
+                        cursor = GeneralDelegates.WriteThunkCast(output, cursor, objects, types[shape + argument + (open ? 0 : 1)]);
                 }
                 output[cursor++] = 0x10;
                 cursor = Unsigned(output, cursor, hostImports + function);
@@ -637,7 +642,7 @@ namespace PortableCompiler
             if (type == I32 || type == MethodPointer || IsNativeInteger(type) || type == ConsoleStorage.Writer)
                 output[cursor++] = 0x7f; // Console writers store their host stream number.
             else if (type == NullPointer)
-                output[cursor++] = NullSpillWasm.NullRef; // Only the null pointer inhabits the browser storage type.
+                output[cursor++] = StackSpillWasm.NullRef; // Only the null pointer inhabits the browser storage type.
             else if (type == I64)
                 output[cursor++] = 0x7e;
             else if (IsFloat(type))
@@ -678,9 +683,17 @@ namespace PortableCompiler
             return key != 0 ? key < 0 : IsStaticThunk(arity);
         }
 
-        private static int ThunkSize(int receiver, int function, int arity, bool open) =>
-            open ? 3 + 2 * arity + UnsignedSize(function) :
-            (receiver == ObjectReference ? 5 : 7 + HeapTypeSize(HeapType(receiver))) + 2 * (arity - 1) + UnsignedSize(function);
+        // An interface receiver passes as its eqref representation without a cast (decision 0091, #312);
+        // a general delegate thunk adds one ref.cast per varied reference argument (Stage 226).
+        private static int ThunkSize(int receiver, int function, int arity, bool open, bool general, int[] objects, int[] types, int shape)
+        {
+            int size = open ? 3 + 2 * arity + UnsignedSize(function) :
+                (receiver == ObjectReference ? 5 : 7 + HeapTypeSize(HeapType(receiver))) + 2 * (arity - 1) + UnsignedSize(function);
+            if (general)
+                for (int argument = open ? 0 : 1; argument < arity; argument++)
+                    size += GeneralDelegates.ThunkCastBytes(objects, types[shape + 1 + argument]);
+            return size;
+        }
 
         private static int Reserve(int remaining, int size)
         {

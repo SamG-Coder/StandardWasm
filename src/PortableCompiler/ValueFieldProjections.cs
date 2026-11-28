@@ -22,18 +22,25 @@ namespace PortableCompiler
                 ReferenceVector = RegisterArray(objects, ObjectReference);
         }
 
-        internal const int Scalar = 1, Reference = 2, Aggregate = 4, ClassScalar = 8, BooleanScalar = 16;
+        internal const int Scalar = 1, Reference = 2, Aggregate = 4, ClassScalar = 8, BooleanScalar = 16,
+            WideScalar = 32, ClassWideScalar = 64, ClassBooleanScalar = 128, NativeScalar = 256, ClassNativeScalar = 512;
 
         internal static int Kind(int location) => location == Int32Location ? Scalar :
-            location == BooleanLocation ? BooleanScalar :
+            location == BooleanLocation ? BooleanScalar : location == Int64Location ? WideScalar :
+            location == NativeIntLocation ? NativeScalar :
             IsReferenceLocation(location) ? Reference : IsValueLocation(location) ? Aggregate : 0;
 
         internal static int DecodeLocation(int[] objects, int encoded) =>
             IsValueType(objects, encoded) ? ValueLocation(encoded) : encoded;
 
         internal bool Uses(int location) =>
-            (KnownKinds & (location == Int32Location ? Scalar | ClassScalar : Kind(location))) != 0;
-        internal bool ClassScalars => (KnownKinds & ClassScalar) != 0;
+            (KnownKinds & (Kind(location) | ClassKind(location))) != 0;
+
+        internal bool UsesClass(int location) => (KnownKinds & ClassKind(location)) != 0;
+
+        private static int ClassKind(int location) =>
+            location == Int32Location ? ClassScalar : location == Int64Location ? ClassWideScalar :
+            location == BooleanLocation ? ClassBooleanScalar : location == NativeIntLocation ? ClassNativeScalar : 0;
         internal bool Aggregates => (KnownKinds & Aggregate) != 0;
 
         internal int Owner(int selector) => fields[selector * Width];
@@ -56,7 +63,7 @@ namespace PortableCompiler
                 int descriptor = records[slot + 3];
                 int location = DecodeLocation(objects, FieldAccess.Storage(descriptor));
                 int owner = FieldAccess.Owner(descriptor);
-                int kind = IsValueType(objects, owner) ? Kind(location) : ClassScalar;
+                int kind = IsValueType(objects, owner) ? Kind(location) : ClassKind(location);
                 int selector = Add(owner, records[slot + 1], location, kind);
                 if (selector < 0)
                 {
@@ -93,8 +100,8 @@ namespace PortableCompiler
         }
 
         // Read the exact CLI type in its closed declaring context before
-        // choosing the location ABI. Int32 and UInt32 share field storage.
-        internal static int Bind(BundleImages bundle, int[] objects, int owner, int row, bool classInt32 = false)
+        // choosing the location ABI. Wide primitive and enum fields use i64 storage.
+        internal static int Bind(BundleImages bundle, int[] objects, int owner, int row, int classStorage)
         {
             byte[] image = bundle.Get(AssemblyOf(objects, owner));
             var layout = new int[4];
@@ -114,17 +121,31 @@ namespace PortableCompiler
             int end = next[0] + size;
             next[0]++;
             int modifier = ReadFieldModifier(image, heaps, layout, next, end);
-            if (modifier != 0) return modifier < 0 ? modifier : -2;
-            if (classInt32)
+            if (modifier < 0) return modifier;
+            if (classStorage != 0)
             {
+                if (modifier != 0 && classStorage != I32 && classStorage != Unsigned8) return -2;
                 int type = ManagedReferenceSignatures.Read(bundle, image, layout, heaps,
                     AssemblyOf(objects, owner), next, end, owner, objects, 0);
                 if (type < 0) return type;
-                return type == GenericScalar.Key(8) && next[0] == end ? Int32Location : -2;
+                if (next[0] != end) return -2;
+                if (classStorage == I32)
+                    return (type == GenericScalar.Key(8) || IsEnumKey(type)) &&
+                        ManagedReferenceSignatures.ElementLocation(objects, type) == Int32Location ? Int32Location : -2;
+                // Boolean and Byte share the packed Wasm field but have
+                // distinct CLI signatures and byref semantics.
+                if (classStorage == Unsigned8) return type == GenericScalar.Key(2) ? BooleanLocation : -2;
+                // Native words retain their CLI byref kind even though wasm32 stores them as i32.
+                if (classStorage == Native)
+                    return type == GenericScalar.Key(0x18) ? NativeIntLocation : -2;
+                return ManagedReferenceSignatures.ElementLocation(objects, type) == Int64Location ? Int64Location : -2;
             }
             int location = ManagedReferenceSignatures.ReadLocation(bundle, image, layout, heaps,
                 AssemblyOf(objects, owner), next, end, owner, objects);
             if (location < 0) return location;
+            // Taking an address does not perform a volatile load or store.
+            // Reuse the owner-carrying reference projection for value fields.
+            if (modifier != 0 && !IsReferenceLocation(location)) return -2;
             return next[0] == end && Kind(location) != 0 ? location : -2;
         }
     }

@@ -1,0 +1,26 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using NativeFrameFieldFixture;
+
+if (IntPtr.Size != 4) throw new InvalidOperationException("Expected Windows x86 CLR.");
+Func<int>[] cases = [Probe.ReadAfterWrite, Probe.SnapshotAndClear, Probe.NestedOffsets, Probe.AddressOnly,
+    Probe.ManagedByrefAlongsidePointer];
+string core = typeof(object).Assembly.Location;
+string runtime = Path.GetDirectoryName(core);
+File.WriteAllText(args[0], JsonSerializer.Serialize(new
+{
+    runtime = Environment.Version.ToString(),
+    assembly = typeof(Probe).Assembly.Location,
+    dependencies = new[] { Path.Combine(runtime, "netstandard.dll"), Path.Combine(runtime, "System.Runtime.dll"), core },
+    cases = cases.Select(run => new
+    {
+        name = run.Method.Name,
+        row = run.Method.MetadataToken & 0xffffff,
+        expected = run(),
+        memory = true,
+        rejection = run.Method.Name == nameof(Probe.ManagedByrefAlongsidePointer)
+            ? new { status = -2, location = new[] { 0, run.Method.MetadataToken & 0xffffff, 8 } } : null
+    })
+}));

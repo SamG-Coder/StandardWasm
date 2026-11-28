@@ -61,15 +61,20 @@ namespace PortableCompiler
             return used;
         }
 
-        internal static int FromStaticBytes(byte[] code, int used, int offset, int length, int backing)
+        internal static int FromStaticData(byte[] code, int used, int offset, int length, int backing, int vector, int span)
         {
-            used = Const(code, used, offset);
-            used = Const(code, used, backing);
-            used = Gc(code, used, 9, Bytes); // fresh packed owner from the passive data segment
+            if (backing == 0)
+                used = Gc(code, used, 8, vector); // array.new_fixed with zero elements
+            else
+            {
+                used = Const(code, used, offset);
+                used = Const(code, used, backing);
+                used = Gc(code, used, 9, vector); // typed owner from the passive data segment
+            }
             code[used++] = 0;
             used = Const(code, used, 0);
             used = Const(code, used, length);
-            return Gc(code, used, 0, ReadOnlyByteSpan);
+            return Gc(code, used, 0, span);
         }
 
         internal static int TakeLocation(byte[] code, int used, int view, int type)

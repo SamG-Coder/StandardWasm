@@ -10,6 +10,27 @@ namespace PortableCompiler
         internal static bool IsDescriptorOwner(int owner) => owner <= -2;
         internal static int ModuleSlot(int owner) => -owner - 2;
 
+        internal static bool LowerExactHandleGetter(byte[] image, int[] layout, int[] heaps, int[] records,
+            int slot, int[] clauses)
+        {
+            int kind = records[slot], opcode = records[slot + 3];
+            if (kind != BranchIl.Call && kind != BranchIl.MemberCall ||
+                opcode != (kind == BranchIl.Call ? 1 : 0x6f)) return false;
+            // The two preceding CLI instructions each have a four-byte token.
+            // Linking already resolved the token to a non-null descriptor.
+            int conversion = slot - 5 * BranchIl.Width, token = slot - 10 * BranchIl.Width;
+            if (token < 0 || records[token] != BranchIl.LoadTypeToken ||
+                records[conversion] != BranchIl.TypeFromHandle ||
+                records[token + 2] * BranchIl.Width != conversion ||
+                records[conversion + 2] * BranchIl.Width != slot ||
+                ValueOperands.Entry(records, conversion / BranchIl.Width, clauses) ||
+                ValueOperands.Entry(records, slot / BranchIl.Width, clauses) ||
+                !RuntimeTypeMetadata.IsTypeHandleGetter(image, heaps, layout, records[slot + 1], kind == BranchIl.Call))
+                return false;
+            records[slot] = BranchIl.TypeToHandle;
+            return true;
+        }
+
         internal static int Bind(BundleImages bundle, byte[] image, int[] layout, int[] heaps,
             int owner, int coded, int[] globals, int context, int[] objects, int[] methodArguments)
         {
@@ -98,6 +119,17 @@ namespace PortableCompiler
             int element = ObjectLayouts.ArrayElementKey(objects, type);
             if (element != 0)
             {
+                if (element == RuntimeTypeMetadata.Type)
+                {
+                    int linked = FindCoreType(bundle, "Type", identity);
+                    if (linked < 0) return linked;
+                    int nominal = ObjectLayouts.Find(objects, identity[0], identity[1], new int[0]);
+                    int declared = nominal == 0 ? 0 : ObjectLayouts.FindArray(objects, nominal);
+                    if (declared == 0) return -2;
+                    // Both physical representations describe the exact CLR Type[].
+                    identity[1] = ClosedTypeKey + declared;
+                    return 0;
+                }
                 // The array is nominally distinct from its element but has
                 // the element's defining module, including for nested vectors.
                 int status = ReadClosedIdentity(bundle, objects, element, identity, depth + 1);
