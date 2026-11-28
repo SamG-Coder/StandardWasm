@@ -309,6 +309,8 @@ namespace PortableCompiler
                 bool publishesRoots = tracksRoots && (kind == Call || kind == NewObject || kind == ConstructValue ||
                     kind == ResourceLookup || kind == InvokeDelegate || kind == CallNativeIndirect || kind == CallComCookieLookup ||
                     kind == CallDynamicNative || kind == CallPinnedCharacterNative ||
+                    // Decision 0104: Collect marks from the root stack; finalizers can allocate and collect.
+                    kind == GarbageCollectorCall && operand != GarbageCollectorMembers.KeepAlive ||
                     TypeInitializerWasm.HasFieldTrigger(kind, operand, fieldInitializers));
                 if (publishesRoots)
                 {

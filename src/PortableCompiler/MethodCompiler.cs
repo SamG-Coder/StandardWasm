@@ -289,8 +289,9 @@ namespace PortableCompiler
             // One MethodDef can have a body per closed declaring instantiation.
             // Reserve as many specialized bodies as definitions; exceeding that
             // is a reported capacity failure, never a shared approximation.
-            if (symbols > int.MaxValue / 2 - 1) return -3;
-            int functionCapacity = symbols * 2;
+            if (symbols > int.MaxValue / 2 - 1 - FinalizerSuppressionWasm.End) return -3;
+            // Finalizer tracking also defines its heap walker, queue and suppression functions.
+            int functionCapacity = symbols * 2 + (tracksFinalizers ? FinalizerSuppressionWasm.End : 0);
             var owners = new int[functionCapacity];
             var rows = new int[functionCapacity];
             var contexts = new int[functionCapacity];
