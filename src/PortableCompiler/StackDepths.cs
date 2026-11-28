@@ -482,6 +482,9 @@ namespace PortableCompiler
             if (kind == NullLiteral) return Push(stack, allocated, depth, NullValue);
             if (kind == LoadEventArgsEmpty || kind == NewEventArgs) return Push(stack, allocated, depth, EventArgsReference);
             if (kind == NewRootObject) return Push(stack, allocated, depth, ObjectReference, true);
+            if (kind == DelegateEquality)
+                return depth >= 2 && Assignable(stack[depth - 1], DelegateReference, objects) &&
+                    Assignable(stack[depth - 2], DelegateReference, objects) ? Push(stack, allocated, depth - 2, I32) : -2;
             if (kind == CombineHandler || kind == RemoveHandler)
             {
                 if (depth < 2 || !Assignable(stack[depth - 1], DelegateReference, objects) ||
@@ -585,6 +588,8 @@ namespace PortableCompiler
                 return Match(stack, depth, I32) && Match(stack, depth - 1, String)
                     ? Push(stack, allocated, depth - 2, I32) : -1;
             if (kind == LoadFunction) return Push(stack, allocated, depth, MethodPointer);
+            if (kind == LoadVirtualFunction)
+                return depth >= 1 && IsReference(stack[depth - 1]) ? Push(stack, allocated, depth - 1, MethodPointer) : -2;
             // Decision 0078: a function pointer is a native int; calli takes it last.
             if (kind == FunctionAddress) return Push(stack, allocated, depth, Native);
             // Unsafe.AsPointer preserves an address that already lives in memory 0.
@@ -637,7 +642,11 @@ namespace PortableCompiler
             }
             if (kind == NewDelegate)
             {
-                if (!Match(stack, depth, MethodPointer) || depth < 2 || stack[depth - 2] != extra) return -1;
+                // The target is the delegate's receiver (extra) or, for an instance method, any
+                // subclass of it: the closure keeps it as eqref and the thunk casts it back.
+                if (!Match(stack, depth, MethodPointer) || depth < 2 || stack[depth - 2] != extra &&
+                    (extra == NullValue || stack[depth - 2] == NullValue || !Assignable(stack[depth - 2], extra, objects)))
+                    return -1;
                 return Push(stack, allocated, depth - 2, operand);
             }
             if (kind == InvokeDelegate)

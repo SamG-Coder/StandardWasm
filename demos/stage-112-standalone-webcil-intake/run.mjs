@@ -48,9 +48,11 @@ const node = await inspectStandaloneEntry(compilerBytes, selection);
 assert.equal(node.entryToken, reference.token);
 assert.ok(node.managedAssemblies > 1);
 assert.equal(node.compilerStatus, -2);
-// The local state-machine address is supported. The adjacent ldflda
-// still needs an interior byref to the nested async method builder.
-assert.deepEqual(node.diagnostic, [0, 1, 0x1e]);
+// Main's nested-builder ldflda now compiles. MethodDef 28 (<<Main>$>d__0::MoveNext)
+// is rejected while its local signature is read (offset -1). Its display class
+// reaches RenderTreeEdit, whose explicit layout places a field past the 8-byte
+// backing cell, so ExplicitValueLayouts reports the layout as unsupported.
+assert.deepEqual(node.diagnostic, [0, 28, -1]);
 assert.equal(node.diagnosticAssembly, node.entry);
 
 const pages = new Map();

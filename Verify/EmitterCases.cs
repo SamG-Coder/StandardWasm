@@ -28,6 +28,8 @@ internal static class EmitterCases
         VerifyMethod("Mix", pairs, a => Kernels.Mix(a[0], a[1]));
         VerifyMethod("Quotient", [.. pairs, [int.MinValue, -1]], a => Kernels.Quotient(a[0], a[1]), capacity: 512);
 
+        // The module is exactly 256 bytes on c538ddc; decision 0092's EventEntry nominal-type field
+        // adds 2 to every module's fixed type section, so this buffer gets Quotient's headroom.
         VerifyMethod("UnsupportedSignature", [[-32769], [0], [32768]], a => Kernels.UnsupportedSignature(a[0]), capacity: 512);
         Reject("method call", rows["UnsupportedCall"], 256, -2);
         Reject("insufficient capacity", rows["DemoKernel"], 8, -3);

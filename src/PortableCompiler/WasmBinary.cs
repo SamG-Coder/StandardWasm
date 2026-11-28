@@ -218,7 +218,7 @@ namespace PortableCompiler
             {
                 int function = thunks[i + 1];
                 bool open = ThunkOpen(thunks, i, arities[function]);
-                int receiver = open ? 0 : types[offsets[function] + 1];
+                int receiver = open ? 0 : Representation(objects, types[offsets[function] + 1]);
                 bool general = GeneralDelegates.ThunkKey(thunks, i) != 0;
                 int thunkSize = ThunkSize(receiver, hostImports + function, arities[function], open, general, objects, types, offsets[function]);
                 if (UnsignedSize(thunkSize) + thunkSize > output.Length - codeSize ||
@@ -583,7 +583,7 @@ namespace PortableCompiler
             {
                 int function = thunks[i + 1], arity = arities[function];
                 bool open = ThunkOpen(thunks, i, arity);
-                int receiver = open ? 0 : types[offsets[function] + 1];
+                int receiver = open ? 0 : Representation(objects, types[offsets[function] + 1]);
                 bool general = GeneralDelegates.ThunkKey(thunks, i) != 0;
                 int shape = offsets[function];
                 cursor = Unsigned(output, cursor, ThunkSize(receiver, hostImports + function, arity, open, general, objects, types, shape));
@@ -592,9 +592,14 @@ namespace PortableCompiler
                 {
                     output[cursor++] = 0x20;
                     output[cursor++] = 0;
-                    output[cursor++] = 0xfb;
-                    output[cursor++] = 22; // ref.cast to the target's concrete receiver
-                    cursor = Signed(output, cursor, HeapType(receiver));
+                    // An interface receiver is an eqref parameter (ObjectLayouts.Representation), so the
+                    // target passes as it is; a class receiver is cast to its concrete struct.
+                    if (receiver != ObjectReference)
+                    {
+                        output[cursor++] = 0xfb;
+                        output[cursor++] = 22; // ref.cast to the target's concrete receiver
+                        cursor = Signed(output, cursor, HeapType(receiver));
+                    }
                 }
                 // A static target ignores the thunk's leading target parameter.
                 for (int argument = 1; argument < (open ? arity + 1 : arity); argument++)
@@ -678,10 +683,12 @@ namespace PortableCompiler
             return key != 0 ? key < 0 : IsStaticThunk(arity);
         }
 
+        // An interface receiver passes as its eqref representation without a cast (decision 0091, #312);
+        // a general delegate thunk adds one ref.cast per varied reference argument (Stage 226).
         private static int ThunkSize(int receiver, int function, int arity, bool open, bool general, int[] objects, int[] types, int shape)
         {
             int size = open ? 3 + 2 * arity + UnsignedSize(function) :
-                7 + HeapTypeSize(HeapType(receiver)) + 2 * (arity - 1) + UnsignedSize(function);
+                (receiver == ObjectReference ? 5 : 7 + HeapTypeSize(HeapType(receiver))) + 2 * (arity - 1) + UnsignedSize(function);
             if (general)
                 for (int argument = open ? 0 : 1; argument < arity; argument++)
                     size += GeneralDelegates.ThunkCastBytes(objects, types[shape + 1 + argument]);

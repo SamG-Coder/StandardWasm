@@ -893,7 +893,7 @@ namespace PortableCompiler
                             parameters == 0 ? 0 : signatures[signature + 1], valueConstructor || valueMethod || locationReceiver, valueMethod, valueConstructor, records, owners, rows, contexts,
                             bases, indices, arities, offsets, signatures, objects, thunks, globals, literals, literalSize, functions, location, frame, catchRegion, hostUse, virtualTypes, virtualUsed,
                             initializers, reflection, typeCalls, instantiations, methodArguments, inlineLocations, frameCells, parameters, signatures[signature],
-                            nativePlans, addressedFields, localElements, pointers, finalizers, tracksFinalizers, scopedReceiver, falseBooleans);
+                            nativePlans, addressedFields, localElements, pointers, finalizers, tracksFinalizers, scopedReceiver, falseBooleans, dispatch);
                         if (functions == Reemit)
                         {
                             // Allocation can precede the first reachable suppression call.
@@ -1078,6 +1078,8 @@ namespace PortableCompiler
                     receiverDemand.ObserveCalls(records, depths, contexts);
                     if (location.Length != 0) location[2] = -1;
                     int capacity = body[1] * 64 + 32;
+                    // Grouped dispatch (BranchWasm.BeginGroup) opens a block per group of at least eight states.
+                    capacity += (body[1] / 8 + 1) * BranchWasm.GroupBytes;
                     if (tracksFinalizers)
                     {
                         var finalizerTarget = new int[2];
@@ -1406,6 +1408,8 @@ namespace PortableCompiler
                                 tags = ExceptionTypes.Overflow;
                             else if (kind == BranchIl.NewDelegate)
                                 tags = ExceptionTypes.Argument;
+                            else if (kind == BranchIl.LoadVirtualFunction)
+                                tags = ExceptionTypes.NullReference;
                             else if (kind == BranchIl.UnboxValue || kind == BranchIl.UnboxAggregate || kind == BranchIl.UnboxAggregateAddress)
                                 tags = ExceptionTypes.InvalidCast | ExceptionTypes.NullReference;
                             else if (kind == BranchIl.CastClass || kind == BranchIl.CastHandler)
@@ -1537,7 +1541,7 @@ namespace PortableCompiler
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
                         if (kind == BranchIl.FormatEnum) frameShape[5] |= 5;
                         if (kind == BranchIl.PinScopedValue) frameShape[5] |= 2 | ScopedValuePins.FrameFlag;
-                        if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler ||
+                        if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler || kind == BranchIl.DelegateEquality ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
                             frameShape[6] = 1;
                     }
@@ -1861,7 +1865,8 @@ namespace PortableCompiler
             MethodInstantiations instantiations, int[] methodArguments,
             int[] inlineLocations, int[] frameCells, int parameterCount, int result, NativeAggregatePlans nativePlans,
             AddressedFields addressedFields, byte[] localElements,
-            FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers, int scopedReceiver, FalseBooleanSpecializations falseBooleans)
+            FunctionPointerPlan pointers, FinalizerSlots finalizers, bool tracksFinalizers, int scopedReceiver, FalseBooleanSpecializations falseBooleans,
+            VirtualDispatch dispatch)
         {
             int callerType = 0; // The caller's TypeDef, read once when a member needs access checks.
             bool arrayEnumerator = ArrayElementKey(objects, callerReceiver) != 0 &&
@@ -2956,6 +2961,106 @@ namespace PortableCompiler
                     if (status < 0) return status;
                     continue;
                 }
+                // ldftn of a MemberRef (negated row): resolve it through the bundle like a static or
+                // non-virtual call, then link the delegate target exactly as for a MethodDef. A virtual
+                // target needs ldvirtftn's dispatch and stays diagnosed.
+                if (kind == BranchIl.LoadFunction && records[slot + 1] < 0)
+                {
+                    if (bundle.Length == 0) return -2;
+                    var symbol = new int[7];
+                    if (callerType == 0) callerType = ObjectLayouts.Owner(image, heaps, layout, callerRow, false);
+                    if (callerType < 0) return -1;
+                    int resolvedPointer = AssemblyBundle.Resolve(bundle, image, layout, heaps, owner, -records[slot + 1], 0x28,
+                        false, objects, symbol, context, callerType, callerMethodArguments: methodArguments);
+                    if (resolvedPointer < 0) return resolvedPointer;
+                    if (symbol[0] < 0 || symbol[1] < 1) return -2; // not a compiled bundle method
+                    byte[] pointerImage = bundle.Get(symbol[0]);
+                    var pointerLayout = new int[4];
+                    var pointerHeaps = new int[8];
+                    if (CompressedTables.FindWithHeaps(pointerImage, pointerLayout, pointerHeaps) < 0) return -1;
+                    // Resolve reports Virtual/Final only for virtual calls, so read the target's own flags.
+                    int pointerFlags = MethodDefinitions.ReadColumn(pointerImage, pointerLayout, symbol[1], 2);
+                    if ((pointerFlags & 0x40) != 0) return -2;
+                    int pointerIndex = Lookup(owners, rows, contexts, bases, indices, functions, symbol[0], symbol[1], symbol[3]);
+                    if (pointerIndex < 0)
+                    {
+                        functions = Register(bundle, pointerImage, pointerLayout, pointerHeaps, symbol[0], symbol[1], symbol[3],
+                            owners, rows, contexts, bases, indices, arities, offsets, signatures, objects, functions, allowVirtual: false);
+                        if (functions < 0) return functions;
+                        pointerIndex = functions - 1;
+                    }
+                    if (!IsSharedBundleSignature(signatures, offsets[pointerIndex], arities[pointerIndex])) return -2;
+                    int pointerSignature = offsets[pointerIndex];
+                    bool pointerReceiver = arities[pointerIndex] > 0 &&
+                        StackType(signatures[pointerSignature + 1]) >= ObjectLayouts.FirstClass;
+                    int linkedPointer = LinkFunctionPointer(bundle, image, heaps, layout, owner, records, slot, pointerIndex,
+                        (pointerFlags & 0x10) == 0, pointerReceiver, pointerSignature, arities, signatures, thunks, context,
+                        methodArguments, objects, pointers);
+                    if (linkedPointer < 0) return linkedPointer;
+                    continue;
+                }
+                // #256 ldvirtftn: `dup; ldvirtftn M; newobj D::.ctor`. The delegate's target is the
+                // object ldvirtftn consumed (the dup), so the thunk can dispatch on the target. A final
+                // or non-virtual M binds directly; otherwise the thunk calls M's dispatch site for M's
+                // declaring class, whose arms VirtualDispatch.Expand fills with every allocated override,
+                // exactly as for callvirt. Generic virtual methods stay diagnosed.
+                if (kind == BranchIl.LoadVirtualFunction)
+                {
+                    int method = records[slot + 1];
+                    if (method < 1 || method > bases[owner + 1] - bases[owner]) return -1;
+                    int previous = -1;
+                    for (int at = 0, guard = 0; at < slot && guard < records.Length; at = records[at + 2] * BranchIl.Width, guard++)
+                    {
+                        if (records[at + 2] * BranchIl.Width == slot) { previous = at; break; }
+                        if (records[at + 2] * BranchIl.Width <= at) break;
+                    }
+                    if (previous < 0 || records[previous] != BranchIl.Dup) return -2;
+                    int attributes = MethodDefinitions.ReadColumn(image, layout, method, 2);
+                    if ((attributes & 0x10) != 0) return -2; // a static method is invalid ldvirtftn IL
+                    int virtualIndex;
+                    if ((attributes & 0x40) == 0 || (attributes & 0x20) != 0)
+                    {
+                        virtualIndex = Lookup(owners, rows, contexts, bases, indices, functions, owner, method, 0);
+                        if (virtualIndex < 0)
+                        {
+                            functions = Register(bundle, image, layout, heaps, owner, method, 0, owners, rows, contexts, bases, indices,
+                                arities, offsets, signatures, objects, functions, allowVirtual: true);
+                            if (functions < 0) return functions;
+                            virtualIndex = functions - 1;
+                        }
+                    }
+                    else
+                    {
+                        int staged = StageVirtualCall(bundle, image, layout, heaps, owner, method,
+                            objects, records, slot, virtualTypes, virtualUsed, typeCalls);
+                        if (staged < 0) return staged;
+                        int shape = records[slot + 1], arity = records[slot + 3];
+                        records[slot] = BranchIl.LoadVirtualFunction;
+                        int receiverClass = virtualTypes[shape + 1];
+                        if (receiverClass < ObjectLayouts.FirstClass) return -2;
+                        virtualIndex = dispatch.Add(functions, owner, method, receiverClass, receiverClass, owner, callerRow, slot / BranchIl.Width);
+                        if (virtualIndex < 0) return virtualIndex;
+                        if (virtualIndex == functions)
+                        {
+                            if (functions >= rows.Length) return -3;
+                            int offset = NextSignature(offsets, arities, functions);
+                            if (arity >= signatures.Length - offset) return -3;
+                            arities[functions] = arity;
+                            offsets[functions] = offset;
+                            for (int i = 0; i <= arity; i++) signatures[offset + i] = virtualTypes[shape + i];
+                            functions++;
+                        }
+                    }
+                    int virtualSignature = offsets[virtualIndex];
+                    bool virtualReceiver = arities[virtualIndex] > 0 &&
+                        StackType(signatures[virtualSignature + 1]) >= ObjectLayouts.FirstClass;
+                    int linkedVirtual = LinkFunctionPointer(bundle, image, heaps, layout, owner, records, slot, virtualIndex,
+                        true, virtualReceiver, virtualSignature, arities, signatures, thunks, context, methodArguments, objects, pointers);
+                    if (linkedVirtual < 0) return linkedVirtual;
+                    // A delegate needs it; a bare ldvirtftn function pointer stays diagnosed.
+                    if (records[slot] != BranchIl.LoadVirtualFunction) return -2;
+                    continue;
+                }
                 // Validate direct MethodDef operands before framework recognizers inspect their rows.
                 int target = records[slot + 1];
                 if (kind == BranchIl.CoreVersionOutCall)
@@ -3251,6 +3356,13 @@ namespace PortableCompiler
                         }
                         if (eventMember == EventMetadata.ConstructHandler && opcode == 0x73)
                             constructorType = EventHandlerReference;
+                        if ((eventMember == EventMetadata.DelegateEqual || eventMember == EventMetadata.DelegateNotEqual) && opcode == 0x28)
+                        {
+                            records[slot] = BranchIl.DelegateEquality;
+                            records[slot + 1] = eventMember == EventMetadata.DelegateNotEqual ? 1 : 0;
+                            records[slot + 3] = 0;
+                            continue;
+                        }
                         if ((eventMember == EventMetadata.CombineHandler || eventMember == EventMetadata.RemoveHandler) && opcode == 0x28)
                         {
                             records[slot] = eventMember == EventMetadata.CombineHandler ? BranchIl.CombineHandler : BranchIl.RemoveHandler;
@@ -3413,14 +3525,16 @@ namespace PortableCompiler
                     }
                     int pointer = slot - 6 * BranchIl.Width;
                     if ((constructorType == Delegate && delegateMember != DelegateMetadata.Construct) || opcode != 0x73 || pointer < 0 ||
-                        records[pointer] != BranchIl.LoadFunction || records[pointer + 2] != slot / BranchIl.Width)
+                        records[pointer] != BranchIl.LoadFunction && records[pointer] != BranchIl.LoadVirtualFunction ||
+                        records[pointer + 2] != slot / BranchIl.Width)
                         return -2;
                     records[slot] = BranchIl.NewDelegate;
                     records[slot + 1] = constructorType;
                     records[slot + 3] = records[pointer + 3];
                     continue;
                 }
-                if (kind != BranchIl.Call && kind != BranchIl.NewObject && kind != BranchIl.LoadFunction)
+                if (kind != BranchIl.Call && kind != BranchIl.NewObject && kind != BranchIl.LoadFunction &&
+                    kind != BranchIl.LoadVirtualFunction)
                     continue;
                 if (kind != BranchIl.LoadFunction)
                 {
@@ -3444,7 +3558,8 @@ namespace PortableCompiler
                         // ldftn (or ldvirtftn's absence: the pointer must be an ldftn) then newobj, as for
                         // the platform delegates; the ldftn linking checked the target's signature.
                         int pointer = slot - 6 * BranchIl.Width;
-                        if (kind != BranchIl.NewObject || pointer < 0 || records[pointer] != BranchIl.LoadFunction ||
+                        if (kind != BranchIl.NewObject || pointer < 0 ||
+                            records[pointer] != BranchIl.LoadFunction && records[pointer] != BranchIl.LoadVirtualFunction ||
                             records[pointer + 2] != slot / BranchIl.Width)
                             return -2;
                         records[slot] = BranchIl.NewDelegate;
@@ -3679,62 +3794,10 @@ namespace PortableCompiler
                     // static method's address as a table-2 slot. Instance pointers stay diagnosed.
                     // Only the delegate constructor shape counts: an ordinary constructor can take
                     // a function pointer straight from ldftn (Codex review of c6b68c7).
-                    int following = records[slot + 2] * BranchIl.Width;
-                    if (!FeedsDelegateConstructor(bundle, image, heaps, layout, owner, records, following))
-                    {
-                        if ((MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) == 0) return -2;
-                        records[slot] = BranchIl.FunctionAddress;
-                        records[slot + 1] = pointers.Slot(index);
-                        continue;
-                    }
                     bool instance = (MethodDefinitions.ReadColumn(image, layout, target, 2) & 0x10) == 0;
-                    int next = records[slot + 2] * BranchIl.Width;
-                    var generalKey = new int[1];
-                    // Stage 204: newobj of a delegate TypeDef's runtime .ctor (a MethodDef record).
-                    bool defined = next < records.Length && records[next] == BranchIl.NewObject &&
-                        GeneralDelegates.DefinedMember(bundle, image, layout, heaps, owner, records[next + 1], objects,
-                            generalKey) == GeneralDelegates.Construct;
-                    if (!defined && (next >= records.Length || records[next] != BranchIl.MemberCall || records[next + 3] != 0x73))
-                        return -2;
-                    bool spanCallback = !defined && CharacterSpanCallbackMetadata.Member(bundle, image, layout, heaps, owner,
-                        records[next + 1], context, methodArguments, objects) == CharacterSpanCallbackMetadata.Construct;
-                    bool general = defined || !spanCallback && GeneralDelegates.Member(bundle, image, layout, heaps, owner,
-                        records[next + 1], context, methodArguments, objects, generalKey) == GeneralDelegates.Construct;
-                    if (general)
-                    {
-                        if (instance && !hasReceiver ||
-                            !GeneralDelegates.MatchesTarget(objects, generalKey[0], signatures, signature, arities[index], instance))
-                            return -2;
-                    }
-                    else if (spanCallback)
-                    {
-                        if (instance && !hasReceiver ||
-                            !CharacterSpanCallbackMetadata.MatchesTarget(signatures, signature, arities[index], instance))
-                            return -2;
-                    }
-                    else if (EventMetadata.Member(image, heaps, layout, records[next + 1]) == EventMetadata.ConstructHandler)
-                    {
-                        int first = signature + (instance ? 2 : 1);
-                        if (instance && !hasReceiver || arities[index] != (instance ? 3 : 2) ||
-                            signatures[signature] != Void || signatures[first] != ObjectReference ||
-                            signatures[first + 1] != EventArgsReference)
-                            return -2;
-                    }
-                    else if (instance && !hasReceiver || arities[index] != (instance ? 1 : 0) || signatures[signature] != I32)
-                        return -2;
-                    int thunk = 0;
-                    int thunkKey = general ? (instance ? generalKey[0] : -generalKey[0]) : 0;
-                    while (thunk < thunks[0] && (thunks[thunk + 1] != index || GeneralDelegates.ThunkKey(thunks, thunk) != thunkKey))
-                        thunk++;
-                    if (thunk == thunks[0])
-                    {
-                        if (thunk + 1 >= thunks.Length / 2) return -3;
-                        thunks[thunk + 1] = index;
-                        thunks[0] = thunk + 1;
-                        GeneralDelegates.SetThunkKey(thunks, thunk, general ? generalKey[0] : 0, !instance);
-                    }
-                    records[slot + 1] = thunk;
-                    records[slot + 3] = instance ? signatures[signature + 1] : NullValue;
+                    int linkedTarget = LinkFunctionPointer(bundle, image, heaps, layout, owner, records, slot, index, instance,
+                        hasReceiver, signature, arities, signatures, thunks, context, methodArguments, objects, pointers);
+                    if (linkedTarget < 0) return linkedTarget;
                     continue;
                 }
                 if (kind == BranchIl.NewObject)
@@ -4455,6 +4518,73 @@ namespace PortableCompiler
 
         internal static int NextSignature(int[] offsets, int[] arities, int functions) =>
             functions == 0 ? 0 : offsets[functions - 1] + arities[functions - 1] + 1;
+
+        // An ldftn that feeds a delegate constructor binds its target's thunk; one that feeds nothing
+        // takes a static method's table-2 slot (decision 0078). Shared by MethodDef and MemberRef ldftn.
+        // `instance` and `hasReceiver` describe the resolved target function `index`.
+        private static int LinkFunctionPointer(BundleImages bundle, byte[] image, int[] heaps, int[] layout, int owner,
+            int[] records, int slot, int index, bool instance, bool hasReceiver, int signature, int[] arities,
+            int[] signatures, int[] thunks, int context, int[] methodArguments, int[] objects, FunctionPointerPlan pointers)
+        {
+            int following = records[slot + 2] * BranchIl.Width;
+            if (!FeedsDelegateConstructor(bundle, image, heaps, layout, owner, records, following))
+            {
+                if (instance) return -2;
+                records[slot] = BranchIl.FunctionAddress;
+                records[slot + 1] = pointers.Slot(index);
+                return 0;
+            }
+            int next = records[slot + 2] * BranchIl.Width;
+            var generalKey = new int[1];
+            // Stage 204: newobj of a delegate TypeDef's runtime .ctor (a MethodDef record).
+            bool defined = next < records.Length && records[next] == BranchIl.NewObject &&
+                GeneralDelegates.DefinedMember(bundle, image, layout, heaps, owner, records[next + 1], objects,
+                    generalKey) == GeneralDelegates.Construct;
+            if (!defined && (next >= records.Length || records[next] != BranchIl.MemberCall || records[next + 3] != 0x73))
+                return -2;
+            bool spanCallback = !defined && CharacterSpanCallbackMetadata.Member(bundle, image, layout, heaps, owner,
+                records[next + 1], context, methodArguments, objects) == CharacterSpanCallbackMetadata.Construct;
+            bool general = defined || !spanCallback && GeneralDelegates.Member(bundle, image, layout, heaps, owner,
+                records[next + 1], context, methodArguments, objects, generalKey) == GeneralDelegates.Construct;
+            if (general)
+            {
+                if (instance && !hasReceiver ||
+                    !GeneralDelegates.MatchesTarget(objects, generalKey[0], signatures, signature, arities[index], instance))
+                    return -2;
+            }
+            else if (spanCallback)
+            {
+                if (instance && !hasReceiver ||
+                    !CharacterSpanCallbackMetadata.MatchesTarget(signatures, signature, arities[index], instance))
+                    return -2;
+            }
+            else if (EventMetadata.Member(image, heaps, layout, records[next + 1]) == EventMetadata.ConstructHandler)
+            {
+                int first = signature + (instance ? 2 : 1);
+                if (instance && !hasReceiver || arities[index] != (instance ? 3 : 2) ||
+                    signatures[signature] != Void || signatures[first] != ObjectReference ||
+                    signatures[first + 1] != EventArgsReference)
+                    return -2;
+            }
+            else if (instance && !hasReceiver || arities[index] != (instance ? 1 : 0) || signatures[signature] != I32)
+                return -2;
+            int thunk = 0;
+            // Stage 226: one thunk per (target, general delegate key), so a varied reference
+            // argument gets the casts of the delegate type it is bound through.
+            int thunkKey = general ? (instance ? generalKey[0] : -generalKey[0]) : 0;
+            while (thunk < thunks[0] && (thunks[thunk + 1] != index || GeneralDelegates.ThunkKey(thunks, thunk) != thunkKey))
+                thunk++;
+            if (thunk == thunks[0])
+            {
+                if (thunk + 1 >= thunks.Length / 2) return -3;
+                thunks[thunk + 1] = index;
+                thunks[0] = thunk + 1;
+                GeneralDelegates.SetThunkKey(thunks, thunk, general ? generalKey[0] : 0, !instance);
+            }
+            records[slot + 1] = thunk;
+            records[slot + 3] = instance ? signatures[signature + 1] : NullValue;
+            return 0;
+        }
 
         private static bool LinkExchange(BundleImages bundle, byte[] image, int[] heaps, int[] layout, int owner, int[] objects,
             int[] records, int slot)

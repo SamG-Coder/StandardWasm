@@ -80,7 +80,11 @@ namespace PortableCompiler
             int arity = SignatureTypes.Read(bundle, image, heaps, MethodDefinitions.ReadColumn(image, layout, invoke, 4),
                 types, 0, ObjectLayouts.ObjectReference, layout, objects, assembly, 0);
             bundle.LayoutDepth--;
-            if (arity < 1) return arity < 0 && arity != -2 ? arity : 0;
+            // A missing dependency (-4) or an unsupported type (-2) in Invoke leaves the delegate an
+            // ordinary class layout, as before Stage 204: constructing or invoking it stays -2 at the
+            // use site. Native AOT likewise fails only when the delegate's code is needed, so merely
+            // reaching the type (a field of a framework class) must not stop the compile.
+            if (arity < 1) return arity < 0 && arity != -2 && arity != -4 ? arity : 0;
             int count = arity - 1;
             var parameters = new int[count];
             for (int i = 0; i < count; i++)

@@ -5,6 +5,8 @@ namespace PeLibrary
     internal static class EventMetadata
     {
         internal const int Empty = 1, Construct = 2, ConstructHandler = 3, InvokeHandler = 4, CombineHandler = 5, RemoveHandler = 6;
+        // Delegate.op_Equality and op_Inequality (#256): 7 is the private ExchangeMember.
+        internal const int DelegateEqual = 8, DelegateNotEqual = 9;
         private const int DelegateType = ObjectLayouts.DelegateReference, InterlockedType = 257;
         private const int ExchangeMember = 7;
 
@@ -98,6 +100,23 @@ namespace PeLibrary
             if (type == DelegateType)
             {
                 if (image[signature] != 0 || image[signature + 1] != 2) return 0;
+                // static bool op_Equality(Delegate, Delegate) and op_Inequality: C#'s == and != on
+                // any delegate type.
+                if (size == 7 && image[signature + 2] == 0x02 && (MatchesAscii(image, heaps, name, "op_Equality") ||
+                    MatchesAscii(image, heaps, name, "op_Inequality")))
+                {
+                    int operand = signature + 3;
+                    for (int i = 0; i < 2; i++)
+                    {
+                        if (image[operand] != 0x12) return 0;
+                        int reference = CompressedUnsigned(image, operand + 1, signature + size, next);
+                        if ((reference & 3) != 1 || ReadType(image, heaps, methods, counts, first, reference >> 2) != DelegateType)
+                            return 0;
+                        operand = next[0];
+                    }
+                    if (operand != signature + size) return 0;
+                    return MatchesAscii(image, heaps, name, "op_Equality") ? DelegateEqual : DelegateNotEqual;
+                }
                 int member;
                 if (Name(image, heaps, name, 7, 0x626d6f43, 0x656e69, 0)) // Combine
                     member = CombineHandler;
