@@ -85,6 +85,11 @@ namespace PortableCompiler
             return Local(code, used, 0x21, result);
         }
 
+        // [] -> [String] for the i64 in `value`: the invariant decimal text of a signed or
+        // unsigned primitive (decision 0104). It shares the enum fallback's digit loops.
+        internal static int FormatDecimal(byte[] code, int used, bool signed, int chars, int index, int negative, int value, int work) =>
+            Decimal(code, used, signed, chars, index, negative, value, work);
+
         // Two passes allocate the exact immutable UTF-16 payload. Unsigned
         // magnitude arithmetic admits both long.MinValue and ulong.MaxValue.
         private static int Decimal(byte[] code, int used, bool signed, int chars, int index, int negative, int value, int work)

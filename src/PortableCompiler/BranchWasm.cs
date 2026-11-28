@@ -435,6 +435,27 @@ namespace PortableCompiler
                     code[used++] = operand == I64 ? (byte)0x51 : (byte)0x46; // eq
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, I32, top - 1));
                 }
+                else if (kind == JoinStringArray)
+                {
+                    int vector = PeLibrary.ObjectLayouts.FindArray(objects, String);
+                    used = StringArrayJoinWasm.Emit(code, used, vector, Spill(spills, maximum, spillFlags, states[state + top], top),
+                        operand, scratch, scratch + 1, scratch + 3, scratch + 4, enumLocals, enumLocals + 1);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, String, top));
+                }
+                else if (kind == FormatPrimitive)
+                {
+                    // [location] -> [String]: read the receiver through its managed location as
+                    // ldind.i4/ldind.i8 would, widen to the i64 magnitude workspace, then format.
+                    int type = states[state + top];
+                    int address = Spill(spills, maximum, spillFlags, type, top);
+                    bool wide = operand >= 10;
+                    used = ValueFieldProjectionWasm.Read(code, used, frameShape[7], address, wide ? Longs : Ints, type, projections);
+                    if (!wide) code[used++] = operand == 8 ? (byte)0xac : (byte)0xad; // i64.extend_i32_s/u
+                    used = Local(code, used, 0x21, enumLocals);
+                    used = EnumFormattingWasm.FormatDecimal(code, used, (operand & 1) == 0, scratch, scratch + 3, scratch + 4,
+                        enumLocals, enumLocals + 1);
+                    used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, String, top));
+                }
                 else if (kind == FormatEnum)
                 {
                     int element = records[slot + 3];

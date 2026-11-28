@@ -1387,6 +1387,11 @@ namespace PortableCompiler
                                 if (bytes < 0) return bytes;
                                 capacity += bytes;
                             }
+                            if (kind == BranchIl.FormatPrimitive || kind == BranchIl.JoinStringArray)
+                            {
+                                if (capacity > int.MaxValue - EnumFormattingWasm.Capacity) return -3;
+                                capacity += EnumFormattingWasm.Capacity;
+                            }
                             if (kind == BranchIl.FormatEnum)
                             {
                                 int names = unchecked((int)PeLibrary.ImageBytes.U32(literals, (uint)operation));
@@ -1450,6 +1455,8 @@ namespace PortableCompiler
                                 if (capacity > int.MaxValue - ArrayCopyWasm.Capacity) return -3;
                                 capacity += ArrayCopyWasm.Capacity;
                             }
+                            else if (kind == BranchIl.JoinStringArray)
+                                tags = ExceptionTypes.ArgumentNull; // String.Concat(null)
                             else if (kind == BranchIl.ThrowFrameworkArgument)
                                 tags = operation == ExceptionTagsWasm.ArgumentNullTag
                                     ? ExceptionTypes.ArgumentNull : ExceptionTypes.ArgumentOutOfRange;
@@ -1539,7 +1546,8 @@ namespace PortableCompiler
                             kind == BranchIl.PinString || kind == BranchIl.ConsoleReadLine || kind == BranchIl.CopyCharacterSpan ||
                             kind == BranchIl.FindCharacterInSpan || kind == BranchIl.CopyConstructionString) frameShape[5] |= 1;
                         if (kind == BranchIl.CallPinnedCharacterNative) frameShape[5] |= 2;
-                        if (kind == BranchIl.FormatEnum) frameShape[5] |= 5;
+                        if (kind == BranchIl.FormatEnum || kind == BranchIl.FormatPrimitive ||
+                            kind == BranchIl.JoinStringArray) frameShape[5] |= 5;
                         if (kind == BranchIl.PinScopedValue) frameShape[5] |= 2 | ScopedValuePins.FrameFlag;
                         if (kind == BranchIl.CombineHandler || kind == BranchIl.RemoveHandler || kind == BranchIl.DelegateEquality ||
                             (kind == BranchIl.InvokeDelegate && records[slot + 1] == EventHandlerReference))
@@ -3399,6 +3407,13 @@ namespace PortableCompiler
                         records[slot] = opcode == 0x73 ? BranchIl.NewRootObject : BranchIl.BaseCtor;
                         continue;
                     }
+                    int primitiveFormat = !addressed && opcode == 0x28 ? PrimitiveFormatting.Identify(image, heaps, layout, member) : 0;
+                    if (primitiveFormat != 0)
+                    {
+                        records[slot] = BranchIl.FormatPrimitive;
+                        records[slot + 1] = primitiveFormat;
+                        continue;
+                    }
                     int stringMember = addressed ? 0 : StringMetadata.Member(image, heaps, layout, member);
                     if ((stringMember == StringMetadata.OrdinalEquals || stringMember == StringMetadata.OrdinalUnequal) &&
                         opcode == 0x28)
@@ -3406,6 +3421,16 @@ namespace PortableCompiler
                         // The operand selects op_Inequality, which negates the ordinal result.
                         records[slot] = BranchIl.StringEquals;
                         records[slot + 1] = stringMember == StringMetadata.OrdinalUnequal ? 1 : 0;
+                        continue;
+                    }
+                    if (stringMember == StringMetadata.ConcatArray && opcode == 0x28)
+                    {
+                        int empty = StringLiterals.Empty(globals);
+                        if (empty < 0) return empty;
+                        int vector = ObjectLayouts.RegisterArray(objects, String);
+                        if (vector < 0) return vector;
+                        records[slot] = BranchIl.JoinStringArray;
+                        records[slot + 1] = empty;
                         continue;
                     }
                     bool joinStrings = stringMember == StringMetadata.Concat && opcode == 0x28;

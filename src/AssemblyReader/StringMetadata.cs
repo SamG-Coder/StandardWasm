@@ -4,7 +4,7 @@ namespace PeLibrary
 {
     internal static class StringMetadata
     {
-        internal const int Length = 1, Character = 2, Concat = 3, FromChars = 4, OrdinalEquals = 5, Empty = 6, PinnableReference = 7, OrdinalUnequal = 8;
+        internal const int Length = 1, Character = 2, Concat = 3, FromChars = 4, OrdinalEquals = 5, Empty = 6, PinnableReference = 7, OrdinalUnequal = 8, ConcatArray = 9;
 
         internal static int CopyLiteral(byte[] image, int[] streams, int tokenOffset, byte[] bytes, int used)
         {
@@ -78,6 +78,12 @@ namespace PeLibrary
                 Fits(sig, 6, (uint)streams[1]) && U32(image, signature) == 0x0e020005 &&
                 U16(image, signature + 4) == 0x0e0e)
                 return Concat;
+            // static string Concat(string[]): C# joins five or more operands this way.
+            if (Fits(name, 7, (uint)streams[3]) && U32(image, n) == 0x636e6f43 &&
+                U16(image, n + 4) == 0x7461 && image[n + 6] == 0 &&
+                Fits(sig, 6, (uint)streams[1]) && U32(image, signature) == 0x0e010005 &&
+                U16(image, signature + 4) == 0x0e1d)
+                return ConcatArray;
             bool equals = PlatformTypeReferences.Named(image, (uint)streams[2], (uint)streams[3], name, 6,
                 0x61757145, 0x736c, 0) || // Equals
                 PlatformTypeReferences.Named(image, (uint)streams[2], (uint)streams[3], name, 11,

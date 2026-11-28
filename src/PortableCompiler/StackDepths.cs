@@ -451,6 +451,14 @@ namespace PortableCompiler
             if (kind == EnumHasFlag)
                 return depth >= 2 && Match(stack, depth, operand) && Match(stack, depth - 1, operand)
                     ? Push(stack, allocated, depth - 2, I32) : -2;
+            if (kind == JoinStringArray)
+            {
+                int vector = PeLibrary.ObjectLayouts.FindArray(objects, String);
+                return vector != 0 && Match(stack, depth, vector) ? Push(stack, allocated, depth - 1, String) : -2;
+            }
+            if (kind == FormatPrimitive)
+                return Match(stack, depth, PrimitiveFormatting.ReceiverLocation(operand))
+                    ? Push(stack, allocated, depth - 1, String) : -2;
             if (kind == FormatEnum)
                 return Match(stack, depth, EnumFormatting.StackStorage(extra))
                     ? Push(stack, allocated, depth - 1, String) : -2;

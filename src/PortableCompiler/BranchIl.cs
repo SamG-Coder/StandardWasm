@@ -106,6 +106,10 @@ namespace PortableCompiler
         internal const int CopyNativeConstructionString = 249; // [fresh String, pointer, count] -> []
         internal const int CoreVersionOutCall = 250; // Unlinked native-backed call to the original managed wrapper.
         internal const int ScalarBitCast = 251; // [integer or float] -> [equal-width bit reinterpretation]
+        // #326 (Claude): reserved high so parallel work does not collide. The operand is the CLI element
+        // type (8..11) of System.{Int32,UInt32,Int64,UInt64}::ToString() (decision 0104).
+        internal const int FormatPrimitive = 420; // [Int32Location or Int64Location] -> [String]
+        internal const int JoinStringArray = 421; // [String[]] -> [String] for String.Concat(string[])
         internal const int OffsetCharacterLocation = 168; // 167 is reserved for the constrained span integration.
         internal const int ProvenNativeZero = 2;
         internal const int MethodSpecCallvirt = 2;
