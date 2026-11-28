@@ -333,6 +333,7 @@ Run npm ci once from the repository root. Run npm run demo to list available sta
 | [361 · Thread window enumeration](stage-361-enum-thread-windows/README.md) | `npm run demo -- stage-361-enum-thread-windows` | Compare real stdcall callbacks, ordering and payload with Windows |
 | [363 · Launch-directory long paths](stage-363-launch-long-paths/README.md) | `npm run demo -- stage-363-launch-long-paths` | Mount the dropped publish as the virtual executable directory and match Windows GetLongPathNameW respelling, case folding and short-buffer writes |
 | [365 · Native pointer arguments](stage-365-native-pointer-arguments/README.md) | `npm run demo -- stage-365-native-pointer-arguments` | Pass unmanaged pointers through typed DllImports and match kernel32 FILETIME/SYSTEMTIME conversions and ucrtbase strlen/memcpy over fixed and stackalloc memory with the x86 CLR |
+| [366 · Benchmark console members](stage-366-benchmark-console-members/README.md) | `npm run demo -- stage-366-benchmark-console-members` | Run an unchanged console app using primitive formatting, string joins, Stopwatch, NativeMemory, Array.Sort, BitOperations, UInt128, Unsafe and Environment.Exit, matching the x86 CLR byte for byte in Node and Edge |
 
 ## Adding a stage
 
