@@ -13,7 +13,7 @@ namespace PortableCompiler
             byte[] outgoingNulls, int[] outgoingReferences, int[] objects, int[] fieldInitializers, RuntimeReflectionPlan reflection,
             int[] inlineLocations, int[] nativePlans, int[] filters, int[] frameCells,
             FunctionPointerPlan pointers, int rootCount, byte[] frameRoots, FinalizerSlots finalizers, int[] failure,
-            PrimitiveArrayWasm primitiveArrays, ValueFieldProjections projections, byte[] literals)
+            PrimitiveArrayWasm primitiveArrays, ValueFieldProjections projections, byte[] literals, CollectionReach reach = null)
         {
             int arguments = frameShape[0], locals = frameShape[1], maximum = frameShape[2];
             int result = frameShape[3];
@@ -40,6 +40,9 @@ namespace PortableCompiler
             // Stage 149 (decision 0077): a pinning frame also saves the live-pin count.
             int pins = frameShape[24] - 1;
             bool tracksRoots = frameRoots != null;
+            // Decision 0106: a frame may skip root publishing while the module still tracks
+            // finalizers; the managed cell layout follows the module, not the frame.
+            bool rootLayout = finalizers != null;
             bool hasNull = outgoingNulls.Length != 0;
             int spillFlags = 0;
             // Only verified stack types need banks. Unused view types must not
@@ -243,7 +246,7 @@ namespace PortableCompiler
                         code[used++] = 0xd0; // ref.null eq
                         code[used++] = 0x6d;
                     }
-                    if (IsValueLocation(vector)) used = ManagedValueLocationWasm.CreateCell(code, used, tracksRoots);
+                    if (IsValueLocation(vector)) used = ManagedValueLocationWasm.CreateCell(code, used, rootLayout);
                     else
                     {
                         used = Gc(code, used, 8, vector); // array.new_fixed
@@ -299,21 +302,37 @@ namespace PortableCompiler
             // consecutive states into blocks headed by `br_if (pc >= next group's first pc)`,
             // so re-entering the loop skips a whole group with one comparison instead of
             // testing each of its states (#316). A branch to the loop leaves one more block.
-            int emitted = 0;
+            // Decision 0106: the loop re-enters with one br_table over pc. Each basic-block leader owns
+            // a block; its code follows the block's end, and the states after it fall through in pc
+            // order. Leader 0 is innermost, so br_table label i reaches leader i's code; any other pc
+            // takes the outermost default block, which ends in the trailing unreachable as before.
+            bool[] leaders = Leaders(records, depths, catchRegion, filters != null, 0, continuations != 0);
+            int leaderCount = 0;
+            var leaderIndex = new int[depths.Length];
             for (int pc = 0; pc < depths.Length; pc++)
-                if (depths[pc] != 0) emitted++;
-            int groupSize = emitted > MinimumGroupedStates ? GroupSize(emitted) : 0;
-            int loopDepth = (catchRegion.Length == 0 ? 1 : ExceptionDispatchWasm.Depth) + (groupSize != 0 ? 1 : 0);
-            int ordinal = 0;
+                leaderIndex[pc] = depths[pc] != 0 && leaders[pc] ? leaderCount++ : -1;
+            // Labels between a state's block and the loop besides the leader blocks: catch dispatch
+            // adds try_table and one block per tag (ExceptionDispatchWasm.Depth counted the old `if`).
+            int exceptionLabels = catchRegion.Length == 0 ? 0 : ExceptionDispatchWasm.Depth - 1;
+            for (int i = 0; i <= leaderCount; i++) { code[used++] = 0x02; code[used++] = 0x40; } // default + leaders
+            used = Local(code, used, 0x20, pcLocal);
+            code[used++] = 0x0e; // br_table (pc is in range for every emitted state)
+            used = WasmBinary.Unsigned(code, used, depths.Length);
+            for (int pc = 0; pc < depths.Length; pc++)
+                used = WasmBinary.Unsigned(code, used, leaderIndex[pc] >= 0 ? leaderIndex[pc] : leaderCount);
+            used = WasmBinary.Unsigned(code, used, leaderCount);
+            int segment = -1;
             for (int pc = 0; pc < depths.Length; pc++)
             {
                 if (depths[pc] == 0) continue;
-                if (groupSize != 0 && ordinal % groupSize == 0)
+                if (leaderIndex[pc] >= 0)
                 {
-                    if (ordinal != 0) code[used++] = 0x0b; // end the previous group
-                    used = BeginGroup(code, used, depths, pc, groupSize, pcLocal);
+                    code[used++] = 0x0b; // end the leader's block: its code follows
+                    segment = leaderIndex[pc];
                 }
-                ordinal++;
+                // From inside this state's block: the remaining leader blocks, the default block, the
+                // exception labels and then the loop.
+                int loopDepth = 1 + (leaderCount - 1 - segment) + 1 + exceptionLabels;
                 int slot = pc * BranchIl.Width;
                 int kind = records[slot], operand = records[slot + 1], next = records[slot + 2];
                 int depth = depths[pc] - 1;
@@ -321,14 +340,13 @@ namespace PortableCompiler
                 int top = depth - 1;
                 bool fallsThrough = false;
                 bool fieldStore = kind == SetField || kind == UpdateConstructorField;
-                used = Local(code, used, 0x20, pcLocal);
-                used = Const(code, used, pc);
-                code[used++] = 0x46;
-                code[used++] = 0x04;
+                code[used++] = 0x02; // the state's own label, as the former `if`
                 code[used++] = 0x40;
 
                 int tracked = 0;
-                bool publishesRoots = tracksRoots && (kind == Call || kind == NewObject || kind == ConstructValue ||
+                // Decision 0106: a direct call to a function that cannot reach a collection publishes nothing.
+                bool collectingCall = reach == null || (kind != Call && kind != NewObject && kind != ConstructValue) || reach.MayCollect(operand);
+                bool publishesRoots = tracksRoots && collectingCall && (kind == Call || kind == NewObject || kind == ConstructValue ||
                     kind == ResourceLookup || kind == InvokeDelegate || kind == CallNativeIndirect || kind == CallComCookieLookup ||
                     kind == CallDynamicNative || kind == CallPinnedCharacterNative ||
                     // Decision 0104: Collect marks from the root stack; finalizers can allocate and collect.
@@ -912,7 +930,7 @@ namespace PortableCompiler
                         kind == BoxAggregateToInterface ? FieldAccess.Storage(operand) : ObjectReference;
                     int target = Spill(spills, maximum, spillFlags, resultType, top);
                     if (kind == BoxAggregate || kind == BoxAggregateToInterface)
-                        used = AggregateBoxing.Box(code, used, source, target, box, descriptor, tracksRoots);
+                        used = AggregateBoxing.Box(code, used, source, target, box, descriptor, rootLayout);
                     else
                     {
                         used = kind == UnboxAggregate || address ? AggregateBoxing.Unbox(code, used, source, operand, box, descriptor, address) :
@@ -1113,7 +1131,10 @@ namespace PortableCompiler
                     // Preserve the current frame whenever it can handle an exception.
                     // With the same result type, the callee already normalizes its return value.
                     // An initializer must observe its callee's failure, so it never tail-calls.
+                    // Decision 0106: pins copied back or released at ret also keep the frame (a tail call
+                    // would skip that cleanup).
                     if (kind == Call && tracked == 0 && catchRegion.Length == 0 && guard < 0 && stackPointer < 0 && first == 0 && returned == result &&
+                        arrayPins == null && scopedValuePin < 0 && pins < 0 &&
                         next < depths.Length && records[next * Width] == Return)
                     {
                         code[used++] = 0x12; // return_call
@@ -1757,7 +1778,7 @@ namespace PortableCompiler
                     // does not use its eqref position. These slots are dead after Copy.
                     used = ArrayCopyWasm.Emit(code, used, vector, source, sourceIndex, destination, destinationIndex,
                         Spill(spills, maximum, spillFlags, I32, top), IsValueType(objects, ArrayElement(objects, vector)),
-                        (records[slot + 3] & 1) != 0, tracksRoots, Spill(spills, maximum, spillFlags, I32, first),
+                        (records[slot + 3] & 1) != 0, rootLayout, Spill(spills, maximum, spillFlags, I32, first),
                         Spill(spills, maximum, spillFlags, I32, target), Spill(spills, maximum, spillFlags, ObjectReference, top));
                 }
                 else if (kind == SpanRead)
@@ -1782,7 +1803,7 @@ namespace PortableCompiler
                     {
                         used = GuardNull(code, used, array);
                         used = GuardArrayIndex(code, used, array, index, false);
-                        used = ValueArrayWasm.Take(code, used, operand, array, index, tracksRoots);
+                        used = ValueArrayWasm.Take(code, used, operand, array, index, rootLayout);
                         used = Local(code, used, 0x21, resultSpill);
                     }
                     else used = ManagedLocationWasm.TakeElement(code, used, array, index, resultSpill);
@@ -1950,7 +1971,7 @@ namespace PortableCompiler
                     int descriptor = records[slot + 3], storage = FieldAccess.Storage(descriptor);
                     int reference = Spill(spills, maximum, spillFlags, states[state + top], top);
                     used = GuardNull(code, used, reference);
-                    used = ManagedValueLocationWasm.Take(code, used, FieldAccess.Owner(descriptor), reference, operand, tracksRoots);
+                    used = ManagedValueLocationWasm.Take(code, used, FieldAccess.Owner(descriptor), reference, operand, rootLayout);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, ValueLocation(storage), top));
                 }
                 else if (kind == GetReferenceField || kind == SetReferenceField || kind == TakeReferenceFieldAddress)
@@ -2009,7 +2030,7 @@ namespace PortableCompiler
                     int descriptor = records[slot + 3], owner = FieldAccess.Owner(descriptor);
                     int location = ValueFieldProjections.DecodeLocation(objects, FieldAccess.Storage(descriptor));
                     int source = Spill(spills, maximum, spillFlags, states[state + top], top);
-                    used = ValueFieldProjectionWasm.Take(code, used, source, owner, operand, location, IsValueType(objects, owner), tracksRoots);
+                    used = ValueFieldProjectionWasm.Take(code, used, source, owner, operand, location, IsValueType(objects, owner), rootLayout);
                     used = Local(code, used, 0x21, Spill(spills, maximum, spillFlags, location, top));
                 }
                 else if (kind == ClearInteriorField)
@@ -2059,7 +2080,7 @@ namespace PortableCompiler
                         {
                             int source = states[state + top];
                             used = ManagedValueLocationWasm.Write(code, used, type, reference, operand,
-                                Spill(spills, maximum, spillFlags, source, top), source, storage, tracksRoots);
+                                Spill(spills, maximum, spillFlags, source, top), source, storage, rootLayout);
                         }
                     }
                     else
@@ -2187,7 +2208,7 @@ namespace PortableCompiler
                 else if ((kind == ArrayGet || kind == ArraySet) && records[slot + 3] != 0)
                 {
                     used = ValueArrayWasm.EmitAccess(code, used, kind == ArrayGet, operand, records[slot + 3], state, top, states,
-                        spills, maximum, spillFlags, objects, tracksRoots);
+                        spills, maximum, spillFlags, objects, rootLayout);
                 }
                 else if (kind == ArrayGet)
                 {
@@ -2326,13 +2347,12 @@ namespace PortableCompiler
                     if (!fallsThrough)
                     {
                         code[used++] = 0x0c;
-                        // Catch dispatch adds try_table and one block per tag around the instruction if.
-                        code[used++] = (byte)loopDepth;
+                        used = WasmBinary.Unsigned(code, used, loopDepth);
                     }
                 }
-                code[used++] = 0x0b;
+                code[used++] = 0x0b; // the state's block
             }
-            if (groupSize != 0) code[used++] = 0x0b; // end the last group
+            code[used++] = 0x0b; // the default block
             code[used++] = 0;
             if (catchRegion.Length != 0)
             {
@@ -2402,6 +2422,63 @@ namespace PortableCompiler
             code[used++] = 0x0d;
             code[used++] = 0;
             return used;
+        }
+
+        // Decision 0106: the states that keep their `pc == state` test. Every other state is entered
+        // only by falling through from the state before it, which then leaves its `if` open, so the
+        // state runs with no dispatch test (pc is still written before every state ends, so exception
+        // dispatch and the helpers that use pc as scratch observe the same values as before).
+        //   - the first state, the first state of each dispatch group, and any state the dispatch
+        //     loop can re-enter: branch, leave and switch targets, a conditional's fall-through, and
+        //     every exception clause boundary, resume point and handler;
+        //   - any state after one that does not fall through (a branch to another state, a
+        //     conditional, switch, return, throw, rethrow, endfinally or a leave through finally);
+        //   - every state of a method with exception filters, which keep their dispatch unchanged.
+        private static bool[] Leaders(int[] records, int[] depths, int[] clauses, bool filtered, int groupSize, bool continuations)
+        {
+            var leaders = new bool[depths.Length];
+            int ordinal = 0, previous = -1;
+            for (int pc = 0; pc < depths.Length; pc++)
+            {
+                if (depths[pc] == 0) continue;
+                if (filtered || previous < 0 || groupSize != 0 && ordinal % groupSize == 0 || !FallsThrough(records, depths, previous, continuations))
+                    leaders[pc] = true;
+                ordinal++;
+                previous = pc;
+                int slot = pc * BranchIl.Width, kind = records[slot];
+                if (kind == Branch || kind == Conditional || kind == Leave) Mark(leaders, records[slot + 1]);
+                if (kind == Conditional) Mark(leaders, records[slot + 2]);
+                if (kind == Switch)
+                {
+                    for (int i = 0; i < records[slot + 3]; i++) Mark(leaders, BranchIl.SwitchTarget(records, records[slot + 1], i));
+                    Mark(leaders, records[slot + 2]);
+                }
+            }
+            for (int clause = 0; clause < clauses.Length; clause += ExceptionClauses.Width)
+            {
+                Mark(leaders, clauses[clause]);
+                Mark(leaders, clauses[clause + 1]);
+                Mark(leaders, clauses[clause + 1] + clauses[clause + 2]);
+                Mark(leaders, clauses[clause + 3]);
+                Mark(leaders, clauses[clause + 3] + clauses[clause + 4]);
+            }
+            return leaders;
+        }
+
+        private static void Mark(bool[] leaders, int pc)
+        {
+            if ((uint)pc < (uint)leaders.Length) leaders[pc] = true;
+        }
+
+        // Mirrors the state epilogue: true when the state at `pc` ends by writing the next emitted
+        // state to pc without branching back to the dispatch loop.
+        private static bool FallsThrough(int[] records, int[] depths, int pc, bool continuations)
+        {
+            int slot = pc * BranchIl.Width, kind = records[slot];
+            if (kind == Return || kind == ThrowNull || kind == ThrowFrameworkArgument || kind == Rethrow ||
+                kind == Conditional || kind == Switch || kind == EndFinally || kind == Leave && continuations) return false;
+            int successor = kind == Branch || kind == Leave ? records[slot + 1] : records[slot + 2];
+            return successor == NextEmitted(depths, pc);
         }
 
         // The next pc the dispatch loop emits a state for, or depths.Length past the last.

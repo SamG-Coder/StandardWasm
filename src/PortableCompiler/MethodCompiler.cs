@@ -216,15 +216,16 @@ namespace PortableCompiler
             var addressedFields = new AddressedFields();
             var typeCalls = new RuntimeTypeCalls();
             var readOnlyCharacters = new ReadOnlyCharacterCalls();
+            var reach = new CollectionReach();
             int status = Reemit;
             while (status == Reemit)
-                status = CompileProgramPass(bundle, entries, output, location, features, addressedFields, typeCalls, stubs, rootProbe, natives, readOnlyCharacters);
+                status = CompileProgramPass(bundle, entries, output, location, features, addressedFields, typeCalls, stubs, rootProbe, natives, readOnlyCharacters, reach);
             return status;
         }
 
         private static int CompileProgramPass(BundleImages bundle, byte[] entries, byte[] output, int[] location,
             long[] features, AddressedFields addressedFields, RuntimeTypeCalls typeCalls, MissingAssemblyStubs stubs, bool rootProbe, NativeImportTable natives,
-            ReadOnlyCharacterCalls readOnlyCharacters)
+            ReadOnlyCharacterCalls readOnlyCharacters, CollectionReach reach)
         {
             long hostFeatures = features[0];
             bool tracksFinalizers = features[1] != 0;
@@ -294,6 +295,7 @@ namespace PortableCompiler
             int functionCapacity = symbols * 2 + (tracksFinalizers ? FinalizerSuppressionWasm.End : 0);
             var owners = new int[functionCapacity];
             var rows = new int[functionCapacity];
+            reach.BeginPass(owners, rows);
             var contexts = new int[functionCapacity];
             var instantiations = new MethodInstantiations();
             var falseBooleans = new FalseBooleanSpecializations();
@@ -879,7 +881,8 @@ namespace PortableCompiler
                         records, catchRegion, frame, parameters, locals, body[2], objects, globals);
                     if (status < 0) return status;
                     byte[] frameRoots = null;
-                    if (tracksFinalizers)
+                    // Decision 0106: a function that cannot reach a collection publishes no roots.
+                    if (tracksFinalizers && reach.MayCollect(current))
                     {
                         if (location.Length != 0) location[2] = -1;
                         frameRoots = RootStackWasm.MapFrame(records, frame, parameters + locals, catchRegion.Length != 0, parameters, filters);
@@ -1148,8 +1151,9 @@ namespace PortableCompiler
                     receiverDemand.ObserveCalls(records, depths, contexts);
                     if (location.Length != 0) location[2] = -1;
                     int capacity = body[1] * 64 + 32;
-                    // Grouped dispatch (BranchWasm.BeginGroup) opens a block per group of at least eight states.
-                    capacity += (body[1] / 8 + 1) * BranchWasm.GroupBytes;
+                    // Decision 0106: one leader block per state at most (2 bytes) and a br_table entry
+                    // of at most 3 bytes per IL offset.
+                    capacity += body[1] * 8 + 32;
                     if (tracksFinalizers)
                     {
                         var finalizerTarget = new int[2];
@@ -1764,10 +1768,13 @@ namespace PortableCompiler
                             frameShape[6] = 1;
                     }
                     code = new byte[capacity];
+                    if (tracksFinalizers)
+                        reach.Record(current, records, initializers.FieldInitializers, frameShape[12] != 0);
                     used = BranchWasm.Emit(records, depths, states, frameShape, frame, signatures, offsets,
                         arities, code, remainderFixup, catchRegion, outgoingNulls, outgoingReferences, objects, initializers.FieldInitializers,
                         reflection, inlineLocations, nativePlans.Plans, filters, frameCells, pointers, rootCount, frameRoots,
-                        tracksFinalizers ? finalizers : null, wrapsFailure ? failure : null, primitiveArrays, projections, literals);
+                        tracksFinalizers ? finalizers : null, wrapsFailure ? failure : null, primitiveArrays, projections, literals,
+                        tracksFinalizers ? reach : null);
                 }
 
                 if (used < 0) return used;
@@ -2038,9 +2045,15 @@ namespace PortableCompiler
             }
             CompileLocation.Clear(location);
             if (linearMemory) hostFeatures |= WasmImports.Memory;
-            return WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
+            // Decision 0106: compile again once the exact set of collecting functions is known.
+            if (tracksFinalizers && reach.Settle(functions)) return Reemit;
+            int written = WasmBinary.WriteModule(output, arities, offsets, signatures, sizes, bodyOffsets, functions,
                 moduleCode, entries, entryOffsets, exports, objects, thunks, literals, literalSize[0], globals, remainderFixup[0], exceptionTags, hostFeatures, reflection.HeapFixups[0], pointers, rootCount, rootWalker, rootProbe, natives,
                 primitiveArrays, delegateTypeFixups);
+            // Opt-in profiling names; off by default so modules stay byte-identical.
+            if (written > 0 && FunctionNames.EmitNames && bundle.Length != 0)
+                written = FunctionNames.Append(output, written, bundle, owners, rows, functions, WasmImports.FunctionCount(hostFeatures, natives));
+            return written;
         }
 
         private static bool IsExported(int[] exports, int target)
